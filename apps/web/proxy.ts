@@ -101,6 +101,7 @@ export async function proxy(request: NextRequest) {
 
   // ========== Original permission logic (compatible with file-read token) ==========
   const publicPaths = new Set([
+    "/",
     "/login",
     "/guest-login",
     "/register",
@@ -172,7 +173,10 @@ export async function proxy(request: NextRequest) {
   const isGuest = token.type === "guest";
   const hasValidSessionVersion = token.sessionVersion === authSessionVersion;
 
-  if (!isPublicPath && (!hasValidSessionVersion || isGuest)) {
+  // Allow guests to access "/" - they need a landing page after login
+  // Guests are still redirected from other non-public paths
+  const isRootPath = pathname === "/";
+  if (!isPublicPath && (!hasValidSessionVersion || (isGuest && !isRootPath))) {
     return buildLoginRedirect();
   }
 

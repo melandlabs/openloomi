@@ -254,7 +254,11 @@ export class DingTalkAdapter extends MessagePlatformAdapter {
   ): Promise<string> {
     const token = await this.getAccessToken();
     const formData = new FormData();
-    formData.append("media", new Blob([new Uint8Array(content)], { type: mimeType }), fileName);
+    formData.append(
+      "media",
+      new Blob([new Uint8Array(content)], { type: mimeType }),
+      fileName,
+    );
     // Note: Must use oapi.dingtalk.com not api.dingtalk.com
     const uploadUrl = `https://oapi.dingtalk.com/media/upload?access_token=${encodeURIComponent(token)}&type=${encodeURIComponent(fileType)}`;
     const resp = await fetch(uploadUrl, { method: "POST", body: formData });

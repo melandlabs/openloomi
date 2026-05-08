@@ -142,5 +142,5 @@ export function judgeGuest(session: Session) {
  * In character tab mode, returns "/character", otherwise returns "/".
  */
 export function getHomePath(): string {
-  return "/character";
+  return "/";
 }

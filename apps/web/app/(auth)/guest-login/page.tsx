@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getSession } from "next-auth/react";
 
 /**
  * Guest login page - automatically creates a guest account and redirects to home.
@@ -9,22 +10,33 @@ import { useRouter } from "next/navigation";
  */
 export default function GuestLoginPage() {
   const router = useRouter();
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     // Create guest account and sign in
     const createGuestAndLogin = async () => {
+      if (isCreating) return;
+      setIsCreating(true);
+
       try {
+        // Check if already authenticated (to avoid loops when middleware redirects back)
+        const session = await getSession();
+        if (session?.user) {
+          // Already logged in, go to home
+          router.push("/");
+          return;
+        }
+
         const response = await fetch("/api/auth/guest", {
           method: "POST",
+          credentials: "include",
         });
 
         if (response.ok) {
-          // Successful login, reload the page to get the new session
+          // Successful login, go to home
           router.push("/");
-          router.refresh();
         } else {
           console.error("[GuestLogin] Failed to create guest account");
-          // Fallback: try normal login page
           router.push("/");
         }
       } catch (error) {
@@ -34,7 +46,7 @@ export default function GuestLoginPage() {
     };
 
     createGuestAndLogin();
-  }, [router]);
+  }, [router, isCreating]);
 
   return (
     <div className="flex min-h-screen items-center justify-center">

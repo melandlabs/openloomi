@@ -103,7 +103,10 @@ export { TimePicker } from "./time-picker";
 export { SidebarInset, SidebarProvider } from "./sidebar";
 export { PageSectionHeader } from "./page-section-header";
 export { PageContentCard } from "./page-content-card";
-export { HorizontalScrollContainer, hasDragged } from "./horizontal-scroll-container";
+export {
+  HorizontalScrollContainer,
+  hasDragged,
+} from "./horizontal-scroll-container";
 export {
   Command,
   CommandList,
