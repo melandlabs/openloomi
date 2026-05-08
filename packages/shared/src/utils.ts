@@ -125,7 +125,10 @@ export function coerceDate(input: unknown): Date {
   return new Date();
 }
 
-export function timeBeforeHours(hours: number, now: number = Date.now()): number {
+export function timeBeforeHours(
+  hours: number,
+  now: number = Date.now(),
+): number {
   return Math.floor((now - hours * 60 * 60 * 1000) / 1000);
 }
 
@@ -136,7 +139,10 @@ export function timeBeforeHoursMs(
   return now - hours * 60 * 60 * 1000;
 }
 
-export function timeBeforeMinutes(minutes: number, now: number = Date.now()): number {
+export function timeBeforeMinutes(
+  minutes: number,
+  now: number = Date.now(),
+): number {
   return Math.floor((now - minutes * 60 * 1000) / 1000);
 }
 

@@ -621,27 +621,6 @@ export async function saveChat({
         },
       });
 
-    // Track chat creation events (server-side tracking)
-    try {
-      const { captureServerEvent } =
-        await import("@/lib/analytics/posthog/posthog-server");
-      await captureServerEvent({
-        distinctId: userId,
-        event: "chat_created",
-        properties: {
-          chatId: id,
-          title,
-          timestamp: new Date().toISOString(),
-        },
-      });
-    } catch (trackingError) {
-      // Tracking failure shouldn't affect main functionality
-      console.error(
-        "[Analytics] Failed to track chat creation:",
-        trackingError,
-      );
-    }
-
     return result;
   } catch (error) {
     console.error(error);
