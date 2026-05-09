@@ -43,35 +43,49 @@ vi.mock("@/lib/db/queries", () => ({
     }
     return ids;
   }),
-  getInsightByIdForUser: vi.fn(async ({ userId, insightId }: { userId: string; insightId: string }) => {
-    const insight = dbState.insights.get(insightId);
-    if (!insight) return null;
+  getInsightByIdForUser: vi.fn(
+    async ({ userId, insightId }: { userId: string; insightId: string }) => {
+      const insight = dbState.insights.get(insightId);
+      if (!insight) return null;
 
-    const bot = dbState.bots.get(insight.botId);
-    if (!bot || bot.userId !== userId) return null;
+      const bot = dbState.bots.get(insight.botId);
+      if (!bot || bot.userId !== userId) return null;
 
-    return { insight, bot };
-  }),
-  updateInsightById: vi.fn(async ({ insightId, botId, payload }: { insightId: string; botId: string; payload: any }) => {
-    const existing = dbState.insights.get(insightId);
-    if (!existing) return null;
+      return { insight, bot };
+    },
+  ),
+  updateInsightById: vi.fn(
+    async ({
+      insightId,
+      botId,
+      payload,
+    }: {
+      insightId: string;
+      botId: string;
+      payload: any;
+    }) => {
+      const existing = dbState.insights.get(insightId);
+      if (!existing) return null;
 
-    const updated = {
-      ...existing,
-      ...payload,
-      id: insightId,
-      updatedAt: new Date(),
-    };
-    dbState.insights.set(insightId, updated);
-    return updated;
-  }),
+      const updated = {
+        ...existing,
+        ...payload,
+        id: insightId,
+        updatedAt: new Date(),
+      };
+      dbState.insights.set(insightId, updated);
+      return updated;
+    },
+  ),
   deleteInsightsByIds: vi.fn(async ({ ids }: { ids: string[] }) => {
     for (const id of ids) {
       dbState.insights.delete(id);
     }
   }),
   getBotsByUserId: vi.fn(async ({ id: userId }: { id: string }) => {
-    const userBots = Array.from(dbState.bots.values()).filter((b) => b.userId === userId);
+    const userBots = Array.from(dbState.bots.values()).filter(
+      (b) => b.userId === userId,
+    );
     return { bots: userBots };
   }),
   createBot: vi.fn(async (input: any) => {
@@ -374,7 +388,9 @@ describe("Insights CRUD API integration tests", () => {
         time: new Date(),
         groups: [],
         people: [],
-        details: [{ content: "Original detail", person: "User", time: Date.now() }],
+        details: [
+          { content: "Original detail", person: "User", time: Date.now() },
+        ],
         timeline: null,
         insights: null,
       });
@@ -574,7 +590,9 @@ describe("Insights CRUD API integration tests", () => {
         details: null,
         timeline: null,
         insights: null,
-        myTasks: [{ title: "Task 1", status: "pending", deadline: null, owner: null }],
+        myTasks: [
+          { title: "Task 1", status: "pending", deadline: null, owner: null },
+        ],
       });
 
       const response = await invokeUpdateInsight("insight-8", {

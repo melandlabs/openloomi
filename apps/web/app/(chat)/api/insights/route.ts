@@ -282,7 +282,10 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "title is required" }, { status: 400 });
     }
     if (!description || typeof description !== "string") {
-      return Response.json({ error: "description is required" }, { status: 400 });
+      return Response.json(
+        { error: "description is required" },
+        { status: 400 },
+      );
     }
 
     // Get or create manual bot
@@ -329,9 +332,8 @@ export async function POST(request: NextRequest) {
     // Normalize tasks
     const normalizedTasks = myTasks?.map((t: any) => ({
       text: typeof t === "string" ? t : t.text,
-      completed: typeof t === "object" ? t.completed ?? false : false,
-      deadline:
-        typeof t === "object" && t.deadline ? t.deadline : undefined,
+      completed: typeof t === "object" ? (t.completed ?? false) : false,
+      deadline: typeof t === "object" && t.deadline ? t.deadline : undefined,
       owner: typeof t === "object" && t.owner ? t.owner : undefined,
     }));
 
@@ -396,9 +398,7 @@ export async function POST(request: NextRequest) {
       nextActions: null,
     };
 
-    const insightIds = await insertInsightRecords([
-      { ...payload, botId },
-    ]);
+    const insightIds = await insertInsightRecords([{ ...payload, botId }]);
 
     return Response.json(
       { id: insightIds[0], message: "Insight created successfully" },

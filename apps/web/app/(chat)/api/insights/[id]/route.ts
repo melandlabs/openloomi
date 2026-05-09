@@ -259,7 +259,10 @@ export async function DELETE(
     });
 
     if (!insightResult) {
-      return new AppError("not_found:insight", "Insight not found").toResponse();
+      return new AppError(
+        "not_found:insight",
+        "Insight not found",
+      ).toResponse();
     }
 
     // Call delete function (using array form, consistent with existing function interface)
@@ -311,7 +314,10 @@ export async function PUT(
     });
 
     if (!insightResult) {
-      return new AppError("not_found:insight", "Insight not found").toResponse();
+      return new AppError(
+        "not_found:insight",
+        "Insight not found",
+      ).toResponse();
     }
 
     const { insight: existingInsight, bot } = insightResult;
@@ -412,7 +418,8 @@ export async function PUT(
       scope: existingInsight.scope ?? null,
       nextActions: existingInsight.nextActions,
       followUps: existingInsight.followUps,
-      actionRequired: updates.actionRequired ?? existingInsight.actionRequired ?? null,
+      actionRequired:
+        updates.actionRequired ?? existingInsight.actionRequired ?? null,
       actionRequiredDetails: existingInsight.actionRequiredDetails,
       myTasks: updates.myTasks
         ? updates.myTasks
