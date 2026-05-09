@@ -4,6 +4,8 @@ import {
   botExists,
   deleteInsightsByIds,
   getBotsByUserId,
+  getInsightByIdForUser,
+  updateInsightById,
 } from "@/lib/db/queries";
 import { AppError } from "@alloomi/shared/errors";
 import timeout from "p-timeout";
@@ -250,6 +252,16 @@ export async function DELETE(
       ).toResponse();
     }
 
+    // Verify ownership before deleting
+    const insightResult = await getInsightByIdForUser({
+      userId: session.user.id,
+      insightId: id,
+    });
+
+    if (!insightResult) {
+      return new AppError("not_found:insight", "Insight not found").toResponse();
+    }
+
     // Call delete function (using array form, consistent with existing function interface)
     await deleteInsightsByIds({ ids: [id] });
 
@@ -267,6 +279,194 @@ export async function DELETE(
     }
 
     // Handle unknown errors
+    return new AppError("bad_request:database", String(error)).toResponse();
+  }
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return new AppError("unauthorized:insight").toResponse();
+  }
+
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { updates } = body;
+
+    if (!updates || typeof updates !== "object") {
+      return Response.json(
+        { error: "updates object is required" },
+        { status: 400 },
+      );
+    }
+
+    // Get the insight and verify access
+    const insightResult = await getInsightByIdForUser({
+      userId: session.user.id,
+      insightId: id,
+    });
+
+    if (!insightResult) {
+      return new AppError("not_found:insight", "Insight not found").toResponse();
+    }
+
+    const { insight: existingInsight, bot } = insightResult;
+
+    // Normalize importance and urgency
+    const normalizeImportance = (val?: string) => {
+      if (val === "Important") return "Important";
+      if (val === "Not Important") return "Not Important";
+      return "General";
+    };
+
+    const normalizeUrgency = (val?: string) => {
+      if (val === "As soon as possible") return "ASAP";
+      if (val === "Within 24 hours") return "24h";
+      if (val === "Not urgent") return "Not urgent";
+      return "General";
+    };
+
+    // Normalize task format
+    const normalizeTask = (t: any) => {
+      if (typeof t === "string") {
+        return { text: t, completed: false };
+      }
+      return {
+        text: t.text || "",
+        completed: t.completed ?? false,
+        deadline: t.deadline,
+        owner: t.owner,
+      };
+    };
+
+    // Build the full payload with incremental updates
+    const fullPayload: any = {
+      dedupeKey: existingInsight.dedupeKey ?? null,
+      taskLabel: existingInsight.taskLabel,
+      title: updates.title || existingInsight.title,
+      description: updates.description || existingInsight.description,
+      importance: updates.importance
+        ? normalizeImportance(updates.importance)
+        : existingInsight.importance,
+      urgency: updates.urgency
+        ? normalizeUrgency(updates.urgency)
+        : existingInsight.urgency,
+      platform: existingInsight.platform ?? null,
+      account: existingInsight.account ?? null,
+      groups: existingInsight.groups ?? [],
+      people: existingInsight.people ?? [],
+      time: existingInsight.time,
+      // Incremental update: append new items to existing array
+      details: updates.details
+        ? [
+            ...(existingInsight.details || []),
+            ...updates.details.map((d: any) => ({
+              ...d,
+              time: d.time ?? Date.now(),
+            })),
+          ]
+        : existingInsight.details,
+      timeline: updates.timeline
+        ? [
+            ...(existingInsight.timeline || []),
+            ...updates.timeline.map((t: any) => ({
+              ...t,
+              time: Date.now(),
+            })),
+          ]
+        : existingInsight.timeline,
+      insights: updates.insights
+        ? [...(existingInsight.insights || []), ...updates.insights]
+        : existingInsight.insights,
+      trendDirection: existingInsight.trendDirection ?? null,
+      trendConfidence: existingInsight.trendConfidence
+        ? Number.parseFloat(existingInsight.trendConfidence.toString())
+        : null,
+      sentiment: existingInsight.sentiment ?? null,
+      sentimentConfidence: existingInsight.sentimentConfidence
+        ? Number.parseFloat(existingInsight.sentimentConfidence.toString())
+        : null,
+      intent: existingInsight.intent ?? null,
+      trend: existingInsight.trend ?? null,
+      issueStatus: existingInsight.issueStatus ?? null,
+      communityTrend: existingInsight.communityTrend ?? null,
+      duplicateFlag: existingInsight.duplicateFlag ?? null,
+      impactLevel: existingInsight.impactLevel ?? null,
+      resolutionHint: existingInsight.resolutionHint ?? null,
+      topKeywords: existingInsight.topKeywords ?? [],
+      topEntities: existingInsight.topEntities ?? [],
+      topVoices: existingInsight.topVoices,
+      sources: existingInsight.sources,
+      sourceConcentration: existingInsight.sourceConcentration ?? null,
+      buyerSignals: existingInsight.buyerSignals ?? [],
+      stakeholders: existingInsight.stakeholders,
+      contractStatus: existingInsight.contractStatus ?? null,
+      signalType: existingInsight.signalType ?? null,
+      confidence: existingInsight.confidence
+        ? Number.parseFloat(existingInsight.confidence.toString())
+        : null,
+      scope: existingInsight.scope ?? null,
+      nextActions: existingInsight.nextActions,
+      followUps: existingInsight.followUps,
+      actionRequired: updates.actionRequired ?? existingInsight.actionRequired ?? null,
+      actionRequiredDetails: existingInsight.actionRequiredDetails,
+      myTasks: updates.myTasks
+        ? updates.myTasks
+            .map(normalizeTask)
+            .filter((task: any) => task.text.length > 0)
+            .map((task: any) => ({
+              title: task.text,
+              status: task.completed ? "completed" : "pending",
+              deadline: task.deadline || null,
+              owner: task.owner || null,
+            }))
+        : existingInsight.myTasks,
+      waitingForMe: updates.waitingForMe
+        ? updates.waitingForMe
+            .map(normalizeTask)
+            .filter((task: any) => task.text.length > 0)
+            .map((task: any) => ({
+              title: task.text,
+              status: task.completed ? "completed" : "pending",
+              deadline: task.deadline || null,
+              owner: task.owner || null,
+            }))
+        : existingInsight.waitingForMe,
+      waitingForOthers: updates.waitingForOthers
+        ? updates.waitingForOthers
+            .map(normalizeTask)
+            .filter((task: any) => task.text.length > 0)
+            .map((task: any) => ({
+              title: task.text,
+              status: task.completed ? "completed" : "pending",
+              deadline: task.deadline || null,
+              owner: task.owner || null,
+            }))
+        : existingInsight.waitingForOthers,
+      clarifyNeeded: existingInsight.clarifyNeeded ?? null,
+      categories: updates.categories ?? existingInsight.categories ?? [],
+      learning: existingInsight.learning ?? null,
+      experimentIdeas: existingInsight.experimentIdeas,
+      executiveSummary: existingInsight.executiveSummary ?? null,
+    };
+
+    // Update the insight
+    await updateInsightById({
+      insightId: id,
+      botId: bot.id,
+      payload: fullPayload,
+    });
+
+    return Response.json(
+      { message: "Insight updated successfully", id },
+      { status: 200 },
+    );
+  } catch (error) {
+    console.error("[Insights] Update failed:", error);
     return new AppError("bad_request:database", String(error)).toResponse();
   }
 }

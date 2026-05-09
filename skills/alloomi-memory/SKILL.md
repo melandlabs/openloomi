@@ -18,28 +18,20 @@ Alloomi Memory is a personal knowledge management tool that searches and manages
 
 ---
 
-## What is Alloomi?
+## Overview
 
-Most AI assistants function as workflow tools—users give commands, they execute tasks, with no persistent knowledge of who you are or what matters to you.
+Alloomi Memory is built on a unique architectural principle: instead of treating memory as an afterthought, it's the foundation.
 
-**Alloomi takes a fundamentally different approach: it operates as a proactive digital partner** that watches, learns, remembers, and acts on your behalf. The difference is architectural.
+**How it works with Connectors:** Before memory can search your data, you need to connect your platforms using the `alloomi-connectors` skill. Connectors handles OAuth authentication and integration setup for 26 platforms (Telegram, WhatsApp, Slack, Discord, Gmail, Outlook, Twitter/X, WeChat, and more). Once connected, Alloomi continuously syncs everything with your permission—raw messages, meetings, emails, tweets, calendar events, voice calls, and any notes or ideas you've captured. This aggregated data becomes the single source of truth that powers Alloomi's brain.
 
-### How It Works
+**The memory is layered:**
 
-When users connect messaging platforms and integrations to Alloomi, they sync with permission:
-- Raw messages and communications
-- Meetings and calendar events
-- Emails and tweets
-- Voice calls
-- Notes and captured ideas
+- **Raw information:** Original messages, files, transcripts
+- **Information insights:** Extracted entities, decisions, key events
+- **Contextual memory:** Recent conversation state
+- **Knowledge-base memory:** Long-term people/projects/preferences knowledge graph
 
-This aggregated data becomes "the single source of truth for Alloomi's brain."
-
-### The Continuous Sync Loop
-
-Alloomi runs a background agent on a continuous sync loop, actively gathering information from all connected sources. An agent without this loop can only respond based on stale context. With it, every conversation—and every moment—makes Alloomi smarter and more aligned with you.
-
-### Memory Architecture
+This enables reasoning across both immediate context and deep historical knowledge simultaneously. When you create custom agent roles to handle tasks, this memory acts as the orchestrator—dramatically improving execution quality.
 
 Inside Alloomi, memory is layered into multiple levels:
 
@@ -74,6 +66,22 @@ Memory files are stored locally at `~/.alloomi/data/memory/` and searched via di
 ├── projects/       # Project notes
 ├── notes/          # General notes
 └── strategy/       # Strategy documents
+```
+
+### Write Operations
+
+Memory files are plain markdown or JSON stored locally. You can add or delete files directly.
+
+**Adding a memory file:**
+```bash
+node $SKILL_DIR/scripts/alloomi-memory.cjs add-memory "Content to remember" --file=filename.md --directory=notes
+```
+- `--file` (optional): Filename. If not provided, auto-generated from first line of content.
+- `--directory` (optional): Subdirectory under `~/.alloomi/data/memory/`. Created if doesn't exist.
+
+**Deleting a memory file:**
+```bash
+node $SKILL_DIR/scripts/alloomi-memory.cjs delete-memory filename.md --directory=notes
 ```
 
 ### How search-memory Works
@@ -224,6 +232,16 @@ Each insight contains a `groups` field—an array of channel identifiers indicat
 }
 ```
 
+**Insight Types:**
+| Type | Description |
+|------|-------------|
+| `decision` | Key decisions made |
+| `action_item` | Tasks or follow-ups |
+| `note` | General notes |
+| `preference` | User preferences |
+| `relationship` | Notes about people |
+| `event` | Important events |
+
 **Common Channel Groups:**
 | Channel | Group Value | Description |
 |---------|-------------|-------------|
@@ -237,6 +255,73 @@ Each insight contains a `groups` field—an array of channel identifiers indicat
 | Twitter/X | `"twitter"` | Twitter posts |
 | WeChat | `"weixin"` | WeChat messages |
 | RSS | `"rss"` | RSS feed items |
+
+---
+
+#### POST `/api/insights` - Create Insight
+Create a new insight manually.
+
+```bash
+curl -X POST http://localhost:3415/api/insights \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"type": "preference", "content": "I prefer Americano coffee", "groups": ["whatsapp"]}'
+```
+
+**Parameters:**
+- `type` (string, required) - Insight type (decision, action_item, note, preference, relationship, event)
+- `content` (string, required) - The insight text
+- `groups` (array, optional) - Channel groups to associate with
+- `people` (array, optional) - People mentioned in the insight
+
+**Response:**
+```json
+{
+  "id": "insight_xxx",
+  "type": "preference",
+  "content": "I prefer Americano coffee",
+  "groups": ["whatsapp"],
+  "createdAt": "2024-01-01T00:00:00Z"
+}
+```
+
+---
+
+#### PUT `/api/insights/[id]` - Update Insight
+Partial update an existing insight. Arrays (details, timeline, insights) are appended to, not replaced.
+
+```bash
+curl -X PUT http://localhost:3415/api/insights/insight_xxx \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "updates": {
+      "description": "Updated description",
+      "details": [{"content": "User mentioned new preference", "person": "User"}],
+      "timeline": [{"summary": "Progress update", "label": "Update"}]
+    }
+  }'
+```
+
+**Update Fields:**
+- `title` - New title
+- `description` - New description
+- `importance` - Important, General, Not Important
+- `urgency` - As soon as possible, Within 24 hours, Not urgent, General
+- `details` - Array of detail objects (appended to existing)
+- `timeline` - Array of timeline events (appended to existing)
+- `myTasks` - Array of task objects
+- `groups` - Array of group tags (replaced)
+- `categories` - Array of categories (replaced)
+- `people` - Array of people names (replaced)
+
+**Response:**
+```json
+{
+  "message": "Insight updated successfully",
+  "id": "insight_xxx"
+}
+```
 
 ---
 
@@ -330,8 +415,20 @@ node $SKILL_DIR/scripts/alloomi-memory.cjs list-insights --keyword=screen --keyw
 # Get single insight
 node $SKILL_DIR/scripts/alloomi-memory.cjs get-insight insight_xxx
 
+# Create a new insight
+node $SKILL_DIR/scripts/alloomi-memory.cjs add-insight --title="Coffee preference" --description="I prefer Americano coffee" --importance=General
+
+# Update an insight (partial update with array append)
+node $SKILL_DIR/scripts/alloomi-memory.cjs update-insight insight_xxx --description="Updated description" --detail="User mentioned new preference"
+
 # Delete insight
 node $SKILL_DIR/scripts/alloomi-memory.cjs delete-insight insight_xxx
+
+# Add a memory file
+node $SKILL_DIR/scripts/alloomi-memory.cjs add-memory "My boss John likes Monday project discussions" --file=people/boss.md
+
+# Delete a memory file
+node $SKILL_DIR/scripts/alloomi-memory.cjs delete-memory people/boss.md
 ```
 
 ### Command Reference
@@ -346,6 +443,10 @@ node $SKILL_DIR/scripts/alloomi-memory.cjs delete-insight insight_xxx
 | `list-insights` | List extracted insights (supports `--channel` filter) | Insights API |
 | `get-insight` | Get single insight by ID | Insights API |
 | `delete-insight` | Delete an insight | Insights API |
+| `add-insight` | Create a new insight (title, description, importance, urgency, groups, people) | Insights API |
+| `update-insight` | Update an insight (partial update with array append logic) | Insights API |
+| `add-memory` | Add a memory file (auto-generates filename from content) | Local filesystem |
+| `delete-memory` | Delete a memory file | Local filesystem |
 
 ---
 
