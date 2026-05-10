@@ -291,6 +291,9 @@ export function Home() {
   useEffect(() => {
     // Only redirect when page is null and localActiveChatId is available
     if (page !== null || !localActiveChatId) return;
+    // /inbox is a standalone page that also has no page query parameter.
+    // Keep it on the insight/events surface instead of forcing it into chat.
+    if (pathname !== "/") return;
 
     const newPath = buildNavigationUrl({
       pathname: "/",
@@ -301,7 +304,7 @@ export function Home() {
       },
     });
     router.replace(newPath, { scroll: false });
-  }, [page, localActiveChatId, searchParams, router]);
+  }, [page, localActiveChatId, pathname, searchParams, router]);
 
   // Mobile panel state
   // Note: When initializing, need to consider pathname, ensure value in localStorage matches current path

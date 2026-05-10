@@ -3,9 +3,75 @@ import baseZh from "@alloomi/i18n/locales/zh-Hans";
 
 const zh = {
   ...baseZh,
+  common: {
+    ...baseZh.common,
+    export: "导出",
+  },
   nav: {
     ...baseZh.nav,
+    insights: "Insight 追踪",
+    inbox: "Insight 追踪",
     termsAndPolicies: "条款与政策",
+  },
+  insight: {
+    ...(baseZh.insight ?? {}),
+    tabs: {
+      ...(baseZh.insight?.tabs ?? {}),
+      preset: {
+        ...(baseZh.insight?.tabs?.preset ?? {}),
+        importantPeople: "重要人物",
+        importantPeopleDesc: "筛选来自重要人物或重点联系人的 Insight",
+      },
+    },
+    analytics: {
+      ...(
+        (baseZh.insight as typeof baseZh.insight & {
+          analytics?: Record<string, unknown>;
+        }).analytics ?? {}
+      ),
+      tab: "分析",
+      title: "使用分析",
+      generatedAt: "更新于 {{time}}",
+      loadFailed: "分析数据加载失败",
+      totalInsights: "Insight 总数",
+      activeInsights: "30 天活跃",
+      dormantInsights: "休眠",
+      averageScore: "平均评分",
+      topInsights: "高频 Insight",
+      bottomInsights: "休眠 Insight",
+      noUsageData: "暂无使用数据",
+      noDormantData: "暂无休眠 Insight",
+      trends: "趋势分析",
+      relationships: "关系分析",
+      noRelationships: "暂无重复关联",
+      organizationRecommendations: "整理建议",
+      noRecommendations: "暂无需要清理的 Insight",
+      neverAccessed: "从未访问",
+      noAccess: "暂无访问",
+      untitled: "未命名 Insight",
+      accesses30dShort: "{{count}} / 30天",
+      totalAccessesShort: "共 {{count}} 次",
+      conversationCount: "{{count}} 个会话",
+      accessCount30d: "30 天 {{count}} 次访问",
+      scoreValue: "评分 {{score}}",
+      trend: {
+        rising: "上升",
+        stable: "稳定",
+        falling: "下降",
+      },
+      action: {
+        keep: "保留",
+        archive: "归档",
+        delete: "删除",
+      },
+      reason: {
+        favorited: "已收藏的 Insight 会被视为需要保留。",
+        deleteDormant: "超过 90 天没有近期使用，且价值评分较低。",
+        archiveDormant: "至少 30 天未活跃，近期价值较低。",
+        archiveFalling: "使用趋势下降，且价值评分低于活跃阈值。",
+        keepActive: "使用情况、新鲜度或相关性仍支持继续保留。",
+      },
+    },
   },
   character: {
     ...baseZh.character,

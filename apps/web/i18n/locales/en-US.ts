@@ -3,9 +3,78 @@ import baseEn from "@alloomi/i18n/locales/en-US";
 
 const en = {
   ...baseEn,
+  common: {
+    ...baseEn.common,
+    export: "Export",
+  },
   nav: {
     ...baseEn.nav,
+    insights: "Insight Tracking",
+    inbox: "Insight Tracking",
     termsAndPolicies: "Terms & Policies",
+  },
+  insight: {
+    ...(baseEn.insight ?? {}),
+    tabs: {
+      ...(baseEn.insight?.tabs ?? {}),
+      preset: {
+        ...(baseEn.insight?.tabs?.preset ?? {}),
+        importantPeople: "Important people",
+        importantPeopleDesc: "Filter insights from important people or key contacts",
+      },
+    },
+    analytics: {
+      ...(
+        (baseEn.insight as typeof baseEn.insight & {
+          analytics?: Record<string, unknown>;
+        }).analytics ?? {}
+      ),
+      tab: "Analytics",
+      title: "Usage Analytics",
+      generatedAt: "Updated {{time}}",
+      loadFailed: "Analytics failed to load",
+      totalInsights: "Total insights",
+      activeInsights: "Active / 30d",
+      dormantInsights: "Dormant",
+      averageScore: "Average score",
+      topInsights: "Top insights",
+      bottomInsights: "Dormant insights",
+      noUsageData: "No usage data yet",
+      noDormantData: "No dormant insights",
+      trends: "Trend analysis",
+      relationships: "Relationship analysis",
+      noRelationships: "No repeated relationships yet",
+      organizationRecommendations: "Organization recommendations",
+      noRecommendations: "No cleanup needed",
+      neverAccessed: "Never",
+      noAccess: "No access",
+      untitled: "Untitled insight",
+      accesses30dShort: "{{count}} / 30d",
+      totalAccessesShort: "{{count}} total",
+      conversationCount: "{{count}} conversations",
+      accessCount30d: "{{count}} accesses / 30d",
+      scoreValue: "score {{score}}",
+      trend: {
+        rising: "Rising",
+        stable: "Stable",
+        falling: "Falling",
+      },
+      action: {
+        keep: "Keep",
+        archive: "Archive",
+        delete: "Delete",
+      },
+      reason: {
+        favorited: "Favorited insights are treated as intentionally retained.",
+        deleteDormant:
+          "No recent usage and low value score for more than 90 days.",
+        archiveDormant: "Dormant for at least 30 days with low recent value.",
+        archiveFalling:
+          "Usage is falling and value score is below the active threshold.",
+        keepActive:
+          "Usage, freshness, or relevance still supports keeping it active.",
+      },
+    },
   },
   character: {
     ...baseEn.character,

@@ -2235,6 +2235,10 @@ export const insightWeights = pgTable(
       .$type<number>()
       .notNull()
       .default(0),
+    accessCountTotal: integer("access_count_total").notNull().default(0),
+    accessCount7d: integer("access_count_7d").notNull().default(0),
+    accessCount30d: integer("access_count_30d").notNull().default(0),
+    lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
     lastWeightAdjustmentReason: text("last_weight_adjustment_reason"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -2251,6 +2255,14 @@ export const insightWeights = pgTable(
     insightIdx: index("weights_insight_idx").on(table.insightId),
     userIdx: index("weights_user_idx").on(table.userId),
     lastViewedIdx: index("weights_last_viewed_idx").on(table.lastViewedAt),
+    accessCount30dIdx: index("weights_access_count_30d_idx").on(
+      table.userId,
+      table.accessCount30d,
+    ),
+    lastAccessedIdx: index("weights_last_accessed_idx").on(
+      table.userId,
+      table.lastAccessedAt,
+    ),
   }),
 );
 

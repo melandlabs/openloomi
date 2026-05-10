@@ -610,6 +610,13 @@
       "when": 1774100000000,
       "tag": "0097_add_character_system_type",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1774200000000,
+      "tag": "0098_add_insight_access_frequency",
+      "breakpoints": true
     }
   ]
 }

@@ -18,7 +18,7 @@ import {
   type InsertInsightWeightHistory,
   type InsertInsightViewHistory,
 } from "@/lib/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 import type { DrizzleDB } from "@/lib/db/types";
 
 // ============================================================================
@@ -70,7 +70,7 @@ export async function getWeightConfig(
     return getDefaultConfig(configKey);
   }
 
-  return configs[0].configValue as WeightConfig;
+  return parseStoredConfig(configs[0].configValue);
 }
 
 /**
@@ -95,6 +95,132 @@ function getDefaultConfig(configKey: string): WeightConfig {
   };
 
   return defaults[configKey] || {};
+}
+
+function isSqliteSchemaMode(): boolean {
+  return process.env.TAURI_MODE === "true" || process.env.IS_TAURI === "true";
+}
+
+function parseStoredConfig(value: unknown): WeightConfig {
+  if (!value) return {};
+  if (typeof value !== "string") return value as WeightConfig;
+
+  try {
+    return JSON.parse(value) as WeightConfig;
+  } catch {
+    return {};
+  }
+}
+
+function serializeJsonForStorage(
+  value: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | string | null {
+  if (!value) return null;
+  return isSqliteSchemaMode() ? JSON.stringify(value) : value;
+}
+
+function getRollingAccessCutoffs(now: Date) {
+  return {
+    sevenDaysAgo: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+    thirtyDaysAgo: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+  };
+}
+
+function readCount(row: { value: unknown } | undefined): number {
+  return Number(row?.value ?? 0);
+}
+
+async function getInsightAccessCounts(
+  insightId: string,
+  userId: string,
+  now: Date,
+  db: DrizzleDB,
+) {
+  const { sevenDaysAgo, thirtyDaysAgo } = getRollingAccessCutoffs(now);
+
+  const [totalRows, sevenDayRows, thirtyDayRows] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(insightViewHistory)
+      .where(
+        and(
+          eq(insightViewHistory.insightId, insightId),
+          eq(insightViewHistory.userId, userId),
+        ),
+      ),
+    db
+      .select({ value: count() })
+      .from(insightViewHistory)
+      .where(
+        and(
+          eq(insightViewHistory.insightId, insightId),
+          eq(insightViewHistory.userId, userId),
+          gte(insightViewHistory.viewedAt, sevenDaysAgo),
+        ),
+      ),
+    db
+      .select({ value: count() })
+      .from(insightViewHistory)
+      .where(
+        and(
+          eq(insightViewHistory.insightId, insightId),
+          eq(insightViewHistory.userId, userId),
+          gte(insightViewHistory.viewedAt, thirtyDaysAgo),
+        ),
+      ),
+  ]);
+
+  return {
+    total: readCount(totalRows[0]),
+    sevenDays: readCount(sevenDayRows[0]),
+    thirtyDays: readCount(thirtyDayRows[0]),
+  };
+}
+
+async function getLastInsightAccessedAt(
+  insightId: string,
+  userId: string,
+  db: DrizzleDB,
+) {
+  const rows = await db
+    .select({ viewedAt: insightViewHistory.viewedAt })
+    .from(insightViewHistory)
+    .where(
+      and(
+        eq(insightViewHistory.insightId, insightId),
+        eq(insightViewHistory.userId, userId),
+      ),
+    )
+    .orderBy(desc(insightViewHistory.viewedAt))
+    .limit(1);
+
+  return rows[0]?.viewedAt ?? null;
+}
+
+export async function refreshInsightAccessSummary(
+  insightId: string,
+  userId: string,
+  now: Date,
+  db: DrizzleDB,
+): Promise<void> {
+  const accessCounts = await getInsightAccessCounts(insightId, userId, now, db);
+  const lastAccessedAt = await getLastInsightAccessedAt(insightId, userId, db);
+
+  await db
+    .update(insightWeights)
+    .set({
+      accessCountTotal: accessCounts.total,
+      accessCount7d: accessCounts.sevenDays,
+      accessCount30d: accessCounts.thirtyDays,
+      lastAccessedAt,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(insightWeights.insightId, insightId),
+        eq(insightWeights.userId, userId),
+      ),
+    );
 }
 
 // ============================================================================
@@ -391,12 +517,21 @@ export async function recordInsightView(
     if (weightRecord.length === 0) {
       // Create new weight record
       const newWeight: InsertInsightWeight = {
+        id: crypto.randomUUID(),
         insightId,
         userId,
         customWeightMultiplier: 1.0,
         lastViewedAt: now,
+        lastRankCalculatedAt: now,
+        currentEventRank: 0,
+        accessCountTotal: 0,
+        accessCount7d: 0,
+        accessCount30d: 0,
+        lastAccessedAt: now,
+        lastWeightAdjustmentReason: "view_recorded",
+        createdAt: now,
         updatedAt: now,
-      };
+      } as InsertInsightWeight;
       await db.insert(insightWeights).values(newWeight);
     } else {
       // Update existing weight record
@@ -423,6 +558,7 @@ export async function recordInsightView(
 
         // Record weight adjustment history
         const history: InsertInsightWeightHistory = {
+          id: crypto.randomUUID(),
           insightId,
           userId,
           adjustmentType: "view",
@@ -432,13 +568,14 @@ export async function recordInsightView(
           customMultiplierBefore: currentMultiplier,
           customMultiplierAfter: newMultiplier,
           reason: `Viewed after ${Math.floor(daysSinceView)} days, applying ${multiplier}x boost`,
-          context: {
+          context: serializeJsonForStorage({
             source: "api",
             viewSource,
             daysSinceView: Math.floor(daysSinceView),
             durationHours: duration_hours,
-          },
-        };
+          }) as any,
+          createdAt: now,
+        } as InsertInsightWeightHistory;
 
         await db.insert(insightWeightHistory).values(history);
       } else {
@@ -456,12 +593,13 @@ export async function recordInsightView(
     // Record view history (try to insert, ignore duplicate constraint violations)
     try {
       const viewRecord: InsertInsightViewHistory = {
+        id: crypto.randomUUID(),
         insightId,
         userId,
         viewSource,
-        viewContext: viewContext as any,
+        viewContext: serializeJsonForStorage(viewContext) as any,
         viewedAt: now,
-      };
+      } as InsertInsightViewHistory;
       await db.insert(insightViewHistory).values(viewRecord);
     } catch (error: any) {
       // Ignore unique constraint violations (duplicate view records)
@@ -472,6 +610,8 @@ export async function recordInsightView(
         throw error;
       }
     }
+
+    await refreshInsightAccessSummary(insightId, userId, now, db);
   } catch (error) {
     console.error("[WeightAdjustment] Failed to record insight view:", error);
     throw error;

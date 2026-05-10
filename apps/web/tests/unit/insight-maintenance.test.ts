@@ -10,6 +10,10 @@ const { deleteExpiredPendingDeletionInsightsMock, runInsightCompactionMock } =
     runInsightCompactionMock: vi.fn(),
   }));
 
+const { refreshInsightAccessSummaryMock } = vi.hoisted(() => ({
+  refreshInsightAccessSummaryMock: vi.fn(),
+}));
+
 vi.mock("@/lib/db/queries", () => ({
   db: {
     select: selectMock,
@@ -22,7 +26,14 @@ vi.mock("@/lib/insights/compaction", () => ({
   runInsightCompaction: runInsightCompactionMock,
 }));
 
-import { runWeeklyInsightMaintenance } from "@/lib/insights/maintenance";
+vi.mock("@/lib/insights/weight-adjustment", () => ({
+  refreshInsightAccessSummary: refreshInsightAccessSummaryMock,
+}));
+
+import {
+  runDailyInsightAnalyticsMaintenance,
+  runWeeklyInsightMaintenance,
+} from "@/lib/insights/maintenance";
 
 function makeBotSelectBuilder(response: unknown) {
   return {
@@ -35,11 +46,27 @@ function makeBotSelectBuilder(response: unknown) {
   };
 }
 
+function makeWeightSelectBuilder(response: unknown) {
+  const resolved = Promise.resolve(response);
+  const builder = {
+    innerJoin: vi.fn(),
+    where: vi.fn().mockReturnValue(resolved),
+    then: resolved.then.bind(resolved),
+  };
+
+  builder.innerJoin.mockReturnValue(builder);
+
+  return {
+    from: vi.fn().mockReturnValue(builder),
+  };
+}
+
 describe("weekly insight maintenance", () => {
   beforeEach(() => {
     selectMock.mockReset();
     runInsightCompactionMock.mockReset();
     deleteExpiredPendingDeletionInsightsMock.mockReset();
+    refreshInsightAccessSummaryMock.mockReset();
   });
 
   it("runs compaction and cleanup per user for the selected platform", async () => {
@@ -130,6 +157,47 @@ describe("weekly insight maintenance", () => {
           deletedInsightIds: [],
         },
       ],
+    });
+  });
+
+  it("refreshes rolling access counts for every tracked insight weight", async () => {
+    const now = new Date("2026-05-09T00:00:00.000Z");
+    selectMock.mockImplementationOnce(() =>
+      makeWeightSelectBuilder([
+        { insightId: "insight-1", userId: "user-1" },
+        { insightId: "insight-2", userId: "user-1" },
+        { insightId: "insight-3", userId: "user-2" },
+      ]),
+    );
+
+    const result = await runDailyInsightAnalyticsMaintenance({ now });
+
+    expect(refreshInsightAccessSummaryMock).toHaveBeenNthCalledWith(
+      1,
+      "insight-1",
+      "user-1",
+      now,
+      expect.any(Object),
+    );
+    expect(refreshInsightAccessSummaryMock).toHaveBeenNthCalledWith(
+      2,
+      "insight-2",
+      "user-1",
+      now,
+      expect.any(Object),
+    );
+    expect(refreshInsightAccessSummaryMock).toHaveBeenNthCalledWith(
+      3,
+      "insight-3",
+      "user-2",
+      now,
+      expect.any(Object),
+    );
+
+    expect(result).toEqual({
+      processedWeightCount: 3,
+      processedUserCount: 2,
+      users: ["user-1", "user-2"],
     });
   });
 });

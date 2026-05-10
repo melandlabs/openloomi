@@ -22,6 +22,8 @@ const InsightTabsDialogLazy = lazy(() =>
   })),
 );
 
+const ANALYTICS_TAB_VALUE = "analytics";
+
 import { useChatContext } from "@/components/chat-context";
 import {
   GoogleAuthForm,
@@ -86,6 +88,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { CombinedFilterButton } from "./combined-filter-button";
 import type { QuickFilterValue, ViewOptionValue } from "./events-panel-types";
+import { InsightAnalyticsPanel } from "./insight-analytics-panel";
 import {
   deduplicateInsights,
   filterEmptyInsights,
@@ -1376,6 +1379,11 @@ export function AgentEventsPanel({
       return;
     }
 
+    if (selectedValue === ANALYTICS_TAB_VALUE) {
+      lastValidatedSelectedValueRef.current = ANALYTICS_TAB_VALUE;
+      return;
+    }
+
     const isValidCustomTab = enabledTabsRef.current.some(
       (tab) => tab.id === selectedValue,
     );
@@ -1422,7 +1430,7 @@ export function AgentEventsPanel({
       return;
     }
 
-    if (selectedValue === "all") {
+    if (selectedValue === "all" || selectedValue === ANALYTICS_TAB_VALUE) {
       if (subTab !== "all") {
         setSubTab("all");
         lastSyncedSubTabRef.current = "all";
@@ -1750,6 +1758,7 @@ export function AgentEventsPanel({
   const effectiveSelectedInsight = externalSelectedInsight ?? selectedInsight;
   /** Desktop with selected event: list + middle card displays Insight details, convenient for coexistence with right person detail column */
   const showEmbeddedInsight = !isMobile && !!effectiveSelectedInsight;
+  const isAnalyticsView = selectedValue === ANALYTICS_TAB_VALUE;
 
   return (
     <>
@@ -1792,6 +1801,7 @@ export function AgentEventsPanel({
                       "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 h-8 text-xs font-semibold transition-colors shrink-0",
                       selectedValue === "all" ||
                         (selectedValue !== "other" &&
+                          selectedValue !== ANALYTICS_TAB_VALUE &&
                           !enabledTabs.some((tab) => tab.id === selectedValue))
                         ? "border-primary/20 bg-primary/10 text-primary"
                         : "border-border bg-background text-muted-foreground hover:bg-muted",
@@ -1810,6 +1820,20 @@ export function AgentEventsPanel({
                         </span>
                       ) : null;
                     })()}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSubTabChange(ANALYTICS_TAB_VALUE)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 h-8 text-xs font-semibold transition-colors shrink-0",
+                      isAnalyticsView
+                        ? "border-primary/20 bg-primary/10 text-primary"
+                        : "border-border bg-background text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    <RemixIcon name="chart_gantt" size="size-3.5" />
+                    <span>{t("insight.analytics.tab", "Analytics")}</span>
                   </button>
 
                   {/* Enabled custom and preset Tabs */}
@@ -1877,7 +1901,7 @@ export function AgentEventsPanel({
             >
               {/* Right side actions */}
               {/* Combined filter button - desktop display, left of refresh button */}
-              {!isMobile && (
+              {!isMobile && !isAnalyticsView && (
                 <CombinedFilterButton
                   readStatus={sharedReadStatus}
                   onReadStatusChange={setSharedReadStatus}
@@ -1888,7 +1912,7 @@ export function AgentEventsPanel({
               )}
 
               {/* Refresh button - desktop display, right of filter button */}
-              {!isMobile && (
+              {!isMobile && !isAnalyticsView && (
                 <Button
                   variant="outline"
                   size="icon"
@@ -2013,8 +2037,14 @@ export function AgentEventsPanel({
             />
 
             <div className="px-6 pt-0 pb-6 flex flex-col justify-start items-center w-full h-full">
-              {selectedValue === "all" && renderAllView()}
-              {selectedValue !== "all" && renderTabView(selectedValue)}
+              {isAnalyticsView ? (
+                <InsightAnalyticsPanel />
+              ) : (
+                <>
+                  {selectedValue === "all" && renderAllView()}
+                  {selectedValue !== "all" && renderTabView(selectedValue)}
+                </>
+              )}
             </div>
           </div>
         </div>

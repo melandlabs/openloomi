@@ -1,6 +1,6 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/queries";
-import { bot } from "@/lib/db/schema";
+import { bot, insight, insightWeights } from "@/lib/db/schema";
 import {
   deleteExpiredPendingDeletionInsights,
   runInsightCompaction,
@@ -11,6 +11,7 @@ import {
   getInsightCompactionPlatform,
   type InsightCompactionPlatform,
 } from "@/lib/insights/compaction-profile";
+import { refreshInsightAccessSummary } from "@/lib/insights/weight-adjustment";
 
 export type WeeklyInsightMaintenanceInput = {
   platform?: InsightCompactionPlatform;
@@ -29,6 +30,18 @@ export type WeeklyInsightMaintenanceResult = {
   platform: InsightCompactionPlatform;
   processedUserCount: number;
   users: WeeklyInsightMaintenanceUserResult[];
+};
+
+export type DailyInsightAnalyticsMaintenanceInput = {
+  userId?: string;
+  botId?: string;
+  now?: Date;
+};
+
+export type DailyInsightAnalyticsMaintenanceResult = {
+  processedWeightCount: number;
+  processedUserCount: number;
+  users: string[];
 };
 
 // Weekly maintenance runs per user so compaction and cleanup stay scoped to one owner's insights at a time.
@@ -85,5 +98,58 @@ export async function runWeeklyInsightMaintenance(
     platform,
     processedUserCount: results.length,
     users: results,
+  };
+}
+
+async function loadInsightWeightsForAnalyticsMaintenance(
+  input: DailyInsightAnalyticsMaintenanceInput,
+) {
+  const query = db
+    .select({
+      insightId: insightWeights.insightId,
+      userId: insightWeights.userId,
+    })
+    .from(insightWeights)
+    .innerJoin(insight, eq(insightWeights.insightId, insight.id))
+    .innerJoin(bot, eq(insight.botId, bot.id));
+
+  if (input.userId && input.botId) {
+    return query.where(
+      and(
+        eq(insightWeights.userId, input.userId),
+        eq(insight.botId, input.botId),
+      ),
+    );
+  }
+
+  if (input.userId) {
+    return query.where(eq(insightWeights.userId, input.userId));
+  }
+
+  if (input.botId) {
+    return query.where(eq(insight.botId, input.botId));
+  }
+
+  return query;
+}
+
+export async function runDailyInsightAnalyticsMaintenance(
+  input: DailyInsightAnalyticsMaintenanceInput = {},
+): Promise<DailyInsightAnalyticsMaintenanceResult> {
+  const now = input.now ?? new Date();
+  const rows = await loadInsightWeightsForAnalyticsMaintenance(input);
+  const userIds = new Set<string>();
+
+  for (const row of rows) {
+    if (!row.insightId || !row.userId) continue;
+
+    userIds.add(row.userId);
+    await refreshInsightAccessSummary(row.insightId, row.userId, now, db);
+  }
+
+  return {
+    processedWeightCount: rows.length,
+    processedUserCount: userIds.size,
+    users: Array.from(userIds).sort(),
   };
 }

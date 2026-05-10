@@ -785,6 +785,7 @@ function InsightDetailDrawerContent({
 
   // rerender-move-effect-to-event: use ref to track recorded insight, avoid duplicate calls
   const lastRecordedInsightRef = useRef<string | null>(null);
+  const lastRecordedInsightViewRef = useRef<string | null>(null);
 
   // Single insight refresh hook
   const { isRefreshing, handleRefresh: refreshInsight } =
@@ -829,6 +830,51 @@ function InsightDetailDrawerContent({
       }
     }
   }, [isOpen, normalizedInsight]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      lastRecordedInsightViewRef.current = null;
+      return;
+    }
+
+    const insightId = normalizedInsight.id;
+    if (lastRecordedInsightViewRef.current === insightId) {
+      return;
+    }
+
+    lastRecordedInsightViewRef.current = insightId;
+    const controller = new AbortController();
+
+    void fetch(`/api/insights/${encodeURIComponent(insightId)}/view`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        viewSource: "detail",
+        viewContext: {
+          surface: embedInLayout ? "embedded" : "drawer",
+          isInBriefContext,
+          initialTab: initialTab ?? null,
+        },
+      }),
+      signal: controller.signal,
+    }).catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+      console.warn(
+        "[InsightDetailDrawer] Failed to record insight view:",
+        error,
+      );
+    });
+
+    return () => controller.abort();
+  }, [
+    embedInLayout,
+    initialTab,
+    isInBriefContext,
+    isOpen,
+    normalizedInsight.id,
+  ]);
 
   const shouldHideReplyWorkspace =
     normalizedInsight.taskLabel === "rss_feed" ||

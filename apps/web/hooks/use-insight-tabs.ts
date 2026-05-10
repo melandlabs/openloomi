@@ -527,7 +527,14 @@ export function useInsightTabs() {
     const updatedPresetTabs = presetTabs.map((presetTab) => {
       const userTab = userTabsMap.get(presetTab.id);
       if (userTab) {
-        return { ...presetTab, ...userTab };
+        return {
+          ...presetTab,
+          ...userTab,
+          name: presetTab.name,
+          title: presetTab.title,
+          description: presetTab.description,
+          rules: presetTab.rules,
+        };
       }
       return { ...presetTab, enabled: true };
     });

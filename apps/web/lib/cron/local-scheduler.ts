@@ -21,6 +21,10 @@ import { db } from "../db/index";
 import { characters, jobExecutions, scheduledJobs } from "../db/schema";
 import { eq } from "drizzle-orm";
 import type { ScheduledJob } from "@/lib/db/schema";
+import {
+  runDailyInsightAnalyticsMaintenanceIfDue,
+  runInsightMaintenanceIfDue,
+} from "./insight-maintenance";
 
 // Track running jobs to prevent duplicate executions within the same scheduler cycle
 const runningJobs = new Set<string>();
@@ -179,6 +183,9 @@ async function checkAndExecuteDueJobs() {
     // Then clean up zombie jobs that have been stuck for over 4 hours
     // These are beyond recovery and are simply deleted
     await cleanupStuckJobs();
+
+    await runDailyInsightAnalyticsMaintenanceIfDue(schedulerUserId);
+    await runInsightMaintenanceIfDue(schedulerUserId);
 
     // Get all jobs that are due to run for the current user
     const dueJobs = await getDueJobs(new Date(), schedulerUserId);

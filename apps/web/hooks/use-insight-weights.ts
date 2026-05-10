@@ -52,19 +52,22 @@ export function useInsightWeights(
   const [error, setError] = useState<Error | null>(null);
   const [version, setVersion] = useState(0); // Used to trigger re-fetch
 
-  // Dedupe insightIds to avoid unnecessary requests
+  // Dedupe and stabilize insightIds to avoid re-fetching when callers create
+  // a new array instance with the same IDs on every render.
+  const insightIdsKey = [...new Set(insightIds)].sort().join("\u0000");
   const memoizedInsightIds = useMemo(() => {
-    return [...new Set(insightIds)];
-  }, [insightIds]);
+    return insightIdsKey ? insightIdsKey.split("\u0000") : [];
+  }, [insightIdsKey]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function fetchWeights() {
       if (memoizedInsightIds.length === 0) {
-        setWeightMultipliers(new Map());
-        setLastViewedAtMap(new Map());
-        setIsLoading(false);
+        setWeightMultipliers((prev) => (prev.size === 0 ? prev : new Map()));
+        setLastViewedAtMap((prev) => (prev.size === 0 ? prev : new Map()));
+        setIsLoading((prev) => (prev ? false : prev));
+        setError((prev) => (prev === null ? prev : null));
         return;
       }
 
