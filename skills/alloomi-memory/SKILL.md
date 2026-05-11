@@ -14,7 +14,7 @@ Alloomi Memory is a personal knowledge management tool that searches and manages
 |------|-------------|--------------|
 | **Memory Files** | Personal memory files (markdown/json) | `~/.alloomi/data/memory/` |
 | **Knowledge Base** | Uploaded documents via RAG/embeddings | Alloomi server |
-| **Insights** | Structured info extracted from chat history | Alloomi server |
+| **Insights** | Structured info extracted from chat history, with usage tracking and automatic maintenance | Alloomi server |
 
 ---
 
@@ -42,6 +42,8 @@ Inside Alloomi, memory is layered into multiple levels:
 
 This enables reasoning across both immediate context and deep historical knowledge simultaneously.
 
+Insights include automatic usage tracking—recording view frequency, sources, and calculating value scores to surface the most relevant information. A periodic maintenance system (daily analytics refresh, weekly compaction) keeps insight retrieval accurate and prevents context decay by archiving or removing stale, low-value content.
+
 ---
 
 ## Authentication
@@ -61,7 +63,7 @@ Memory files are stored locally at `~/.alloomi/data/memory/` and searched via di
 ```
 ~/.alloomi/data/memory/
 ├── chats/           # Chat conversation exports
-├── weixin/          # WeChat exports
+├── channels/         # Channel memory exports e.g., weixin, telegram, etc.
 ├── people/          # Person profiles
 ├── projects/       # Project notes
 ├── notes/          # General notes
@@ -374,6 +376,131 @@ Get all insights for a specific chat.
 ```bash
 curl "http://localhost:3415/api/chat-insights?chatId=chat_xxx" \
   -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+### Insight Usage Analytics & Maintenance
+
+Alloomi tracks insight usage and performs periodic maintenance to preserve retrieval quality, avoiding context decay.
+
+#### Usage Tracking
+
+Each insight view is recorded with:
+- Access timestamp
+- Access source (`list`, `detail`, `search`, `favorite`)
+- Cumulative access counts (7-day / 30-day / total)
+
+Data is stored in the `insightWeights` table:
+- `accessCountTotal` - Total access count
+- `accessCount7d` - Access count in last 7 days
+- `accessCount30d` - Access count in last 30 days
+- `lastAccessedAt` - Last access timestamp
+
+#### Analysis Dimensions
+
+Each insight is scored on trend and value:
+
+| Metric | Weight | Description |
+|--------|--------|-------------|
+| Frequency | 45% | Based on 7-day / 30-day access frequency |
+| Freshness | 25% | Last access time |
+| Relevance | 20% | Importance (70%) + Urgency (30%) |
+| Favorites | 10% | Whether the insight is favorited |
+
+**Trend Indicators:**
+- `rising` - Access frequency increasing
+- `falling` - Access frequency decreasing
+- `stable` - Frequency stable
+
+#### Periodic Maintenance
+
+System automatically runs two maintenance tasks:
+
+| Task | Frequency | Purpose |
+|------|-----------|---------|
+| Daily analytics refresh | 24 hours | Refresh access stats, recalculate trends and scores |
+| Weekly compaction | 7 days | Merge similar insights, prune low-value content |
+
+**Retention Policy:**
+- `delete`: 90 days no access + low score + not high importance → soft delete, hard delete after 180 days
+- `archive`: 30 days no access + low score OR falling trend + low score → archived
+
+#### GET `/api/insights/analytics` - Get Insight Usage Analytics
+
+```bash
+curl "http://localhost:3415/api/insights/analytics" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Response:**
+```json
+{
+  "generatedAt": "2024-01-15T10:30:00Z",
+  "summary": {
+    "totalInsights": 150,
+    "activeInsights": 45,
+    "dormantInsights": 105,
+    "totalAccesses30d": 230,
+    "averageValueScore": 42,
+    "risingInsights": 12,
+    "fallingInsights": 8,
+    "stableInsights": 25
+  },
+  "topInsights": [...],
+  "bottomInsights": [...],
+  "relationships": [...],
+  "insights": [
+    {
+      "id": "insight_xxx",
+      "title": "User decided to start new project",
+      "description": "",
+      "taskLabel": "",
+      "platform": "gmail",
+      "account": "user@gmail.com",
+      "importance": "general",
+      "urgency": "not_urgent",
+      "isFavorited": false,
+      "isArchived": false,
+      "createdAt": "2024-01-01T00:00:00Z",
+      "updatedAt": "2024-01-10T00:00:00Z",
+      "time": "2024-01-01T00:00:00Z",
+      "accessCountTotal": 15,
+      "accessCount7d": 3,
+      "accessCount30d": 8,
+      "lastAccessedAt": "2024-01-15T10:30:00Z",
+      "trend": "rising",
+      "recent7dAccessCount": 3,
+      "previous7dAccessCount": 1,
+      "valueScore": 58,
+      "recommendation": {
+        "action": "keep",
+        "reason": "Usage, freshness, or relevance still supports keeping it active."
+      }
+    }
+  ]
+}
+```
+
+---
+
+#### POST `/api/insights/[id]/view` - Record Insight View
+
+```bash
+curl -X POST "http://localhost:3415/api/insights/insight_xxx/view" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"viewSource": "search"}'
+```
+
+**Parameters:**
+- `viewSource` (string) - Source type: `list`, `detail`, `search`, `favorite`
+
+**Response:**
+```json
+{
+  "ok": true
+}
 ```
 
 ---
