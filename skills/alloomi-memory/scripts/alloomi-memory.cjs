@@ -184,6 +184,10 @@ async function deleteInsight(id) {
   return apiRequest(`/api/insights/${id}`, 'DELETE');
 }
 
+async function refreshInsights() {
+  return apiRequest('/api/insights/all');
+}
+
 async function addInsight(title, description, options = {}) {
   const {
     importance,
@@ -359,6 +363,12 @@ async function main() {
         break;
       }
 
+      case 'refresh-insights': {
+        const result = await refreshInsights();
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
       case 'add-insight': {
         let title = null;
         let description = null;
@@ -504,6 +514,7 @@ Commands:
   list-insights [--days=7] [--limit=50] [--channel=<channel>]     List recent insights (optionally filtered by channel)
   get-insight <id>                                                  Get single insight
   delete-insight <id>                                               Delete an insight
+  refresh-insights                                                  Refresh all insights from all channels
   add-insight --title=<title> --description=<text>                  Create a new insight
   update-insight <id> [--title=<title>] [--description=<text>]     Update an insight
   add-memory <content> [--file=<filename>] [--directory=<subdir>]   Add a memory file
