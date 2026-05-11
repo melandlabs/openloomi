@@ -176,6 +176,13 @@ async function checkAndExecuteDueJobs() {
   isProcessing = true;
 
   try {
+    await runDailyInsightAnalyticsMaintenanceIfDue(schedulerUserId);
+    await runInsightMaintenanceIfDue(schedulerUserId);
+  } catch (error) {
+    console.error("[LocalScheduler] Error checking for due jobs:", error);
+  }
+
+  try {
     // First, recover any stuck jobs (runs every minute as part of the scheduler cycle)
     // Jobs running longer than RECOVERY_TIMEOUT_MS (120 min) are considered stuck
     await recoverStuckJobs();
@@ -183,9 +190,6 @@ async function checkAndExecuteDueJobs() {
     // Then clean up zombie jobs that have been stuck for over 4 hours
     // These are beyond recovery and are simply deleted
     await cleanupStuckJobs();
-
-    await runDailyInsightAnalyticsMaintenanceIfDue(schedulerUserId);
-    await runInsightMaintenanceIfDue(schedulerUserId);
 
     // Get all jobs that are due to run for the current user
     const dueJobs = await getDueJobs(new Date(), schedulerUserId);
