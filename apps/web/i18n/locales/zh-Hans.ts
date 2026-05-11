@@ -9,8 +9,8 @@ const zh = {
   },
   nav: {
     ...baseZh.nav,
-    insights: "Insight 追踪",
-    inbox: "Insight 追踪",
+    insights: "洞察",
+    inbox: "洞察",
     termsAndPolicies: "条款与政策",
   },
   insight: {

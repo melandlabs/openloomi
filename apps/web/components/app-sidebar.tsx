@@ -346,7 +346,8 @@ export function AppSidebar() {
       currentPage === "alloomi-soul" ||
       currentPage === "account-settings" ||
       currentPage === "profile-edit" ||
-      currentPage === "about";
+      currentPage === "about" ||
+      pathname === "/inbox";
     return isProfileSettingsPage;
   }, [pathname, searchParams]);
 
@@ -369,6 +370,13 @@ export function AppSidebar() {
         icon: "brain_ai_3",
         type: "internal" as const,
         href: "/?page=profile-soul",
+      },
+      {
+        key: "insight-tracking",
+        title: "nav.insights",
+        icon: "radar",
+        type: "internal" as const,
+        href: "/inbox",
       },
       {
         key: "about",
@@ -696,7 +704,8 @@ export function AppSidebar() {
                           (searchParams?.get("page") === "account-settings" ||
                             searchParams?.get("page") === "profile-edit")) ||
                         (item.href === "/?page=about" &&
-                          searchParams?.get("page") === "about");
+                          searchParams?.get("page") === "about") ||
+                        (item.href === "/inbox" && pathname === "/inbox");
 
                       return (
                         <Tooltip key={item.key}>
@@ -901,143 +910,6 @@ export function AppSidebar() {
                             </Tooltip>
                           );
                         })()}
-
-                      {/* Insight analytics entry - exposes /inbox from the primary sidebar. */}
-                      {isNavVisible("chat") && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              className={cn(
-                                "w-full gap-2 px-3 py-2 h-auto rounded-md transition-colors",
-                                pathname === "/inbox"
-                                  ? "text-primary bg-sidebar-hover"
-                                  : "text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-hover-foreground",
-                                isCollapsed
-                                  ? "justify-center"
-                                  : "justify-start",
-                              )}
-                              aria-current={
-                                pathname === "/inbox" ? "page" : undefined
-                              }
-                              asChild
-                            >
-                              <Link
-                                href="/inbox"
-                                onClick={() => {
-                                  if (isMobile) {
-                                    setIsCollapsed(true);
-                                    window.dispatchEvent(
-                                      new CustomEvent("alloomi:close-sidebar"),
-                                    );
-                                  }
-                                }}
-                                className={cn(
-                                  "flex items-center w-full min-h-0",
-                                  isCollapsed
-                                    ? "justify-center"
-                                    : "gap-2 justify-start",
-                                )}
-                              >
-                                <RemixIcon
-                                  name="radar"
-                                  size={SIDEBAR_NAV_ICON_SIZE}
-                                  filled={pathname === "/inbox"}
-                                  className={
-                                    pathname === "/inbox" ? "text-primary" : ""
-                                  }
-                                />
-                                {!isCollapsed && (
-                                  <span
-                                    className={cn(
-                                      "truncate font-normal",
-                                      pathname === "/inbox"
-                                        ? "text-primary"
-                                        : "text-sidebar-foreground",
-                                    )}
-                                  >
-                                    {t("nav.insights", "Tracking Events")}
-                                  </span>
-                                )}
-                              </Link>
-                            </Button>
-                          </TooltipTrigger>
-                          {isCollapsed && (
-                            <TooltipContent
-                              side="right"
-                              className="border border-border bg-card text-card-foreground z-[9999]"
-                            >
-                              <p>{t("nav.insights", "Tracking Events")}</p>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      )}
-
-                      {/* Collection - temporarily hidden */}
-                      {/* <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      asChild
-                      variant="ghost"
-                      className={cn(
-                        "w-full gap-2 px-3 py-2 h-auto rounded-md transition-colors",
-                        isCollapsed ? "justify-center" : "justify-start",
-                        pathname === "/" &&
-                          searchParams?.get("page") === "favorites"
-                          ? "text-primary"
-                          : "text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-hover-foreground",
-                      )}
-                    >
-                      <Link
-                        href="/?page=favorites"
-                        onClick={() => {
-                          if (isMobile) {
-                            setIsCollapsed(true);
-                            window.dispatchEvent(
-                              new CustomEvent("alloomi:close-sidebar"),
-                            );
-                          }
-                        }}
-                        className={cn(
-                          "flex items-center w-full min-h-0",
-                          isCollapsed
-                            ? "justify-center"
-                            : "gap-2 justify-start",
-                        )}
-                      >
-                        <RemixIcon
-                          name="bookmark"
-                          filled={
-                            pathname === "/" &&
-                            searchParams?.get("page") === "favorites"
-                          }
-                          size={SIDEBAR_NAV_ICON_SIZE}
-                        />
-                        {!isCollapsed && (
-                          <span
-                            className={cn(
-                              "truncate font-normal",
-                              pathname === "/" &&
-                                searchParams?.get("page") === "favorites"
-                                ? "text-primary"
-                                : "text-sidebar-foreground",
-                            )}
-                          >
-                            {t("nav.favorites")}
-                          </span>
-                        )}
-                      </Link>
-                    </Button>
-                  </TooltipTrigger>
-                  {isCollapsed && (
-                    <TooltipContent
-                      side="right"
-                      className="border border-border bg-card text-card-foreground z-[9999]"
-                    >
-                      <p>{t("nav.favorites")}</p>
-                    </TooltipContent>
-                  )}
-                </Tooltip> */}
 
                       {/* Connectors (linked accounts / integrations) — same unlock as Library */}
                       {isNavVisible("workspace") && (

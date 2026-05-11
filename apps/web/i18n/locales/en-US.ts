@@ -9,8 +9,8 @@ const en = {
   },
   nav: {
     ...baseEn.nav,
-    insights: "Insight Tracking",
-    inbox: "Insight Tracking",
+    insights: "Insight",
+    inbox: "Insight",
     termsAndPolicies: "Terms & Policies",
   },
   insight: {
