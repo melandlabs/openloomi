@@ -31,7 +31,7 @@ jobs:
         run: pnpm lint
 
       - name: Format check
-        run: pnpm format
+        run: pnpm format:check
 
       - name: Type check
         run: pnpm tsc
