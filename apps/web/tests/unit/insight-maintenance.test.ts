@@ -51,8 +51,9 @@ function makeWeightSelectBuilder(response: unknown) {
   const builder = {
     innerJoin: vi.fn(),
     where: vi.fn().mockReturnValue(resolved),
-    then: resolved.then.bind(resolved),
   };
+  // biome-ignore lint/suspicious/noThenProperty: thenable mock for query builder
+  (builder as any).then = resolved.then.bind(resolved);
 
   builder.innerJoin.mockReturnValue(builder);
 

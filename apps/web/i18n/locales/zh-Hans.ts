@@ -24,11 +24,11 @@ const zh = {
       },
     },
     analytics: {
-      ...(
-        (baseZh.insight as typeof baseZh.insight & {
+      ...((
+        baseZh.insight as typeof baseZh.insight & {
           analytics?: Record<string, unknown>;
-        }).analytics ?? {}
-      ),
+        }
+      ).analytics ?? {}),
       tab: "分析",
       title: "使用分析",
       generatedAt: "更新于 {{time}}",

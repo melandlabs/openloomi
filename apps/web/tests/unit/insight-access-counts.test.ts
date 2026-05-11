@@ -91,6 +91,7 @@ function createMockDb() {
       return Promise.resolve([]);
     }
 
+    // biome-ignore lint/suspicious/noThenProperty: thenable mock for query builder
     then(
       resolve: (value: any[]) => unknown,
       reject?: (reason: unknown) => unknown,

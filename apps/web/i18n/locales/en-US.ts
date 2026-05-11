@@ -20,15 +20,16 @@ const en = {
       preset: {
         ...(baseEn.insight?.tabs?.preset ?? {}),
         importantPeople: "Important people",
-        importantPeopleDesc: "Filter insights from important people or key contacts",
+        importantPeopleDesc:
+          "Filter insights from important people or key contacts",
       },
     },
     analytics: {
-      ...(
-        (baseEn.insight as typeof baseEn.insight & {
+      ...((
+        baseEn.insight as typeof baseEn.insight & {
           analytics?: Record<string, unknown>;
-        }).analytics ?? {}
-      ),
+        }
+      ).analytics ?? {}),
       tab: "Analytics",
       title: "Usage Analytics",
       generatedAt: "Updated {{time}}",
