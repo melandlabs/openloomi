@@ -93,16 +93,19 @@ curl http://localhost:3415/api/integrations/accounts \
   "accounts": [
     {
       "id": "int_xxx",
-      "platform": "telegram",
-      "externalId": "123456789",
-      "displayName": "My Telegram",
+      "platform": "gmail",
+      "externalId": "user@gmail.com",
+      "displayName": "My Gmail",
       "status": "active",
       "metadata": {},
-      "createdAt": "2024-01-01T00:00:00Z"
+      "createdAt": "2024-01-01T00:00:00Z",
+      "botId": "bot_xxx"
     }
   ]
 }
 ```
+
+**Note:** Each account includes a `botId` field which is used for `send-reply` and other bot operations.
 
 ---
 
@@ -182,6 +185,74 @@ curl -X DELETE http://localhost:3415/api/integrations/int_xxx \
 
 ---
 
+### GET `/api/contacts` - Query Contacts
+
+Query user contacts with optional filtering and pagination.
+
+```bash
+curl "http://localhost:3415/api/contacts?name=John&page=1&pageSize=10" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Parameters:**
+- `name` (string, optional) - Filter contacts by name (partial match)
+- `page` (number, default 1) - Page number
+- `pageSize` (number, default 10) - Items per page (max 100)
+
+**Response:**
+```json
+{
+  "success": true,
+  "contacts": [
+    {
+      "id": "contact_xxx",
+      "name": "John Doe",
+      "type": "email",
+      "botId": "bot_xxx",
+      "platform": "gmail"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 10,
+    "totalCount": 50,
+    "totalPages": 5,
+    "hasMore": true,
+    "hasPrevious": false
+  }
+}
+```
+
+---
+
+### POST `/api/messages` - Send Message
+
+Send a message via a connected platform bot.
+
+```bash
+curl -X POST http://localhost:3415/api/messages \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "botId": "bot_xxx",
+    "recipients": ["John"],
+    "message": "Hello!",
+    "subject": "Optional subject"
+  }'
+```
+
+**Parameters:**
+- `botId` (string, required) - The bot ID to send from
+- `recipients` (array, required) - List of recipient names
+- `message` (string, required) - Message content
+- `subject` (string, optional) - Email subject line
+- `cc` (array, optional) - CC recipients
+- `bcc` (array, optional) - BCC recipients
+
+**Note:** `botId` is returned by `list-accounts` in the `botId` field (different from account `id`).
+
+---
+
 ## Platform Aliases Reference
 
 Aliases are case-insensitive and support both English and Chinese:
@@ -237,7 +308,7 @@ Users can also authorize accounts directly through the Alloomi desktop applicati
 # List all supported platforms
 node $SKILL_DIR/scripts/alloomi-connectors.cjs list-platforms
 
-# List all connected accounts
+# List all connected accounts (includes botId for send-reply)
 node $SKILL_DIR/scripts/alloomi-connectors.cjs list-accounts
 
 # Check connection status for a platform
@@ -248,6 +319,12 @@ node $SKILL_DIR/scripts/alloomi-connectors.cjs connect slack
 
 # Disconnect an account by ID
 node $SKILL_DIR/scripts/alloomi-connectors.cjs disconnect int_xxx
+
+# Query contacts
+node $SKILL_DIR/scripts/alloomi-connectors.cjs query-contacts --name=John --page=1 --pageSize=10
+
+# Send a message (requires botId from list-accounts)
+node $SKILL_DIR/scripts/alloomi-connectors.cjs send-reply --botId=bot_xxx --recipients=John --message="Hello!"
 ```
 
 ### Commands
@@ -255,10 +332,12 @@ node $SKILL_DIR/scripts/alloomi-connectors.cjs disconnect int_xxx
 | Command | Description |
 |---------|-------------|
 | `list-platforms` | List all 26 supported platforms with IDs and aliases |
-| `list-accounts` | List all connected integration accounts |
+| `list-accounts` | List all connected integration accounts (includes `botId`) |
 | `status <platform>` | Check if a platform is connected (e.g., telegram, slack) |
 | `connect <platform> [options]` | Connect a platform (OAuth, App Password, or App Credentials) |
 | `disconnect <accountId>` | Disconnect a specific account by ID |
+| `query-contacts [options]` | Query contacts (--name=, --page=, --pageSize=) |
+| `send-reply --botId= --recipients= --message=` | Send a message via REST API |
 
 ### Platform Connection Methods
 
@@ -280,10 +359,14 @@ node $SKILL_DIR/scripts/alloomi-connectors.cjs disconnect int_xxx
 2. Listing integrations - "show my connected accounts", "what platforms am I connected to"
 3. Checking status - "is my github connected?", "telegram status"
 4. Disconnecting - "disconnect my discord", "remove whatsapp"
+5. Querying contacts - "show my contacts", "find John in contacts"
+6. Sending messages - "send email to John", "reply to that message"
 
 **Execution Flow:**
 
-1. **Identify intent** - connect / list / status / disconnect
+1. **Identify intent** - connect / list / status / disconnect / query-contacts / send-reply
 2. **Resolve platform** - use alias normalization (e.g., `gh` -> `github`)
 3. **Execute command** - use Bash tool
 4. **Format output** - report results naturally in user's language
+
+**Note on send-reply:** The `botId` is returned by `list-accounts` in the `botId` field.

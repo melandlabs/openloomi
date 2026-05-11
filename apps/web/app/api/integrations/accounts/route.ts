@@ -290,7 +290,7 @@ async function handleLocalMode(request: NextRequest) {
       await ensureBotForAccount(cloudAccount, localUserId);
     }
 
-    // Return account list from local database
+    // Return account list from local database (with bot ID via JOIN)
     const localAccounts = await db
       .select({
         id: integrationAccounts.id,
@@ -301,8 +301,10 @@ async function handleLocalMode(request: NextRequest) {
         metadata: integrationAccounts.metadata,
         createdAt: integrationAccounts.createdAt,
         updatedAt: integrationAccounts.updatedAt,
+        botId: bot.id,
       })
       .from(integrationAccounts)
+      .leftJoin(bot, eq(bot.platformAccountId, integrationAccounts.id))
       .where(eq(integrationAccounts.userId, localUserId));
 
     // Enhance accounts with hasValidContextToken for WeChat
@@ -317,6 +319,7 @@ async function handleLocalMode(request: NextRequest) {
           metadata: string | null;
           createdAt: Date;
           updatedAt: Date;
+          botId: string | null;
         }) => {
           const account: {
             id: string;
@@ -327,6 +330,7 @@ async function handleLocalMode(request: NextRequest) {
             metadata: Record<string, unknown> | null;
             createdAt: Date;
             updatedAt: Date;
+            botId: string | null;
             hasValidContextToken?: boolean;
           } = {
             ...acc,

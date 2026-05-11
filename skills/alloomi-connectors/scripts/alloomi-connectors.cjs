@@ -209,6 +209,23 @@ async function disconnectAccount(accountId) {
   return apiRequest(`/api/integrations/${accountId}`, 'DELETE');
 }
 
+async function queryContacts(options = {}) {
+  const { name, page = 1, pageSize = 10 } = options;
+  const params = new URLSearchParams();
+  if (name) params.set('name', name);
+  params.set('page', String(page));
+  params.set('pageSize', String(pageSize));
+  return apiRequest(`/api/contacts?${params.toString()}`);
+}
+
+async function sendReply(options = {}) {
+  const { botId, recipients, message, subject, cc, bcc } = options;
+  if (!botId || !recipients || !message) {
+    throw new Error('botId, recipients, and message are required');
+  }
+  return apiRequest('/api/messages', 'POST', { botId, recipients, message, subject, cc, bcc });
+}
+
 async function connectEmailPlatform(platformId, email, appPassword) {
   const validateEndpoint = platformId === 'gmail' ? '/api/google/validate' : '/api/outlook/validate';
 
@@ -460,16 +477,53 @@ async function main() {
         break;
       }
 
+      case 'query-contacts': {
+        const nameArg = args.find(a => a.startsWith('--name='));
+        const pageArg = args.find(a => a.startsWith('--page='));
+        const pageSizeArg = args.find(a => a.startsWith('--pageSize='));
+        const result = await queryContacts({
+          name: nameArg ? nameArg.split('=')[1] : undefined,
+          page: pageArg ? Number.parseInt(pageArg.split('=')[1], 10) : 1,
+          pageSize: pageSizeArg ? Number.parseInt(pageSizeArg.split('=')[1], 10) : 10
+        });
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'send-reply': {
+        const botIdArg = args.find(a => a.startsWith('--botId='));
+        const recipientsArg = args.find(a => a.startsWith('--recipients='));
+        const messageArg = args.find(a => a.startsWith('--message='));
+        const subjectArg = args.find(a => a.startsWith('--subject='));
+        const ccArg = args.find(a => a.startsWith('--cc='));
+        const bccArg = args.find(a => a.startsWith('--bcc='));
+        if (!botIdArg || !recipientsArg || !messageArg) {
+          throw new Error('botId, recipients, and message required');
+        }
+        const result = await sendReply({
+          botId: botIdArg.split('=')[1],
+          recipients: recipientsArg.split('=')[1].split(','),
+          message: messageArg.split('=')[1],
+          subject: subjectArg ? subjectArg.split('=')[1] : undefined,
+          cc: ccArg ? ccArg.split('=')[1].split(',') : undefined,
+          bcc: bccArg ? bccArg.split('=')[1].split(',') : undefined
+        });
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
       default:
         console.log(JSON.stringify({
           error: 'Unknown command',
           usage: `
 Commands:
   list-platforms                                List all supported platforms
-  list-accounts                                List all connected accounts
+  list-accounts                                List all connected accounts (includes botId)
   status <platform>                            Check connection status for a platform
   connect <platform> [options]                  Connect a platform
   disconnect <accountId>                        Disconnect an account by ID
+  query-contacts [options]                      Query contacts (--name=, --page=, --pageSize=)
+  send-reply --botId= --recipients= --message= Send a message
 
 Platform Connection Methods:
   OAuth (auto-opens browser):
@@ -500,6 +554,8 @@ Examples:
   node alloomi-connectors.cjs status telegram
   node alloomi-connectors.cjs connect gmail --email=my@gmail.com --password=abcdefghijklnop
   node alloomi-connectors.cjs disconnect int_xxx
+  node alloomi-connectors.cjs query-contacts --name=John --page=1 --pageSize=10
+  node alloomi-connectors.cjs send-reply --botId=bot_xxx --recipients=John --message="Hello!"
           `.trim()
         }, null, 2));
     }
