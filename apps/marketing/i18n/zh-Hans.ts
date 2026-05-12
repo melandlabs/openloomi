@@ -144,7 +144,7 @@ export const zhHans = {
     title: "开源。本地优先。属于你。",
     subtitle:
       "OpenLoomi 在 Apache 2.0 下开源。在你的机器上自托管——你的数据永远不会离开。五分钟内 clone、build、运行。",
-    cloneCommand: "git clone https://github.com/melandlabs/alloomi.git",
+    cloneCommand: "git clone https://github.com/melandlabs/openloomi.git",
     cta: "GitHub",
     community: "加入 Discord 社区",
   },

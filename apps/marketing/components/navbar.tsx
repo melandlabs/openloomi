@@ -61,7 +61,7 @@ export function Navbar({
     if (onSignInClick) {
       onSignInClick();
     } else {
-      window.open("https://github.com/melandlabs/alloomi", "_blank");
+      window.open("https://github.com/melandlabs/openloomi", "_blank");
     }
   };
 
@@ -69,7 +69,7 @@ export function Navbar({
     if (onGetStartedClick) {
       onGetStartedClick();
     } else {
-      window.open("https://github.com/melandlabs/alloomi", "_blank");
+      window.open("https://github.com/melandlabs/openloomi", "_blank");
     }
   };
 
@@ -83,7 +83,7 @@ export function Navbar({
     return { backgroundColor: "var(--color-background)" };
   };
 
-  const githubUrl = "https://github.com/melandlabs/alloomi";
+  const githubUrl = "https://github.com/melandlabs/openloomi";
 
   // Nav padding tuned to match the design preview.
   // Move: <md shows Logo.svg only; Desktop: shows Logo-full-light.

@@ -27,7 +27,7 @@ export function LandingFooterCtaSection() {
         </p>
         <div className="flex flex-col sm:flex-row justify-center gap-4">
           <a
-            href="https://github.com/melandlabs/alloomi"
+            href="https://github.com/melandlabs/openloomi"
             target="_blank"
             rel="noopener noreferrer"
             className="bg-primary-gradient text-primary-foreground px-8 py-4 rounded-lg shadow-sm font-medium transition-all transform flex items-center gap-2 relative z-20 hover:brightness-95 min-w-[180px] justify-center"

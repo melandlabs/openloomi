@@ -147,7 +147,7 @@ export const en = {
     title: "Open-source. Local-first. Yours.",
     subtitle:
       "OpenLoomi is open-source under Apache 2.0. Self-host on your machine — your data never leaves. Clone, build, and run in under 5 minutes.",
-    cloneCommand: "git clone https://github.com/melandlabs/alloomi.git",
+    cloneCommand: "git clone https://github.com/melandlabs/openloomi.git",
     cta: "GitHub",
     community: "Join the community on Discord",
   },

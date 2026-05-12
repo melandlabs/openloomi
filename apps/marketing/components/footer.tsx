@@ -166,7 +166,7 @@ export function Footer({
         },
         {
           name: "GitHub",
-          href: "https://github.com/melandlabs/alloomi",
+          href: "https://github.com/melandlabs/openloomi",
           icon: <RemixIcon name="github" variant="line" size="size-4" />,
         },
         {
