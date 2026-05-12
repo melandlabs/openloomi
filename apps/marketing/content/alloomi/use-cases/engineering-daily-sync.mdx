@@ -14,7 +14,7 @@ Engineering teams waste hours every week pulling commit logs, writing status rep
 
 | Step           | Action                                                      |
 | -------------- | ----------------------------------------------------------- |
-| 🌙 Every 10 PM | Pull all commits from `melandlabs/Alloomi` on GitHub        |
+| 🌙 Every 10 PM | Pull all commits from `melandlabs/openloomi` on GitHub      |
 | 📝 Compile     | Generate a structured daily dev report                      |
 | 📧 Email       | Send the report to the engineering team                     |
 | 🐛 New Issues  | Fetch all issues created that day, rewrite with full detail |
@@ -82,7 +82,7 @@ Alloomi's tracking panel shows exactly how many times each task has run, against
 Open Alloomi and paste this:
 
 ```
-Please pull all commits from melandlabs/Alloomi every night at 10 PM, compile a report, and send it to my email. Also, monitor all new issues created that day, rewrite them in detail, and sync them to Linear.
+Please pull all commits from melandlabs/openloomi every night at 10 PM, compile a report, and send it to my email. Also, monitor all new issues created that day, rewrite them in detail, and sync them to Linear.
 ```
 
 Alloomi will automatically create the scheduled tasks for you!
@@ -94,11 +94,11 @@ Alloomi will automatically create the scheduled tasks for you!
 1. Go to the **Agent** page, then select **Automation** → **New Task**
 2. Create the first task:
 
-| Field            | Input                                                                                                                                                                                                                                                                |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Task Name        | `PD Daily Sync`                                                                                                                                                                                                                                                      |
-| Task Description | `1. Fetch all commits from your GitHub repo (e.g. melandlabs/Alloomi)\n2. Compile a structured daily dev report\n3. Email the report to your team\n4. Fetch all issues created that day\n5. Rewrite each issue with full detail\n6. Sync rewritten issues to Linear` |
-| Schedule         | `0 22 * * *` (every day at 10 PM)                                                                                                                                                                                                                                    |
+| Field            | Input                                                                                                                                                                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Task Name        | `PD Daily Sync`                                                                                                                                                                                                                                                        |
+| Task Description | `1. Fetch all commits from your GitHub repo (e.g. melandlabs/openloomi)\n2. Compile a structured daily dev report\n3. Email the report to your team\n4. Fetch all issues created that day\n5. Rewrite each issue with full detail\n6. Sync rewritten issues to Linear` |
+| Schedule         | `0 22 * * *` (every day at 10 PM)                                                                                                                                                                                                                                      |
 
 3. Create the second task:
 
