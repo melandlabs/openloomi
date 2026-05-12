@@ -33,6 +33,8 @@ export type ModelType =
   | "moonshotai/kimi-k2.6"
   | "minimax/minimax-m2.5"
   | "minimax/minimax-m2.7"
+  | "qwen/qwen3.6-plus"
+  | "qwen/qwen3.6-flash"
   | "xiaomi/mimo-v2.5"
   | "xiaomi/mimo-v2.5-pro"
   | "stepfun/step-3.5-flash";
@@ -198,6 +200,16 @@ export const MODEL_PRICING: Record<ModelType, ModelPricing> = {
     supportsVision: true,
     supportsAudio: true,
     supportsTranscription: true,
+  },
+  "qwen/qwen3.6-flash": {
+    inputPricePerMillion: 0.1,
+    outputPricePerMillion: 0.3,
+    supportsVision: false,
+  },
+  "qwen/qwen3.6-plus": {
+    inputPricePerMillion: 0.3,
+    outputPricePerMillion: 1,
+    supportsVision: true,
   },
 };
 

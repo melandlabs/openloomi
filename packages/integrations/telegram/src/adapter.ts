@@ -49,6 +49,36 @@ const FIRST_LANDING_MESSAGE_CHUNK_COUNT = 10;
 const TELEGRAM_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const dialogCacheFetchLimit = 200;
 
+// Timeout constants for network operations (in ms)
+export const CONNECT_TIMEOUT_MS = 60_000; // 60 seconds for initial connection
+export const SEND_MESSAGE_TIMEOUT_MS = 30_000; // 30 seconds for sending a message
+
+/**
+ * Wraps a promise with a timeout. If the promise doesn't resolve within the timeout,
+ * the promise is rejected with a timeout error.
+ */
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  operationName: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${operationName} timed out after ${ms}ms`));
+    }, ms);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 // Cache interfaces
 interface EntityCache {
   [id: string]: {
@@ -498,7 +528,11 @@ export class TelegramAdapter extends MessagePlatformAdapter {
     messages: Messages,
   ): Promise<void> {
     if (!this.client.connected) {
-      await this.client.connect();
+      await withTimeout(
+        this.client.connect(),
+        CONNECT_TIMEOUT_MS,
+        `[Bot ${this.botId}] Telegram client.connect()`,
+      );
     }
 
     if (messages.length === 0) {
@@ -515,7 +549,11 @@ export class TelegramAdapter extends MessagePlatformAdapter {
     quoteOrigin = false,
   ): Promise<void> {
     if (!this.client.connected) {
-      await this.client.connect();
+      await withTimeout(
+        this.client.connect(),
+        CONNECT_TIMEOUT_MS,
+        `[Bot ${this.botId}] Telegram client.connect()`,
+      );
     }
 
     if (messages.length === 0) {
@@ -1392,10 +1430,19 @@ export class TelegramAdapter extends MessagePlatformAdapter {
         return;
       }
 
-      await this.client.sendMessage(inputPeer, {
-        message: markdownToTelegramHtml(text),
-        parseMode: "html",
-      });
+      await withTimeout(
+        this.client.sendMessage(inputPeer, {
+          message: markdownToTelegramHtml(text),
+          parseMode: "html",
+        }),
+        SEND_MESSAGE_TIMEOUT_MS,
+        `[Bot ${this.botId}] Telegram client.sendMessage()`,
+      );
+      if (DEBUG) {
+        console.log(
+          `[Bot ${this.botId}] [telegram] Message sent successfully to ${peer}`,
+        );
+      }
       return;
     }
 
@@ -1423,18 +1470,37 @@ export class TelegramAdapter extends MessagePlatformAdapter {
         options.caption = caption;
       }
 
-      await this.client.sendFile(inputPeer, options);
+      await withTimeout(
+        this.client.sendFile(inputPeer, options),
+        SEND_MESSAGE_TIMEOUT_MS,
+        `[Bot ${this.botId}] Telegram client.sendFile()`,
+      );
 
       if (index === 0 && caption) {
         captionDelivered = true;
       }
+
+      if (DEBUG) {
+        console.log(
+          `[Bot ${this.botId}] [telegram] File sent successfully to ${peer}`,
+        );
+      }
     }
 
     if (caption && !captionDelivered) {
-      await this.client.sendMessage(inputPeer, {
-        message: markdownToTelegramHtml(text),
-        parseMode: "html",
-      });
+      await withTimeout(
+        this.client.sendMessage(inputPeer, {
+          message: markdownToTelegramHtml(text),
+          parseMode: "html",
+        }),
+        SEND_MESSAGE_TIMEOUT_MS,
+        `[Bot ${this.botId}] Telegram client.sendMessage()`,
+      );
+      if (DEBUG) {
+        console.log(
+          `[Bot ${this.botId}] [telegram] Caption message sent successfully to ${peer}`,
+        );
+      }
     }
   }
 }

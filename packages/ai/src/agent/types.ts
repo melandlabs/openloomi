@@ -102,7 +102,7 @@ export interface AgentMessage {
 export interface AgentQuestion {
   id: string;
   questions: Question[];
-  status?: "pending" | "answered";
+  status?: "pending" | "answered" | "cancelled";
 }
 
 export interface Question {
@@ -267,6 +267,8 @@ export interface AgentOptions {
   skillsConfig?: SkillsConfig;
   /** MCP configuration */
   mcpConfig?: McpConfig;
+  /** Active character (mate) ID for character-scoped chat */
+  characterId?: string;
   /** Focused insight IDs (from web agent) */
   focusedInsightIds?: string[];
   /** Focused insights data (from web agent) */
@@ -285,6 +287,13 @@ export interface AgentOptions {
     insightId?: string;
     insight?: Record<string, unknown>;
   }) => void;
+  /**
+   * Callback invoked when the MCP-backed `AskUserQuestion` tool needs to ask
+   * the user. Presence of this callback gates registration of the
+   * `ask-user-question` MCP server — non-interactive contexts (cron,
+   * subagent, execute) should not pass it.
+   */
+  onAskUserQuestion?: (question: AgentQuestion) => void;
   /** Callback for handling permission requests from SDK */
   onPermissionRequest?: (request: {
     toolName: string;

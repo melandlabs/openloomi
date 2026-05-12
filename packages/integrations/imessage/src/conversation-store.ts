@@ -8,9 +8,9 @@
  */
 
 import {
-  saveMessage,
-  loadDay,
-  clearConversationFromAllDays,
+  saveChannelMessage,
+  loadChannelDay,
+  clearChannelConversationFromAllDays,
 } from "@alloomi/ai/store";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -51,7 +51,7 @@ class IMessageConversationStore {
     }
 
     const today = new Date().toISOString().slice(0, 10);
-    const msgs = loadDay(
+    const msgs = loadChannelDay(
       this.memoryDir,
       this.PREFIX,
       today,
@@ -90,12 +90,12 @@ class IMessageConversationStore {
     };
 
     this.cache.get(userKey)?.get(channelId)?.push(message);
-    saveMessage(
+    saveChannelMessage(
       this.memoryDir,
       this.PREFIX,
       userKey,
       channelId,
-      message as any,
+      message,
     );
   }
 
@@ -105,7 +105,7 @@ class IMessageConversationStore {
 
     this.cache.get(userKey)?.get(channelId)?.splice(0);
     this.loadedPairs.delete(pk);
-    clearConversationFromAllDays(
+    clearChannelConversationFromAllDays(
       this.memoryDir,
       this.PREFIX,
       userKey,
@@ -126,7 +126,7 @@ class IMessageConversationStore {
         if (now - lastMsg.timestamp > expiryMs) {
           channels.delete(channelId);
           changed = true;
-          clearConversationFromAllDays(
+          clearChannelConversationFromAllDays(
             this.memoryDir,
             this.PREFIX,
             userKey,

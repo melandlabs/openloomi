@@ -2,7 +2,7 @@
 name: alloomi-memory
 description: "Alloomi Memory tools - search memory files, knowledge base, and chat insights. Triggers: memory search, knowledge base, documents, insights"
 metadata:
-  version: 0.1.0
+  version: 0.5.0
 allowed-tools: Bash(node $SKILL_DIR/scripts/alloomi-memory.cjs *)
 ---
 

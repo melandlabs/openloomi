@@ -524,3 +524,5 @@ export class DingTalkAdapter extends MessagePlatformAdapter {
     this.accessTokenCache = null;
   }
 }
+
+export { DingTalkConversationStore } from "./conversation-store";

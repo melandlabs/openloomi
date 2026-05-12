@@ -2,9 +2,10 @@
  * Embedding service with OpenRouter support and billing.
  * All configuration is read from environment variables.
  * The calling app is responsible for setting the appropriate env vars.
+ * Uses lazy import of OpenAI SDK to avoid loading at module load time.
  */
 
-import OpenAI from "openai";
+import type OpenAI from "openai";
 import { estimateTokens } from "@alloomi/shared";
 
 const OPENROUTER_API_KEY =
@@ -31,6 +32,9 @@ const EMBEDDING_DIMENSIONS: Record<string, number> = {
 // Credit cost multiplier (converts USD to credits)
 const CREDIT_COST_MULTIPLIER = 100; // 1 USD = 100 credits
 
+// Lazy-loaded OpenAI client instance
+let _openAIClient: OpenAI | null = null;
+
 /**
  * Calculate credit cost for embedding generation
  */
@@ -41,7 +45,13 @@ function calculateCreditCost(model: string, tokenCount: number): number {
 }
 
 async function getOpenAIClient(): Promise<OpenAI> {
-  return new OpenAI({
+  if (_openAIClient) {
+    return _openAIClient;
+  }
+
+  // Lazy import of OpenAI SDK
+  const OpenAI = (await import("openai")).default;
+  _openAIClient = new OpenAI({
     apiKey: OPENROUTER_API_KEY,
     baseURL: EMBEDDING_BASE_URL,
     defaultHeaders: {
@@ -49,6 +59,8 @@ async function getOpenAIClient(): Promise<OpenAI> {
       "X-Title": "Alloomi AI",
     },
   });
+
+  return _openAIClient;
 }
 
 export interface EmbeddingResult {

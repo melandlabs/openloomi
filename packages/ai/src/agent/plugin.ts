@@ -234,6 +234,8 @@ export const CLAUDE_METADATA: AgentProviderMetadata = {
     "stepfun/step-3.5-flash",
     "xiaomi/mimo-v2.5",
     "xiaomi/mimo-v2.5-pro",
+    "qwen/qwen3.6-flash",
+    "qwen/qwen3.6-plus",
   ],
   defaultModel: "claude-sonnet-4-20250514",
   tags: ["anthropic", "claude", "planning", "streaming"],
@@ -253,8 +255,8 @@ export const CODEX_METADATA: AgentProviderMetadata = {
   supportsPlan: true,
   supportsStreaming: true,
   supportsSandbox: true,
-  supportedModels: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
-  defaultModel: "gpt-4",
+  supportedModels: ["gpt-5.4", "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
+  defaultModel: "gpt-5.4",
   tags: ["openai", "codex", "cli"],
 };
 

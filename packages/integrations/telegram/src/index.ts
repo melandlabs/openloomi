@@ -18,3 +18,4 @@ export type {
 
 // Re-export utility functions
 export { alloomiMessageToTgText, tgMessageToAlloomiMessage } from "./adapter";
+export { withTimeout, CONNECT_TIMEOUT_MS } from "./adapter";

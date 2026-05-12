@@ -569,6 +569,8 @@ function markdownToBasicHtml(markdown: string): string {
 // Snippet generation
 // ---------------------------------------------------------------------------
 
-export function buildSnippet(plainText: string): string {
-  return plainText.replace(/\s+/g, " ").trim();
+export function buildSnippet(plainText: string, maxLength = 240): string {
+  const normalized = plainText.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }

@@ -1,8 +1,8 @@
 /**
- * Gmail Self-Message Conversation Store
+ * QQBot Conversation Store
  *
  * File-backed per-day in-memory store for conversation history with AI.
- * Data persists to ~/.alloomi/memory/gmail/YYYY-MM-DD.json
+ * Data persists to ~/.alloomi/data/memory/channels/qqbot/YYYY-MM-DD.json
  *
  * Token trimming is handled by handleAgentRuntime (40K budget) — not here.
  */
@@ -26,10 +26,11 @@ interface ConversationMessage {
   timestamp: number;
 }
 
-class GmailConversationStore {
+const PLATFORM = "qqbot";
+
+class QQBotConversationStore {
   private cache: Map<string, Map<string, ConversationMessage[]>> = new Map();
   private loadedPairs = new Set<string>();
-  private readonly PREFIX = "gmail";
   private readonly memoryDir: string;
 
   constructor(memoryDir?: string) {
@@ -51,7 +52,7 @@ class GmailConversationStore {
     const today = new Date().toISOString().slice(0, 10);
     const msgs = loadChannelDay(
       this.memoryDir,
-      this.PREFIX,
+      PLATFORM,
       today,
       userKey,
       accountId,
@@ -61,10 +62,10 @@ class GmailConversationStore {
   }
 
   getConversationHistory(
-    userId: string,
+    senderId: string,
     accountId: string,
   ): Array<{ role: "user" | "assistant"; content: string }> {
-    const userKey = this.getUserKey(userId);
+    const userKey = this.getUserKey(senderId);
     this.ensureLoaded(userKey, accountId);
     return (this.cache.get(userKey)?.get(accountId) ?? []).map((msg) => ({
       role: msg.role,
@@ -73,12 +74,12 @@ class GmailConversationStore {
   }
 
   addMessage(
-    userId: string,
+    senderId: string,
     accountId: string,
     role: "user" | "assistant",
     content: string,
   ): void {
-    const userKey = this.getUserKey(userId);
+    const userKey = this.getUserKey(senderId);
     this.ensureLoaded(userKey, accountId);
 
     const message: ConversationMessage = {
@@ -88,39 +89,33 @@ class GmailConversationStore {
     };
 
     this.cache.get(userKey)?.get(accountId)?.push(message);
-    saveChannelMessage(
-      this.memoryDir,
-      this.PREFIX,
-      userKey,
-      accountId,
-      message,
-    );
+    saveChannelMessage(this.memoryDir, PLATFORM, userKey, accountId, message);
 
     console.log(
-      `[GmailConversationStore] Added ${role} message for user ${userId}, account ${accountId}`,
+      `[QQBotConversationStore] Added ${role} message for sender ${senderId}, account ${accountId}`,
     );
   }
 
-  clearConversation(userId: string, accountId: string): void {
-    const userKey = this.getUserKey(userId);
+  clearConversation(senderId: string, accountId: string): void {
+    const userKey = this.getUserKey(senderId);
     const pk = this.pairKey(userKey, accountId);
 
     this.cache.get(userKey)?.get(accountId)?.splice(0);
     this.loadedPairs.delete(pk);
     clearChannelConversationFromAllDays(
       this.memoryDir,
-      this.PREFIX,
+      PLATFORM,
       userKey,
       accountId,
     );
 
     console.log(
-      `[GmailConversationStore] Cleared conversation for user ${userId}, account ${accountId}`,
+      `[QQBotConversationStore] Cleared conversation for sender ${senderId}, account ${accountId}`,
     );
   }
 
-  clearAllConversations(userId: string): void {
-    const userKey = this.getUserKey(userId);
+  clearAllConversations(senderId: string): void {
+    const userKey = this.getUserKey(senderId);
 
     for (const pk of [...this.loadedPairs]) {
       if (pk.startsWith(`${userKey}::`)) {
@@ -128,16 +123,16 @@ class GmailConversationStore {
       }
     }
     this.cache.delete(userKey);
-    clearAllChannelForUser(this.memoryDir, this.PREFIX, userKey);
+    clearAllChannelForUser(this.memoryDir, PLATFORM, userKey);
 
     console.log(
-      `[GmailConversationStore] Cleared all conversations for user ${userId}`,
+      `[QQBotConversationStore] Cleared all conversations for sender ${senderId}`,
     );
   }
 
-  private getUserKey(userId: string): string {
-    return `gmail:${userId}`;
+  private getUserKey(senderId: string): string {
+    return `qqbot:${senderId}`;
   }
 }
 
-export { GmailConversationStore };
+export { QQBotConversationStore };

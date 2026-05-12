@@ -102,7 +102,7 @@ class FeishuConversationStore {
   ) {
     this.domain = domain;
     this.memoryDir = memoryDir ?? getAppMemoryDir();
-    this.sessionsDir = join(this.memoryDir, `${this.domain}-sessions`);
+    this.sessionsDir = join(this.memoryDir, "channels", this.domain);
     this.sessionScope =
       sessionScope && sessionScope.trim().length > 0
         ? sessionScope.trim()

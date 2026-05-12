@@ -1,8 +1,8 @@
 /**
- * Gmail Self-Message Conversation Store
+ * DingTalk Conversation Store
  *
  * File-backed per-day in-memory store for conversation history with AI.
- * Data persists to ~/.alloomi/memory/gmail/YYYY-MM-DD.json
+ * Data persists to ~/.alloomi/data/memory/channels/dingtalk/YYYY-MM-DD.json
  *
  * Token trimming is handled by handleAgentRuntime (40K budget) — not here.
  */
@@ -26,10 +26,11 @@ interface ConversationMessage {
   timestamp: number;
 }
 
-class GmailConversationStore {
+const PLATFORM = "dingtalk";
+
+class DingTalkConversationStore {
   private cache: Map<string, Map<string, ConversationMessage[]>> = new Map();
   private loadedPairs = new Set<string>();
-  private readonly PREFIX = "gmail";
   private readonly memoryDir: string;
 
   constructor(memoryDir?: string) {
@@ -51,7 +52,7 @@ class GmailConversationStore {
     const today = new Date().toISOString().slice(0, 10);
     const msgs = loadChannelDay(
       this.memoryDir,
-      this.PREFIX,
+      PLATFORM,
       today,
       userKey,
       accountId,
@@ -61,25 +62,25 @@ class GmailConversationStore {
   }
 
   getConversationHistory(
-    userId: string,
-    accountId: string,
+    senderId: string,
+    chatId: string,
   ): Array<{ role: "user" | "assistant"; content: string }> {
-    const userKey = this.getUserKey(userId);
-    this.ensureLoaded(userKey, accountId);
-    return (this.cache.get(userKey)?.get(accountId) ?? []).map((msg) => ({
+    const userKey = this.getUserKey(senderId);
+    this.ensureLoaded(userKey, chatId);
+    return (this.cache.get(userKey)?.get(chatId) ?? []).map((msg) => ({
       role: msg.role,
       content: msg.content,
     }));
   }
 
   addMessage(
-    userId: string,
-    accountId: string,
+    senderId: string,
+    chatId: string,
     role: "user" | "assistant",
     content: string,
   ): void {
-    const userKey = this.getUserKey(userId);
-    this.ensureLoaded(userKey, accountId);
+    const userKey = this.getUserKey(senderId);
+    this.ensureLoaded(userKey, chatId);
 
     const message: ConversationMessage = {
       role,
@@ -87,40 +88,34 @@ class GmailConversationStore {
       timestamp: Date.now(),
     };
 
-    this.cache.get(userKey)?.get(accountId)?.push(message);
-    saveChannelMessage(
-      this.memoryDir,
-      this.PREFIX,
-      userKey,
-      accountId,
-      message,
-    );
+    this.cache.get(userKey)?.get(chatId)?.push(message);
+    saveChannelMessage(this.memoryDir, PLATFORM, userKey, chatId, message);
 
     console.log(
-      `[GmailConversationStore] Added ${role} message for user ${userId}, account ${accountId}`,
+      `[DingTalkConversationStore] Added ${role} message for sender ${senderId}, chat ${chatId}`,
     );
   }
 
-  clearConversation(userId: string, accountId: string): void {
-    const userKey = this.getUserKey(userId);
-    const pk = this.pairKey(userKey, accountId);
+  clearConversation(senderId: string, chatId: string): void {
+    const userKey = this.getUserKey(senderId);
+    const pk = this.pairKey(userKey, chatId);
 
-    this.cache.get(userKey)?.get(accountId)?.splice(0);
+    this.cache.get(userKey)?.get(chatId)?.splice(0);
     this.loadedPairs.delete(pk);
     clearChannelConversationFromAllDays(
       this.memoryDir,
-      this.PREFIX,
+      PLATFORM,
       userKey,
-      accountId,
+      chatId,
     );
 
     console.log(
-      `[GmailConversationStore] Cleared conversation for user ${userId}, account ${accountId}`,
+      `[DingTalkConversationStore] Cleared conversation for sender ${senderId}, chat ${chatId}`,
     );
   }
 
-  clearAllConversations(userId: string): void {
-    const userKey = this.getUserKey(userId);
+  clearAllConversations(senderId: string): void {
+    const userKey = this.getUserKey(senderId);
 
     for (const pk of [...this.loadedPairs]) {
       if (pk.startsWith(`${userKey}::`)) {
@@ -128,16 +123,16 @@ class GmailConversationStore {
       }
     }
     this.cache.delete(userKey);
-    clearAllChannelForUser(this.memoryDir, this.PREFIX, userKey);
+    clearAllChannelForUser(this.memoryDir, PLATFORM, userKey);
 
     console.log(
-      `[GmailConversationStore] Cleared all conversations for user ${userId}`,
+      `[DingTalkConversationStore] Cleared all conversations for sender ${senderId}`,
     );
   }
 
-  private getUserKey(userId: string): string {
-    return `gmail:${userId}`;
+  private getUserKey(senderId: string): string {
+    return `dingtalk:${senderId}`;
   }
 }
 
-export { GmailConversationStore };
+export { DingTalkConversationStore };

@@ -8,10 +8,10 @@
  */
 
 import {
-  saveMessage,
-  loadDay,
-  clearAllForUser,
-  clearConversationFromAllDays,
+  saveChannelMessage,
+  loadChannelDay,
+  clearChannelConversationFromAllDays,
+  clearAllChannelForUser,
 } from "@alloomi/ai/store";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -49,7 +49,7 @@ class WhatsAppConversationStore {
     }
 
     const today = new Date().toISOString().slice(0, 10);
-    const msgs = loadDay(
+    const msgs = loadChannelDay(
       this.memoryDir,
       this.PREFIX,
       today,
@@ -88,12 +88,12 @@ class WhatsAppConversationStore {
     };
 
     this.cache.get(userKey)?.get(accountId)?.push(message);
-    saveMessage(
+    saveChannelMessage(
       this.memoryDir,
       this.PREFIX,
       userKey,
       accountId,
-      message as any,
+      message,
     );
 
     console.log(
@@ -107,7 +107,7 @@ class WhatsAppConversationStore {
 
     this.cache.get(userKey)?.get(accountId)?.splice(0);
     this.loadedPairs.delete(pk);
-    clearConversationFromAllDays(
+    clearChannelConversationFromAllDays(
       this.memoryDir,
       this.PREFIX,
       userKey,
@@ -128,7 +128,7 @@ class WhatsAppConversationStore {
       }
     }
     this.cache.delete(userKey);
-    clearAllForUser(this.memoryDir, this.PREFIX, userKey);
+    clearAllChannelForUser(this.memoryDir, this.PREFIX, userKey);
 
     console.log(
       `[WhatsAppConversationStore] Cleared all conversations for user ${userId}`,

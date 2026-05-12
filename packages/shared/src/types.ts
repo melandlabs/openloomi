@@ -6,6 +6,10 @@ export type DataPart = { type: "append-message"; message: string };
 export const messageMetadataSchema = z.object({
   createdAt: z.string().optional(),
   disableAction: z.boolean().optional(),
+  executionId: z.string().optional(),
+  executionSequence: z.number().int().positive().optional(),
+  messagePhase: z.enum(["process", "final"]).optional(),
+  finalizedAt: z.string().optional(),
   platformAccountId: z.uuid().optional(),
   ragDocuments: z
     .array(
@@ -58,6 +62,15 @@ export const messageMetadataSchema = z.object({
         name: z.string(),
       }),
     )
+    .optional(),
+  // Task-layer context used by the chat-first task creation flow.
+  activeTaskId: z.string().optional(),
+  taskCreationMode: z.boolean().optional(),
+  taskTemplate: z
+    .object({
+      id: z.string().optional(),
+      name: z.string().optional(),
+    })
     .optional(),
 });
 

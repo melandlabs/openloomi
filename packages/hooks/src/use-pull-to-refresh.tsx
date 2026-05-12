@@ -63,14 +63,24 @@ export function usePullToRefresh({
     }
   }, [onRefresh, reset]);
 
+  // Resolve the actual scroll element. Prefer Radix ScrollArea's viewport
+  // when present; otherwise treat the attached element itself as the
+  // scroll container (lets plain `<div overflow-y-scroll>` callers use
+  // this hook too).
+  const resolveScrollElement = useCallback((): HTMLElement | null => {
+    const root = containerRef.current;
+    if (!root) return null;
+    const viewport = root.querySelector(
+      "[data-radix-scroll-area-viewport]",
+    ) as HTMLElement | null;
+    return viewport ?? (root as HTMLElement);
+  }, []);
+
   const handleStart = useCallback(
     (clientY: number) => {
       if (!enabled || isRefreshing) return;
 
-      // ScrollArea's viewport is under data-radix-scroll-area-viewport attribute
-      const container = containerRef.current?.querySelector(
-        "[data-radix-scroll-area-viewport]",
-      ) as HTMLElement;
+      const container = resolveScrollElement();
       if (!container) return;
 
       // Only pull down when at top
@@ -80,7 +90,7 @@ export function usePullToRefresh({
       startYRef.current = clientY;
       isPullingRef.current = true;
     },
-    [enabled, isRefreshing],
+    [enabled, isRefreshing, resolveScrollElement],
   );
 
   const handleMove = useCallback(
@@ -116,13 +126,7 @@ export function usePullToRefresh({
 
   // Touch event handling
   useEffect(() => {
-    const root = containerRef.current;
-    if (!root) return;
-
-    // ScrollArea's viewport is under the data-radix-scroll-area-viewport attribute
-    const container = root.querySelector(
-      "[data-radix-scroll-area-viewport]",
-    ) as HTMLElement;
+    const container = resolveScrollElement();
 
     const handleTouchStart = (e: TouchEvent) => {
       handleStart(e.touches[0].clientY);
@@ -159,17 +163,11 @@ export function usePullToRefresh({
         container.removeEventListener("touchcancel", handleEnd);
       }
     };
-  }, [handleStart, handleMove, handleEnd, pullDistance]);
+  }, [handleStart, handleMove, handleEnd, pullDistance, resolveScrollElement]);
 
   // Mouse event handling (for desktop debugging)
   useEffect(() => {
-    const root = containerRef.current;
-    if (!root) return;
-
-    // ScrollArea's viewport is under the data-radix-scroll-area-viewport attribute
-    const container = root.querySelector(
-      "[data-radix-scroll-area-viewport]",
-    ) as HTMLElement;
+    const container = resolveScrollElement();
 
     const handleMouseDown = (e: MouseEvent) => {
       handleStart(e.clientY);
@@ -196,7 +194,7 @@ export function usePullToRefresh({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [handleStart, handleMove, handleEnd]);
+  }, [handleStart, handleMove, handleEnd, resolveScrollElement]);
 
   // Set ref callback function
   const setupRefCallback = useCallback((node: HTMLElement | null) => {

@@ -2,11 +2,17 @@
  * MCP Config Loader
  *
  * Loads MCP server configuration from ~/.alloomi/mcp.json
+ * Uses mtime-based caching to avoid re-reading unchanged files
  */
 
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { FileCache } from "@alloomi/shared";
+
+// Module-level file cache for MCP configs (5 minute TTL for safety)
+const mcpFileCache = new FileCache<Record<string, McpServerConfig>>();
 
 export interface McpStdioServerConfig {
   type?: "stdio";
@@ -108,6 +114,7 @@ export interface McpConfig {
 
 /**
  * Load MCP servers configuration from ~/.alloomi/mcp.json
+ * Uses mtime-based caching to avoid re-reading unchanged files
  *
  * @param mcpConfig Optional config to control loading
  * @returns Record of server name to config
@@ -120,6 +127,24 @@ export async function loadMcpServers(
   }
 
   const configPath = getMcpConfigPath();
-  const servers = await loadMcpServersFromFile(configPath, "alloomi");
-  return servers;
+
+  // Check if config file exists and get mtime for cache
+  try {
+    const stats = fsSync.statSync(configPath);
+    const cached = mcpFileCache.get(configPath, stats.mtimeMs);
+    if (cached) {
+      console.log(
+        `[MCP] Using cached config for ${configPath} (mtime: ${stats.mtimeMs})`,
+      );
+      return cached;
+    }
+
+    // Load and cache
+    const servers = await loadMcpServersFromFile(configPath, "alloomi");
+    mcpFileCache.set(configPath, stats.mtimeMs, servers);
+    return servers;
+  } catch {
+    // File doesn't exist or can't be read
+    return {};
+  }
 }

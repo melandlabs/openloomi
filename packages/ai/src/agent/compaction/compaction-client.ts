@@ -1,7 +1,7 @@
 /**
  * Compaction Client
  *
- * Calls /api/ai/chat to summarize old conversation messages.
+ * Calls /api/ai/v1/chat/completions to summarize old conversation messages.
  * The chat route handles credit billing and proxies to cloud in native mode.
  *
  * Fire-and-forget: compaction runs asynchronously; errors are logged but
@@ -38,7 +38,7 @@ export interface CompactionOptions {
   level: CompactionLevel;
   /** Platform name */
   platform: CompactionPlatform;
-  /** Auth token (Bearer token for /api/ai/chat) */
+  /** Auth token (Bearer token for /api/ai/v1/chat/completions) */
   authToken: string;
 }
 
@@ -53,7 +53,7 @@ function normalizeCompactionRole(
 }
 
 /**
- * Trigger conversation compaction via /api/ai/chat.
+ * Trigger conversation compaction via /api/ai/v1/chat/completions.
  * The chat route handles credit billing and proxies to cloud in native mode.
  *
  * @param options - Compaction options
@@ -96,7 +96,7 @@ export async function triggerCompaction(
   );
 
   try {
-    const response = await fetch("/api/ai/chat", {
+    const response = await fetch("/api/ai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

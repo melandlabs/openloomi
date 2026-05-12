@@ -2,7 +2,7 @@
 name: alloomi-connectors
 description: "Alloomi Connectors tools - manage platform integrations (OAuth connections, list accounts, check status). Triggers: connect platform, integration status, list accounts, disconnect"
 metadata:
-  version: 0.1.0
+  version: 0.5.0
 allowed-tools: Bash(node $SKILL_DIR/scripts/alloomi-connectors.cjs *)
 ---
 

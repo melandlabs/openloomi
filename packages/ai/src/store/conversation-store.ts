@@ -539,3 +539,83 @@ export function saveCompactionSummary(
     current.setDate(current.getDate() + 1);
   }
 }
+
+// ─── Channel Store Helpers ───────────────────────────────────────────────────
+
+/**
+ * Builds the memory directory path for a specific channel.
+ * Uses proper path.join to handle cross-platform path separators.
+ */
+export function getChannelMemoryDir(
+  memoryDir: string,
+  platform: string,
+): string {
+  return join(memoryDir, "channels", platform);
+}
+
+/**
+ * Saves a message to a channel-specific day file.
+ * The channel path is automatically nested under channels/{platform}.
+ */
+export function saveChannelMessage(
+  memoryDir: string,
+  platform: string,
+  userKey: string,
+  accountId: string,
+  message: ConversationMessage,
+): void {
+  const channelDir = getChannelMemoryDir(memoryDir, platform);
+  saveMessage(channelDir, platform, userKey, accountId, message);
+}
+
+/**
+ * Loads messages for a specific channel and day.
+ * The channel path is automatically nested under channels/{platform}.
+ */
+export function loadChannelDay(
+  memoryDir: string,
+  platform: string,
+  date: string,
+  userKey?: string,
+  accountId?: string,
+): ConversationMessage[] {
+  const channelDir = getChannelMemoryDir(memoryDir, platform);
+  return loadDay(channelDir, platform, date, userKey, accountId);
+}
+
+/**
+ * Clears a specific conversation from all day files for a channel.
+ */
+export function clearChannelConversationFromAllDays(
+  memoryDir: string,
+  platform: string,
+  userKey: string,
+  accountId: string,
+): void {
+  const channelDir = getChannelMemoryDir(memoryDir, platform);
+  clearConversationFromAllDays(channelDir, platform, userKey, accountId);
+}
+
+/**
+ * Clears all conversations for a user within a channel.
+ */
+export function clearAllChannelForUser(
+  memoryDir: string,
+  platform: string,
+  userKey: string,
+): void {
+  const channelDir = getChannelMemoryDir(memoryDir, platform);
+  clearAllForUser(channelDir, platform, userKey);
+}
+
+/**
+ * Clears all conversations for userKeys that start with a given prefix within a channel.
+ */
+export function clearChannelForUserPrefix(
+  memoryDir: string,
+  platform: string,
+  userKeyPrefix: string,
+): void {
+  const channelDir = getChannelMemoryDir(memoryDir, platform);
+  clearAllForUserPrefix(channelDir, platform, userKeyPrefix);
+}

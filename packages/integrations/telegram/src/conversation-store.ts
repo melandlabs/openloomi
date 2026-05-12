@@ -8,10 +8,10 @@
  */
 
 import {
-  saveMessage,
-  loadDay,
-  clearAllForUserPrefix,
-  clearConversationFromAllDays,
+  saveChannelMessage,
+  loadChannelDay,
+  clearChannelConversationFromAllDays,
+  clearChannelForUserPrefix,
 } from "@alloomi/ai/store";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -59,7 +59,7 @@ class TelegramConversationStore {
     const today = new Date().toISOString().slice(0, 10);
 
     // loadDay returns all messages for the full key + accountId pair
-    const rawMsgs = loadDay(
+    const rawMsgs = loadChannelDay(
       this.memoryDir,
       this.PREFIX,
       today,
@@ -111,10 +111,10 @@ class TelegramConversationStore {
     conversation.messages.push(msg);
     conversation.lastUpdated = new Date();
 
-    saveMessage(this.memoryDir, this.PREFIX, key, "", {
+    saveChannelMessage(this.memoryDir, this.PREFIX, key, "", {
       ...msg,
       timestamp: Date.now(),
-    } as any);
+    });
 
     console.log(`[TelegramConversationStore] Added ${role} message for ${key}`);
   }
@@ -133,7 +133,7 @@ class TelegramConversationStore {
 
     this.cache.delete(key);
     this.loadedPairs.delete(pk);
-    clearConversationFromAllDays(this.memoryDir, this.PREFIX, key, "");
+    clearChannelConversationFromAllDays(this.memoryDir, this.PREFIX, key, "");
 
     console.log(`[TelegramConversationStore] Cleared conversation: ${key}`);
   }
@@ -154,7 +154,7 @@ class TelegramConversationStore {
       }
     }
 
-    clearAllForUserPrefix(this.memoryDir, this.PREFIX, prefix);
+    clearChannelForUserPrefix(this.memoryDir, this.PREFIX, prefix);
 
     console.log(
       `[TelegramConversationStore] Cleared ${clearedCount} conversation(s) for user ${userId}`,
@@ -172,7 +172,12 @@ class TelegramConversationStore {
       if (hoursSinceLastUpdate > this.EXPIRY_HOURS) {
         this.cache.delete(key);
         clearedCount++;
-        clearConversationFromAllDays(this.memoryDir, this.PREFIX, key, "");
+        clearChannelConversationFromAllDays(
+          this.memoryDir,
+          this.PREFIX,
+          key,
+          "",
+        );
         console.log(
           `[TelegramConversationStore] Cleared expired conversation: ${key} (${hoursSinceLastUpdate.toFixed(1)}h old)`,
         );

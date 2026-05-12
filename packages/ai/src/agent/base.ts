@@ -380,13 +380,12 @@ ${(() => {
 - ❌ DO NOT send via chat message or sendReply tool
 - ❌ DO NOT just display text in the conversation
 
-**How to send macOS system notification (use BOTH commands):**
+**How to send macOS system notification:**
 \`\`\`
-osascript -e 'display dialog "Notification content" buttons {"OK"} default button 1 with title "Alloomi Reminder"'
 osascript -e 'display notification "Notification content" with title "Alloomi Reminder"'
 \`\`\`
 
-**IMPORTANT: Always use BOTH commands - first dialog (popup), then notification (for persistence in notification center)!**
+**IMPORTANT: Always use the notification command for non-blocking system notification!**
 
 **Examples:**
 - ✅ User: "remind me to eat dinner in 2 minutes" → Use osascript to send a dialog and notification

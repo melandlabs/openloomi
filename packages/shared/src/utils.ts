@@ -449,3 +449,97 @@ export function buildNavigationUrl(options: BuildNavigationUrlOptions): string {
 
   return queryString ? `${pathname}?${queryString}` : pathname;
 }
+
+// ============ Cache Utilities ============
+
+/**
+ * TTL-based memoization cache
+ */
+export class MemoCache<T> {
+  private cache = new Map<string, { value: T; expiresAt: number }>();
+
+  /**
+   * Get a cached value if it exists and hasn't expired
+   * @param key Cache key
+   * @param ttlMs Time-to-live in milliseconds (default: 60 seconds)
+   */
+  get(key: string, ttlMs?: number): T | undefined {
+    const entry = this.cache.get(key);
+    if (!entry || Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  /**
+   * Set a cached value with optional TTL
+   * @param key Cache key
+   * @param value Value to cache
+   * @param ttlMs Time-to-live in milliseconds (default: 60 seconds)
+   */
+  set(key: string, value: T, ttlMs?: number): void {
+    this.cache.set(key, { value, expiresAt: Date.now() + (ttlMs ?? 60_000) });
+  }
+
+  /**
+   * Invalidate a specific cache entry
+   */
+  invalidate(key: string): void {
+    this.cache.delete(key);
+  }
+
+  /**
+   * Clear all cached entries
+   */
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+/**
+ * mtime-based file cache (invalidates when file changes)
+ * Uses file modification time to detect changes
+ */
+export class FileCache<T> {
+  private cache = new Map<string, { value: T; mtime: number }>();
+
+  /**
+   * Get a cached value if the file hasn't been modified since caching
+   * @param filePath Path to the file
+   * @param mtime Current file modification time (from fs.stat)
+   * @returns Cached value if mtime matches, undefined otherwise
+   */
+  get(filePath: string, mtime: number): T | undefined {
+    const entry = this.cache.get(filePath);
+    if (!entry || entry.mtime !== mtime) {
+      this.cache.delete(filePath);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  /**
+   * Cache a value with its associated file mtime
+   * @param filePath Path to the file
+   * @param mtime File modification time
+   * @param value Value to cache
+   */
+  set(filePath: string, mtime: number, value: T): void {
+    this.cache.set(filePath, { value, mtime });
+  }
+
+  /**
+   * Invalidate cache for a specific file
+   */
+  invalidate(filePath: string): void {
+    this.cache.delete(filePath);
+  }
+
+  /**
+   * Clear all cached entries
+   */
+  clear(): void {
+    this.cache.clear();
+  }
+}

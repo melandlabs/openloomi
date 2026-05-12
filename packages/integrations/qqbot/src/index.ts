@@ -208,3 +208,5 @@ export class QQBotAdapter extends MessagePlatformAdapter {
     this.tokenCache = null;
   }
 }
+
+export { QQBotConversationStore } from "./conversation-store";
