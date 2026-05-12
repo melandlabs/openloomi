@@ -94,7 +94,7 @@ export type RunInsightCompactionResult = {
   candidateCount: number;
   groupCount: number;
   condensedInsightIds: string[];
-  pendingDeletionInsightIds: string[];
+  archivedInsightIds: string[];
   dryRun: boolean;
 };
 
@@ -1187,7 +1187,7 @@ function buildInsertInsightValues(
   } as InsertInsight;
 }
 
-// Run the full compaction pass: preview -> generate condensed insights -> mark source insights pending deletion.
+// Run the full compaction pass: preview -> generate condensed insights -> archive source insights.
 export async function runInsightCompaction(
   input: RunInsightCompactionInput,
 ): Promise<RunInsightCompactionResult> {
@@ -1197,7 +1197,7 @@ export async function runInsightCompaction(
       candidateCount: preview.candidates.length,
       groupCount: preview.groups.length,
       condensedInsightIds: [],
-      pendingDeletionInsightIds: [],
+      archivedInsightIds: [],
       dryRun: Boolean(input.dryRun),
     };
   }
@@ -1235,7 +1235,7 @@ export async function runInsightCompaction(
   return await executeCompactionTransaction(input.platform, async (tx) => {
     const now = new Date();
     const condensedInsightIds: string[] = [];
-    const pendingDeletionInsightIds: string[] = [];
+    const archivedInsightIds: string[] = [];
 
     for (const draft of drafts) {
       const [created] = await tx
@@ -1255,13 +1255,15 @@ export async function runInsightCompaction(
       );
 
       const sourceIds = draft.group.insights.map((source) => source.id);
-      pendingDeletionInsightIds.push(...sourceIds);
+      archivedInsightIds.push(...sourceIds);
 
       await tx
         .update(insight)
         .set({
-          pendingDeletionAt: now,
+          pendingDeletionAt: null,
           compactedIntoInsightId: created.id,
+          isArchived: true,
+          archivedAt: now,
           updatedAt: now,
         } as any)
         .where(inArray(insight.id, sourceIds));
@@ -1271,14 +1273,15 @@ export async function runInsightCompaction(
       candidateCount: preview.candidates.length,
       groupCount: preview.groups.length,
       condensedInsightIds,
-      pendingDeletionInsightIds,
+      archivedInsightIds,
       dryRun: false,
     };
   });
 }
 
-// Pending deletion is a soft state first; this helper is the hard-delete step after the retention window expires.
-export async function deleteExpiredPendingDeletionInsights(input: {
+// Archives older rows left in the legacy pending-deletion state.
+// New compaction archives sources immediately, so this is only compatibility cleanup.
+export async function archiveLegacyPendingDeletionInsights(input: {
   userId?: string;
   botId?: string;
   olderThanDays?: number;
@@ -1316,6 +1319,14 @@ export async function deleteExpiredPendingDeletionInsights(input: {
   const ids = rows.map((row: { id: string }) => row.id);
   if (ids.length === 0) return [];
 
-  await db.delete(insight).where(inArray(insight.id, ids));
+  await db
+    .update(insight)
+    .set({
+      isArchived: true,
+      archivedAt: new Date(),
+      pendingDeletionAt: null,
+      updatedAt: new Date(),
+    } as any)
+    .where(inArray(insight.id, ids));
   return ids;
 }

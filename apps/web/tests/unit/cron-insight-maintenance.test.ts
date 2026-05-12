@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const {
   getUserInsightSettingsMock,
   updateUserInsightSettingsMock,
-  runDailyInsightAnalyticsMaintenanceMock,
+  runInsightEmbeddingDreamMock,
   runWeeklyInsightMaintenanceMock,
 } = vi.hoisted(() => ({
   getUserInsightSettingsMock: vi.fn(),
   updateUserInsightSettingsMock: vi.fn(),
-  runDailyInsightAnalyticsMaintenanceMock: vi.fn(),
+  runInsightEmbeddingDreamMock: vi.fn(),
   runWeeklyInsightMaintenanceMock: vi.fn(),
 }));
 
@@ -18,14 +18,17 @@ vi.mock("@/lib/db/queries", () => ({
 }));
 
 vi.mock("@/lib/insights/maintenance", () => ({
-  runDailyInsightAnalyticsMaintenance: runDailyInsightAnalyticsMaintenanceMock,
   runWeeklyInsightMaintenance: runWeeklyInsightMaintenanceMock,
 }));
 
+vi.mock("@/lib/insights/dream", () => ({
+  runInsightEmbeddingDream: runInsightEmbeddingDreamMock,
+}));
+
 import {
-  runDailyInsightAnalyticsMaintenanceIfDue,
+  runInsightEmbeddingDreamIfDue,
   runInsightMaintenanceIfDue,
-  setLastInsightAnalyticsMaintenanceRunAt,
+  setLastInsightEmbeddingDreamRunAt,
   setLastInsightMaintenanceRunAt,
 } from "@/lib/cron/insight-maintenance";
 
@@ -33,16 +36,22 @@ describe("cron insight maintenance", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-09T02:17:00.000Z"));
-    setLastInsightAnalyticsMaintenanceRunAt(null);
+    setLastInsightEmbeddingDreamRunAt(null);
     setLastInsightMaintenanceRunAt(null);
     getUserInsightSettingsMock.mockReset();
     updateUserInsightSettingsMock.mockReset();
-    runDailyInsightAnalyticsMaintenanceMock.mockReset();
+    runInsightEmbeddingDreamMock.mockReset();
     runWeeklyInsightMaintenanceMock.mockReset();
-    runDailyInsightAnalyticsMaintenanceMock.mockResolvedValue({
-      processedWeightCount: 0,
-      processedUserCount: 0,
-      users: [],
+    runInsightEmbeddingDreamMock.mockResolvedValue({
+      scanned: 0,
+      selected: 0,
+      embedded: 0,
+      dryRun: false,
+      reasons: {
+        missing: 0,
+        model_changed: 0,
+        content_changed: 0,
+      },
     });
     runWeeklyInsightMaintenanceMock.mockResolvedValue({
       platform: "desktop",
@@ -55,20 +64,39 @@ describe("cron insight maintenance", () => {
     vi.useRealTimers();
   });
 
-  it("runs daily analytics once per local scheduler interval window", async () => {
-    await runDailyInsightAnalyticsMaintenanceIfDue("user-1");
-    await runDailyInsightAnalyticsMaintenanceIfDue("user-1");
+  it("runs insight embedding dream once per local scheduler interval window", async () => {
+    getUserInsightSettingsMock.mockResolvedValue({
+      lastInsightEmbeddingDreamRunAt: null,
+    });
 
-    expect(runDailyInsightAnalyticsMaintenanceMock).toHaveBeenCalledTimes(1);
-    expect(runDailyInsightAnalyticsMaintenanceMock).toHaveBeenCalledWith({
+    await runInsightEmbeddingDreamIfDue("user-1", "cloud-token");
+    await runInsightEmbeddingDreamIfDue("user-1", "cloud-token");
+
+    expect(runInsightEmbeddingDreamMock).toHaveBeenCalledTimes(1);
+    expect(runInsightEmbeddingDreamMock).toHaveBeenCalledWith({
       userId: "user-1",
-      now: new Date("2026-05-09T02:17:00.000Z"),
+      limit: 100,
+      authToken: "cloud-token",
+    });
+    expect(updateUserInsightSettingsMock).toHaveBeenCalledWith("user-1", {
+      lastInsightEmbeddingDreamRunAt: new Date("2026-05-09T02:17:00.000Z"),
     });
 
     vi.setSystemTime(new Date("2026-05-10T02:17:01.000Z"));
-    await runDailyInsightAnalyticsMaintenanceIfDue("user-1");
+    await runInsightEmbeddingDreamIfDue("user-1", "cloud-token");
 
-    expect(runDailyInsightAnalyticsMaintenanceMock).toHaveBeenCalledTimes(2);
+    expect(runInsightEmbeddingDreamMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips insight embedding dream when persisted checkpoint is fresh", async () => {
+    getUserInsightSettingsMock.mockResolvedValue({
+      lastInsightEmbeddingDreamRunAt: new Date("2026-05-09T01:17:00.000Z"),
+    });
+
+    await runInsightEmbeddingDreamIfDue("user-1", "cloud-token");
+
+    expect(runInsightEmbeddingDreamMock).not.toHaveBeenCalled();
+    expect(updateUserInsightSettingsMock).not.toHaveBeenCalled();
   });
 
   it("runs weekly maintenance when persisted checkpoint is due", async () => {
@@ -88,10 +116,10 @@ describe("cron insight maintenance", () => {
   });
 
   it("skips maintenance without a scheduler user", async () => {
-    await runDailyInsightAnalyticsMaintenanceIfDue(undefined);
+    await runInsightEmbeddingDreamIfDue(undefined);
     await runInsightMaintenanceIfDue(undefined);
 
-    expect(runDailyInsightAnalyticsMaintenanceMock).not.toHaveBeenCalled();
+    expect(runInsightEmbeddingDreamMock).not.toHaveBeenCalled();
     expect(runWeeklyInsightMaintenanceMock).not.toHaveBeenCalled();
   });
 });

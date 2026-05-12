@@ -2,7 +2,6 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/queries";
 import { bot, insight, insightWeights } from "@/lib/db/schema";
 import {
-  deleteExpiredPendingDeletionInsights,
   runInsightCompaction,
   type RunInsightCompactionInput,
   type RunInsightCompactionResult,
@@ -23,7 +22,6 @@ export type WeeklyInsightMaintenanceInput = {
 export type WeeklyInsightMaintenanceUserResult = {
   userId: string;
   compaction: RunInsightCompactionResult;
-  deletedInsightIds: string[];
 };
 
 export type WeeklyInsightMaintenanceResult = {
@@ -80,17 +78,10 @@ export async function runWeeklyInsightMaintenance(
     };
 
     const compaction = await runInsightCompaction(compactionInput);
-    // Cleanup runs after compaction so newly pending insights always get a full retention window.
-    const deletedInsightIds = await deleteExpiredPendingDeletionInsights({
-      userId,
-      botId: input.botId,
-      platform,
-    });
 
     results.push({
       userId,
       compaction,
-      deletedInsightIds,
     });
   }
 

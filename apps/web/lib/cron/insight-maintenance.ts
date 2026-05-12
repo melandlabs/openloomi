@@ -7,37 +7,40 @@ import {
   getUserInsightSettings,
   updateUserInsightSettings,
 } from "../db/queries";
-import {
-  runDailyInsightAnalyticsMaintenance,
-  runWeeklyInsightMaintenance,
-} from "@/lib/insights/maintenance";
+import { runWeeklyInsightMaintenance } from "@/lib/insights/maintenance";
+import { runInsightEmbeddingDream } from "@/lib/insights/dream";
 
-const DAILY_ANALYTICS_INTERVAL = 24 * 60 * 60 * 1000;
+const INSIGHT_EMBEDDING_DREAM_INTERVAL = 24 * 60 * 60 * 1000;
 const WEEKLY_MAINTENANCE_INTERVAL = 7 * 24 * 60 * 60 * 1000;
 
 // Desktop caches the last successful maintenance run in memory, but also mirrors it to insight settings so restarts keep the same weekly window.
 let lastInsightMaintenanceRunAt: Date | null = null;
-let lastInsightAnalyticsMaintenanceRunAt: Date | null = null;
+let lastInsightEmbeddingDreamRunAt: Date | null = null;
 
 export function getLastInsightMaintenanceRunAt(): Date | null {
   return lastInsightMaintenanceRunAt;
 }
 
-export function getLastInsightAnalyticsMaintenanceRunAt(): Date | null {
-  return lastInsightAnalyticsMaintenanceRunAt;
+export function getLastInsightEmbeddingDreamRunAt(): Date | null {
+  return lastInsightEmbeddingDreamRunAt;
 }
 
 export function setLastInsightMaintenanceRunAt(date: Date | null) {
   lastInsightMaintenanceRunAt = date;
 }
 
-export function setLastInsightAnalyticsMaintenanceRunAt(date: Date | null) {
-  lastInsightAnalyticsMaintenanceRunAt = date;
+export function setLastInsightEmbeddingDreamRunAt(date: Date | null) {
+  lastInsightEmbeddingDreamRunAt = date;
 }
 
 async function loadPersistedInsightMaintenanceRunAt(userId: string) {
   const settings = await getUserInsightSettings(userId);
   return settings?.lastInsightMaintenanceRunAt ?? null;
+}
+
+async function loadPersistedInsightEmbeddingDreamRunAt(userId: string) {
+  const settings = await getUserInsightSettings(userId);
+  return settings?.lastInsightEmbeddingDreamRunAt ?? null;
 }
 
 async function persistInsightMaintenanceRunAt(userId: string, runAt: Date) {
@@ -46,29 +49,46 @@ async function persistInsightMaintenanceRunAt(userId: string, runAt: Date) {
   });
 }
 
-// Keep rolling insight analytics fresh in desktop mode even when no new view event is recorded.
-export async function runDailyInsightAnalyticsMaintenanceIfDue(
+async function persistInsightEmbeddingDreamRunAt(userId: string, runAt: Date) {
+  await updateUserInsightSettings(userId, {
+    lastInsightEmbeddingDreamRunAt: runAt,
+  });
+}
+
+// Dream keeps insight embeddings complete over time without blocking normal insight writes.
+export async function runInsightEmbeddingDreamIfDue(
   schedulerUserId: string | undefined,
+  authToken?: string,
 ) {
   if (!schedulerUserId) {
     return;
   }
 
+  if (!lastInsightEmbeddingDreamRunAt) {
+    lastInsightEmbeddingDreamRunAt =
+      await loadPersistedInsightEmbeddingDreamRunAt(schedulerUserId);
+  }
+
   const now = new Date();
   if (
-    lastInsightAnalyticsMaintenanceRunAt &&
-    now.getTime() - lastInsightAnalyticsMaintenanceRunAt.getTime() <
-      DAILY_ANALYTICS_INTERVAL
+    lastInsightEmbeddingDreamRunAt &&
+    now.getTime() - lastInsightEmbeddingDreamRunAt.getTime() <
+      INSIGHT_EMBEDDING_DREAM_INTERVAL
   ) {
     return;
   }
 
-  console.log("[LocalScheduler] Running daily insight analytics maintenance");
-  await runDailyInsightAnalyticsMaintenance({
+  console.log("[LocalScheduler] Running insight embedding dream");
+  const result = await runInsightEmbeddingDream({
     userId: schedulerUserId,
-    now,
+    limit: 100,
+    authToken,
   });
-  lastInsightAnalyticsMaintenanceRunAt = now;
+  if (result.upsert?.failed || result.upsert?.skippedNoProvider) {
+    return;
+  }
+  await persistInsightEmbeddingDreamRunAt(schedulerUserId, now);
+  lastInsightEmbeddingDreamRunAt = now;
 }
 
 // Run insight maintenance on the same minute loop as scheduled jobs, but only once per persisted weekly window per user.

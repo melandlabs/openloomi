@@ -197,6 +197,27 @@
                         "when": 1774200000000,
                         "tag": "0098_add_insight_access_frequency",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx": 28,
+                        "version": "7",
+                        "when": 1774300000000,
+                        "tag": "0099_add_insight_embeddings",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx": 29,
+                        "version": "7",
+                        "when": 1774400000000,
+                        "tag": "0100_archive_pending_deletion_insights",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx": 30,
+                        "version": "7",
+                        "when": 1774500000000,
+                        "tag": "0101_persist_insight_embedding_dream_checkpoint",
+                        "breakpoints":  true
                     }
                 ]
 }

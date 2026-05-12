@@ -660,6 +660,43 @@ export const insight = sqliteTable("Insight", {
 export type Insight = InferSelectModel<typeof insight>;
 export type InsertInsight = InferInsertModel<typeof insight>;
 
+export const insightEmbeddings = sqliteTable(
+  "insight_embeddings",
+  {
+    insightId: text("insight_id")
+      .primaryKey()
+      .references(() => insight.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    botId: text("bot_id")
+      .notNull()
+      .references(() => bot.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    contentHash: text("content_hash").notNull(),
+    embedding: text("embedding").notNull(),
+    embeddingModel: text("embedding_model").notNull(),
+    embeddingDimensions: integer("embedding_dimensions").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    userIdx: index("insight_embeddings_user_idx").on(table.userId),
+    botIdx: index("insight_embeddings_bot_idx").on(table.botId),
+    modelIdx: index("insight_embeddings_model_idx").on(table.embeddingModel),
+    updatedAtIdx: index("insight_embeddings_updated_at_idx").on(
+      table.updatedAt,
+    ),
+  }),
+);
+
+export type InsightEmbedding = InferSelectModel<typeof insightEmbeddings>;
+export type InsertInsightEmbedding = InferInsertModel<typeof insightEmbeddings>;
+
 export const insightCompactionLinks = sqliteTable(
   "insight_compaction_links",
   {
@@ -843,6 +880,12 @@ export const userInsightSettings = sqliteTable("user_insight_settings", {
   lastInsightMaintenanceRunAt: integer("last_insight_maintenance_run_at", {
     mode: "timestamp",
   }),
+  lastInsightEmbeddingDreamRunAt: integer(
+    "last_insight_embedding_dream_run_at",
+    {
+      mode: "timestamp",
+    },
+  ),
   activityTier: text("activity_tier").notNull().default("low"),
   lastUpdated: integer("last_updated", { mode: "timestamp" })
     .notNull()
@@ -979,6 +1022,7 @@ export type InsightSettings = {
   lastMessageProcessedAt: Date | null;
   lastActiveAt: Date | null;
   lastInsightMaintenanceRunAt?: Date | null;
+  lastInsightEmbeddingDreamRunAt?: Date | null;
   activityTier: "high" | "medium" | "low" | "dormant";
   lastUpdated: Date;
 };
@@ -1006,6 +1050,8 @@ export function parseInsightSettings(
     lastMessageProcessedAt: dbSettings.lastMessageProcessedAt ?? null,
     lastActiveAt: dbSettings.lastActiveAt ?? null,
     lastInsightMaintenanceRunAt: dbSettings.lastInsightMaintenanceRunAt ?? null,
+    lastInsightEmbeddingDreamRunAt:
+      dbSettings.lastInsightEmbeddingDreamRunAt ?? null,
     activityTier: normalizeActivityTier(dbSettings.activityTier),
     lastUpdated: dbSettings.lastUpdated,
   };
@@ -1030,6 +1076,7 @@ export function serializeInsightSettings(
     lastMessageProcessedAt: settings.lastMessageProcessedAt,
     lastActiveAt: settings.lastActiveAt,
     lastInsightMaintenanceRunAt: settings.lastInsightMaintenanceRunAt,
+    lastInsightEmbeddingDreamRunAt: settings.lastInsightEmbeddingDreamRunAt,
     activityTier: settings.activityTier,
   };
 }

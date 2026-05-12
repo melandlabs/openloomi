@@ -1,5 +1,6 @@
 // Re-export all originally exported items from insights.ts
 export { refreshActiveBotInsight } from "./refresh";
+export { runInsightEmbeddingDream } from "./dream";
 export { getInsightsByBotId, dealMessageChunk } from "./processor";
 export { userInsightSettingsToPrompt } from "./settings";
 export type {

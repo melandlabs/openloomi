@@ -15,6 +15,11 @@ export interface MemoryRecord {
   timestamp: number;
   text?: string;
   mediaRefs?: string[];
+  embedding?: number[];
+  embeddingModel?: string;
+  embeddingContentHash?: string;
+  embeddingDimensions?: number;
+  embeddingUpdatedAt?: number;
   tier: MemoryTier;
   accessCount?: number;
   lastAccessAt?: number;

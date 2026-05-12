@@ -27,6 +27,11 @@ export interface RawMessage {
     contentType?: string;
     sizeBytes?: number;
   }>;
+  embedding?: number[];
+  embeddingModel?: string;
+  embeddingContentHash?: string;
+  embeddingDimensions?: number;
+  embeddingUpdatedAt?: number;
   metadata?: Record<string, any>; // Additional platform-specific data
   createdAt: number; // When stored in IndexedDB
   memoryStage?: MemoryStage;
@@ -90,6 +95,15 @@ export interface MemorySummaryQuery {
   limit?: number;
   offset?: number;
   dimensions?: Record<string, string | number | boolean | undefined>;
+}
+
+export interface RawMessageEmbeddingUpdate {
+  messageId: string;
+  embedding: number[];
+  embeddingModel: string;
+  embeddingContentHash: string;
+  embeddingDimensions?: number;
+  embeddingUpdatedAt?: number;
 }
 
 class IndexedDBManager {
@@ -884,6 +898,37 @@ class IndexedDBManager {
         ...message,
         archivedAt,
       }),
+      userId,
+    );
+  }
+
+  async updateMessageEmbeddings(
+    updates: RawMessageEmbeddingUpdate[],
+    userId?: string,
+  ): Promise<number> {
+    const updatesById = new Map(
+      updates
+        .filter((update) => update.messageId && update.embedding.length > 0)
+        .map((update) => [update.messageId, update]),
+    );
+
+    return this.updateMessagesByMessageIds(
+      Array.from(updatesById.keys()),
+      (message) => {
+        const update = updatesById.get(message.messageId);
+        if (!update) {
+          return message;
+        }
+        return {
+          ...message,
+          embedding: update.embedding,
+          embeddingModel: update.embeddingModel,
+          embeddingContentHash: update.embeddingContentHash,
+          embeddingDimensions:
+            update.embeddingDimensions ?? update.embedding.length,
+          embeddingUpdatedAt: update.embeddingUpdatedAt ?? Date.now(),
+        };
+      },
       userId,
     );
   }

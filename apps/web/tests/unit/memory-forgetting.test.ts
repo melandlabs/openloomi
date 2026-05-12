@@ -140,6 +140,11 @@ function createRecord(
     timestamp: input.timestamp ?? Date.now(),
     text: input.text,
     mediaRefs: input.mediaRefs,
+    embedding: input.embedding,
+    embeddingModel: input.embeddingModel,
+    embeddingContentHash: input.embeddingContentHash,
+    embeddingDimensions: input.embeddingDimensions,
+    embeddingUpdatedAt: input.embeddingUpdatedAt,
     tier: input.tier ?? "short",
     accessCount: input.accessCount,
     lastAccessAt: input.lastAccessAt,
@@ -276,6 +281,29 @@ describe("memory ingest", () => {
     });
 
     expect(normalized.tier).toBe("short");
+  });
+
+  it("preserves embedding metadata during ingest normalization", () => {
+    const now = Date.now();
+    const normalized = normalizeMemoryRecordForIngest({
+      id: "ingest-embedding",
+      userId: "u1",
+      timestamp: now,
+      text: "message with vector",
+      embedding: [0.1, 0.2, 0.3],
+      embeddingModel: "text-embedding-3-small",
+      embeddingContentHash: "memory-record-embedding-text-v1:abc",
+      embeddingDimensions: 3,
+      embeddingUpdatedAt: now,
+    });
+
+    expect(normalized.embedding).toEqual([0.1, 0.2, 0.3]);
+    expect(normalized.embeddingModel).toBe("text-embedding-3-small");
+    expect(normalized.embeddingContentHash).toBe(
+      "memory-record-embedding-text-v1:abc",
+    );
+    expect(normalized.embeddingDimensions).toBe(3);
+    expect(normalized.embeddingUpdatedAt).toBe(now);
   });
 
   it("normalizes batch records and preserves explicit tiers", () => {

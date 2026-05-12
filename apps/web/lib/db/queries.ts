@@ -111,6 +111,10 @@ import {
 import type { InsightTaskItem, TimelineData } from "../ai/subagents/insights";
 import { createHash } from "node:crypto";
 import { generateInsightId } from "../insights/transform";
+import {
+  upsertInsightEmbeddingsForCandidates,
+  type InsightEmbeddingCandidate,
+} from "../insights/embedding-service";
 
 // Import serialization utilities from separate module
 export {
@@ -3717,12 +3721,16 @@ export async function appendInsightsByBotId({
 }): Promise<string[]> {
   // Explicitly return ID array
   try {
-    return await executeTransaction(async (tx) => {
+    const result = await executeTransaction<{
+      ids: string[];
+      embeddingCandidates: InsightEmbeddingCandidate[];
+    }>(async (tx) => {
       if (insightPayloads.length === 0) {
-        return []; // Return empty array when no data
+        return { ids: [], embeddingCandidates: [] }; // Return empty array when no data
       }
 
       const formattedSummaries = [];
+      const validPayloads: GeneratedInsightPayload[] = [];
       for (const item of insightPayloads) {
         // Validate required fields
         if (
@@ -3801,11 +3809,12 @@ export async function appendInsightsByBotId({
             roleAttribution: serializeJson(item.roleAttribution),
             alerts: serializeJson(item.alerts),
           });
+          validPayloads.push(item);
         }
       }
 
       if (formattedSummaries.length === 0) {
-        return []; // Return empty array when no valid data
+        return { ids: [], embeddingCandidates: [] }; // Return empty array when no valid data
       }
 
       // Execute insert and return record containing ID
@@ -3819,8 +3828,31 @@ export async function appendInsightsByBotId({
         botId: id,
         candidates: insightPayloads,
       });
-      return result.map((item: any) => item.id);
+      const ids: string[] = result.map((item: any) => item.id);
+      const embeddingCandidates = ids.reduce<InsightEmbeddingCandidate[]>(
+        (acc, insightId: string, index: number) => {
+          const payload = validPayloads[index];
+          if (payload) {
+            acc.push({
+              insightId,
+              botId: id,
+              payload,
+            });
+          }
+          return acc;
+        },
+        [],
+      );
+      return {
+        ids,
+        embeddingCandidates,
+      };
     });
+    await upsertInsightEmbeddingsForCandidates({
+      db,
+      candidates: result.embeddingCandidates,
+    });
+    return result.ids;
   } catch (error) {
     console.error(error);
     throw new AppError(
@@ -4169,12 +4201,16 @@ export async function upsertInsightsByBotId({
   insights: GeneratedInsightPayload[];
 }): Promise<string[]> {
   try {
-    return await executeTransaction(async (tx) => {
+    const result = await executeTransaction<{
+      ids: string[];
+      embeddingCandidates: InsightEmbeddingCandidate[];
+    }>(async (tx) => {
       if (insightPayloads.length === 0) {
-        return [];
+        return { ids: [], embeddingCandidates: [] };
       }
 
       const resultIds: string[] = [];
+      const embeddingCandidates: InsightEmbeddingCandidate[] = [];
 
       // Track migrated insights to avoid duplicate migration
       const migratedInsightIds = new Set<string>();
@@ -4364,6 +4400,14 @@ export async function upsertInsightsByBotId({
             .set(updateData)
             .where(eq(insight.id, existingInsight.id));
           resultIds.push(existingInsight.id);
+          embeddingCandidates.push({
+            insightId: existingInsight.id,
+            botId: id,
+            payload: {
+              ...item,
+              timeline: mergedTimeline,
+            },
+          });
         } else {
           // For new insights with dedupeKey, use deterministic ID based on botId + dedupeKey
           // This ensures ONE insight ID per group/chat
@@ -4407,6 +4451,11 @@ export async function upsertInsightsByBotId({
           }
 
           resultIds.push(newInsightId);
+          embeddingCandidates.push({
+            insightId: newInsightId,
+            botId: id,
+            payload: item,
+          });
         }
       }
 
@@ -4416,8 +4465,13 @@ export async function upsertInsightsByBotId({
         candidates: insightPayloads,
       });
 
-      return resultIds;
+      return { ids: resultIds, embeddingCandidates };
     });
+    await upsertInsightEmbeddingsForCandidates({
+      db,
+      candidates: result.embeddingCandidates,
+    });
+    return result.ids;
   } catch (error) {
     console.error(error);
     throw new AppError(
@@ -5416,6 +5470,7 @@ export async function updateUserInsightSettings(
       lastMessageProcessedAt: null,
       lastActiveAt: null,
       lastInsightMaintenanceRunAt: null,
+      lastInsightEmbeddingDreamRunAt: null,
       activityTier: "low",
       aiSoulPrompt: null,
       identityIndustries: null,

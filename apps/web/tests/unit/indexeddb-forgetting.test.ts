@@ -202,6 +202,11 @@ function createRaw(input: {
   stage: MemoryStage;
   timestampSec: number;
   text: string;
+  embedding?: number[];
+  embeddingModel?: string;
+  embeddingContentHash?: string;
+  embeddingDimensions?: number;
+  embeddingUpdatedAt?: number;
 }): RawMessage {
   return {
     messageId: input.messageId,
@@ -212,6 +217,11 @@ function createRaw(input: {
     person: "alice",
     timestamp: input.timestampSec,
     content: input.text,
+    embedding: input.embedding,
+    embeddingModel: input.embeddingModel,
+    embeddingContentHash: input.embeddingContentHash,
+    embeddingDimensions: input.embeddingDimensions,
+    embeddingUpdatedAt: input.embeddingUpdatedAt,
     createdAt: input.timestampSec,
     memoryStage: input.stage,
     accessCount: 0,
@@ -307,6 +317,11 @@ describe("indexeddb forgetting bridge", () => {
         stage: "short",
         timestampSec: Math.floor((now - DAY_MS) / 1000),
         text: "only one raw hit",
+        embedding: [0.2, 0.4, 0.6],
+        embeddingModel: "text-embedding-3-small",
+        embeddingContentHash: "memory-record-embedding-text-v1:abc",
+        embeddingDimensions: 3,
+        embeddingUpdatedAt: now - DAY_MS,
       }),
     ];
 
@@ -344,6 +359,17 @@ describe("indexeddb forgetting bridge", () => {
     expect(result.items.some((item) => item.sourceType === "summary")).toBe(
       true,
     );
+    const rawHit = result.items.find((item) => item.sourceType === "raw");
+    expect(rawHit?.sourceType).toBe("raw");
+    if (rawHit?.sourceType === "raw") {
+      expect(rawHit.record.embedding).toEqual([0.2, 0.4, 0.6]);
+      expect(rawHit.record.embeddingModel).toBe("text-embedding-3-small");
+      expect(rawHit.record.embeddingContentHash).toBe(
+        "memory-record-embedding-text-v1:abc",
+      );
+      expect(rawHit.record.embeddingDimensions).toBe(3);
+      expect(rawHit.record.embeddingUpdatedAt).toBe(now - DAY_MS);
+    }
     expect(manager.accessedIds).toContain("r1");
   });
 });

@@ -29,6 +29,7 @@ export const vote = (currentSchema as any).vote;
 export const stream = (currentSchema as any).stream;
 export const bot = (currentSchema as any).bot;
 export const insight = (currentSchema as any).insight;
+export const insightEmbeddings = (currentSchema as any).insightEmbeddings;
 export const userInsightSettings = (currentSchema as any).userInsightSettings;
 export const userContacts = (currentSchema as any).userContacts;
 export const dingtalkBotInsightMessages = (currentSchema as any)
@@ -128,6 +129,8 @@ export type {
   Bot,
   Insight,
   InsertInsight,
+  InsightEmbedding,
+  InsertInsightEmbedding,
   InsightSettings,
   DBInsightSettings,
   DBInsertInsightSettings,

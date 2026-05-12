@@ -8,10 +8,12 @@ const {
   selectMock,
   setAIUserContextMock,
   transactionMock,
+  updateMock,
 } = vi.hoisted(() => {
   const select = vi.fn();
   const transaction = vi.fn();
   const deleteFn = vi.fn();
+  const update = vi.fn();
 
   return {
     clearAIUserContextMock: vi.fn(),
@@ -20,10 +22,12 @@ const {
       select,
       transaction,
       delete: deleteFn,
+      update,
     },
     selectMock: select,
     setAIUserContextMock: vi.fn(),
     transactionMock: transaction,
+    updateMock: update,
   };
 });
 
@@ -43,7 +47,7 @@ vi.mock("@/lib/ai", () => ({
 
 let buildInsightCompactionBucketKey: typeof import("@/lib/insights/compaction").buildInsightCompactionBucketKey;
 let buildSeedCompactedInsightPayload: typeof import("@/lib/insights/compaction").buildSeedCompactedInsightPayload;
-let deleteExpiredPendingDeletionInsights: typeof import("@/lib/insights/compaction").deleteExpiredPendingDeletionInsights;
+let archiveLegacyPendingDeletionInsights: typeof import("@/lib/insights/compaction").archiveLegacyPendingDeletionInsights;
 let groupInsightsForCompaction: typeof import("@/lib/insights/compaction").groupInsightsForCompaction;
 let isInsightCompactable: typeof import("@/lib/insights/compaction").isInsightCompactable;
 let mergeCompactedInsightPayload: typeof import("@/lib/insights/compaction").mergeCompactedInsightPayload;
@@ -54,8 +58,8 @@ beforeAll(async () => {
   const mod = await import("@/lib/insights/compaction");
   buildInsightCompactionBucketKey = mod.buildInsightCompactionBucketKey;
   buildSeedCompactedInsightPayload = mod.buildSeedCompactedInsightPayload;
-  deleteExpiredPendingDeletionInsights =
-    mod.deleteExpiredPendingDeletionInsights;
+  archiveLegacyPendingDeletionInsights =
+    mod.archiveLegacyPendingDeletionInsights;
   groupInsightsForCompaction = mod.groupInsightsForCompaction;
   isInsightCompactable = mod.isInsightCompactable;
   mergeCompactedInsightPayload = mod.mergeCompactedInsightPayload;
@@ -67,6 +71,7 @@ beforeEach(() => {
   selectMock.mockReset();
   transactionMock.mockReset();
   deleteMock.mockReset();
+  updateMock.mockReset();
   setAIUserContextMock.mockReset();
   clearAIUserContextMock.mockReset();
 });
@@ -318,9 +323,10 @@ describe("insight compaction", () => {
     expect(clearAIUserContextMock).toHaveBeenCalledTimes(1);
   });
 
-  it("deletes expired pending-deletion insights after retention window", async () => {
+  it("archives older legacy pending-deletion insights", async () => {
     const selectRows = [{ id: "old-1" }, { id: "old-2" }];
-    const deleteWhereMock = vi.fn().mockResolvedValue(undefined);
+    const updateWhereMock = vi.fn().mockResolvedValue(undefined);
+    let updateSetValues: Record<string, unknown> | null = null;
 
     selectMock.mockImplementationOnce(() => ({
       from: vi.fn().mockReturnValue({
@@ -329,21 +335,36 @@ describe("insight compaction", () => {
         }),
       }),
     }));
-    deleteMock.mockReturnValue({
-      where: deleteWhereMock,
+    updateMock.mockReturnValue({
+      set: vi.fn((values: Record<string, unknown>) => {
+        updateSetValues = values;
+        return {
+          where: updateWhereMock,
+        };
+      }),
     });
 
-    const deletedIds = await deleteExpiredPendingDeletionInsights({
+    const archivedIds = await archiveLegacyPendingDeletionInsights({
       userId: "user-1",
       olderThanDays: 180,
     });
 
-    expect(deletedIds).toEqual(["old-1", "old-2"]);
-    expect(deleteMock).toHaveBeenCalledTimes(1);
-    expect(deleteWhereMock).toHaveBeenCalledTimes(1);
+    expect(archivedIds).toEqual(["old-1", "old-2"]);
+    expect(deleteMock).not.toHaveBeenCalled();
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(updateSetValues).toMatchObject({
+      isArchived: true,
+      pendingDeletionAt: null,
+    });
+    const finalizedUpdate = updateSetValues as unknown as Record<
+      string,
+      unknown
+    >;
+    expect(finalizedUpdate.archivedAt).toBeInstanceOf(Date);
+    expect(updateWhereMock).toHaveBeenCalledTimes(1);
   });
 
-  it("runs the full compaction flow and marks source insights pending deletion", async () => {
+  it("runs the full compaction flow and archives source insights", async () => {
     const first = makeInsight({
       id: "i1",
       time: new Date("2026-03-01T00:00:00.000Z"),
@@ -413,7 +434,7 @@ describe("insight compaction", () => {
       candidateCount: 2,
       groupCount: 1,
       condensedInsightIds: ["condensed-1"],
-      pendingDeletionInsightIds: ["i1", "i2"],
+      archivedInsightIds: ["i1", "i2"],
       dryRun: false,
     });
 
@@ -449,15 +470,16 @@ describe("insight compaction", () => {
 
     expect(updateSetValues).toMatchObject({
       compactedIntoInsightId: "condensed-1",
+      pendingDeletionAt: null,
+      isArchived: true,
     });
     expect(updateSetValues).not.toBeNull();
     const finalizedUpdate = updateSetValues as unknown as Record<
       string,
       unknown
     >;
-    expect(finalizedUpdate.pendingDeletionAt).toBeInstanceOf(Date);
+    expect(finalizedUpdate.archivedAt).toBeInstanceOf(Date);
     expect(finalizedUpdate.updatedAt).toBeInstanceOf(Date);
-    expect(updateSetValues).not.toHaveProperty("isArchived");
     expect(updateWhereArg).toBeTruthy();
     expect(transactionMock).toHaveBeenCalledTimes(1);
   });

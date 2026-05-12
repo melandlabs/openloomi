@@ -86,6 +86,11 @@ export async function storeRawMessagesFromInsight(
       contentType?: string;
       sizeBytes?: number;
     }>;
+    embedding?: number[];
+    embeddingModel?: string;
+    embeddingContentHash?: string;
+    embeddingDimensions?: number;
+    embeddingUpdatedAt?: number;
     metadata?: Record<string, any>;
   }>,
 ): Promise<{ success: boolean; stored: number; errors: number }> {
@@ -234,6 +239,11 @@ export async function queryRawMessagesWithFallback(
         timestamp: Math.floor(item.record.timestamp / 1000),
         content: item.record.text ?? "",
         attachments: [],
+        embedding: item.record.embedding,
+        embeddingModel: item.record.embeddingModel,
+        embeddingContentHash: item.record.embeddingContentHash,
+        embeddingDimensions: item.record.embeddingDimensions,
+        embeddingUpdatedAt: item.record.embeddingUpdatedAt,
         metadata:
           (item.record.metadata as Record<string, any> | undefined) ??
           undefined,
@@ -361,6 +371,51 @@ export async function runMemoryForgettingCycleForUser(
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+export async function runRawMessageEmbeddingDreamForUser(
+  userId: string,
+  options: {
+    embeddingModel: string;
+    embedDocuments: (documents: string[]) => Promise<number[][]>;
+    limit?: number;
+    scanLimit?: number;
+    includeArchived?: boolean;
+    dryRun?: boolean;
+  },
+) {
+  const manager = await getManager();
+  const { runRawMessageEmbeddingDream } = await import("./embedding");
+  return await runRawMessageEmbeddingDream(manager, {
+    userId,
+    ...options,
+  });
+}
+
+export async function searchRawMessagesSemanticallyForUser(
+  userId: string,
+  options: {
+    query: string;
+    embedQuery: (query: string) => Promise<number[]>;
+    embeddingModel?: string;
+    limit?: number;
+    scanLimit?: number;
+    threshold?: number;
+    includeArchived?: boolean;
+    platform?: string;
+    botId?: string;
+    channel?: string;
+    person?: string;
+    startTime?: number;
+    endTime?: number;
+  },
+) {
+  const manager = await getManager();
+  const { searchRawMessagesSemantically } = await import("./embedding");
+  return await searchRawMessagesSemantically(manager, {
+    userId,
+    ...options,
+  });
 }
 
 /**

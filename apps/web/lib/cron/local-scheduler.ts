@@ -22,7 +22,7 @@ import { characters, jobExecutions, scheduledJobs } from "../db/schema";
 import { eq } from "drizzle-orm";
 import type { ScheduledJob } from "@/lib/db/schema";
 import {
-  runDailyInsightAnalyticsMaintenanceIfDue,
+  runInsightEmbeddingDreamIfDue,
   runInsightMaintenanceIfDue,
 } from "./insight-maintenance";
 
@@ -176,13 +176,6 @@ async function checkAndExecuteDueJobs() {
   isProcessing = true;
 
   try {
-    await runDailyInsightAnalyticsMaintenanceIfDue(schedulerUserId);
-    await runInsightMaintenanceIfDue(schedulerUserId);
-  } catch (error) {
-    console.error("[LocalScheduler] Error checking for due jobs:", error);
-  }
-
-  try {
     // First, recover any stuck jobs (runs every minute as part of the scheduler cycle)
     // Jobs running longer than RECOVERY_TIMEOUT_MS (120 min) are considered stuck
     await recoverStuckJobs();
@@ -190,6 +183,10 @@ async function checkAndExecuteDueJobs() {
     // Then clean up zombie jobs that have been stuck for over 4 hours
     // These are beyond recovery and are simply deleted
     await cleanupStuckJobs();
+
+    const schedulerAuthToken = getCloudAuthToken();
+    await runInsightEmbeddingDreamIfDue(schedulerUserId, schedulerAuthToken);
+    await runInsightMaintenanceIfDue(schedulerUserId);
 
     // Get all jobs that are due to run for the current user
     const dueJobs = await getDueJobs(new Date(), schedulerUserId);
@@ -247,7 +244,7 @@ async function checkAndExecuteDueJobs() {
 
         // Build modelConfig from cloud auth token (for Tauri mode)
         // Use DEFAULT_AI_MODEL as default model to match manual execution behavior.
-        const cloudAuthToken = getCloudAuthToken();
+        const cloudAuthToken = schedulerAuthToken;
         const selectedModel = (() => {
           const model = (job as any)?.jobConfig?.modelConfig?.model;
           // Treat "default" as "no model specified" so we use the default
