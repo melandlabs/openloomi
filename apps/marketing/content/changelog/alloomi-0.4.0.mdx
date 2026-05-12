@@ -1,0 +1,52 @@
+## Alloomi 0.4.0 - Apr 15, 2026
+
+This Alloomi update marks a significant milestone with the introduction of the Character System, a powerful automation framework for creating and deploying AI-powered workflows. This release also debuts the Marketplace for discovering character templates and skills, delivers intelligent memory management through the Forgetting Pipeline, enables voice processing with multiple transcription models, expands document preview capabilities across major formats, and introduces a restructured package architecture under @alloomi/\* namespaces.
+
+### 🔔 Notable Changes
+
+#### 🤖 Character System
+
+Alloomi introduces a comprehensive Character System that serves as a new automation and execution framework. Users can create, customize, and deploy characters with specific behaviors and integrations. The system includes:
+
+- **Character Templates**: Pre-built templates including AI Product Daily Digest, Personal Daily Digest, Topic Tracker, Sales Pipeline Automation, Contract Risk Evaluator, and more
+- **Execution Tracking**: Detailed execution history with inline expansion, fullscreen chat panel, and source attribution
+- **Scheduling**: Flexible interval-based scheduling with minutes and hours support, plus monthly cron configurations
+- **Insight Integration**: Character insights provide analytics on performance with clickable timeline actions and citation support (^ID^ format)
+- **Workspace Integration**: Drag-and-drop folder upload, file preview within character pages, and workspace library synchronization
+
+#### 🏪 Marketplace
+
+The new Marketplace provides a centralized directory for character templates and skills. Users can discover, preview, and deploy pre-built solutions with detailed character listings showing descriptions, capability summaries, and source information. Seamless installation enables quick setup of community-contributed content.
+
+#### 📄 Document Previews
+
+Alloomi now supports rich document preview capabilities across a wide range of formats:
+
+- **PDF**: Full inline content preview with thumbnail scaling and viewer controls (i18n)
+- **DOCX**: Word document preview with formatting preservation
+- **PPTX**: PowerPoint presentation viewer with slide navigation
+- **Spreadsheets**: CSV preview with data organization and column alignment
+- **TXT**: Plain text content preview in library grid view
+- **HTML**: Inline preview with CDN resource inlining and CSP updates for d3js and Google Fonts
+- **Images**: Thumbnail previews in library grid view
+
+#### 🔔 Cross-Platform Notifications
+
+The notification system has been expanded with multi-channel support:
+
+- **Notification Plugin**: New plugin architecture for extensible notification handlers
+- **Multi-Select Channels**: Users can select multiple notification channels per character
+- **Tauri Integration**: Native send_notification command for desktop notifications
+- **Telegram Integration**: Scheduled notifications with "me" contact support and timezone handling
+
+#### 💡 UI/UX Enhancements
+
+Additional improvements include:
+
+- **Onboarding Redesign**: Revamped tooltip flow with avatar defaults and i18n support for onboarding translations
+- **Sidebar Character Tab**: Dedicated character tab with tab mode support outside development
+- **Avatar Editor**: Upgraded avatar editor with improved configuration persistence
+- **Workspace Library**: Enhanced file listing with parallel loading and task ID filtering
+- **Billing Ledger**: New usage tab showing Stripe subscription details and billing entries
+- **Citation Badges**: Tooltips showing insight titles on hover for better source attribution
+- **Streaming Resilience**: Exponential backoff retry for streaming responses and auto-recovery for stuck scheduled jobs

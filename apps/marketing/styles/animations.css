@@ -1,0 +1,226 @@
+/* GSAP Animations */
+.fade-in {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.fade-in.active {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s ease;
+}
+
+/* Custom Animations */
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Breathing animation - for logo */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.5;
+    background-color: rgb(239, 68, 68); /* red-500 */
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+    background-color: rgb(220, 38, 38); /* red-600 - deeper red */
+  }
+}
+
+.breathe {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+/* Logo glow effect */
+@keyframes glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 30px rgba(185, 88, 10, 0.3),
+      0 0 60px rgba(185, 88, 10, 0.2),
+      0 0 90px rgba(185, 88, 10, 0.1),
+      0 0 120px rgba(185, 88, 10, 0.05);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(185, 88, 10, 0.5),
+      0 0 80px rgba(185, 88, 10, 0.3),
+      0 0 120px rgba(185, 88, 10, 0.2),
+      0 0 160px rgba(185, 88, 10, 0.1);
+  }
+}
+
+.logo-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* Badge fade out animation */
+@keyframes fade-out-badge {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0);
+  }
+}
+
+.fade-out-badge {
+  animation: fade-out-badge 0.6s ease-out forwards;
+}
+
+/* Badge fade in animation */
+@keyframes fade-in-badge {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fade-in-badge {
+  animation: fade-in-badge 0.4s ease-out forwards;
+  animation-delay: 1s;
+  opacity: 0;
+}
+
+/* Platform logo fade out animation */
+@keyframes fade-out-logo {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+.fade-out-logo {
+  animation: fade-out-logo 0.5s ease-out forwards;
+  animation-delay: 0.3s;
+}
+
+/* Platform logo fade in animation */
+@keyframes fade-in-logo {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fade-in-logo {
+  animation: fade-in-logo 0.5s ease-out forwards;
+  animation-delay: 0.2s;
+  opacity: 0;
+}
+
+/* Tag container rotation animation - for changing tag position */
+/* Note: container centering done via Tailwind classes, animation only handles rotation */
+@keyframes orbit-tag-container {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.orbit-tag-container {
+  animation: orbit-tag-container 20s linear infinite;
+  transform-origin: center center;
+}
+
+/* Tag container rotation-only animation - no translate (for positioning via Tailwind classes) */
+@keyframes orbit-tag-container-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Tag reverse rotation animation - keeps tag horizontal */
+@keyframes orbit-tag-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.orbit-tag-reverse {
+  animation: orbit-tag-reverse 20s linear infinite;
+}
+
+/* Tag fade in animation */
+@keyframes fade-in-tag {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fade-in-tag {
+  animation: fade-in-tag 0.5s ease-out forwards;
+  animation-delay: 0.8s;
+  opacity: 0;
+}
+
+/* Light gray flowing gradient background animation - color flows */
+@keyframes flowlight-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.bg-flowlight-animated {
+  /* Light gray flowing gradient background - diagonal gradient, color flows */
+  background: linear-gradient(
+    135deg,
+    rgba(243, 244, 246, 0.9) 0%,
+    rgba(229, 231, 235, 0.95) 25%,
+    rgba(249, 250, 251, 0.9) 50%,
+    rgba(229, 231, 235, 0.95) 75%,
+    rgba(243, 244, 246, 0.9) 100%
+  );
+  background-size: 200% 200%;
+  animation: flowlight-gradient 8s ease-in-out infinite;
+}

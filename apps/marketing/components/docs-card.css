@@ -1,0 +1,139 @@
+/* Doc card grid layout - ensures equal column widths */
+.docs-card-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(280px, 1fr)
+  ); /* All columns equal width */
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+/* Responsive layout adjustments */
+@media (min-width: 640px) {
+  .docs-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .docs-card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Card link styles */
+.docs-card-link {
+  display: block;
+  text-decoration: none;
+  height: 100%; /* Ensures link fills entire card height */
+}
+
+/* Card base styles - ensures equal heights */
+.docs-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid theme("colors.border.primary");
+  border-radius: theme("borderRadius.card");
+  background-color: theme("colors.background.card");
+  padding: 1.5rem;
+  box-shadow: theme("boxShadow.card");
+  transition: all theme("transitionDuration.normal") ease;
+  height: 100%; /* Key: all cards equal height */
+  display: flex;
+  flex-direction: column; /* Uses flex to ensure content fills correctly */
+}
+
+/* Card hover effect */
+.docs-card:hover {
+  border-color: theme("colors.info.DEFAULT");
+  box-shadow: theme("boxShadow.hover");
+  transform: translateY(-2px);
+}
+
+/* Card decorative element */
+.docs-card-decoration {
+  position: absolute;
+  right: -3rem;
+  top: -3rem;
+  width: 6rem;
+  height: 6rem;
+  border-radius: 50%;
+  background-color: theme("colors.info.light");
+  transition: all theme("transitionDuration.normal") ease;
+}
+
+.docs-card:hover .docs-card-decoration {
+  background-color: theme("colors.info.light");
+  opacity: 0.8;
+}
+
+/* Card content container - fills available space */
+.docs-card-content {
+  position: relative;
+  flex: 1; /* Fills card remaining space */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Card title */
+.docs-card-title {
+  margin: 0 0 0.75rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: theme("colors.foreground.secondary");
+  transition: color theme("transitionDuration.normal") ease;
+}
+
+.docs-card:hover .docs-card-title {
+  color: theme("colors.info.DEFAULT");
+}
+
+/* Card description - ensures content doesn't expand card */
+.docs-card-description {
+  margin: 0 0 1rem 0;
+  color: theme("colors.foreground.muted");
+  flex: 1; /* Allows description text area to expand */
+  display: -webkit-box;
+  -webkit-line-clamp: 3; /* Limits max 3 lines of text */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Learn more link - stays at bottom */
+.docs-card-learn-more {
+  display: inline-flex;
+  align-items: center;
+  color: theme("colors.info.DEFAULT");
+  opacity: 0;
+  transition: opacity theme("transitionDuration.normal") ease;
+  margin-top: auto; /* Pushes to container bottom */
+}
+
+.docs-card:hover .docs-card-learn-more {
+  opacity: 1;
+}
+
+.docs-card-learn-more span {
+  margin-right: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Arrow icon */
+.docs-card-arrow {
+  width: 1rem;
+  height: 1rem;
+}
+
+.blogs-container {
+  display: grid;
+  gap: 2rem;
+  padding: 2rem;
+}
+
+.blog-card {
+  border: 1px solid theme("colors.border.primary");
+  border-radius: theme("borderRadius.card");
+  padding: 1.5rem;
+}

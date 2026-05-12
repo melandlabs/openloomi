@@ -1,0 +1,27 @@
+User-agent: *
+Allow: /
+Sitemap: https://alloomi.ai/sitemap.xml
+
+# Disallow restricted areas
+Disallow: /admin/
+Disallow: /api/
+Disallow: /private/
+Disallow: /user/*/messages
+Disallow: /dashboard/*/settings
+
+# Allow critical resources for proper rendering
+Allow: /*.js$
+Allow: /*.css$
+Allow: /*.png$
+Allow: /*.jpg$
+Allow: /*.svg$
+Allow: /*.gif$
+
+# Specific bot restrictions
+User-agent: GPTBot
+Allow: /blogs/
+Disallow: /
+
+User-agent: Claude-Web
+Allow: /blogs/
+Disallow: /

@@ -1,0 +1,352 @@
+@import "tailwindcss";
+
+@theme {
+  /* Primary colors - blue palette (aligned with apps/web) */
+  --color-primary-50: #f0f5fc;
+  --color-primary-100: #e3ecf9;
+  --color-primary-200: #cddff4;
+  --color-primary-300: #a9caeb;
+  --color-primary-400: #7faee0;
+  --color-primary-500: #5d90d4;
+  --color-primary-600: #4272c1;
+  --color-primary-700: #13408f;
+  --color-primary-800: #29427e;
+  --color-primary-900: #253964;
+  --color-primary-950: #192441;
+  --color-primary-start: #4272c1;
+  --color-primary-end: #13408f;
+
+  /* Accent colors - orange palette (aligned with apps/web) */
+  --color-accent-50: #fdf6ef;
+  --color-accent-100: #faebd9;
+  --color-accent-200: #f4d2b2;
+  --color-accent-300: #edb383;
+  --color-accent-400: #e48c52;
+  --color-accent-500: #db6e2b;
+  --color-accent-600: #cb5621;
+  --color-accent-700: #b9580a;
+  --color-accent-800: #934610;
+  --color-accent-900: #763a10;
+  --color-accent-950: #401c06;
+  --color-accent-brand: #b9580a;
+  --color-accent-bg-start: #fdf6ef;
+  --color-accent-bg-end: #faebd9;
+
+  /* Background colors */
+  --color-background: #f8f8fb;
+  --color-background-surface: #fbfbfb;
+  --color-background-card: #ffffff;
+  --color-background-secondary: #f5f7fa;
+  --color-background-flowlight: #fff5e5;
+  --color-muted: #f1f5f9;
+
+  /* Text colors */
+  --color-foreground: #020617;
+  --color-foreground-secondary: #0f172a;
+  --color-foreground-muted: #64748b;
+  /* Used for text-muted-foreground */
+  --color-muted-foreground: #9ca3af;
+  --color-foreground-accent: #E0F172A;
+  --color-foreground-primary: #f8fafc;
+
+  /* Brand colors */
+  --color-deepwater: var(--color-primary-end); /* Deepwater */
+  --color-flowlight: var(--color-accent-brand); /* Flowlight - accent color */
+  --color-surfaceBlue: #e8f0fa;
+  --color-primary: var(--color-primary-700);
+  --color-primary-foreground: #f8fafc;
+
+  /* Semantic colors */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-error-dark: #dc2626;
+  --color-info: #3b82f6;
+  --color-info-banner: #165dff;
+  --color-info-banner-dark: #0f48c9;
+  --color-foreground-banner: #1e3a8a;
+  --color-banner-bg: rgba(22, 93, 255, 0.07);
+  --color-banner-border: rgba(22, 93, 255, 0.12);
+  --color-banner-divider: rgba(30, 58, 138, 0.2);
+
+  /* Fonts (aligned with apps/web design system) */
+  --font-sans:
+    "Noto Sans SC", "思源黑体", "PingFang SC", "Helvetica Neue", -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  --font-serif: "Noto Serif SC", "思源宋体", "Songti SC", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Border colors */
+  --color-border-primary: #e5e7eb;
+  --color-border-secondary: #d1d5db;
+  /* Semantic aliases for utilities: bg-card (white, same as --color-background-card), border-border */
+  --color-card: var(--color-background-card);
+  --color-border: #e6e7eb;
+
+  /* Border radius */
+  --radius-card: 0.5rem;
+  --radius-card-large: 1.5rem; /* 24px */
+  --radius-button: 0.375rem;
+}
+
+body {
+  color: var(--color-foreground);
+  background: var(--color-background);
+  font-family: var(--font-sans);
+}
+
+/* Override nextra-theme-docs font-feature-settings to prevent single quotes
+   from being rendered as full-width characters by 'ss01' stylistic set */
+html {
+  font-feature-settings:
+    "liga" 1,
+    "kern" 1;
+}
+
+/* Define 80% opacity foreground-primary color variable */
+:root {
+  /* #F8FAFC at 80% opacity version */
+  --color-foreground-primary-80: rgba(248, 250, 252, 0.7);
+  --gradient-flowlight: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent-bg-end) 60%, transparent) 0%,
+    color-mix(in srgb, var(--color-accent-bg-start) 60%, transparent) 100%
+  );
+}
+
+/* Landing footer link text color - 80% opacity foreground-primary */
+.text-foreground-primary-80 {
+  color: var(--color-foreground-primary-80) !important;
+}
+
+/* Deepwater gradient background */
+.bg-deepwater {
+  background: linear-gradient(
+    180deg,
+    var(--color-primary-start) 0%,
+    var(--color-primary-end) 100%
+  );
+}
+
+/* Primary gradient background (aligned with apps/web design system naming) */
+.bg-primary-gradient {
+  background: linear-gradient(
+    180deg,
+    var(--color-primary-start) 0%,
+    var(--color-primary-end) 100%
+  );
+}
+
+/* Flowlight gradient background */
+.bg-flowlight {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent-bg-end) 60%, transparent) 0%,
+    color-mix(in srgb, var(--color-accent-bg-start) 60%, transparent) 100%
+  );
+}
+
+/* Flowlight gradient background without utility name collision */
+.bg-flowlight-gradient {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent-bg-end) 60%, transparent) 0%,
+    color-mix(in srgb, var(--color-accent-bg-start) 60%, transparent) 100%
+  );
+}
+
+/* Problem cards highlight state: used by selected and hover */
+.problem-card-highlight {
+  background: var(--gradient-flowlight);
+  color: var(--color-flowlight);
+  border-color: var(--color-border-primary);
+}
+
+/* Keep hover and selected visually consistent */
+.problem-card-interactive:hover {
+  background: var(--gradient-flowlight);
+  color: var(--color-flowlight);
+}
+
+/* Flowlight text color */
+.text-flowlight {
+  color: var(--color-flowlight);
+}
+
+/* Muted background color */
+.bg-muted {
+  background-color: var(--color-muted);
+}
+
+/* Ensures docs page content is not blocked by navbar */
+.nextra-container {
+  padding-top: 5rem !important;
+}
+
+/* Testimonial card scroll animation */
+/* Row 1: scrolls from left to right (content moves left) */
+@keyframes scroll-horizontal {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Row 2: scrolls from right to left */
+/* Initial position: aligns last card's right edge with screen right edge */
+/* Total content width = 5*400px + 4*1rem = 2000px + 4rem */
+/* Initial position = 100vw - (5*400px + 4*1rem) = 100vw - 2000px - 4rem */
+@keyframes scroll-horizontal-reverse {
+  0% {
+    transform: translateX(calc(100vw - 2000px - 4rem));
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes scroll-vertical {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+.animate-scroll-horizontal {
+  animation: scroll-horizontal 50s linear infinite;
+  will-change: transform;
+}
+
+.animate-scroll-horizontal-reverse {
+  animation: scroll-horizontal-reverse 50s linear infinite;
+  will-change: transform;
+}
+
+.animate-scroll-vertical {
+  animation: scroll-vertical 80s linear infinite;
+  will-change: transform;
+}
+
+.animate-scroll-horizontal:hover,
+.animate-scroll-horizontal-reverse:hover,
+.animate-scroll-vertical:hover {
+  animation-play-state: paused;
+}
+
+@keyframes testimonial-text-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-testimonial-text {
+  animation: testimonial-text-marquee 18s linear infinite;
+  will-change: transform;
+}
+
+.animate-testimonial-text:hover {
+  animation-play-state: paused;
+}
+
+/* Hero chaos overlay animation */
+@keyframes chaosFadeInOut {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes chaosFloat {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(10px, -15px);
+  }
+  50% {
+    transform: translate(-8px, -25px);
+  }
+  75% {
+    transform: translate(-12px, -10px);
+  }
+}
+
+/* Horizontal movement animation - horizontal only */
+@keyframes chaosFloatHorizontal {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(var(--move-distance, 100px));
+  }
+}
+
+@keyframes chaosPing {
+  0% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+}
+
+/* OrbitingCircles animation */
+@keyframes orbit-normal {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes orbit-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+/* Hide scrollbar but keep scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
+/* Docs tables - horizontal scroll on small screens */
+article div[class*="table"] {
+  overflow-x: auto;
+}
+body.mobile-menu-open section[aria-label="Alloomi Affiliate Program Promotion"],
+body.mobile-menu-open [aria-label="Alloomi Affiliate Program Promotion"] {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

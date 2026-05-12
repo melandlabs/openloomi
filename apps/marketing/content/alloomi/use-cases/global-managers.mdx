@@ -1,0 +1,131 @@
+---
+title: "Global Managers"
+description: "Never miss a critical signal across time zones"
+icon: "FaLightbulb"
+---
+
+# Global Managers
+
+## Never Miss a Critical Signal Across Time Zones
+
+Business runs 24/7 globally. Alloomi filters time zone and language noise, capturing high-value opportunities while you sleep — wake up to a refined action list.
+
+**What it does:**
+
+| Step                | Action                                                         |
+| ------------------- | -------------------------------------------------------------- |
+| ☀️ Morning briefing | Pull updates from Slack, Telegram, Gmail                       |
+| 🎯 Prioritize       | Rank by urgency and your Interests settings                    |
+| 📋 Action list      | Deliver a 3-item morning briefing to your Telegram or WhatsApp |
+| 📊 Track            | Log every briefing run and what was captured in your timeline  |
+
+---
+
+## See It in Action
+
+### Connect All Platforms
+
+Start by connecting every platform your global team uses. In **Settings → Connectors**, add Slack, Telegram and Gmail. Alloomi reads across all of them, regardless of language or time zone.
+
+---
+
+### Configure the Briefing Prompt
+
+Paste the automation prompt into Alloomi's agent chat. It defines the morning briefing workflow: multi-platform pull, prioritization by urgency, and delivery to your preferred channel.
+
+---
+
+### Create the Automation Tasks
+
+Two scheduled tasks handle the full briefing workflow:
+
+| Task                 | Schedule  | Purpose                                                     |
+| -------------------- | --------- | ----------------------------------------------------------- |
+| **Morning Briefing** | Every day | Pull from all platforms, rank, deliver to Telegram/WhatsApp |
+| **Context Tabs**     | Always on | Real-time signal routing by keyword and topic               |
+
+---
+
+### Briefing Delivered
+
+Every morning at 8 AM, Alloomi delivers a prioritized 3-item briefing directly to your Telegram — ranked by urgency, filtered by your Interests settings.
+
+---
+
+## Tracking Every Run
+
+Alloomi records every briefing execution in your personal timeline. Review past briefings, see what signals were captured, and track how your Focus view improves over time.
+
+---
+
+## What Changed
+
+| Aspect             | Before                              | After                                  |
+| ------------------ | ----------------------------------- | -------------------------------------- |
+| Morning routine    | 2 hrs scanning messages             | 3-item prioritized action list         |
+| Escalations        | Missed across time zones            | Keyword-triggered alerts 24/7          |
+| Context gathering  | Manual aggregation across platforms | Automatic multi-platform pull          |
+| Language barriers  | Important updates missed            | Translated and prioritized in Focus    |
+| Time zone coverage | Gaps overnight                      | 24/7 signal monitoring while you sleep |
+
+---
+
+## How to Set Up
+
+**Option 1: Copy & Paste (Easiest)**
+
+Open Alloomi and paste this:
+
+```
+Please help me set up a morning briefing automation.
+
+Every day at 8 AM:
+1. Pull updates from Slack, Telegram and Gmail from the past 24 hours
+2. Filter for signals relevant to enterprise deals, product launches and competitive updates
+3. Prioritize items by urgency using my Interests settings
+4. Deliver a 3-item morning briefing to my Telegram, formatted as:
+• [URGENT] Item 1 — why it matters
+• [ACTION] Item 2 — what to do
+• [INFO] Item 3 — worth knowing
+5. Log the briefing run to my timeline with a summary of what was captured in the event "My Tasks"
+```
+
+Alloomi will automatically create the scheduled task for you!
+
+---
+
+**Option 2: Manual Setup**
+
+1. Go to the **Agent** page, then select **Automation** → **New Task**
+2. Fill in:
+
+| Field            | Input                                                                                                                                                                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Task Name        | `Morning Briefing`                                                                                                                                                                                                                                                 |
+| Task Description | `1. Pull updates from Slack, Telegram and Gmail from the past 24 hours\n2. Filter for signals relevant to your key topics\n3. Prioritize items by urgency using Interests settings\n4. Deliver a 3-item briefing to Telegram\n5. Log the briefing run to timeline` |
+| Schedule         | `0 8 * * *` (every day at 8 AM)                                                                                                                                                                                                                                    |
+
+3. Go to **Settings → Connectors** and connect your platforms (Slack, Telegram, Gmail)
+4. Go to **Settings → Personalization → Interests** and add your priority keywords (e.g., "enterprise deal," "competitor," "launch," "escalation")
+
+---
+
+## Why This Works
+
+**⏰ Wake Up Ready, Not Overwhelmed**
+
+- Every morning you get 3 prioritized items, not 500 unread messages
+- Alloomi filters the noise so you can act on what actually matters
+- Time zone gaps are covered — signals from APAC and EMEA arrive while you sleep
+
+**🎯 Interests Settings Make It Personal**
+
+- The more you use Alloomi, the sharper the prioritization becomes
+- Your Interests settings tune both the briefing and all Context tabs toward exactly what matters to you
+- Context tabs (Escalations, APAC, EMEA, VIP) give you on-demand views without re-running the briefing
+
+**📊 Tracking Closes the Loop**
+
+- Every briefing run is logged with a summary
+- Ask: "What did I miss last Tuesday?"
+- Review past runs to see how your priorities have shifted over time

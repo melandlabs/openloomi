@@ -1,0 +1,131 @@
+---
+title: "Engineering Daily Sync"
+description: "Automated dev reports and issue sync to Linear — every night at 10 PM"
+icon: "FaLightbulb"
+---
+
+# Engineering Daily Sync
+
+## Automated Dev Reports + Issue Sync to Linear — Every Night
+
+Engineering teams waste hours every week pulling commit logs, writing status reports, and triaging GitHub issues. What if every night at 10 PM, AI automatically fetched all commits, compiled a dev report, emailed it to the team, and synced new issues directly to Linear?
+
+**What it does:**
+
+| Step           | Action                                                      |
+| -------------- | ----------------------------------------------------------- |
+| 🌙 Every 10 PM | Pull all commits from `melandlabs/Alloomi` on GitHub        |
+| 📝 Compile     | Generate a structured daily dev report                      |
+| 📧 Email       | Send the report to the engineering team                     |
+| 🐛 New Issues  | Fetch all issues created that day, rewrite with full detail |
+| 🔄 Linear Sync | Sync rewritten issues to Linear for prioritization          |
+
+---
+
+## The Setup
+
+### Configure the PD Prompt
+
+Paste the automation prompt into Alloomi. It defines the nightly workflow: commit fetching, report compilation, email delivery, and Linear sync.
+
+---
+
+### Create the Automation Tasks
+
+Two scheduled tasks handle the full workflow:
+
+| Task              | Schedule           | Purpose                                      |
+| ----------------- | ------------------ | -------------------------------------------- |
+| **PD Daily Sync** | Every day at 10 PM | Fetch commits, compile report, email to team |
+| **PD Issue Sync** | Every 1 hour       | Monitor new issues, rewrite, sync to Linear  |
+
+Both tasks are created with tracking enabled for full observability.
+
+---
+
+## The Operation
+
+### Every 10 PM: PD Daily Sync Runs
+
+Alloomi executes the full pipeline — fetching commits, compiling the report, and syncing issues — then generates structured artifacts for each output.
+
+### Execution Complete
+
+After 3 minutes, the task finishes with two artifacts: the daily dev report and the issue sync summary.
+
+The sync produces two structured artifacts — the daily dev report and the issue migration summary — each ready to share or archive.
+
+---
+
+## Tracking Every Execution
+
+Alloomi's tracking panel shows exactly how many times each task has run, against which repositories:
+
+---
+
+## What Changed
+
+| Aspect                 | Before                        | After                          |
+| ---------------------- | ----------------------------- | ------------------------------ |
+| Dev report compilation | Manual, weekly or never       | Automated, every night         |
+| Commit review          | Developer pulls logs manually | AI fetches and summarizes      |
+| Issue triaging         | Often delayed or missed       | Real-time, every hour          |
+| Linear sync            | Manual copy-paste             | Fully automated rewrite & sync |
+| Engineering time saved | ~2 hrs/week                   | Near-zero, review only         |
+
+---
+
+## How to Set Up
+
+**Option 1: Copy & Paste (Easiest)**
+
+Open Alloomi and paste this:
+
+```
+Please pull all commits from melandlabs/Alloomi every night at 10 PM, compile a report, and send it to my email. Also, monitor all new issues created that day, rewrite them in detail, and sync them to Linear.
+```
+
+Alloomi will automatically create the scheduled tasks for you!
+
+---
+
+**Option 2: Manual Setup**
+
+1. Go to the **Agent** page, then select **Automation** → **New Task**
+2. Create the first task:
+
+| Field            | Input                                                                                                                                                                                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Task Name        | `PD Daily Sync`                                                                                                                                                                                                                                                      |
+| Task Description | `1. Fetch all commits from your GitHub repo (e.g. melandlabs/Alloomi)\n2. Compile a structured daily dev report\n3. Email the report to your team\n4. Fetch all issues created that day\n5. Rewrite each issue with full detail\n6. Sync rewritten issues to Linear` |
+| Schedule         | `0 22 * * *` (every day at 10 PM)                                                                                                                                                                                                                                    |
+
+3. Create the second task:
+
+| Field            | Input                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Task Name        | `PD Issue Sync`                                                                                          |
+| Task Description | `Fetch new GitHub issues created today, rewrite each with full detail and context, then sync to Linear.` |
+| Schedule         | `Every 1 hour`                                                                                           |
+
+---
+
+## Why This Works
+
+**📊 Reporting Without the Effort**
+
+- Every night at 10 PM, a full dev report lands in the team's inbox
+- No developer time spent on status updates
+- Reports are structured, consistent, and always on time
+
+**🔄 Linear Stays in Sync**
+
+- New GitHub issues are automatically rewritten with full context
+- Linear is always up to date, ready for sprint planning
+- No manual issue copy-pasting between platforms
+
+**⏱️ Tracking Shows the Truth**
+
+- See exactly how many syncs have run
+- Know which repositories are being tracked
+- Identify gaps in the engineering workflow at a glance

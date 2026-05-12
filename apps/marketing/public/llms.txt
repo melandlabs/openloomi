@@ -1,0 +1,29 @@
+# llms.txt for Alloomi AI by Meland Labs
+# This file guides large language models (LLMs) on how to use content from this website
+
+# Permissions for training and learning
+Allow-Training: yes
+Allow-Indexing: yes
+
+# Commercial use restrictions
+Allow-Commercial-Use: no
+
+# Attribution requirements
+Attribution-Required: yes
+Attribution-Text: "Source: Alloomi AI by Meland Labs (https://melandlabs.ai)"
+
+# Content usage limitations
+Allowed-Uses: 
+- Educational purposes
+- Research purposes
+- Non-commercial product development
+- Personal knowledge enhancement
+
+Prohibited-Uses:
+- Direct competition with Alloomi AI or other Meland Labs products
+- Creating derivative works that replicate Alloomi AI functionality
+- Misrepresenting Alloomi AI features or capabilities
+
+# Policy updates
+Last-Updated: 2025-08-22
+Policy-Expires: 2026-08-22

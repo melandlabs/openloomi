@@ -1,0 +1,465 @@
+---
+title: "Connectors"
+description: "Connect your messaging platforms, email, and productivity tools to Alloomi"
+icon: "FaPlug"
+---
+
+# Connectors
+
+Link your platforms or subscribe to content you care about — Alloomi keeps watch so you don't have to.
+
+To add a connector, open **Settings → Connectors** and click **+ Add New Connector**. Alloomi will guide you through the authorization process for each platform.
+
+> 🔒 **Privacy by design**: Alloomi only reads messages to generate insights. It does not store raw message content on its servers — data is processed locally or encrypted in transit.
+
+## Supported Platforms
+
+### Messaging Platforms and Social Media
+
+| Platform        | Status         | Description          |
+| --------------- | -------------- | -------------------- |
+| Telegram        | 🟢 Available   | Personal messaging   |
+| WhatsApp        | 🟢 Available   | Personal messaging   |
+| Slack           | 🟢 Available   | Team communications  |
+| Discord         | 🟢 Available   | Community & teams    |
+| iMessage        | 🟢 Available   | Personal messaging   |
+| QQ              | 🟢 Available   | Bot messaging        |
+| Lark/Feishu     | 🟢 Available   | Bot messaging        |
+| DingTalk        | 🟢 Available   | Bot messaging        |
+| Weixin          | 🟢 Available   | Bot messaging        |
+| Gmail           | 🟢 Available   | Email                |
+| Outlook         | 🟢 Available   | Email                |
+| X               | 🟢 Available   | Marketing Automation |
+| LinkedIn        | 🟡 Coming Soon | Marketing Automation |
+| Microsoft Teams | 🟡 Coming Soon | Team communications  |
+
+### Productivity Tools
+
+| Platform        | Status         | Description    |
+| --------------- | -------------- | -------------- |
+| Google Drive    | 🟡 Coming Soon | File storage   |
+| Notion          | 🟡 Coming Soon | Knowledge base |
+| HubSpot         | 🟡 Coming Soon | CRM            |
+| Google Calendar | 🟡 Coming Soon | Scheduling     |
+| GitHub          | 🟡 Coming Soon | R & D          |
+
+### Other
+
+| Platform | Status       | Description    |
+| -------- | ------------ | -------------- |
+| RSS      | 🟢 Available | News & updates |
+
+## What Each Connector Does
+
+The table below compares what each connector supports across key capabilities. Use this to choose the right platform for your workflow.
+
+> **Note:** Microsoft Teams, Google Drive, Notion, HubSpot, Google Calendar, and GitHub are coming soon and not included in the table below.
+
+### Messaging Platforms
+
+| Connector   | Read Messages | Send / Reply | Interactive Chat | AI Translation | AI Polishing | Notes & Files | Setup         |
+| ----------- | ------------- | ------------ | ---------------- | -------------- | ------------ | ------------- | ------------- |
+| Telegram    | ✅            | ✅           | ✅               | ✅             | ✅           | ✅            | QR / Phone    |
+| WhatsApp    | ✅            | ✅           | ✅               | ✅             | ✅           | ✅            | QR / Phone    |
+| Slack       | ✅            | ✅           | ❌               | ✅             | ✅           | ✅            | OAuth         |
+| Discord     | ✅            | ✅           | ❌               | ✅             | ✅           | ✅            | OAuth         |
+| iMessage    | ✅            | ✅           | ✅               | ✅             | ✅           | ✅            | Local (macOS) |
+| QQ          | ⚠️            | ✅           | ✅               | ✅             | ❌           | ❌            | Bot Token     |
+| Lark/Feishu | ⚠️            | ✅           | ✅               | ✅             | ❌           | ❌            | Bot Token     |
+| DingTalk    | ⚠️            | ✅           | ✅               | ✅             | ❌           | ❌            | Bot Token     |
+| Weixin      | ❌            | ❌           | ✅               | ❌             | ❌           | ❌            | QR            |
+
+### Email
+
+| Connector | Read Messages | Send / Reply | Interactive Chat | AI Translation | AI Polishing | Notes & Files | Setup        |
+| --------- | ------------- | ------------ | ---------------- | -------------- | ------------ | ------------- | ------------ |
+| Gmail     | ✅            | ✅           | ❌               | ✅             | ✅           | ✅            | App Password |
+| Outlook   | ✅            | ✅           | ❌               | ✅             | ✅           | ✅            | App Password |
+
+### Social / Content
+
+| Connector | Read Messages | Send / Reply | Interactive Chat | AI Translation | AI Polishing | Notes & Files | Setup      |
+| --------- | ------------- | ------------ | ---------------- | -------------- | ------------ | ------------- | ---------- |
+| X         | ✅            | ✅           | ❌               | ✅             | ✅           | ✅            | OAuth      |
+| RSS       | ✅            | ❌           | ❌               | ❌             | ❌           | ❌            | URL / OPML |
+
+## Authorization Modes Explained
+
+Alloomi supports two distinct authorization modes for messaging platforms. Understanding the difference helps you choose the right platform for your workflow.
+
+### Bot Token Mode — Feishu, DingTalk, QQ
+
+These platforms use **enterprise self-built applications** with bot credentials (App ID + App Secret or Client ID + Client Secret).
+
+| Platform | Credentials        | Message Source                                         | How Users Trigger AI                              |
+| -------- | ------------------ | ------------------------------------------------------ | ------------------------------------------------- |
+| Feishu   | App ID + Secret    | Messages sent **directly to bot** or **@bot in group** | Find bot → private chat, or @mention bot in group |
+| DingTalk | Client ID + Secret | Messages sent **directly to bot** or **@bot in group** | Find bot → private chat, or @mention bot in group |
+| QQ       | App ID + Token     | Messages sent **directly to bot** or **@bot in group** | Find bot → private chat, or @mention bot in group |
+
+**How it works:** You create a bot app on the platform, obtain credentials, and connect it to Alloomi. Users can either:
+
+1. Find your bot in the messaging app and send messages directly to it (private chat)
+2. Add the bot to a group and @mention it — the bot will respond to messages directed at it
+
+> ⚠️ **Group chat requires @mention**: In group chats, the bot only reacts when explicitly @mentioned. It cannot passively read all group messages.
+
+### User Account Mode — Telegram, WhatsApp
+
+These platforms connect to a **user's personal account** via QR code or phone verification.
+
+| Platform | Login Method        | Message Source                                | How Users Trigger AI     |
+| -------- | ------------------- | --------------------------------------------- | ------------------------ |
+| Telegram | QR code / Phone     | **Saved Messages** (user messages themselves) | Send message to yourself |
+| WhatsApp | QR code / Pair code | All personal account chats                    | Send message to yourself |
+
+**How it works:** After logging into your personal account, Alloomi reads messages sent to your own account (Saved Messages / 自己发给自己). When you send a message to yourself, Alloomi reads it, generates an AI response, and you continue the conversation in the same chat.
+
+### Key Differences
+
+|                          | Bot Token Mode                               | User Account Mode                          |
+| ------------------------ | -------------------------------------------- | ------------------------------------------ |
+| **Authorization**        | App credentials (App ID + Secret)            | Personal account login (QR / phone)        |
+| **Message scope**        | Only messages sent to the bot                | All messages in the personal account       |
+| **User interaction**     | User must find and chat with bot             | User chats with their own account          |
+| **Proactive monitoring** | ❌ Bot can only respond to incoming messages | ✅ AI monitors Saved Messages / self-chats |
+| **Use case**             | Customer support bots, team assistants       | Personal AI assistant, self-productivity   |
+
+> 💡 **Tip:** Bot Token mode is ideal for building customer-facing bots where users主动来找 bot. User Account mode is designed for personal AI assistants where you send notes to yourself and get AI-powered insights back.
+
+---
+
+## How to
+
+<div align="center">
+  <img src="/img/alloomi/connectors.png" />
+</div>
+
+<br />
+
+<div align="center">
+  <img src="/img/alloomi/connectors-dialog.png" />
+</div>
+
+## Platform Setup Details
+
+### Telegram
+
+After clicking **[Connect Telegram]**, you'll be redirected to Telegram's authorization page.
+
+<div align="center">
+  <img src="/img/alloomi/telegram-login.png" alt="Alloomi Telegram Login" />
+</div>
+
+1. Enter your phone number
+
+<div align="center">
+  <img
+    src="/img/alloomi/telegram-login-phone.png"
+    alt="Alloomi Telegram Login Phone"
+  />
+</div>
+
+2. Enter the verification code sent to your Telegram app
+
+<div align="center">
+  <img
+    src="/img/alloomi/telegram-login-code.png"
+    alt="Alloomi Telegram Login Code"
+  />
+</div>
+
+3. If you have Two-Step Verification enabled, enter your password
+
+<div align="center">
+  <img
+    src="/img/alloomi/telegram-login-password.png"
+    alt="Alloomi Telegram Login Password"
+  />
+</div>
+
+Or choose to authorize by **scanning a QR code** in the Telegram app
+
+<div align="center">
+  <img
+    src="/img/alloomi/telegram-login-qr-code.png"
+    alt="Alloomi Telegram Login QR Code"
+  />
+</div>
+
+Or choose to authorize by **quick login** in the Telegram app if you have official telegram desktop installed locally, you can use your existing session to login without phone number or verification code
+
+<div align="center">
+  <img src="/img/alloomi/telegram-login-quick.png" />
+</div>
+
+### Slack
+
+After clicking **[Connect Slack]**, you'll be redirected to Slack's authorization page. Click **[Install Alloomi]** to add Alloomi to your workspace.
+
+<div align="center">
+  <img src="/img/alloomi/slack-auth.png" alt="Alloomi Slack Auth" />
+</div>
+
+> Note: Only workspace owners can install Alloomi currently.
+
+### Discord
+
+After clicking **[Connect Discord]**, select a Discord server to install Alloomi.
+
+<div align="center">
+  <img src="/img/alloomi/discord-auth.png" alt="Alloomi Discord Auth" />
+</div>
+
+> Note: Only Discord server managers can install Alloomi currently.
+
+### WhatsApp
+
+After clicking **[Connect WhatsApp]**, scan the QR code in the WhatsApp app to complete authorization.
+
+<div align="center">
+  <img
+    src="/img/alloomi/whatsapp-login-qr-code.png"
+    alt="Alloomi WhatsApp Login"
+  />
+</div>
+
+Or use a **phone pair code** to link WhatsApp without scanning:
+
+<div align="center">
+  <img
+    src="/img/alloomi/whatsapp-login-phone.png"
+    alt="Alloomi WhatsApp Login"
+  />
+</div>
+
+### iMessage
+
+iMessage integration is **only available on macOS**.
+
+1. Click **[Connect iMessage]**
+2. Grant the required permissions:
+   - **Full Disk Access** - Required to read iMessage database
+   - **Automation Permission** - Required to send messages
+3. Enter a display name for your iMessage account
+4. Click connect
+
+**How to grant permissions:**
+
+- Go to **System Settings > Privacy & Security > Full Disk Access**
+- Add the running app (Terminal, Node, or Alloomi)
+- Restart the app after granting permissions
+
+> 💡 Your message data stays on your local device. Alloomi only reads recent messages when you use it to generate insights.
+
+<div align="center">
+  <img src="/img/alloomi/imessage-login.png" />
+</div>
+
+### QQ
+
+QQ integration uses a **bot mode** via a persistent WebSocket connection. Unlike Telegram or iMessage (which connect to your personal account), QQ requires you to set up a QQ bot first.
+
+**Before you start — set up a QQ bot:**
+
+1. Register a QQ bot at the [QQ Open Platform](https://q.qq.com/)
+2. Create a new bot application and obtain your **Bot App ID** and **Bot Token**
+3. Enable the message receive permissions for your bot
+
+**Connect in Alloomi:**
+
+1. Click **+ Add New Connector** and select **QQ**
+2. Enter your **Bot App ID** and **Bot Token**
+3. Click **Connect** — Alloomi establishes a long-lived WebSocket connection to your bot
+
+<div align="center">
+  <img src="/img/alloomi/qq-config.png" />
+</div>
+
+Once connected, users who message your QQ bot will have their conversations processed by Alloomi. Alloomi replies **as the bot**.
+
+> 💡 QQ integration is in bot mode — Alloomi reads messages sent to your bot, not your personal QQ account.
+
+### Lark/Feishu
+
+Lark/Feishu integration uses a **bot mode** via a WebSocket long connection. You need to create an enterprise self-built application on the Lark/Feishu Open Platform — no public IP or domain is required.
+
+> ⚠️ **Important — App must be published**: After setting up in the Lark/Feishu Open Platform, your app must be published in the enterprise admin console before colleagues can find and message it. This is the #1 reason the bot doesn't appear.
+
+**Step 1 — Create a Lark/Feishu app:**
+
+1. Go to [Lark/Feishu Open Platform](https://open.feishu.cn/app) and sign in
+2. Click **Create enterprise self-built app** → fill in app name → click **Create**
+3. On the left sidebar, go to **App capabilities → Bot** → click **Add**
+
+**Step 2 — Configure permissions:**
+
+1. Go to **Permissions management → Add permissions**
+2. Search and enable these permissions:
+
+**Tenant-level scopes:**
+
+| Permission key                                                | Description                |
+| ------------------------------------------------------------- | -------------------------- |
+| `aily:file:read`                                              | Read Aily files            |
+| `aily:file:write`                                             | Write Aily files           |
+| `application:application.app_message_stats.overview:readonly` | Read app message stats     |
+| `application:application:self_manage`                         | Manage application         |
+| `application:bot.menu:write`                                  | Write bot menu             |
+| `cardkit:card:write`                                          | Write card                 |
+| `contact:user.employee_id:readonly`                           | Read employee ID           |
+| `corehr:file:download`                                        | Download CoreHR files      |
+| `docs:document.content:read`                                  | Read document content      |
+| `event:ip_list`                                               | IP list                    |
+| `im:chat`                                                     | Chat access                |
+| `im:chat.access_event.bot_p2p_chat:read`                      | Read bot P2P chat events   |
+| `im:chat.members:bot_access`                                  | Bot access to chat members |
+| `im:message`                                                  | Message access             |
+| `im:message.group_at_msg:readonly`                            | Read group @ messages      |
+| `im:message.group_msg`                                        | Group message              |
+| `im:message.p2p_msg:readonly`                                 | Read direct messages       |
+| `im:message:readonly`                                         | Read message content       |
+| `im:message:send_as_bot`                                      | Send messages as bot       |
+| `im:resource`                                                 | Access resources           |
+| `sheets:spreadsheet`                                          | Spreadsheet access         |
+| `wiki:wiki:readonly`                                          | Read wiki                  |
+
+**User-level scopes:**
+
+| Permission key                           | Description              |
+| ---------------------------------------- | ------------------------ |
+| `aily:file:read`                         | Read Aily files          |
+| `aily:file:write`                        | Write Aily files         |
+| `im:chat.access_event.bot_p2p_chat:read` | Read bot P2P chat events |
+| `im:chat:read`                           | Read chat                |
+| `im:chat:readonly`                       | Read chat info           |
+
+**Step 3 — Subscribe to events (use WebSocket):**
+
+1. Go to **Event Subscriptions**
+2. Choose **Receive events via WebSocket (long connection)** — no domain or IP needed
+3. Click **Add event** → search for `im.message.receive_v1` → add it
+
+**Step 4 — Get your credentials:**
+
+Go to **Credentials & Basic Info** and copy your:
+
+- **App ID** (starts with `cli_`)
+- **App Secret**
+
+**Step 5 — Connect in Alloomi:**
+
+1. In Alloomi, go to **Settings → Connectors → + Add New Connector** → select **Lark/Feishu**
+2. Enter your **App ID** and **App Secret**
+3. Click **Connect**
+
+<div align="center">
+  <img
+    src="/img/alloomi/feishu-config.png"
+    alt="Alloomi Lark/Feishu connector config"
+  />
+</div>
+
+**Step 6 — Publish the app (required before use):**
+
+> 🔑 **This step is essential.** Without publishing, no one (including yourself) can find or chat with the bot.
+
+1. Go to [Lark/Feishu Admin Console](https://www.feishu.cn/admin) → **Applications**
+2. Find your app → click **Publish**
+3. For a self-built app in development, you can also use **Version management → Create version → Submit for internal testing** — this lets you and your team test immediately without full publication
+
+**Step 7 — Find and chat with your bot:**
+
+Once published, open Lark/Feishu and search for your bot's name:
+
+1. In Lark/Feishu, click the **+** (new chat) button → **Search** for your bot name
+2. Click the bot → start chatting
+
+> 💡 Your bot only responds to messages sent **directly to it** — it won't respond to messages in group chats unless someone @mentions it.
+
+### DingTalk
+
+DingTalk integration uses a **Stream mode bot** — a long-lived WebSocket connection with no public IP or domain required.
+
+**Before you start — set up a DingTalk app:**
+
+1. Go to [DingTalk Open Platform](https://open.dingtalk.com/) and sign in
+2. Create an **enterprise internal app**
+3. Add the **Bot** capability and choose **Stream mode** (long connection)
+4. Obtain your **Client ID (AppKey)** and **Client Secret (AppSecret)**
+
+<div align="center">
+  <img src="/img/alloomi/dingtalk-config.png" alt="Alloomi Weixin Login" />
+</div>
+
+**Connect in Alloomi:**
+
+1. Click **+ Add New Connector** and select **DingTalk**
+2. Enter your **Client ID (AppKey)** and **Client Secret (AppSecret)**
+3. Optionally set a display name for your bot
+4. Click **Connect** — Alloomi establishes a long-lived WebSocket connection to your bot
+
+> 💡 Stream mode means Alloomi connects directly via WebSocket — no server or domain setup needed. Once connected, you can chat with your bot directly in DingTalk.
+
+### Weixin
+
+After clicking **[Connect Weixin]**, scan the QR code in the Weixin app to complete authorization.
+
+<div align="center">
+  <img src="/img/alloomi/wechat-login-qr-code.png" alt="Alloomi Weixin Login" />
+</div>
+
+### Gmail
+
+After clicking **[Connect Gmail]**, enter your email address and an [App Password](https://support.google.com/accounts/answer/185833) to authorize. (Regular Gmail password won't work — App Passwords require 2-Step Verification to be enabled.)
+
+<div align="center">
+  <img src="/img/alloomi/gmail-login.png" alt="Alloomi Gmail Login" />
+</div>
+
+### Outlook
+
+After clicking **[Connect Outlook]**, enter your email address and app password to authorize.
+
+<div align="center">
+  <img src="/img/alloomi/outlook-login.png" alt="Alloomi Outlook Login" />
+</div>
+
+### X
+
+After clicking **[Connect X]**, complete the OAuth authorization flow to link your X account.
+
+<div align="center">
+  <img src="/img/alloomi/x-auth.png" alt="Alloomi X Auth" />
+</div>
+
+### RSS
+
+After clicking **[RSS]**, you can add individual RSS links or upload an OPML file for batch import.
+
+<div align="center">
+  <img src="/img/alloomi/rss.png" alt="Alloomi RSS Integration" />
+</div>
+
+---
+
+## Disconnect / Revoke Access
+
+If you no longer want Alloomi to access a connected platform, you can disconnect it at any time.
+
+<div align="center">
+  <img src="/img/alloomi/connectors-unbind.png" alt="Disconnect platform" />
+</div>
+
+1. Go to **Settings → Connectors**
+2. Find the platform you want to disconnect
+3. Click **[Disconnect]** or the remove (×) button
+4. Confirm the action
+
+Once disconnected:
+
+- Alloomi will immediately stop reading new messages from that platform
+- Previously synced data is retained until manually deleted
+- You can reconnect at any time by repeating the connection steps
+
+> 💡 **Tip**: Before disconnecting, review what data has been synced in the **Privacy & Security** settings.
