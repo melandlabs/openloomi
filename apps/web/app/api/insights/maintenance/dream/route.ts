@@ -9,9 +9,7 @@ function parsePositiveInteger(value: unknown): number | undefined {
     return undefined;
   }
   const parsed = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(parsed) && parsed > 0
-    ? Math.floor(parsed)
-    : undefined;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
 }
 
 function parseBoolean(value: unknown): boolean | undefined {
@@ -62,9 +60,7 @@ async function parseDreamInput(request: Request) {
     includeArchived: parseBoolean(getValue("includeArchived")),
     dryRun: parseBoolean(getValue("dryRun")) ?? false,
     authToken:
-      typeof body.cloudAuthToken === "string"
-        ? body.cloudAuthToken
-        : undefined,
+      typeof body.cloudAuthToken === "string" ? body.cloudAuthToken : undefined,
   };
 }
 

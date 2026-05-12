@@ -48,9 +48,9 @@ function emptyResult(requested: number): UpsertInsightEmbeddingsResult {
 export function hasInsightEmbeddingProviderConfig(authToken?: string): boolean {
   return Boolean(
     authToken ||
-      process.env.OPENAI_EMBEDDINGS_API_KEY ||
-      process.env.OPENROUTER_API_KEY ||
-      process.env.LLM_API_KEY,
+    process.env.OPENAI_EMBEDDINGS_API_KEY ||
+    process.env.OPENROUTER_API_KEY ||
+    process.env.LLM_API_KEY,
   );
 }
 
@@ -148,9 +148,7 @@ export async function upsertInsightEmbeddingsForCandidates({
     const existingByInsightId = new Map<
       string,
       { contentHash: string; embeddingModel: string }
-    >(
-      existingRows.map((row: any) => [row.insightId, row]),
-    );
+    >(existingRows.map((row: any) => [row.insightId, row]));
     const changedDocuments = documents.filter((document) => {
       const existing = existingByInsightId.get(document.insightId);
       return (
@@ -167,9 +165,8 @@ export async function upsertInsightEmbeddingsForCandidates({
       return result;
     }
 
-    const { UniversalEmbeddings } = await import(
-      "@alloomi/rag/universal-embeddings"
-    );
+    const { UniversalEmbeddings } =
+      await import("@alloomi/rag/universal-embeddings");
     const embeddings = new UniversalEmbeddings(options.authToken);
     const embeddingVectors = await embeddings.embedDocuments(
       changedDocuments.map((document) => document.content),

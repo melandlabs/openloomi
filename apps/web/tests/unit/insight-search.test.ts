@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  cosineSimilarity,
-  parseStoredEmbedding,
-} from "@/lib/insights/search";
+import { cosineSimilarity, parseStoredEmbedding } from "@/lib/insights/search";
 
 describe("insight semantic search helpers", () => {
   it("parses stored embedding vectors", () => {

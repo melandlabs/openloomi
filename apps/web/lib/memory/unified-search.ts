@@ -66,7 +66,8 @@ export function normalizeUnifiedMemorySearchSources(
 }
 
 export function clampUnifiedMemorySearchLimit(limit: unknown): number {
-  const parsed = typeof limit === "number" ? limit : Number(limit ?? DEFAULT_LIMIT);
+  const parsed =
+    typeof limit === "number" ? limit : Number(limit ?? DEFAULT_LIMIT);
   if (!Number.isFinite(parsed)) {
     return DEFAULT_LIMIT;
   }
@@ -75,7 +76,9 @@ export function clampUnifiedMemorySearchLimit(limit: unknown): number {
 
 export function clampUnifiedMemorySearchThreshold(threshold: unknown): number {
   const parsed =
-    typeof threshold === "number" ? threshold : Number(threshold ?? DEFAULT_THRESHOLD);
+    typeof threshold === "number"
+      ? threshold
+      : Number(threshold ?? DEFAULT_THRESHOLD);
   if (!Number.isFinite(parsed)) {
     return DEFAULT_THRESHOLD;
   }

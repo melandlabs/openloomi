@@ -72,20 +72,22 @@ function clampThreshold(threshold: number | undefined): number {
 function hasEmbeddingProviderConfig(authToken?: string): boolean {
   return Boolean(
     authToken ||
-      process.env.OPENAI_EMBEDDINGS_API_KEY ||
-      process.env.OPENROUTER_API_KEY ||
-      process.env.LLM_API_KEY,
+    process.env.OPENAI_EMBEDDINGS_API_KEY ||
+    process.env.OPENROUTER_API_KEY ||
+    process.env.LLM_API_KEY,
   );
 }
 
-async function embedQuery(query: string, authToken?: string): Promise<number[]> {
+async function embedQuery(
+  query: string,
+  authToken?: string,
+): Promise<number[]> {
   if (!hasEmbeddingProviderConfig(authToken)) {
     throw new Error("Embedding provider API key is not configured");
   }
 
-  const { UniversalEmbeddings } = await import(
-    "@alloomi/rag/universal-embeddings"
-  );
+  const { UniversalEmbeddings } =
+    await import("@alloomi/rag/universal-embeddings");
   const embeddings = new UniversalEmbeddings(authToken);
   return embeddings.embedQuery(query);
 }
@@ -97,9 +99,7 @@ export function parseStoredEmbedding(value: string): number[] | null {
       return null;
     }
     if (
-      !parsed.every(
-        (item) => typeof item === "number" && Number.isFinite(item),
-      )
+      !parsed.every((item) => typeof item === "number" && Number.isFinite(item))
     ) {
       return null;
     }
@@ -204,7 +204,9 @@ async function searchInsightEmbeddingsWithPgVector(input: {
     })
     .from(insightEmbeddings)
     .innerJoin(insight, eq(insight.id, insightEmbeddings.insightId))
-    .where(and(buildBaseWhere(input), sql`${distanceSql} < ${1 - input.threshold}`))
+    .where(
+      and(buildBaseWhere(input), sql`${distanceSql} < ${1 - input.threshold}`),
+    )
     .orderBy(distanceSql)
     .limit(input.limit);
 
@@ -276,9 +278,7 @@ async function searchInsightEmbeddingsWithSqlite(input: {
       }
       return toSearchResult(row, similarity);
     })
-    .filter(
-      (result): result is InsightSemanticSearchResult => result !== null,
-    )
+    .filter((result): result is InsightSemanticSearchResult => result !== null)
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, input.limit);
 }

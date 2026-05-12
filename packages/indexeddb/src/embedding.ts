@@ -102,7 +102,10 @@ function clampThreshold(value: number | undefined): number {
   if (!Number.isFinite(value)) {
     return DEFAULT_MEMORY_SEMANTIC_SEARCH_THRESHOLD;
   }
-  return Math.min(1, Math.max(-1, value ?? DEFAULT_MEMORY_SEMANTIC_SEARCH_THRESHOLD));
+  return Math.min(
+    1,
+    Math.max(-1, value ?? DEFAULT_MEMORY_SEMANTIC_SEARCH_THRESHOLD),
+  );
 }
 
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {
@@ -176,10 +179,7 @@ export async function runRawMessageEmbeddingDream(
   manager: RawMessageEmbeddingDreamManager,
   input: RunRawMessageEmbeddingDreamInput,
 ): Promise<RunRawMessageEmbeddingDreamResult> {
-  const limit = clampLimit(
-    input.limit,
-    DEFAULT_MEMORY_EMBEDDING_DREAM_LIMIT,
-  );
+  const limit = clampLimit(input.limit, DEFAULT_MEMORY_EMBEDDING_DREAM_LIMIT);
   const scanLimit = clampLimit(input.scanLimit, Math.max(limit * 5, limit));
   const now = input.now ?? Date.now();
 
@@ -262,10 +262,7 @@ export async function runRawMessageEmbeddingDream(
     };
   });
 
-  const embedded = await manager.updateMessageEmbeddings(
-    updates,
-    input.userId,
-  );
+  const embedded = await manager.updateMessageEmbeddings(updates, input.userId);
 
   return {
     scanned: messages.length,

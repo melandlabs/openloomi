@@ -35,7 +35,10 @@ class InMemoryEmbeddingManager {
       if (query.person && !message.person?.includes(query.person)) {
         return false;
       }
-      if (query.startTime !== undefined && message.timestamp < query.startTime) {
+      if (
+        query.startTime !== undefined &&
+        message.timestamp < query.startTime
+      ) {
         return false;
       }
       if (query.endTime !== undefined && message.timestamp >= query.endTime) {
@@ -160,13 +163,14 @@ describe("indexeddb memory embedding dream", () => {
       embeddingDimensions: 2,
       embeddingUpdatedAt: 1774500000000,
     });
-    expect(manager.messages.find((item) => item.messageId === "msg-2"))
-      .toMatchObject({
-        embedding: [1, 2],
-        embeddingModel: "text-embedding-3-small",
-        embeddingDimensions: 2,
-        embeddingUpdatedAt: 1774500000000,
-      });
+    expect(
+      manager.messages.find((item) => item.messageId === "msg-2"),
+    ).toMatchObject({
+      embedding: [1, 2],
+      embeddingModel: "text-embedding-3-small",
+      embeddingDimensions: 2,
+      embeddingUpdatedAt: 1774500000000,
+    });
   });
 
   it("supports dry run without embedding or writes", async () => {
