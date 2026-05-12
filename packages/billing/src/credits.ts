@@ -1,7 +1,0 @@
-// Re-export credit constants from package
-export {
-  WEEKLY_REPORT_GENERATION_CREDIT_COST,
-  WEEKLY_REPORT_REGENERATE_CREDIT_COST,
-  PRESENTATION_JOB_CREDIT_COST,
-  PRESENTATION_RETRY_CREDIT_COST,
-} from "./credits-constants";
