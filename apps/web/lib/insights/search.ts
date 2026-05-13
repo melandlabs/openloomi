@@ -86,8 +86,7 @@ async function embedQuery(
     throw new Error("Embedding provider API key is not configured");
   }
 
-  const { UniversalEmbeddings } =
-    await import("@alloomi/rag/universal-embeddings");
+  const { UniversalEmbeddings } = await import("@alloomi/rag");
   const embeddings = new UniversalEmbeddings(authToken);
   return embeddings.embedQuery(query);
 }
