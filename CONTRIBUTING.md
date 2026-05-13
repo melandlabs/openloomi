@@ -157,6 +157,7 @@ Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `ci`
 3. **Write tests** for new functionality
 
 4. **Ensure tests pass**:
+
    ```bash
    pnpm test
    pnpm lint
