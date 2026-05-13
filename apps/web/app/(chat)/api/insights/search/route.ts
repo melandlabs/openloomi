@@ -1,7 +1,7 @@
 import { auth } from "@/app/(auth)/auth";
 import { extractCloudAuthToken } from "@/lib/ai/request-context";
 import { searchInsightsSemantically } from "@/lib/insights/search";
-import { AppError } from "@alloomi/shared";
+import { AppError } from "@openloomi/shared/errors";
 import type { NextRequest } from "next/server";
 
 function parseStringArray(value: unknown): string[] | undefined {

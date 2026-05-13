@@ -165,7 +165,8 @@ export async function upsertInsightEmbeddingsForCandidates({
       return result;
     }
 
-    const { UniversalEmbeddings } = await import("@alloomi/rag");
+    const { UniversalEmbeddings } =
+      await import("@openloomi/rag/universal-embeddings");
     const embeddings = new UniversalEmbeddings(options.authToken);
     const embeddingVectors = await embeddings.embedDocuments(
       changedDocuments.map((document) => document.content),
