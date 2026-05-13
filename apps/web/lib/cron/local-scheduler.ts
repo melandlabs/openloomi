@@ -185,8 +185,15 @@ async function checkAndExecuteDueJobs() {
     await cleanupStuckJobs();
 
     const schedulerAuthToken = getCloudAuthToken();
-    await runInsightEmbeddingDreamIfDue(schedulerUserId, schedulerAuthToken);
-    await runInsightMaintenanceIfDue(schedulerUserId);
+    try {
+      await runInsightEmbeddingDreamIfDue(schedulerUserId, schedulerAuthToken);
+      await runInsightMaintenanceIfDue(schedulerUserId);
+    } catch (error) {
+      console.error(
+        "[LocalScheduler] Error running insight maintenance:",
+        error,
+      );
+    }
 
     // Get all jobs that are due to run for the current user
     const dueJobs = await getDueJobs(new Date(), schedulerUserId);
