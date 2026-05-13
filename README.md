@@ -102,7 +102,7 @@ This is early-stage software. We're looking for people who'll actually install i
 
 - [GitHub Issues](https://github.com/melandlabs/openloomi/issues) — bugs, install problems, feature requests
 - [Discord](https://discord.com/invite/xkJaJyWcsv) — discussion, questions, help
-- [Email](mailto:developer@openloomi.ai) — anything else
+- [Email](mailto:developer@alloomi.ai) — anything else
 
 ## Contributing
 
