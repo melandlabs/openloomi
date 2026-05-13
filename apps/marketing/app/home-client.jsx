@@ -543,7 +543,7 @@ const MarketingPage = () => {
                 {t("openSource.cta")}
               </a>
               <a
-                href="https://discord.gg/openloomi"
+                href="https://discord.com/invite/xkJaJyWcsv"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-transparent border border-border-primary text-foreground px-8 py-4 rounded-lg font-medium transition-all hover:bg-background-secondary"
