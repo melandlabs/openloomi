@@ -1,6 +1,6 @@
 import { auth } from "@/app/(auth)/auth";
 import { getChatById, getVotesByChatId, voteMessage } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

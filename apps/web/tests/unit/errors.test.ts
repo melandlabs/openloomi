@@ -3,7 +3,7 @@ import {
   AppError,
   getMessageByErrorCode,
   isTelegramAuthIssue,
-} from "@alloomi/shared/errors";
+} from "@openloomi/shared/errors";
 
 describe("errors", () => {
   it("builds message with cause for api bad request", () => {

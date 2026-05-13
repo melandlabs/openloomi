@@ -3,9 +3,9 @@ export const siteMetadata = {
   title: "OpenLoomi | Your Proactive AI Workspace",
   description:
     "Open-source, local-first AI workspace with memory, context, and execution built in.",
-  siteUrl: "https://alloomi.ai",
-  marketingUrl: "https://alloomi.ai",
-  appUrl: "https://app.alloomi.ai",
+  siteUrl: "https://openloomi.ai",
+  marketingUrl: "https://openloomi.ai",
+  appUrl: "https://app.openloomi.ai",
   contactEmail: "support@melandlabs.ai",
   keywords: [
     "OpenLoomi",

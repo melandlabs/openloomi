@@ -15,7 +15,7 @@ import type { AgentConfig, AgentProvider, IAgent, TaskPlan } from "./types";
 export const DEFAULT_AGENT_MODEL = "claude-sonnet-4.6";
 
 /** Default work directory path (relative to home) */
-export const DEFAULT_WORK_DIR = "~/.alloomi";
+export const DEFAULT_WORK_DIR = "~/.openloomi";
 
 // ============================================================================
 // Minimal inlined types (from provider-core)

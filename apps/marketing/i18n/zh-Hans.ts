@@ -20,7 +20,7 @@ export const zhHans = {
     downloadForMacIntel: "下载 macOS (Intel)",
     downloadForLinuxX86_64: "下载 Linux (x86_64)",
     downloadForLinuxARM64: "下载 Linux (ARM64)",
-    downloadAlloomi: "下载 OpenLoomi",
+    downloadopenloomi: "下载 OpenLoomi",
     macosAppleSilicon: "macOS Apple Silicon",
     macosIntel: "macOS Intel",
     linuxX86_64: "Linux x86_64",

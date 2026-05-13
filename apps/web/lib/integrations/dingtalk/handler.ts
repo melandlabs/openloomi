@@ -14,7 +14,7 @@ import { handleAgentRuntime } from "@/lib/ai/runtime/shared";
 import { mkdir, readdir, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Attachment } from "@alloomi/shared";
+import type { Attachment } from "@openloomi/shared";
 import { dingTalkLogger } from "@/lib/utils/logger";
 
 function guessContentTypeByName(fileName: string): string {
@@ -166,7 +166,7 @@ export async function handleDingTalkInboundMessage(
     const userContent = text || allMediaHints.join("\n");
 
     const prompt = [
-      "You are the Alloomi assistant. Help the user based on the following cross-platform message summaries.",
+      "You are the openloomi assistant. Help the user based on the following cross-platform message summaries.",
       "When information is insufficient, say so instead of making up content.",
       "If the user sent media (image/voice/file) without text, acknowledge what was received and respond appropriately.",
       "",
@@ -193,7 +193,7 @@ export async function handleDingTalkInboundMessage(
       );
     }
     const replyParts: string[] = [];
-    const workDir = join(tmpdir(), "alloomi-dingtalk-out", userId, msgId);
+    const workDir = join(tmpdir(), "openloomi-dingtalk-out", userId, msgId);
     await mkdir(workDir, { recursive: true });
     await handleAgentRuntime(
       prompt,

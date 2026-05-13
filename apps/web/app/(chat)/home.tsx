@@ -17,7 +17,7 @@ import { AgentLayout } from "@/components/agent/layout";
 import { ResponsiveToolbar } from "@/components/agent/responsive-toolbar";
 import { AgentChatPanel } from "@/components/agent/chat-panel";
 import { ChatHeaderPanel } from "@/components/agent/chat-header-panel";
-import { Button, PageSectionHeader } from "@alloomi/ui";
+import { Button, PageSectionHeader } from "@openloomi/ui";
 import {
   AgentEventsPanel,
   AgentBriefPanel,
@@ -25,7 +25,7 @@ import {
 } from "@/components/agent/dynamic-panels";
 import { useTranslation } from "react-i18next";
 import "../../i18n";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import dynamic from "next/dynamic";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { buildNavigationUrl, cn, generateUUID, fetcher } from "@/lib/utils";
@@ -34,7 +34,7 @@ import { ProfileOverview } from "@/components/profile-overview";
 import { AboutSettings } from "@/components/about-settings";
 import { StorageManagementPanel } from "@/components/storage-management-panel";
 import { PersonalizationProfileSoulPanel } from "@/components/personalization/personalization-profile-soul-panel";
-import { useIsMobile } from "@alloomi/hooks/use-is-mobile";
+import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
 import { useChatContext } from "@/components/chat-context";
 import { InsightsPaginationProvider } from "@/hooks/use-insight-data";
 import { FilePreviewOverlay } from "@/components/file-preview-overlay";
@@ -74,7 +74,7 @@ export function Home() {
   const category = searchParams.get("category");
   /** Chat page (page=chat) reads chatId from URL, used to correctly open corresponding chat after jumping from Library/Chat Vault "Open chat" */
   const urlChatId = searchParams.get("chatId") ?? undefined;
-  /** Chat page reads send parameter from URL, automatically sends that message after mounting (e.g., onboarding "Talk with Alloomi") */
+  /** Chat page reads send parameter from URL, automatically sends that message after mounting (e.g., onboarding "Talk with openloomi") */
   const urlSendMessage = searchParams.get("send");
   const initialMessageToSend =
     urlSendMessage != null ? decodeURIComponent(urlSendMessage) : undefined;
@@ -128,9 +128,9 @@ export function Home() {
     const handler = () => {
       router.push("/connectors?addPlatform=true");
     };
-    window.addEventListener("alloomi:request-integration", handler);
+    window.addEventListener("openloomi:request-integration", handler);
     return () =>
-      window.removeEventListener("alloomi:request-integration", handler);
+      window.removeEventListener("openloomi:request-integration", handler);
   }, [router]);
 
   // Listen for integration authorization completion → retry the tool call
@@ -592,7 +592,7 @@ export function Home() {
         return t("settings.general", "General");
       case "profile-soul":
         return t("settings.profileSoulPageTitle", "About me");
-      case "alloomi-soul":
+      case "openloomi-soul":
         return t("settings.general", "General");
       case "about":
         return t("about.title", "About");
@@ -614,7 +614,7 @@ export function Home() {
       "account-settings",
       "profile-edit",
       "profile-soul",
-      "alloomi-soul",
+      "openloomi-soul",
       "about",
       "storage-management",
     ].includes(pageParam ?? "");
@@ -672,7 +672,7 @@ export function Home() {
       );
     }
 
-    if (page === "alloomi-soul") {
+    if (page === "openloomi-soul") {
       return renderUtilityPanel(<UserProfileSettings />, "account-settings");
     }
 

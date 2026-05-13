@@ -3,7 +3,7 @@ import { google } from "googleapis";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/app/(auth)/auth";
-import { encryptToken } from "@alloomi/security/token-encryption";
+import { encryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
 import { GOOGLE_DRIVE_SCOPES } from "@/lib/files/google-drive";
 
@@ -23,7 +23,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          "Google Drive integration is not configured. Contact the Alloomi team to enable it.",
+          "Google Drive integration is not configured. Contact the openloomi team to enable it.",
       },
       { status: 500 },
     );

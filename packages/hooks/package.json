@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/hooks",
+  "name": "@openloomi/hooks",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "swr": ">=2.0.0"
   },
   "devDependencies": {
-    "@alloomi/config": "workspace:*",
+    "@openloomi/config": "workspace:*",
     "typescript": "^5.6.3"
   },
   "scripts": {

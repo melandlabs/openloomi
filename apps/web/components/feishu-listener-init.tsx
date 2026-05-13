@@ -1,7 +1,7 @@
 /**
  * Feishu / DingTalk / QQ / WeChat listener initialization (Bot mode, not self mode)
  *
- * These platforms are all "user chatting with bot": Alloomi listens to messages received by bot and replies on behalf.
+ * These platforms are all "user chatting with bot": openloomi listens to messages received by bot and replies on behalf.
  * This component only runs under Tauri, after session is ready, passes cloud_auth_token to backend,
  * for bot to call cloud AI when receiving user messages, and re-establishes WebSocket connection after app restart.
  */

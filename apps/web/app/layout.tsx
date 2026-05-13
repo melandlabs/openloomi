@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Noto_Sans_SC, Noto_Serif_SC } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { I18nProvider } from "@/components/i18n-provider";
-import { TooltipProvider } from "@alloomi/ui";
+import { TooltipProvider } from "@openloomi/ui";
 import {
   organizationJsonLd,
   siteMetadata,
@@ -59,7 +59,7 @@ export const metadata: Metadata = {
         url: `${siteMetadata.siteUrl}/images/home/intelligence-hero.png`,
         width: 1024,
         height: 1024,
-        alt: "Alloomi privacy-first AI agent that reads, thinks, and acts locally across your channels",
+        alt: "openloomi privacy-first AI agent that reads, thinks, and acts locally across your channels",
       },
     ],
   },

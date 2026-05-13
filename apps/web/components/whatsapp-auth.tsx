@@ -8,8 +8,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@alloomi/ui";
-import { Button } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Button } from "@openloomi/ui";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

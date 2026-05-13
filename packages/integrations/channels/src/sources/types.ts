@@ -1,11 +1,11 @@
-import type { ExtractedMessageInfo } from "@alloomi/shared";
+import type { ExtractedMessageInfo } from "@openloomi/shared";
 export {
   coerceDate,
   timeBeforeHours,
   timeBeforeHoursMs,
   timeBeforeMinutes,
   delay,
-} from "@alloomi/shared";
+} from "@openloomi/shared";
 export type { ExtractedMessageInfo };
 
 export type DialogInfo = {

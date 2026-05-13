@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       throw new Error("Slack OAuth is not configured");
     }
 
-    const redirectUri = `${process.env.CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://app.alloomi.ai"}/slack-authorized`;
+    const redirectUri = `${process.env.CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://app.openloomi.ai"}/slack-authorized`;
 
     const tokenResponse = await fetch("https://slack.com/api/oauth.v2.access", {
       method: "POST",

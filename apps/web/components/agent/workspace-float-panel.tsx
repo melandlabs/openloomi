@@ -4,8 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button } from "@alloomi/ui";
-import type { ChatMessage } from "@alloomi/shared";
+import { Button } from "@openloomi/ui";
+import type { ChatMessage } from "@openloomi/shared";
 import type { Insight } from "@/lib/db/schema";
 import { getToolDisplayName } from "@/lib/utils/tool-names";
 

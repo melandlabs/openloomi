@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/rag",
+  "name": "@openloomi/rag",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "@langchain/core": "^1.1.8",
     "@langchain/textsplitters": "^1.0.1",
     "zod": "^4.3.6",
-    "@alloomi/shared": "workspace:*",
+    "@openloomi/shared": "workspace:*",
     "pdfjs-dist": "^4.9.155",
     "jszip": "^3.10.1",
     "better-sqlite3": "^11.7.0",
@@ -28,7 +28,7 @@
     "openai": "^4.85.2"
   },
   "devDependencies": {
-    "@alloomi/config": "workspace:*",
+    "@openloomi/config": "workspace:*",
     "typescript": "^5.6.3"
   },
   "scripts": {

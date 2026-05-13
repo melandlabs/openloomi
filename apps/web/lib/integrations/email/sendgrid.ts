@@ -20,7 +20,7 @@ const FALLBACK_FROM_ADDRESS =
   process.env.EMAIL_FROM ||
   process.env.SMTP_FROM ||
   process.env.MAILPIT_EMAIL_FROM ||
-  "marketing@alloomi.test";
+  "marketing@openloomi.test";
 
 let initialized = false;
 let mailpitTransport: Transporter | null = null;

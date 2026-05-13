@@ -4217,7 +4217,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-121-opportunity-rescue",
     name: "Opportunity Rescue (Missed VC Message)",
     description:
-      "User B (Founder) missed a message from a VC 2 weeks ago. Alloomi should surface this as a rescued opportunity.",
+      "User B (Founder) missed a message from a VC 2 weeks ago. openloomi should surface this as a rescued opportunity.",
     category: "P4",
     priority: "P0",
     userProfile: {
@@ -4246,7 +4246,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-122-context-switch-reduction",
     name: "Context Switch Reduction (Cross-Platform Reply)",
     description:
-      "User C receives a Slack message while on WeChat. Alloomi should suggest drafting a reply without switching apps.",
+      "User C receives a Slack message while on WeChat. openloomi should suggest drafting a reply without switching apps.",
     category: "Q1",
     priority: "P2",
     userProfile: {
@@ -4272,7 +4272,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-123-connector-network-effect",
     name: "The Connector (Supply/Demand Matching)",
     description:
-      "User A asks for X in Group 1. User B offers X in Group 2. Alloomi should suggest connecting them.",
+      "User A asks for X in Group 1. User B offers X in Group 2. openloomi should suggest connecting them.",
     category: "P5",
     priority: "P1",
     userProfile: {
@@ -4307,7 +4307,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-124-high-effort-extraction",
     name: "High-Effort Extraction (Meeting Transcript)",
     description:
-      "User receives a long meeting transcript. Alloomi should extract action items and summary.",
+      "User receives a long meeting transcript. openloomi should extract action items and summary.",
     category: "Q3",
     priority: "P2",
     userProfile: {
@@ -4335,7 +4335,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-125-smart-actions",
     name: "Smart Actions (Contextual Reply)",
     description:
-      "User A asks 'Can we meet?'. Alloomi should suggest 'Send Calendly' or 'Propose Slots'.",
+      "User A asks 'Can we meet?'. openloomi should suggest 'Send Calendly' or 'Propose Slots'.",
     category: "Q4",
     priority: "P2",
     userProfile: {
@@ -4362,7 +4362,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-126-partnership-leads",
     name: "Partnership Leads (Collaboration Signal)",
     description:
-      "User sees a message about a potential synergy. Alloomi should identify it as a partnership lead.",
+      "User sees a message about a potential synergy. openloomi should identify it as a partnership lead.",
     category: "P2",
     priority: "P1",
     userProfile: {
@@ -4420,7 +4420,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-128-routine-automation",
     name: "Routine Automation (Weekly Report)",
     description:
-      "User sends the same 'Weekly Report' every Friday. Alloomi should suggest automating it.",
+      "User sends the same 'Weekly Report' every Friday. openloomi should suggest automating it.",
     category: "Q2",
     priority: "P2",
     userProfile: {
@@ -4710,7 +4710,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
   {
     id: "issue-140-smart-action-ticket",
     name: "Smart Action (Create Ticket)",
-    description: "Alloomi suggests creating a ticket from a bug report.",
+    description: "openloomi suggests creating a ticket from a bug report.",
     category: "Q4",
     priority: "P2",
     userProfile: { name: "User Me", email: "me@example.com" },
@@ -4729,7 +4729,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
   {
     id: "issue-141-smart-action-email",
     name: "Smart Action (Draft Email)",
-    description: "Alloomi suggests drafting an intro email.",
+    description: "openloomi suggests drafting an intro email.",
     category: "Q4",
     priority: "P2",
     userProfile: { name: "User Me", email: "me@example.com" },
@@ -4864,7 +4864,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-146-q1-recurring-1on1",
     name: "Context Switch (Recurring 1:1 Prep)",
     description:
-      "Executive has weekly 1:1s with 5 direct reports. Alloomi should aggregate prep materials.",
+      "Executive has weekly 1:1s with 5 direct reports. openloomi should aggregate prep materials.",
     category: "Q1",
     priority: "P1",
     userProfile: {
@@ -4901,7 +4901,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-147-q2-weekly-team-sync",
     name: "Routine (Weekly Team Sync)",
     description:
-      "Team lead runs weekly sync every Monday. Alloomi should auto-generate agenda from last week's threads.",
+      "Team lead runs weekly sync every Monday. openloomi should auto-generate agenda from last week's threads.",
     category: "Q2",
     priority: "P1",
     userProfile: {
@@ -4966,7 +4966,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-149-q4-quarterly-okr",
     name: "Smart Action (Quarterly OKR Review)",
     description:
-      "It's end of quarter. Alloomi should suggest scheduling OKR review with team.",
+      "It's end of quarter. openloomi should suggest scheduling OKR review with team.",
     category: "Q4",
     priority: "P1",
     userProfile: {
@@ -4989,7 +4989,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-150-q1-cross-team-coord",
     name: "Context Switch (Cross-Team Coordination)",
     description:
-      "Executive coordinates between 3 teams on a shared project. Alloomi should consolidate updates.",
+      "Executive coordinates between 3 teams on a shared project. openloomi should consolidate updates.",
     category: "Q1",
     priority: "P2",
     userProfile: { name: "User Me", email: "me@example.com", role: "CTO" },
@@ -5022,7 +5022,7 @@ export const BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     id: "issue-151-q2-skip-level",
     name: "Routine (Skip-Level 1:1s)",
     description:
-      "Senior exec does monthly skip-level 1:1s. Alloomi should track and remind.",
+      "Senior exec does monthly skip-level 1:1s. openloomi should track and remind.",
     category: "Q2",
     priority: "P2",
     userProfile: { name: "User Me", email: "me@example.com", role: "SVP" },

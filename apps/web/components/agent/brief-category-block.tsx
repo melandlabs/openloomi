@@ -8,8 +8,8 @@ import {
 } from "@/components/insight-badge";
 import { InsightCardBadgesRow } from "@/components/insight-card/insight-card-badges-row";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button } from "@alloomi/ui";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import type { ActionCategory } from "@/lib/insights/event-rank";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";

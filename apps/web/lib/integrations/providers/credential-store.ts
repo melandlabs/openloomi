@@ -1,11 +1,11 @@
 /**
  * CredentialStore implementation for apps/web
  *
- * Provides implementations of CredentialStore interface from @alloomi/integrations/core
+ * Provides implementations of CredentialStore interface from @openloomi/integrations/core
  * using the database queries from apps/web.
  */
 
-import type { PlatformId } from "@alloomi/integrations/core";
+import type { PlatformId } from "@openloomi/integrations/core";
 import type { IntegrationId } from "@/lib/integrations/client";
 import {
   getIntegrationAccountsByUserId,

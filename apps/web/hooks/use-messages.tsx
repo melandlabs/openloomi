@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useScrollToBottom } from "@alloomi/hooks/use-scroll-to-bottom";
+import { useScrollToBottom } from "@openloomi/hooks/use-scroll-to-bottom";
 
 export function useMessages({
   chatId,

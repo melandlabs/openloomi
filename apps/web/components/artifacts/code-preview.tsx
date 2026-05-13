@@ -7,7 +7,7 @@ import {
 } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useState, useCallback } from "react";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { cn } from "@/lib/utils";
 
 /**

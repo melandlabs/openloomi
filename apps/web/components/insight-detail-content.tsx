@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { DetailData } from "@/lib/ai/subagents/insights";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { ungzip } from "pako";
 import ReactMarkdown, {
   type Components as MarkdownComponents,
@@ -21,8 +21,8 @@ import { toast } from "sonner";
 import { getSecureFileUrl } from "@/lib/files/secure-url";
 import { useRouter } from "next/navigation";
 import { RemixIcon } from "@/components/remix-icon";
-import type { Attachment } from "@alloomi/shared";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@alloomi/ui";
+import type { Attachment } from "@openloomi/shared";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
 import { cn, formatBytes } from "@/lib/utils";
 import { useIntegrations } from "@/hooks/use-integrations";
 
@@ -425,7 +425,7 @@ function linkifyBracketUrls(value: string): string {
   });
 }
 
-const REMOTE_IMAGE_PREF_KEY = "alloomi.email.allowRemoteImages";
+const REMOTE_IMAGE_PREF_KEY = "openloomi.email.allowRemoteImages";
 
 // rendering-hoist-jsx: Hoist static markdown component definitions to outside the component
 // Avoid creating new component objects on every render, reduce memory allocation and GC pressure

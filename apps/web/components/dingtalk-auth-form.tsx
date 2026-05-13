@@ -10,8 +10,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@alloomi/ui";
-import { Button, Input, Label } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Button, Input, Label } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { createIntegrationAccount } from "@/lib/integrations/client";
 import { DingTalkStepsDialog } from "@/components/dingtalk-steps-dialog";
@@ -93,7 +93,7 @@ export function DingTalkAuthForm({
           name,
           description: t(
             "auth.dingtalkBotDescription",
-            "Chat with Alloomi via DingTalk",
+            "Chat with openloomi via DingTalk",
           ),
           adapter: "dingtalk",
           enable: true,
@@ -147,7 +147,7 @@ export function DingTalkAuthForm({
       <p className="text-sm text-muted-foreground">
         {t(
           "auth.dingtalkDescription",
-          "Create an enterprise internal app on DingTalk Open Platform, add a Stream mode bot, fill in Client ID (AppKey) and Client Secret below to chat with Alloomi.",
+          "Create an enterprise internal app on DingTalk Open Platform, add a Stream mode bot, fill in Client ID (AppKey) and Client Secret below to chat with openloomi.",
         )}
       </p>
       <div className="grid gap-4 py-4">
@@ -256,7 +256,7 @@ export function DingTalkAuthForm({
             <DialogDescription>
               {t(
                 "auth.dingtalkDescription",
-                "Create an enterprise internal app on DingTalk Open Platform, add a Stream mode bot, fill in Client ID (AppKey) and Client Secret below to chat with Alloomi.",
+                "Create an enterprise internal app on DingTalk Open Platform, add a Stream mode bot, fill in Client ID (AppKey) and Client Secret below to chat with openloomi.",
               )}
             </DialogDescription>
           </DialogHeader>

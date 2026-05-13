@@ -9,7 +9,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 
 type RewardAdminSummary = {
   featureEnabled: boolean;

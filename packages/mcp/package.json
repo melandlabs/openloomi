@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/mcp",
+  "name": "@openloomi/mcp",
   "version": "0.4.1",
   "private": false,
   "type": "module",
@@ -10,7 +10,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@alloomi/config": "workspace:*",
+    "@openloomi/config": "workspace:*",
     "typescript": "^5.6.3"
   },
   "scripts": {

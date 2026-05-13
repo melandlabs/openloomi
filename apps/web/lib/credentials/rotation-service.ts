@@ -14,7 +14,7 @@ import {
   credentialRotationHistory,
 } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { getKeyManager } from "@alloomi/security/key-manager";
+import { getKeyManager } from "@openloomi/security/key-manager";
 import { decryptPayload } from "@/lib/db/serialization";
 import { logCredentialAccessToDb } from "@/lib/db/queries";
 

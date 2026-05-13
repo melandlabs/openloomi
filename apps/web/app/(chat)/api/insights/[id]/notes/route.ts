@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { db } from "@/lib/db/queries";
 import { insight, insightNotes } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";

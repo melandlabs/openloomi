@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { Spinner } from "@/components/spinner";
 import { RemixIcon } from "@/components/remix-icon";
 import type { InsightTaskStatus } from "@/lib/db/schema";

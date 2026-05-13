@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import type { SetStateAction } from "react";
 import type { JobAgentStreamEvent } from "@/lib/cron/types";
 

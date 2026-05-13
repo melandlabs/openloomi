@@ -20,9 +20,9 @@ import {
   weixinSendImageMessage,
   weixinSendFileMessage,
   CDN_BASE_URL,
-} from "@alloomi/integrations/weixin/ilink-client";
-import type { WeixinIlinkCredentials } from "@alloomi/integrations/weixin/ilink-client";
-import { WeixinConversationStore } from "@alloomi/integrations/weixin/conversation-store";
+} from "@openloomi/integrations/weixin/ilink-client";
+import type { WeixinIlinkCredentials } from "@openloomi/integrations/weixin/ilink-client";
+import { WeixinConversationStore } from "@openloomi/integrations/weixin/conversation-store";
 import { getAppMemoryDir } from "@/lib/utils/path";
 import { weixinLogger } from "@/lib/utils/logger";
 
@@ -233,7 +233,7 @@ async function processWeixinInboundMessage(
     const userContent = text || allMediaHints.join("\n");
 
     const prompt = [
-      "You are the Alloomi assistant. Help the user based on the following cross-platform message summaries.",
+      "You are the openloomi assistant. Help the user based on the following cross-platform message summaries.",
       "When information is insufficient, say so instead of making up content.",
       "If the user sent media (image/voice/file/video) without text, acknowledge what was received and respond appropriately.",
       "",
@@ -266,7 +266,7 @@ async function processWeixinInboundMessage(
     }
 
     // Allocate independent workDir for this message to ensure precise scanning after Agent completes
-    const workDir = `${process.env.HOME ?? "~"}/.alloomi/sessions/weixin-${params.messageId}`;
+    const workDir = `${process.env.HOME ?? "~"}/.openloomi/sessions/weixin-${params.messageId}`;
 
     // Agent callback is "🤖" + optional variant selector + space + incremental body; do not use fixed slice(2), do not join multiple 🤖 segments
     const assembled = { value: "" };

@@ -14,9 +14,9 @@ import type { WAMessage } from "@whiskeysockets/baileys/lib/Types/Message";
 import { downloadMediaMessage } from "@whiskeysockets/baileys/lib/Utils/messages";
 import { whatsappClientRegistry } from "./client-registry";
 import { handleAgentRuntime } from "./runtime";
-import { WhatsAppConversationStore } from "@alloomi/integrations/whatsapp/conversation-store";
+import { WhatsAppConversationStore } from "@openloomi/integrations/whatsapp/conversation-store";
 import { getAppMemoryDir } from "@/lib/utils/path";
-import { markdownToWhatsApp } from "@alloomi/integrations/whatsapp/markdown";
+import { markdownToWhatsApp } from "@openloomi/integrations/whatsapp/markdown";
 import { createTaskSession } from "@/lib/files/workspace/sessions";
 import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 
@@ -25,7 +25,7 @@ const whatsappConversationStore = new WhatsAppConversationStore(
   getAppMemoryDir(),
 );
 
-const AI_SUFFIX = "(By Alloomi AI)";
+const AI_SUFFIX = "(By openloomi AI)";
 const WHATSAPP_MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 const POLL_INTERVAL_MS = 3000;
 const POLL_MESSAGE_COUNT = 10;

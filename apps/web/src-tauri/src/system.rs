@@ -1,4 +1,4 @@
-// Copyright 2026 Alloomi Team. All rights reserved.
+// Copyright 2026 openloomi Team. All rights reserved.
 //
 // Use of this source code is governed by a license that can be
 // found in the LICENSE file in the root of this source tree.
@@ -321,7 +321,7 @@ pub fn get_storage_directory(app_handle: tauri::AppHandle) -> Result<String, Str
 /// Platform-specific paths:
 /// - macOS:   Contents/Resources/_up_/_up_/_up_/skills   (exe in Contents/MacOS/)
 /// - Windows: _up_/_up_/_up_/skills relative to exe      (resources at exe level)
-/// - Linux:   _up_/_up_/_up_/skills relative to resource dir (e.g. /usr/lib/Alloomi/_up_/_up_/_up_/skills)
+/// - Linux:   _up_/_up_/_up_/skills relative to resource dir (e.g. /usr/lib/openloomi/_up_/_up_/_up_/skills)
 #[tauri::command]
 pub fn get_bundled_skills_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
     use std::path::PathBuf;
@@ -333,7 +333,7 @@ pub fn get_bundled_skills_dir(app_handle: tauri::AppHandle) -> Result<String, St
         .unwrap_or_else(|| PathBuf::from("."));
 
     let skills_dir = if cfg!(target_os = "macos") {
-        // macOS: exe is at Contents/MacOS/alloomi, resources at Contents/Resources/
+        // macOS: exe is at Contents/MacOS/openloomi, resources at Contents/Resources/
         exe_dir
             .join("..")
             .join("Resources")
@@ -377,7 +377,7 @@ pub fn get_bundled_skills_dir(app_handle: tauri::AppHandle) -> Result<String, St
 #[tauri::command]
 pub fn get_app_info() -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
-        "name": "Alloomi",
+        "name": "openloomi",
         "version": env!("CARGO_PKG_VERSION"),
         "description": env!("CARGO_PKG_DESCRIPTION"),
     }))

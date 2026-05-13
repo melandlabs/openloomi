@@ -72,21 +72,21 @@ export function PosthogIdentityListener() {
       if (hasUserChanged || hasProfileChanged) {
         posthog.identify(session.user.id, {
           email: session.user.email ?? undefined,
-          alloomi_role: profile.role ?? undefined,
-          alloomi_roles: profile.roles ?? undefined,
-          alloomi_industry: profile.industry ?? undefined,
-          alloomi_company_size: profile.companySize ?? undefined,
-          alloomi_daily_messages: profile.dailyMessages ?? undefined,
-          alloomi_tools: profile.communicationTools ?? undefined,
-          alloomi_challenges: profile.challenges ?? undefined,
-          alloomi_survey_updated_at: profile.surveyUpdatedAt ?? undefined,
+          openloomi_role: profile.role ?? undefined,
+          openloomi_roles: profile.roles ?? undefined,
+          openloomi_industry: profile.industry ?? undefined,
+          openloomi_company_size: profile.companySize ?? undefined,
+          openloomi_daily_messages: profile.dailyMessages ?? undefined,
+          openloomi_tools: profile.communicationTools ?? undefined,
+          openloomi_challenges: profile.challenges ?? undefined,
+          openloomi_survey_updated_at: profile.surveyUpdatedAt ?? undefined,
         });
 
         posthog.register({
-          alloomi_role: profile.role ?? undefined,
-          alloomi_roles: profile.roles ?? undefined,
-          alloomi_industry: profile.industry ?? undefined,
-          alloomi_company_size: profile.companySize ?? undefined,
+          openloomi_role: profile.role ?? undefined,
+          openloomi_roles: profile.roles ?? undefined,
+          openloomi_industry: profile.industry ?? undefined,
+          openloomi_company_size: profile.companySize ?? undefined,
         });
 
         lastSignatureRef.current = signature;

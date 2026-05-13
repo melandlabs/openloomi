@@ -1,7 +1,7 @@
 /**
  * WeChat (OpenClaw iLink) Platform Adapter
  *
- * Re-exports from @alloomi/integrations/weixin.
+ * Re-exports from @openloomi/integrations/weixin.
  */
 
-export { WeixinAdapter } from "@alloomi/integrations/weixin";
+export { WeixinAdapter } from "@openloomi/integrations/weixin";

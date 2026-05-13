@@ -4,7 +4,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Vote } from "@/lib/db/schema";
 import type { UseChatHelpers } from "@ai-sdk/react";
 import { useMessages } from "@/hooks/use-messages";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import type { IntegrationId } from "@/hooks/use-integrations";
 import type { SuggestedPrompt } from "./suggested-actions";
 import { useVirtualizer } from "@tanstack/react-virtual";

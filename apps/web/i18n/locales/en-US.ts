@@ -1,5 +1,5 @@
-// Extended translations - adds missing keys to @alloomi/i18n
-import baseEn from "@alloomi/i18n/locales/en-US";
+// Extended translations - adds missing keys to @openloomi/i18n
+import baseEn from "@openloomi/i18n/locales/en-US";
 
 const en = {
   ...baseEn,

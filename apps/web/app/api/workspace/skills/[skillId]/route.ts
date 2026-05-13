@@ -1,6 +1,6 @@
 /**
  * DELETE /api/workspace/skills/[skillId]
- * Only allows deleting skill directories under ~/.alloomi/skills, and cleans up corresponding entries in skill-metadata.json
+ * Only allows deleting skill directories under ~/.openloomi/skills, and cleans up corresponding entries in skill-metadata.json
  */
 
 import { type NextRequest, NextResponse } from "next/server";
@@ -8,12 +8,12 @@ import { existsSync, rmSync, readFileSync, writeFileSync, mkdirSync } from "node
 import { join, normalize, sep } from "node:path";
 import { homedir } from "node:os";
 
-function getAlloomiSkillsDir(): string {
-  return join(homedir(), ".alloomi", "skills");
+function getopenloomiSkillsDir(): string {
+  return join(homedir(), ".openloomi", "skills");
 }
 
 function getSkillMetadataPath(): string {
-  return join(homedir(), ".alloomi", "skill-metadata.json");
+  return join(homedir(), ".openloomi", "skill-metadata.json");
 }
 
 /** Ensure path is under base (normalized prefix matches), prevent directory traversal */
@@ -37,7 +37,7 @@ function readSkillMetadata(): Record<string, { avatar?: string }> {
 }
 
 function writeSkillMetadata(data: Record<string, { avatar?: string }>): void {
-  const dir = join(homedir(), ".alloomi");
+  const dir = join(homedir(), ".openloomi");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(getSkillMetadataPath(), JSON.stringify(data, null, 2), "utf-8");
 }
@@ -58,12 +58,12 @@ export async function DELETE(
       );
     }
 
-    const alloomiSkillsDir = getAlloomiSkillsDir();
-    const skillPath = join(alloomiSkillsDir, skillId);
+    const openloomiSkillsDir = getopenloomiSkillsDir();
+    const skillPath = join(openloomiSkillsDir, skillId);
 
-    if (!isPathUnderBase(skillPath, alloomiSkillsDir)) {
+    if (!isPathUnderBase(skillPath, openloomiSkillsDir)) {
       return NextResponse.json(
-        { success: false, error: "Skill can only be deleted from ~/.alloomi/skills" },
+        { success: false, error: "Skill can only be deleted from ~/.openloomi/skills" },
         { status: 403 },
       );
     }

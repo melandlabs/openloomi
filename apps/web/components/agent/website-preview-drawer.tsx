@@ -51,9 +51,9 @@ export function WebsitePreviewDrawer({
         // Prefer externally passed taskId, or extract from path
         if (!resolvedTaskId) {
           // Try to extract taskId from path
-          // Format: /Users/xxx/.alloomi/sessions/{taskId}/...
+          // Format: /Users/xxx/.openloomi/sessions/{taskId}/...
           const sessionMatch = file.path.match(
-            /\/\.alloomi\/sessions\/([^\/]+)/,
+            /\/\.openloomi\/sessions\/([^\/]+)/,
           );
           if (sessionMatch) {
             resolvedTaskId = sessionMatch[1];
@@ -64,9 +64,9 @@ export function WebsitePreviewDrawer({
         if (resolvedTaskId) {
           // Extract relative path
           let relativePath = file.path;
-          // Remove /Users/xxx/.alloomi/sessions/{taskId}/ prefix
+          // Remove /Users/xxx/.openloomi/sessions/{taskId}/ prefix
           const sessionPathMatch = file.path.match(
-            /\.alloomi\/sessions\/[^\/]+\/(.+)$/,
+            /\.openloomi\/sessions\/[^\/]+\/(.+)$/,
           );
           if (sessionPathMatch) {
             relativePath = sessionPathMatch[1];
@@ -119,7 +119,7 @@ export function WebsitePreviewDrawer({
           if (!filePath.startsWith("/") && resolvedTaskId) {
             const homeDir = await homeDirCustom();
             if (homeDir) {
-              filePath = `${homeDir}/.alloomi/sessions/${resolvedTaskId}/${filePath}`;
+              filePath = `${homeDir}/.openloomi/sessions/${resolvedTaskId}/${filePath}`;
             }
           }
 
@@ -163,14 +163,14 @@ export function WebsitePreviewDrawer({
 
           fileDir = filePath.substring(0, filePath.lastIndexOf("/"));
           const sessionMatch = filePath.match(
-            /\/\.alloomi\/sessions\/([^\/]+)/,
+            /\/\.openloomi\/sessions\/([^\/]+)/,
           );
           if (sessionMatch) {
             resolvedTaskId = sessionMatch[1];
           }
         } else if (!content && !isTauriEnv) {
           // Non-Tauri environment (web version): supports three path formats
-          // 1. Absolute path: /Users/xxx/.alloomi/sessions/{taskId}/{relativePath}
+          // 1. Absolute path: /Users/xxx/.openloomi/sessions/{taskId}/{relativePath}
           // 2. Relative path with sessionDir context: ai-digest-dashboard.html (needs taskId to resolve)
           // 3. Legacy /sessions/{taskId}/{relativePath} format
           let taskId = "";
@@ -182,7 +182,7 @@ export function WebsitePreviewDrawer({
           if (isAbsolute) {
             // Absolute path: extract taskId and relativePath
             const sessionMatch = file.path.match(
-              /\.alloomi\/sessions\/([^\/]+)\/(.+)$/,
+              /\.openloomi\/sessions\/([^\/]+)\/(.+)$/,
             );
             if (sessionMatch) {
               taskId = sessionMatch[1];

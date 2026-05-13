@@ -1,14 +1,14 @@
 /**
  * Channels Sources Types Unit Tests
  *
- * Tests for utility functions in @alloomi/integrations/channels/sources/types
+ * Tests for utility functions in @openloomi/integrations/channels/sources/types
  */
 import { describe, test, expect } from "vitest";
-import type { ExtractedMessageInfo } from "@alloomi/shared";
+import type { ExtractedMessageInfo } from "@openloomi/shared";
 
 describe("isEmptyMessage", async () => {
   const { isEmptyMessage } =
-    await import("@alloomi/integrations/channels/sources/types");
+    await import("@openloomi/integrations/channels/sources/types");
 
   test("returns true for null", () => {
     expect(isEmptyMessage(null)).toBe(true);
@@ -123,7 +123,7 @@ describe("isEmptyMessage", async () => {
 
 describe("getTgUserNameString", async () => {
   const { getTgUserNameString } =
-    await import("@alloomi/integrations/channels/sources/types");
+    await import("@openloomi/integrations/channels/sources/types");
 
   test("returns firstName when only firstName is provided", () => {
     const result = getTgUserNameString({ firstName: "John" });

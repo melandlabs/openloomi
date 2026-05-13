@@ -8,7 +8,7 @@
 
 import type { Insight, UserContact } from "./schema";
 import { isTauriMode } from "@/lib/env/constants";
-import { encryptToken, decryptToken } from "@alloomi/security/token-encryption";
+import { encryptToken, decryptToken } from "@openloomi/security/token-encryption";
 
 /**
  * Convert JSON data (object or array) to database-compatible format

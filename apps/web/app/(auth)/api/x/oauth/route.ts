@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { encryptToken } from "@alloomi/security/token-encryption";
+import { encryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
 import { getCloudUrl } from "@/lib/auth/cloud-proxy";
 import { isTauriMode } from "@/lib/env/constants";

@@ -8,8 +8,8 @@ import * as tar from "tar";
 
 const TARGET_DIR = process.argv[2] || "./cli-bundle";
 const CACHE_DIR =
-  process.env.ALLOOMI_BUNDLE_CACHE ||
-  path.join(os.homedir(), ".cache/alloomi-bundle");
+  process.env.openloomi_BUNDLE_CACHE ||
+  path.join(os.homedir(), ".cache/openloomi-bundle");
 const CACHE_EXPIRE_DAYS = 0;
 const CLAUDE_VERSION = "2.1.71";
 
@@ -43,7 +43,7 @@ console.log("");
 fs.mkdirSync(TARGET_DIR, { recursive: true });
 fs.mkdirSync(`${CACHE_DIR}/claude-code`, { recursive: true });
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "alloomi-bundle-"));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openloomi-bundle-"));
 
 function cleanup() {
   try {

@@ -1,16 +1,16 @@
-import { MessagePlatformAdapter } from "@alloomi/integrations/channels";
-import type { Messages, Message } from "@alloomi/integrations/channels";
+import { MessagePlatformAdapter } from "@openloomi/integrations/channels";
+import type { Messages, Message } from "@openloomi/integrations/channels";
 import type {
   MessageEvent,
   MessageTarget,
-} from "@alloomi/integrations/channels";
-import type { Attachment } from "@alloomi/shared";
+} from "@openloomi/integrations/channels";
+import type { Attachment } from "@openloomi/shared";
 import {
   coerceDate,
   delay,
   type DialogInfo,
   type ExtractedMessageInfo,
-} from "@alloomi/integrations/channels/sources/types";
+} from "@openloomi/integrations/channels/sources/types";
 import { ingestAttachmentForUser } from "@/lib/integrations/utils/attachments";
 import type { UserType } from "@/app/(auth)/auth";
 import { updateIntegrationAccount } from "@/lib/db/queries";

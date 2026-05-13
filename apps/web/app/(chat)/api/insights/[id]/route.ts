@@ -7,7 +7,7 @@ import {
   getInsightByIdForUser,
   updateInsightById,
 } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import timeout from "p-timeout";
 import { insight } from "@/lib/db/schema";
 import { db } from "@/lib/db/queries";

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import type { Session } from "next-auth";
-import { DropdownMenu, DropdownMenuContent } from "@alloomi/ui";
+import { DropdownMenu, DropdownMenuContent } from "@openloomi/ui";
 import { cn } from "@/lib/utils";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { UserMenuContent } from "@/components/user-menu-content";
@@ -131,7 +131,7 @@ export function UserMenuDropdown({
       }
 
       if (customEvent.detail?.tab === "basic") {
-        router.push("/?page=alloomi-soul");
+        router.push("/?page=openloomi-soul");
         return;
       }
       if (customEvent.detail?.tab === "contexts") {
@@ -139,27 +139,27 @@ export function UserMenuDropdown({
         return;
       }
 
-      router.push("/?page=alloomi-soul");
+      router.push("/?page=openloomi-soul");
     };
 
     window.addEventListener(
-      "alloomi:open-personalization",
+      "openloomi:open-personalization",
       handleOpenPersonalization as EventListener,
     );
 
     // Support legacy event names
     window.addEventListener(
-      "alloomi:open-user-settings",
+      "openloomi:open-user-settings",
       handleOpenPersonalization as EventListener,
     );
 
     return () => {
       window.removeEventListener(
-        "alloomi:open-personalization",
+        "openloomi:open-personalization",
         handleOpenPersonalization as EventListener,
       );
       window.removeEventListener(
-        "alloomi:open-user-settings",
+        "openloomi:open-user-settings",
         handleOpenPersonalization as EventListener,
       );
     };

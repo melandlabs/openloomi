@@ -239,7 +239,7 @@ export const PersonalizationBasicSettings = forwardRef<
     </div>
   );
 
-  /** Render only language and refresh settings; hide Alloomi Soul configuration block. */
+  /** Render only language and refresh settings; hide openloomi Soul configuration block. */
   return <div className="flex-1 min-h-0 overflow-y-auto">{leftColumn}</div>;
 });
 

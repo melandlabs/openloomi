@@ -207,7 +207,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Validate state (if exists)
     const stateData = await getOAuthState(userId, state);
-    let redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.alloomi.ai"}/discord-authorized`;
+    let redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.openloomi.ai"}/discord-authorized`;
 
     if (stateData) {
       redirectUri = stateData.redirectUri || redirectUri;

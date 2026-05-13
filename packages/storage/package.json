@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/storage",
+  "name": "@openloomi/storage",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     "@vercel/blob": "^0.27.1"
   },
   "devDependencies": {
-    "@alloomi/config": "workspace:*",
+    "@openloomi/config": "workspace:*",
     "typescript": "^5.6.3"
   },
   "scripts": {

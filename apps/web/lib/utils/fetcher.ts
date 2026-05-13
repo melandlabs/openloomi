@@ -1,5 +1,5 @@
-import { AppError, type ErrorCode } from "@alloomi/shared";
-import type { ChatMessage } from "@alloomi/shared";
+import { AppError, type ErrorCode } from "@openloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import { formatISO } from "date-fns";
 import type { Session } from "next-auth";
 import { getAuthToken } from "@/lib/auth/token-manager";

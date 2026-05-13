@@ -2,7 +2,7 @@ import { auth } from "@/app/(auth)/auth";
 import { db } from "@/lib/db";
 import { insight } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import type { InsightTaskItem } from "@/lib/ai/subagents/insights";
 import { generateUUID } from "@/lib/utils";
 import { deserializeJson, serializeJson } from "@/lib/db/queries";

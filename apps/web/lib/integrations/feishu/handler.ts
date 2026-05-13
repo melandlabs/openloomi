@@ -1,7 +1,7 @@
 /**
  * Feishu Bot Inbound Message Handler (Bot Mode, based on OpenClaw)
  *
- * Unlike Telegram/iMessage self mode: this is "user → bot → Alloomi replies on behalf".
+ * Unlike Telegram/iMessage self mode: this is "user → bot → openloomi replies on behalf".
  * - One im.message.receive_v1 contains one user message.
  * - Group chat @ activation: incrementally pull Feishu session history based on local latest message time (window up to 3 days), write to session file,
  *   then combine with locally built model context (historical text total limit approximately 20,000 Unicode characters).
@@ -23,8 +23,8 @@ import {
   type ChatType,
   type QuotedMessage,
   type RuntimeConversationMessage,
-} from "@alloomi/integrations/feishu/conversation-store";
-import { FeishuAdapter } from "@alloomi/integrations/feishu";
+} from "@openloomi/integrations/feishu/conversation-store";
+import { FeishuAdapter } from "@openloomi/integrations/feishu";
 
 type FeishuCredentials = {
   appId?: string;
@@ -62,8 +62,8 @@ const FEISHU_USER_COPY = {
     en: "Not enough context to answer reliably.",
   },
   authFailure: {
-    zh: "云端令牌无效或已过期，请在 Alloomi 内重新登录后再向机器人发消息。（重启后请稍等界面加载完成再发。）",
-    en: "Your cloud session token is invalid or expired. Please sign in to Alloomi again, then message the bot. After a restart, wait until the app has loaded.",
+    zh: "云端令牌无效或已过期，请在 openloomi 内重新登录后再向机器人发消息。（重启后请稍等界面加载完成再发。）",
+    en: "Your cloud session token is invalid or expired. Please sign in to openloomi again, then message the bot. After a restart, wait until the app has loaded.",
   },
   internalPlaceholder: {
     zh: "模型服务暂时异常，请稍后再试。若刚重启应用，请确认已登录并等待几秒后再发消息。",
@@ -504,7 +504,7 @@ export async function handleFeishuInboundMessage(
     }
 
     const prompt = [
-      "You are the Alloomi assistant. Help the user based on the following cross-platform message summaries.",
+      "You are the openloomi assistant. Help the user based on the following cross-platform message summaries.",
       "When information is insufficient, say so instead of making up content.",
       "",
       imagePrioritySection,

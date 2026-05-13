@@ -13,7 +13,7 @@ import {
 } from "@/lib/seo";
 
 export const metadata = {
-  metadataBase: new URL("https://alloomi.ai"),
+  metadataBase: new URL("https://openloomi.ai"),
   title: {
     default: siteMetadata.title,
     template: `%s | ${siteMetadata.name}`,
@@ -123,21 +123,21 @@ export default function RootLayout({ children }) {
           rel="stylesheet"
         />
         <Script
-          id="alloomi-website-jsonld"
+          id="openloomi-website-jsonld"
           type="application/ld+json"
           strategy="beforeInteractive"
         >
           {JSON.stringify(webSiteJsonLd)}
         </Script>
         <Script
-          id="alloomi-organization-jsonld"
+          id="openloomi-organization-jsonld"
           type="application/ld+json"
           strategy="beforeInteractive"
         >
           {JSON.stringify(organizationJsonLd)}
         </Script>
         <Script
-          id="alloomi-software-jsonld"
+          id="openloomi-software-jsonld"
           type="application/ld+json"
           strategy="beforeInteractive"
         >

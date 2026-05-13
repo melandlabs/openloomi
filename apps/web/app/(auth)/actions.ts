@@ -158,7 +158,7 @@ export const login = async (
         process.env.CLOUD_API_URL ||
         process.env.NEXT_PUBLIC_CLOUD_API_URL ||
         getCloudApiBaseUrl() ||
-        "https://app.alloomi.ai";
+        "https://app.openloomi.ai";
 
       if (!cloudUrl) {
         console.error("[RemoteAuth] Cloud API URL not configured");
@@ -293,7 +293,7 @@ export const register = async (
         process.env.CLOUD_API_URL ||
         process.env.NEXT_PUBLIC_CLOUD_API_URL ||
         getCloudApiBaseUrl() ||
-        "https://app.alloomi.ai";
+        "https://app.openloomi.ai";
 
       if (!cloudUrl) {
         return { status: "failed", error: "Cloud API URL not configured" };

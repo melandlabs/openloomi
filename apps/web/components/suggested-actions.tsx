@@ -32,7 +32,7 @@ export function getAllDefaultSuggestions(
       title: t("common.suggestedCards.frontendDesign.title"),
       emoji: "🖥️",
       type: "role_based" as const,
-      reasoning: "Frontend design for Alloomi website introduction page",
+      reasoning: "Frontend design for openloomi website introduction page",
       related_insight_ids: [],
     },
     {

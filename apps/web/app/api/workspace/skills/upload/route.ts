@@ -10,10 +10,10 @@ import { join, basename } from "node:path";
 import { homedir } from "node:os";
 import AdmZip from "adm-zip";
 
-// Get Alloomi skills directory path
-function getAlloomiSkillsDir(): string {
+// Get openloomi skills directory path
+function getopenloomiSkillsDir(): string {
   const homeDir = homedir();
-  const skillsDir = join(homeDir, ".alloomi", "skills");
+  const skillsDir = join(homeDir, ".openloomi", "skills");
   if (!existsSync(skillsDir)) {
     mkdirSync(skillsDir, { recursive: true });
   }
@@ -258,7 +258,7 @@ export async function POST(request: NextRequest) {
       files = formData.getAll("files") as File[];
     }
 
-    const skillsDir = getAlloomiSkillsDir();
+    const skillsDir = getopenloomiSkillsDir();
     const results: Array<{ name: string; success: boolean; error?: string }> = [];
 
     // Handle path-based import (from Tauri dialog)

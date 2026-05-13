@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 
-import { decryptToken } from "@alloomi/security/token-encryption";
+import { decryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
 import {
   getIntegrationAccountByPlatform,

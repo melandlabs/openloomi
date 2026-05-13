@@ -6,7 +6,7 @@ import { auth } from "@/app/(auth)/auth";
 import {
   deleteWeixinQrSession,
   getWeixinQrSession,
-} from "@alloomi/integrations/weixin/qr-login";
+} from "@openloomi/integrations/weixin/qr-login";
 
 export async function POST(request: Request) {
   const session = await auth();

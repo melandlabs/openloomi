@@ -2,7 +2,7 @@ import { generateText } from "ai";
 import { modelProvider } from "@/lib/ai";
 import { z } from "zod";
 import { jsonrepair } from "jsonrepair";
-import { extractJsonFromMarkdown } from "@alloomi/ai";
+import { extractJsonFromMarkdown } from "@openloomi/ai";
 
 /**
  * System prompt for VIP extraction from Insights

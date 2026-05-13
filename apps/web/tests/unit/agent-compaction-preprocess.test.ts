@@ -16,7 +16,7 @@ import {
   truncateOldestCompactionGroups,
   preprocessCompactionMessages,
   type CompactionPreprocessMessage,
-} from "@alloomi/ai/agent";
+} from "@openloomi/ai/agent";
 
 describe("agent-compaction-preprocess", () => {
   describe("sanitizeCompactionMessage", () => {

@@ -46,7 +46,7 @@ export function MobileDrawerMenu({
     if (isOpen) {
       document.body.style.overflow = "hidden";
       const banner = document.querySelector(
-        'section[aria-label="Alloomi Affiliate Program Promotion"]',
+        'section[aria-label="openloomi Affiliate Program Promotion"]',
       );
       if (banner) {
         (banner as HTMLElement).style.display = "none";
@@ -55,7 +55,7 @@ export function MobileDrawerMenu({
     } else {
       document.body.style.overflow = "";
       const banner = document.querySelector(
-        'section[aria-label="Alloomi Affiliate Program Promotion"]',
+        'section[aria-label="openloomi Affiliate Program Promotion"]',
       );
       if (banner) {
         (banner as HTMLElement).style.display = "";
@@ -65,7 +65,7 @@ export function MobileDrawerMenu({
     return () => {
       document.body.style.overflow = "";
       const banner = document.querySelector(
-        'section[aria-label="Alloomi Affiliate Program Promotion"]',
+        'section[aria-label="openloomi Affiliate Program Promotion"]',
       );
       if (banner) {
         (banner as HTMLElement).style.display = "";

@@ -1,4 +1,4 @@
-import { Skeleton } from "@alloomi/ui";
+import { Skeleton } from "@openloomi/ui";
 
 const skeletonItems = Array.from({ length: 8 });
 

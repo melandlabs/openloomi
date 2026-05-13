@@ -30,7 +30,7 @@ export function ThinkingMessage() {
 
           <div className="flex flex-col">
             <span className="font-medium text-slate-700 dark:text-slate-200">
-              {t("common.thinking", "Alloomi is thinking...")}
+              {t("common.thinking", "openloomi is thinking...")}
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">
               {t("common.generating", "Crafting best reply for you")}

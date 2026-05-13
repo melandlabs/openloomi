@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import type { NextRequest } from "next/server";
 import { timelineHistoryService } from "@/lib/insights/timeline-history";
 import { eq } from "drizzle-orm";

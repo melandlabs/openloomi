@@ -3,13 +3,13 @@
 import type { MouseEvent } from "react";
 import { cn } from "@/lib/utils";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { toast } from "@/components/toast";
 import { isTauri } from "@/lib/tauri";
 import { LibraryGridPreviewPanel } from "@/components/library/library-grid-preview-panel";

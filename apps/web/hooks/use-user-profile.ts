@@ -21,7 +21,7 @@ export interface UserProfile {
 function clearCachedProfile() {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem("alloomi_user_profile");
+    localStorage.removeItem("openloomi_user_profile");
   } catch {}
 }
 
@@ -31,7 +31,7 @@ export function useUserProfile() {
 
   // Local state from cache for instant render
   const [cachedProfile, setCachedProfile] = useLocalStorage<UserProfile | null>(
-    "alloomi_user_profile",
+    "openloomi_user_profile",
     null,
   );
 

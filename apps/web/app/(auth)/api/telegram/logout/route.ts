@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { deleteTgBotBySessionAndUserId } from "@/lib/db/queries";
 import { auth } from "@/app/(auth)/auth";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 
 export async function POST(request: NextRequest) {
   try {

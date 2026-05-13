@@ -1,18 +1,18 @@
 /**
  * SQLite-vec Vector Store — app-side re-export layer.
- * Wires app-specific TAURI_DB_PATH and schema into the @alloomi/rag package.
+ * Wires app-specific TAURI_DB_PATH and schema into the @openloomi/rag package.
  */
 
 import { TAURI_DB_PATH } from "@/lib/utils/path";
 import * as schema from "@/lib/db/schema-sqlite";
-import { configureVectorService } from "@alloomi/rag/vector-service";
+import { configureVectorService } from "@openloomi/rag/vector-service";
 import {
   getSQLiteVecStore as pkgGetSQLiteVecStore,
   resetSQLiteVecStore,
   SQLiteVecStore,
   type VectorSearchResult,
   type DocumentChunk,
-} from "@alloomi/rag/sqlite-vec-store";
+} from "@openloomi/rag/sqlite-vec-store";
 
 // Configure vector-service with the app's SQLite store
 configureVectorService({

@@ -4,13 +4,13 @@
  * Needs to work with QQ WebSocket listener to receive messages
  * Reference: https://bot.q.qq.com/wiki/
  */
-import { MessagePlatformAdapter } from "@alloomi/integrations/channels";
-import type { Messages, Message, Image } from "@alloomi/integrations/channels";
+import { MessagePlatformAdapter } from "@openloomi/integrations/channels";
+import type { Messages, Message, Image } from "@openloomi/integrations/channels";
 import type {
   MessageEvent,
   MessageTarget,
-} from "@alloomi/integrations/channels";
-import type { Friend } from "@alloomi/integrations/channels";
+} from "@openloomi/integrations/channels";
+import type { Friend } from "@openloomi/integrations/channels";
 
 const DEBUG = process.env.DEBUG_QQBOT === "true";
 const QQ_TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken";
@@ -36,7 +36,7 @@ function isImageMessage(message: Message): message is Image {
   );
 }
 
-/** Convert Alloomi Messages to plain text (first version only supports text, images as placeholders) */
+/** Convert openloomi Messages to plain text (first version only supports text, images as placeholders) */
 function messagesToQQText(messages: Messages): string {
   const parts: string[] = [];
   for (const m of messages) {

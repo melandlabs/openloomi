@@ -6,9 +6,9 @@ import { RemixIcon } from "@/components/remix-icon";
 import { format } from "date-fns";
 import { enUS } from "date-fns/locale";
 import type { Insight } from "@/lib/db/schema";
-import { Button, Input } from "@alloomi/ui";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
-import { coerceDate } from "@alloomi/shared";
+import { Button, Input } from "@openloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
+import { coerceDate } from "@openloomi/shared";
 import { InsightCardBadgesRow } from "@/components/insight-card/insight-card-badges-row";
 import { TimelineEventCard } from "./timeline-event-card";
 

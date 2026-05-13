@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import { auth } from "@/app/(auth)/auth";
 import { getApplicationBaseUrl } from "@/lib/env";
-import { encryptToken } from "@alloomi/security/token-encryption";
+import { encryptToken } from "@openloomi/security/token-encryption";
 
 const OUTLOOK_CAL_STATE_COOKIE = "outlook_cal_oauth_state";
 const OAUTH_STATE_TTL_SECONDS = 10 * 60;

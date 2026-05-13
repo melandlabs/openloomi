@@ -5,7 +5,7 @@
  */
 
 import type { NextRequest } from "next/server";
-import { getAgentRegistry } from "@alloomi/ai/agent/registry";
+import { getAgentRegistry } from "@openloomi/ai/agent/registry";
 import { claudePlugin } from "@/lib/ai/extensions";
 
 // Set max duration for long-running agent tasks
@@ -18,8 +18,8 @@ import type {
   AgentOptions,
   FileAttachment,
   ImageAttachment,
-} from "@alloomi/ai/agent/types";
-import type { SandboxConfig } from "@alloomi/ai/agent/sandbox/types";
+} from "@openloomi/ai/agent/types";
+import type { SandboxConfig } from "@openloomi/ai/agent/sandbox/types";
 import { auth } from "@/app/(auth)/auth";
 import { promises as fs } from "node:fs";
 import { getUserInsightSettings } from "@/lib/db/queries";

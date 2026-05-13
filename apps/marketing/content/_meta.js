@@ -1,5 +1,5 @@
 const meta = {
-  alloomi: "OpenLoomi",
+  openloomi: "OpenLoomi",
   changelog: "Changelog",
 };
 export default meta;

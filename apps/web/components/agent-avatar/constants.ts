@@ -156,8 +156,8 @@ export const MOUTHS: SvgPath[] = [
  */
 export const COLOR_PRESETS: ColorPreset[] = [
   {
-    id: "alloomi-primary",
-    labelKey: "agentAvatar.colorPresetLabels.alloomi-primary",
+    id: "openloomi-primary",
+    labelKey: "agentAvatar.colorPresetLabels.openloomi-primary",
     label: "Primary",
     mainColor: "bg-primary",
     editorFlatFill: true,
@@ -268,7 +268,7 @@ export function generateRandomAvatarConfig(): AvatarConfiguration {
  * Solid brand primary, eyes wide open, eyebrows High Curve, nose Dot, mouth smile
  */
 const DEFAULT_STATE_CONFIG: AvatarConfiguration = {
-  colorPresetId: "alloomi-primary",
+  colorPresetId: "openloomi-primary",
   shapeId: "four-lobe",
   eyesId: "wide",
   eyebrowsId: "high-curve",
@@ -283,7 +283,7 @@ const DEFAULT_STATE_CONFIG: AvatarConfiguration = {
  * Maintains unified expression and color with default state
  */
 const REFRESHING_STATE_CONFIG: AvatarConfiguration = {
-  colorPresetId: "alloomi-primary",
+  colorPresetId: "openloomi-primary",
   shapeId: "four-lobe",
   eyesId: "wide",
   eyebrowsId: "high-curve",
@@ -298,7 +298,7 @@ const REFRESHING_STATE_CONFIG: AvatarConfiguration = {
  * Maintains unified expression and color with default state
  */
 const CONVERSATION_STATE_CONFIG: AvatarConfiguration = {
-  colorPresetId: "alloomi-primary",
+  colorPresetId: "openloomi-primary",
   shapeId: "four-lobe",
   eyesId: "wide",
   eyebrowsId: "high-curve",

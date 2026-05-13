@@ -12,7 +12,7 @@ import {
   loadIntegrationCredentials,
 } from "@/lib/db/queries";
 import type { IntegrationAccount } from "@/lib/db/schema";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 
 export type NotionStoredCredentials = {
   accessToken: string;

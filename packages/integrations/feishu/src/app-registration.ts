@@ -85,7 +85,7 @@ export async function beginAppRegistration(
     throw new Error("feishu_registration_begin_missing_device_code");
   }
   const qrUrl = new URL(verificationUriComplete);
-  qrUrl.searchParams.set("from", "alloomi");
+  qrUrl.searchParams.set("from", "openloomi");
   qrUrl.searchParams.set("tp", "ob_cli_app");
   return {
     deviceCode,

@@ -1,6 +1,6 @@
 import { auth } from "@/app/(auth)/auth";
 import { getBotById } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 
 export async function GET(
   _: Request,

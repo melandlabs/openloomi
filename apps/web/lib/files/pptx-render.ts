@@ -64,7 +64,7 @@ function getInstalledEnginePathsFromDisk(): {
   try {
     const installedJson = join(
       home,
-      ".alloomi",
+      ".openloomi",
       "render-engines",
       "office",
       "installed.json",
@@ -282,7 +282,7 @@ async function generateCacheKey(
 // Get preview cache directory for a task
 function getPreviewCacheDir(taskId: string): string {
   const sessionDir = getTaskSessionDir(taskId);
-  return join(sessionDir, ".alloomi-preview", "pptx");
+  return join(sessionDir, ".openloomi-preview", "pptx");
 }
 
 // Ensure directory exists

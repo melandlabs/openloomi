@@ -11,9 +11,9 @@ const DEFAULT_STOPS: readonly [string, string, string] = [
 
 const PRESET_GRADIENT_HEX: Record<string, readonly [string, string, string]> = {
   /** Solid brand primary (~ --primary-700) */
-  "alloomi-primary": ["#13408f", "#13408f", "#13408f"],
+  "openloomi-primary": ["#13408f", "#13408f", "#13408f"],
   /** Legacy ids: removed from COLOR_PRESETS but kept for old saved avatarConfig */
-  "alloomi-original": ["#22d3ee", "#a78bfa", "#93c5fd"],
+  "openloomi-original": ["#22d3ee", "#a78bfa", "#93c5fd"],
   "sunset-dream": ["#fb923c", "#fb7185", "#fcd34d"],
   "sakura-breeze": ["#f472b6", "#fda4af", "#fecaca"],
   "forest-whisper": ["#34d399", "#2dd4bf", "#bef264"],

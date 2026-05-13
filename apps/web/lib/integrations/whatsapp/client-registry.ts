@@ -5,7 +5,7 @@
  * Used by the self-message listener to access connected sockets.
  */
 
-import { WhatsAppClientRegistry } from "@alloomi/integrations/whatsapp/client-registry";
+import { WhatsAppClientRegistry } from "@openloomi/integrations/whatsapp/client-registry";
 
 export { WhatsAppClientRegistry };
 

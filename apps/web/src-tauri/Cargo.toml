@@ -1,12 +1,12 @@
 [package]
-name = "alloomi"
-version = "0.4.3"
-description = "Alloomi AI Assistant - Your Personal Productivity Tool"
-authors = ["Alloomi Team"]
+name = "openloomi"
+version = "0.5.0"
+description = "openloomi AI Assistant - Your Personal Productivity Tool"
+authors = ["OpenLoomi Team"]
 edition = "2021"
 
 [lib]
-name = "alloomi_lib"
+name = "openloomi_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

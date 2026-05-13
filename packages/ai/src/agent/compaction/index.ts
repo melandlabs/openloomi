@@ -1,5 +1,5 @@
 /**
- * @alloomi/ai - Compaction: conversation compaction logic
+ * @openloomi/ai - Compaction: conversation compaction logic
  */
 
 export {

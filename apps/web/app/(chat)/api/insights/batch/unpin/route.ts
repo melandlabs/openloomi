@@ -1,7 +1,7 @@
 import { auth } from "@/app/(auth)/auth";
 import { db } from "@/lib/db/queries";
 import { insight, insightBriefCategories } from "@/lib/db/schema";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { eq, inArray, and } from "drizzle-orm";
 import { isTauriMode } from "@/lib/env";
 import type { InsightBriefCategory } from "@/lib/db/schema";

@@ -16,9 +16,9 @@ export const authConfig = {
 
 export const slackAuthConfig = {
   display_information: {
-    name: "Alloomi",
+    name: "openloomi",
     description:
-      "Alloomi is a simple AI IM router and chat agent as your work partner for multiple platforms.",
+      "openloomi is a simple AI IM router and chat agent as your work partner for multiple platforms.",
     background_color: "#4A154B",
   },
   oauth_config: {

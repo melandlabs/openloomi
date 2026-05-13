@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { SUPPORTED_ATTACHMENT_MIME_TYPES_ARRAY } from "@/lib/files/config";
-import { messageMetadataSchema } from "@alloomi/shared";
+import { messageMetadataSchema } from "@openloomi/shared";
 
 const attachmentMimeEnum = z.enum(SUPPORTED_ATTACHMENT_MIME_TYPES_ARRAY);
 

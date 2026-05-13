@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { RemixIcon } from "@/components/remix-icon";
-import { Switch } from "@alloomi/ui";
+import { Switch } from "@openloomi/ui";
 import "../i18n";
 
 /** Quick select common emoji list (skill avatars) */
@@ -126,7 +126,7 @@ interface SkillsPanelProps {
   className?: string;
   /** Controlled mode: data and callbacks passed from page, no internal fetch */
   skills?: Skill[];
-  directories?: { agent: string; alloomi: string } | null;
+  directories?: { agent: string; openloomi: string } | null;
   isLoading?: boolean;
   onRefresh?: () => void;
   onOpenLocalFolder?: () => void;
@@ -156,7 +156,7 @@ export function SkillsPanel({
   const [internalSkills, setInternalSkills] = useState<Skill[]>([]);
   const [internalDirectories, setInternalDirectories] = useState<{
     agent: string;
-    alloomi: string;
+    openloomi: string;
   } | null>(null);
   const [internalLoading, setInternalLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -214,10 +214,10 @@ export function SkillsPanel({
       onOpenLocalFolder();
       return;
     }
-    if (!internalDirectories?.alloomi || !isTauri()) return;
+    if (!internalDirectories?.openloomi || !isTauri()) return;
     setInternalOpeningFolder(true);
     try {
-      await openPathCustom(internalDirectories.alloomi);
+      await openPathCustom(internalDirectories.openloomi);
       toast({
         type: "success",
         description: t(
@@ -255,7 +255,7 @@ export function SkillsPanel({
       onOpenLocalFolder={handleOpenLocalFolder}
       onCreateSkill={handleUseSkillCreator}
       openingFolder={openingFolder}
-      disabled={disabled || !directories?.alloomi || !isTauri()}
+      disabled={disabled || !directories?.openloomi || !isTauri()}
     />
   );
 
@@ -296,7 +296,7 @@ export function SkillsPanel({
               <p className="text-xs text-muted-foreground mt-1">
                 {t(
                   "agent.panels.workspacePanel.skillsHint",
-                  "Add skills to ~/.alloomi/skills/",
+                  "Add skills to ~/.openloomi/skills/",
                 )}
               </p>
               {!hideEmptyStateAddSkill && (
@@ -312,10 +312,10 @@ export function SkillsPanel({
                   key={skill.id}
                   skill={skill}
                   canDelete={
-                    !!directories && skill.source === directories.alloomi
+                    !!directories && skill.source === directories.openloomi
                   }
                   canToggle={
-                    !!directories && skill.source === directories.alloomi
+                    !!directories && skill.source === directories.openloomi
                   }
                   onAvatarChange={loadSkills}
                   onDeleted={loadSkills}
@@ -340,7 +340,7 @@ interface SkillCardProps {
 }
 
 /**
- * Single skill card: avatar on top, name on next line, description multi-line ellipsis; can enable/disable/delete (alloomi skills only)
+ * Single skill card: avatar on top, name on next line, description multi-line ellipsis; can enable/disable/delete (openloomi skills only)
  */
 function SkillCard({
   skill,
@@ -414,7 +414,7 @@ function SkillCard({
     }
   };
 
-  const isAlloomiSkill = canDelete || canToggle;
+  const isopenloomiSkill = canDelete || canToggle;
 
   return (
     <div
@@ -424,7 +424,7 @@ function SkillCard({
       )}
     >
       {/* ... button: shows on hover, contains Switch and Delete */}
-      {isAlloomiSkill && (
+      {isopenloomiSkill && (
         <div className="absolute top-2 right-2 opacity-100 transition-opacity z-[1]">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

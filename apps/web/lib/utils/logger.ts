@@ -2,7 +2,7 @@
  * Shared Logger Utility
  *
  * Provides file-based logging for debugging in distributed apps.
- * All logs are written to ~/.alloomi/logs/alloomi.log
+ * All logs are written to ~/.openloomi/logs/openloomi.log
  *
  * Console output is only enabled in development environment
  */
@@ -11,8 +11,8 @@ import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const LOG_DIR = join(homedir(), ".alloomi", "logs");
-const LOG_FILE = join(LOG_DIR, "alloomi.log");
+const LOG_DIR = join(homedir(), ".openloomi", "logs");
+const LOG_FILE = join(LOG_DIR, "openloomi.log");
 const isDevelopment =
   process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";
 

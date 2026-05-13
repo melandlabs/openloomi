@@ -34,7 +34,7 @@ export function SkillsTab({
   const [skills, setSkills] = useState<Skill[]>([]);
   const [directories, setDirectories] = useState<{
     agent: string;
-    alloomi: string;
+    openloomi: string;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [openingFolder, setOpeningFolder] = useState(false);
@@ -70,17 +70,17 @@ export function SkillsTab({
   };
 
   const handleOpenLocalFolder = useCallback(async () => {
-    if (!directories?.alloomi) return;
+    if (!directories?.openloomi) return;
     setOpeningFolder(true);
     try {
       const { openPath } = await import("@tauri-apps/plugin-opener");
-      await openPath(directories.alloomi);
+      await openPath(directories.openloomi);
     } catch (e) {
       console.error("[SkillsTab] Open folder failed:", e);
     } finally {
       setOpeningFolder(false);
     }
-  }, [directories?.alloomi]);
+  }, [directories?.openloomi]);
 
   const handleCreateSkill = useCallback(() => {
     const newChatId = crypto.randomUUID();
@@ -95,14 +95,14 @@ export function SkillsTab({
       onOpenLocalFolder: handleOpenLocalFolder,
       onCreateSkill: handleCreateSkill,
       openingFolder,
-      disabled: !directories?.alloomi || !isTauri(),
+      disabled: !directories?.openloomi || !isTauri(),
     });
   }, [
     onAddSkillProps,
     handleOpenLocalFolder,
     handleCreateSkill,
     openingFolder,
-    directories?.alloomi,
+    directories?.openloomi,
   ]);
 
   return (

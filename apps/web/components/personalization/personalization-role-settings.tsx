@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 import { fetcher } from "@/lib/utils";
 import { toast } from "@/components/toast";
 import { RemixIcon } from "@/components/remix-icon";
-import { Label, Textarea, type Option, MultipleSelector } from "@alloomi/ui";
+import { Label, Textarea, type Option, MultipleSelector } from "@openloomi/ui";
 
 type RoleAssignment = {
   role: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, type ReactNode } from "react";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { cn } from "@/lib/utils";
 
 interface ScrollableTabsProps {

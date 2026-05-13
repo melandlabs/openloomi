@@ -119,5 +119,5 @@ export const OpenLoomiDocsCards = (): JSX.Element => {
     },
   ];
 
-  return <DocsCard items={docsItems} basePath="/docs/alloomi" />;
+  return <DocsCard items={docsItems} basePath="/docs/openloomi" />;
 };

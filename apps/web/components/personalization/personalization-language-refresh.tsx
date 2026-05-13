@@ -8,7 +8,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { LanguageSettingsMenu } from "@/components/language-settings-menu";
 
 /**

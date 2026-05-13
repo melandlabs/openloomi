@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { RemixIcon } from "@/components/remix-icon";
@@ -155,8 +155,8 @@ export default function GuestGuide({
   // New: State management for translations after client hydration completes
   const [translations, setTranslations] = useState({
     welcome: "",
-    alloomiIntro1: "",
-    alloomiIntro2: "",
+    openloomiIntro1: "",
+    openloomiIntro2: "",
     youCanTry: "",
     suggestedAction1st: "",
     suggestedAction2nd: "",
@@ -168,8 +168,8 @@ export default function GuestGuide({
   useEffect(() => {
     setTranslations({
       welcome: t("common.welcome"),
-      alloomiIntro1: t("common.alloomiIntro1"),
-      alloomiIntro2: t("common.alloomiIntro2"),
+      openloomiIntro1: t("common.openloomiIntro1"),
+      openloomiIntro2: t("common.openloomiIntro2"),
       youCanTry: t("common.youCanTry"),
       suggestedAction1st: t("suggestedAction1st.title"),
       suggestedAction2nd: t("suggestedAction2nd.title"),
@@ -336,7 +336,7 @@ export default function GuestGuide({
               <div className="size-16 sm:size-20 bg-gradient-to-br rounded-full flex items-center justify-center">
                 <Image
                   src="/images/logo_web.png"
-                  alt="Alloomi Logo"
+                  alt="openloomi Logo"
                   width={32}
                   height={32}
                   className="object-contain"
@@ -360,7 +360,7 @@ export default function GuestGuide({
             <div className="size-32 sm:size-20 bg-gradient-to-br rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
               <Image
                 src="/images/logo_web.png"
-                alt="Alloomi Logo"
+                alt="openloomi Logo"
                 width={32}
                 height={32}
                 className="object-contain"
@@ -372,9 +372,9 @@ export default function GuestGuide({
             </h1>
 
             <p className="text-[#9b9a97] text-sm sm:text-base leading-relaxed mb-6 sm:mb-8">
-              {translations.alloomiIntro1}
+              {translations.openloomiIntro1}
               <br />
-              {translations.alloomiIntro2}
+              {translations.openloomiIntro2}
             </p>
 
             <Button

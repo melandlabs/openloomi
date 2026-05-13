@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { ScrollArea } from "@alloomi/ui";
-import { Button, Input } from "@alloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
+import { Button, Input } from "@openloomi/ui";
 import { useTranslation } from "react-i18next";
 import { RemixIcon } from "@/components/remix-icon";
 import {
@@ -14,8 +14,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@alloomi/ui";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import { toast } from "@/components/toast";
 import { MarkdownWithCitations } from "@/components/markdown-with-citations";
 import { RichTextEditor } from "@/components/rich-text-editor";

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused)]
-// Copyright 2026 Alloomi Team. All rights reserved.
+// Copyright 2026 openloomi Team. All rights reserved.
 //
 // Use of this source code is governed by a license that can be
 // found in the LICENSE file in the root of this source tree.
@@ -384,7 +384,7 @@ pub fn find_system_node(home: &str) -> Option<String> {
 
     let env_home = home.to_string();
     let fixed_paths: Vec<String> = vec![
-        format!("{}/.alloomi/node/bin/node", env_home),
+        format!("{}/.openloomi/node/bin/node", env_home),
         "/usr/local/bin/node".to_string(),
         "/opt/homebrew/bin/node".to_string(),
         format!("{}/.nvm/versions/node/v22.17.0/bin/node", env_home),
@@ -419,9 +419,9 @@ pub fn find_system_node(home: &str) -> Option<String> {
 pub fn find_system_node(home: &str) -> Option<String> {
     let env_home = home.to_string();
 
-    // First check fixed paths (including .alloomi downloaded node)
+    // First check fixed paths (including .openloomi downloaded node)
     let fixed_paths: Vec<String> = vec![
-        format!(r"{}\.alloomi\node\node.exe", env_home),
+        format!(r"{}\.openloomi\node\node.exe", env_home),
         format!(r"{}\AppData\Roaming\nvm\v22.17.0\node.exe", env_home),
         format!(r"{}\.nvm\versions\node\v22.17.0\node.exe", env_home),
         r"C:\Program Files\nodejs\node.exe".to_string(),
@@ -457,11 +457,11 @@ pub fn find_system_node(home: &str) -> Option<String> {
         if output.status.success() {
             let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path_str.is_empty() && std::path::Path::new(&path_str).exists() {
-                if !path_str.contains(".alloomi") && is_node_version_valid(&path_str) {
+                if !path_str.contains(".openloomi") && is_node_version_valid(&path_str) {
                     println!("✅ Found valid Node.js: {}", path_str);
                     return Some(path_str);
-                } else if path_str.contains(".alloomi") {
-                    println!("⚠️  .alloomi Node.js is below v22, will download new version...");
+                } else if path_str.contains(".openloomi") {
+                    println!("⚠️  .openloomi Node.js is below v22, will download new version...");
                 } else {
                     println!("⚠️  Found Node.js version below v22: {}", path_str);
                 }
@@ -480,7 +480,7 @@ pub fn find_system_node(home: &str) -> Option<String> {
             let path_str = String::from_utf8_lossy(&output.stdout);
             for line in path_str.lines().take(5) {
                 let node_path = line.trim();
-                if node_path.is_empty() || node_path.contains(".alloomi") {
+                if node_path.is_empty() || node_path.contains(".openloomi") {
                     continue;
                 }
                 if std::path::Path::new(node_path).exists() {
@@ -536,7 +536,7 @@ pub fn download_and_install_node(home: &str) -> Option<String> {
     set_downloading_node(true);
 
     let env_home = home.to_string();
-    let install_dir = PathBuf::from(&env_home).join(".alloomi").join("node");
+    let install_dir = PathBuf::from(&env_home).join(".openloomi").join("node");
     let node_exe = install_dir.join("bin").join("node");
 
     if node_exe.exists() {
@@ -643,7 +643,7 @@ pub fn download_and_install_node(home: &str) -> Option<String> {
     set_downloading_node(true);
 
     let env_home = home.to_string();
-    let install_dir = PathBuf::from(&env_home).join(".alloomi").join("node");
+    let install_dir = PathBuf::from(&env_home).join(".openloomi").join("node");
     let node_exe = install_dir.join("bin").join("node");
 
     if node_exe.exists() {
@@ -750,7 +750,7 @@ pub fn download_and_install_node(home: &str) -> Option<String> {
     set_downloading_node(true);
 
     let env_home = home.to_string();
-    let install_dir = PathBuf::from(&env_home).join(".alloomi").join("node");
+    let install_dir = PathBuf::from(&env_home).join(".openloomi").join("node");
     let node_exe = install_dir.join("node.exe");
 
     if node_exe.exists() {
@@ -999,8 +999,8 @@ pub fn try_start_nextjs(
         }
     }
 
-    // If node_cmd contains .alloomi, prepend its directory to PATH
-    let effective_path = if node_cmd.contains(".alloomi") {
+    // If node_cmd contains .openloomi, prepend its directory to PATH
+    let effective_path = if node_cmd.contains(".openloomi") {
         if let Some(node_dir) = std::path::Path::new(node_cmd).parent() {
             let node_dir_str = node_dir.to_string_lossy().to_string();
             // Use semicolon on Windows, colon on Unix
@@ -1063,8 +1063,8 @@ pub fn try_start_nextjs(
         .env("IS_TAURI", "true")
         .env("TAURI_MODE", "1")
         .env("DEPLOYMENT_MODE", "tauri")
-        .env("CLOUD_API_URL", "https://app.alloomi.ai")
-        .env("NEXT_PUBLIC_CLOUD_API_URL", "https://app.alloomi.ai")
+        .env("CLOUD_API_URL", "https://app.openloomi.ai")
+        .env("NEXT_PUBLIC_CLOUD_API_URL", "https://app.openloomi.ai")
         .env("TAURI_DB_PATH", db_path)
         .env("NEXTAUTH_URL", "http://localhost:3415")
         .env("NEXT_PUBLIC_APP_URL", "http://localhost:3415")
@@ -1099,7 +1099,7 @@ pub fn try_start_nextjs(
     };
 
     // Capture stderr to a temp file so we can read error output on failure
-    let stderr_path = std::env::temp_dir().join("alloomi_node_stderr.log");
+    let stderr_path = std::env::temp_dir().join("openloomi_node_stderr.log");
     let stderr_file = match fs::File::create(&stderr_path) {
         Ok(f) => f,
         Err(e) => {
@@ -1254,7 +1254,7 @@ pub fn start_nextjs_server() {
         let msg = format!(
             "Next.js server not found at: {:?}. \
             This may happen if the app was moved after installation. \
-            Please reinstall Alloomi from alloomi.ai",
+            Please reinstall openloomi from openloomi.ai",
             server_script
         );
         eprintln!("❌ {}", msg);
@@ -1290,7 +1290,7 @@ pub fn start_nextjs_server() {
         let pnpm_path = format!("{}/Library/pnpm", env_home);
         let nvm_path = format!("{}/.nvm/versions/node/v22.17.0/bin", env_home);
         let local_bin = format!("{}/.local/bin", env_home);
-        let alloomi_node_path = format!("{}/.alloomi/node/bin", env_home);
+        let openloomi_node_path = format!("{}/.openloomi/node/bin", env_home);
         let fnm_shims = format!("{}/.local/share/fnm/shims", env_home);
         let fnm_installation_bin = format!(
             "{}/.local/share/fnm/node-versions/v22.17.0/installation/bin",
@@ -1301,7 +1301,7 @@ pub fn start_nextjs_server() {
             pnpm_path,
             nvm_path,
             local_bin,
-            alloomi_node_path,
+            openloomi_node_path,
             fnm_shims,
             fnm_installation_bin,
         ];
@@ -1319,7 +1319,7 @@ pub fn start_nextjs_server() {
 
     #[cfg(windows)]
     {
-        let alloomi_node_dir = format!(r"{}\.alloomi\node", env_home);
+        let openloomi_node_dir = format!(r"{}\.openloomi\node", env_home);
         let nvm_dir = format!(r"{}\AppData\Roaming\nvm\v22.17.0", env_home);
         let scoop_shims = format!(r"{}\scoop\shims", env_home);
         let npm_global = format!(r"{}\AppData\Roaming\npm", env_home);
@@ -1327,7 +1327,7 @@ pub fn start_nextjs_server() {
         let prog_files_x86 = r"C:\Program Files (x86)\nodejs".to_string();
 
         let extra_paths = vec![
-            alloomi_node_dir,
+            openloomi_node_dir,
             nvm_dir,
             scoop_shims,
             npm_global,
@@ -1351,7 +1351,7 @@ pub fn start_nextjs_server() {
     let data_dir = crate::storage::get_data_dir();
     let db_path = data_dir.join("data.db");
     let env_home_path = PathBuf::from(&env_home);
-    let code_tmpdir = env_home_path.join(".cache").join("alloomi-tmp");
+    let code_tmpdir = env_home_path.join(".cache").join("openloomi-tmp");
 
     let db_path_str = db_path.to_string_lossy().to_string();
     let code_tmpdir_str = code_tmpdir.to_string_lossy().to_string();

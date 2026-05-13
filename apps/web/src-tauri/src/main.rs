@@ -1,4 +1,4 @@
-// Copyright 2026 Alloomi Team. All rights reserved.
+// Copyright 2026 openloomi Team. All rights reserved.
 //
 // Use of this source code is governed by a license that can be
 // found in the LICENSE file in the root of this source tree.
@@ -49,7 +49,7 @@ fn resolve_resource_file(
 fn wait_and_navigate(app: tauri::AppHandle) {
     // Copy loading HTML from resources to temp dir so WebView can both
     // load it and execute JS to update the status text dynamically.
-    let temp_path = std::env::temp_dir().join("alloomi_loading.html");
+    let temp_path = std::env::temp_dir().join("openloomi_loading.html");
     let resource_path = resolve_resource_file(&app, "loading.html");
 
     if let Ok(resource_path) = resource_path {
@@ -208,7 +208,7 @@ fn main() {
 
     println!("╔══════════════════════════════════════╗");
     println!(
-        "║       Alloomi Tauri App v{}        ║",
+        "║       openloomi Tauri App v{}        ║",
         env!("CARGO_PKG_VERSION")
     );
     println!("╚══════════════════════════════════════╝");

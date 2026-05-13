@@ -10,7 +10,7 @@ import {
 } from "@/lib/files/config";
 import { deriveBlobPathFromUrl } from "@/lib/files/blob-path";
 import { getUserStorageUsage, createUserFile } from "@/lib/db/storageService";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { uploadFileToGoogleDrive } from "@/lib/files/google-drive";
 import {
   deriveNotionTextPreview,
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "Saving is unavailable for this attachment because it is not stored in Alloomi.",
+          "Saving is unavailable for this attachment because it is not stored in openloomi.",
       },
       { status: 400 },
     );

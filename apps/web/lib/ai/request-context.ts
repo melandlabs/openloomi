@@ -4,19 +4,19 @@
  * Used to set AI Provider user context in API routes
  * Supports extracting cloud authentication token from request body or Authorization header.
  *
- * Re-exports core context functions from @alloomi/ai and adds app-specific helpers.
+ * Re-exports core context functions from @openloomi/ai and adds app-specific helpers.
  */
 
 import type { UserType } from "@/app/(auth)/auth";
 import { NextRequest } from "next/server";
-import { setAIUserContext } from "@alloomi/ai/agent/model";
+import { setAIUserContext } from "@openloomi/ai/agent/model";
 
 export {
   setAIUserContext,
   clearAIUserContext,
   getAIUserContext,
-} from "@alloomi/ai/agent/model";
-export type { AIUserContext } from "@alloomi/ai/agent/model";
+} from "@openloomi/ai/agent/model";
+export type { AIUserContext } from "@openloomi/ai/agent/model";
 
 /**
  * Extract cloud authentication token from request

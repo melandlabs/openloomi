@@ -3,17 +3,17 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
-import { Badge, Button } from "@alloomi/ui";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+import { Badge, Button } from "@openloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@alloomi/ui";
-import { HorizontalScrollContainer, hasDragged } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { HorizontalScrollContainer, hasDragged } from "@openloomi/ui";
 import { useChatContextOptional } from "@/components/chat-context";
-import { useIsMobile } from "@alloomi/hooks/use-is-mobile";
+import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
 import { useSidePanel } from "@/components/agent/side-panel-context";
 import { AgentChatPanel } from "@/components/agent/chat-panel";
 import { RemixIcon } from "@/components/remix-icon";

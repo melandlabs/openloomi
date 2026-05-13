@@ -1,7 +1,7 @@
 // Remove specified task from Insight's bucket
 import { auth } from "@/app/(auth)/auth";
 import { removeInsightTask } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 
 export async function POST(
   _: Request,

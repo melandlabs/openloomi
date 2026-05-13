@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
     const cloudUrl =
       process.env.CLOUD_API_URL ||
       process.env.NEXT_PUBLIC_CLOUD_API_URL ||
-      "https://app.alloomi.ai";
+      "https://app.openloomi.ai";
 
     const exchangeResponse = await fetch(
       `${cloudUrl}/api/remote-auth/oauth/google/exchange`,

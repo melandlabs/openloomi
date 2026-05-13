@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslation } from "react-i18next";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@alloomi/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
 import { isTauri, openUrl } from "@/lib/tauri";
 
 const FEISHU_OPEN_PLATFORM_URL = "https://open.feishu.cn/app";
@@ -106,7 +106,7 @@ export function FeishuStepsDialog({
             <p className="text-muted-foreground text-xs mt-1">
               {t(
                 "auth.feishuStepsNote",
-                "Note: If the long connection is not shown here, try restarting Alloomi",
+                "Note: If the long connection is not shown here, try restarting openloomi",
               )}
             </p>
             <ol

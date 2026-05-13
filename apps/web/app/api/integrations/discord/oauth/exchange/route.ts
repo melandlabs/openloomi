@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Exchange code → token
-  const redirectUri = `${process.env.CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://app.alloomi.ai"}/discord-authorized`;
+  const redirectUri = `${process.env.CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://app.openloomi.ai"}/discord-authorized`;
 
   const response = await fetch("https://discord.com/api/oauth2/token", {
     method: "POST",

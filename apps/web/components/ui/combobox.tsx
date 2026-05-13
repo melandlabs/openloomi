@@ -3,9 +3,9 @@
 import * as React from "react";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
-import { Button, Input } from "@alloomi/ui";
-import { ScrollArea } from "@alloomi/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@alloomi/ui";
+import { Button, Input } from "@openloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@openloomi/ui";
 
 interface ComboboxOption {
   value: string;

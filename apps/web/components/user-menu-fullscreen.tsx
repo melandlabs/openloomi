@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import type { Session } from "next-auth";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button, ScrollArea } from "@alloomi/ui";
+import { Button, ScrollArea } from "@openloomi/ui";
 import { cn } from "@/lib/utils";
 import { useUserProfile } from "@/hooks/use-user-profile";
-import { useIsMobile } from "@alloomi/hooks/use-is-mobile";
+import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
 import { UserMenuContent } from "@/components/user-menu-content";
 
 /**
@@ -134,7 +134,7 @@ export function UserMenuFullscreen({
 
       if (customEvent.detail?.tab === "basic") {
         onClose();
-        router.push("/?page=alloomi-soul");
+        router.push("/?page=openloomi-soul");
         return;
       }
       if (customEvent.detail?.tab === "contexts") {
@@ -144,27 +144,27 @@ export function UserMenuFullscreen({
       }
 
       onClose();
-      router.push("/?page=alloomi-soul");
+      router.push("/?page=openloomi-soul");
     };
 
     window.addEventListener(
-      "alloomi:open-personalization",
+      "openloomi:open-personalization",
       handleOpenPersonalization as EventListener,
     );
 
     // Backwards compatibility with old event name
     window.addEventListener(
-      "alloomi:open-user-settings",
+      "openloomi:open-user-settings",
       handleOpenPersonalization as EventListener,
     );
 
     return () => {
       window.removeEventListener(
-        "alloomi:open-personalization",
+        "openloomi:open-personalization",
         handleOpenPersonalization as EventListener,
       );
       window.removeEventListener(
-        "alloomi:open-user-settings",
+        "openloomi:open-user-settings",
         handleOpenPersonalization as EventListener,
       );
     };

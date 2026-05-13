@@ -299,7 +299,7 @@ export function AvatarDisplay({
     }
 
     const link = document.createElement("a");
-    link.download = "alloomi-avatar.png";
+    link.download = "openloomi-avatar.png";
     link.href = canvas.toDataURL();
     link.click();
   }, [

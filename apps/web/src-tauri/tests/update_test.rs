@@ -1,11 +1,11 @@
-// Copyright 2026 Alloomi Team. All rights reserved.
+// Copyright 2026 openloomi Team. All rights reserved.
 //
 // Use of this source code is governed by a license that can be
 // found in the LICENSE file in the root of this source tree.
 
 //! Unit tests for the update module.
 
-use alloomi_lib::update::{get_platform_download_filename, is_newer_version, parse_semver};
+use openloomi_lib::update::{get_platform_download_filename, is_newer_version, parse_semver};
 
 #[cfg(test)]
 mod parse_semver_tests {
@@ -100,7 +100,7 @@ mod get_platform_download_filename_tests {
         assert!(result.is_some());
         let name = result.unwrap();
         assert!(
-            name.contains("Alloomi_1.0.0_macOS_x64.dmg"),
+            name.contains("openloomi_1.0.0_macOS_x64.dmg"),
             "got: {}",
             name
         );
@@ -124,7 +124,7 @@ mod get_platform_download_filename_tests {
         let result = get_platform_download_filename("v1.0.0");
         assert!(result.is_some());
         let name = result.unwrap();
-        assert!(name.contains("Alloomi_1.0.0_linux"), "got: {}", name);
+        assert!(name.contains("openloomi_1.0.0_linux"), "got: {}", name);
     }
 
     #[cfg(target_os = "windows")]
@@ -134,7 +134,7 @@ mod get_platform_download_filename_tests {
         assert!(result.is_some());
         let name = result.unwrap();
         assert!(
-            name.contains("Alloomi_1.0.0_windows_x64-setup.exe"),
+            name.contains("openloomi_1.0.0_windows_x64-setup.exe"),
             "got: {}",
             name
         );

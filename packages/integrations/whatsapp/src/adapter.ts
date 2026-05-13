@@ -22,24 +22,24 @@ import {
 } from "@whiskeysockets/baileys";
 import { downloadMediaMessage } from "@whiskeysockets/baileys/lib/Utils/messages";
 import pino from "pino";
-import { MessagePlatformAdapter } from "@alloomi/integrations/channels";
+import { MessagePlatformAdapter } from "@openloomi/integrations/channels";
 import type {
   MessageEvent,
   MessageTarget,
-} from "@alloomi/integrations/channels";
+} from "@openloomi/integrations/channels";
 import type {
-  Image as AlloomiImage,
-  Message as AlloomiMessage,
-  File as AlloomiFile,
+  Image as openloomiImage,
+  Message as openloomiMessage,
+  File as openloomiFile,
   Messages,
-} from "@alloomi/integrations/channels";
-import type { ExtractedMessageInfo } from "@alloomi/integrations/channels/sources/types";
+} from "@openloomi/integrations/channels";
+import type { ExtractedMessageInfo } from "@openloomi/integrations/channels/sources/types";
 import type {
   BaileysAuthStateProvider,
   ClientRegistry,
   FileIngester,
   ConfigProvider,
-} from "@alloomi/integrations/core";
+} from "@openloomi/integrations/core";
 
 const DEBUG = process.env.DEBUG_WHATSAPP === "true";
 
@@ -76,13 +76,13 @@ type LoginDeferred = {
   rejectLogin: (error: Error) => void;
 };
 
-function isImageMessage(message: AlloomiMessage): message is AlloomiImage {
+function isImageMessage(message: openloomiMessage): message is openloomiImage {
   if (typeof message !== "object" || message === null) return false;
   if (!("url" in message) && !("base64" in message)) return false;
   return !isFileMessage(message);
 }
 
-function isFileMessage(message: AlloomiMessage): message is AlloomiFile {
+function isFileMessage(message: openloomiMessage): message is openloomiFile {
   if (typeof message !== "object" || message === null) return false;
   return "url" in message && "name" in message;
 }
@@ -276,7 +276,7 @@ export class WhatsAppAdapter extends MessagePlatformAdapter {
       auth,
       logger,
       printQRInTerminal: false,
-      browser: ["Alloomi", "Desktop", "0.3.0"],
+      browser: ["openloomi", "Desktop", "0.3.0"],
       generateHighQualityLinkPreview: false,
       connectTimeoutMs: 30_000,
       syncFullHistory: true,
@@ -1512,7 +1512,7 @@ export class WhatsAppAdapter extends MessagePlatformAdapter {
   }
 
   private async prepareMediaMessage(
-    image: AlloomiImage,
+    image: openloomiImage,
   ): Promise<{ image: Buffer } | null> {
     try {
       let buffer: Buffer;
@@ -1537,7 +1537,7 @@ export class WhatsAppAdapter extends MessagePlatformAdapter {
     }
   }
 
-  private async prepareFileMessage(file: AlloomiFile): Promise<{
+  private async prepareFileMessage(file: openloomiFile): Promise<{
     document: Buffer;
     mimetype: string;
     fileName: string;

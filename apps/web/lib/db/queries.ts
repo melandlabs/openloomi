@@ -96,7 +96,7 @@ import {
 } from "./schema";
 import { generateUUID } from "../utils";
 import { generateHashedPassword } from "./utils";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import type { UserType } from "@/app/(auth)/auth";
 import { isTauriMode } from "@/lib/env/constants";
 import { filterDueInsightSettings } from "@/lib/insights/tier";
@@ -2390,7 +2390,7 @@ export function loadIntegrationCredentials<T = Record<string, unknown>>(
   if (auditContext) {
     try {
       // Dynamic import to avoid circular dependencies
-      const { logCredentialAccess } = require("@alloomi/audit");
+      const { logCredentialAccess } = require("@openloomi/audit");
       logCredentialAccess({
         accountId: account.id,
         userId: auditContext.userId,

@@ -2,7 +2,7 @@
  * Audit logger
  *
  * Records non-project file reads and non-project local command executions during program execution.
- * Logs are written in JSONL format to ~/.alloomi/logs/audit.jsonl
+ * Logs are written in JSONL format to ~/.openloomi/logs/audit.jsonl
  *
  * Note: All Node.js modules are loaded via dynamic require()
  * to avoid Edge Runtime static analysis errors.
@@ -11,7 +11,7 @@
 function getLogPaths() {
   const { homedir } = require("node:os") as typeof import("node:os");
   const { join } = require("node:path") as typeof import("node:path");
-  const dir = join(homedir(), ".alloomi", "logs");
+  const dir = join(homedir(), ".openloomi", "logs");
   const file = join(dir, "audit.jsonl");
   return { dir, file };
 }
@@ -210,4 +210,4 @@ export function clearAuditLogs() {
   }
 }
 
-export const AUDIT_LOG_PATH = "~/.alloomi/logs/audit.jsonl";
+export const AUDIT_LOG_PATH = "~/.openloomi/logs/audit.jsonl";

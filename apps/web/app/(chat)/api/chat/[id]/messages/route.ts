@@ -1,8 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
 import { getChatById, getMessagesByChatId } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { convertToUIMessages } from "@/lib/utils";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 
 /**
  * Get message list for specified chat

@@ -138,7 +138,7 @@ export function createDownloadAttachmentTool(
         // Build session workDir path
         const sessionWorkDir = join(
           homedir(),
-          ".alloomi",
+          ".openloomi",
           "sessions",
           chatId || "default",
         );

@@ -7,12 +7,12 @@ import {
   getIntegrationAccountByPlatform,
   upsertIntegrationAccount,
 } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import {
   mergeNotionMetadata,
   type NotionStoredCredentials,
 } from "@/lib/files/notion";
-import { decryptToken } from "@alloomi/security/token-encryption";
+import { decryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
 
 type NotionTokenResponse = {

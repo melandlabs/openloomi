@@ -30,7 +30,7 @@
     {
       "identifier": "fs:allow-stat",
       "allow": [
-        "$HOME/.alloomi/**",
+        "$HOME/.openloomi/**",
         "$HOME/.agent/**",
         "$HOME/.claude/**",
         "$HOME/**",
@@ -48,7 +48,7 @@
     {
       "identifier": "fs:allow-read-file",
       "allow": [
-        "$HOME/.alloomi/**",
+        "$HOME/.openloomi/**",
         "$HOME/.agent/**",
         "$HOME/.claude/**",
         "$HOME/**",
@@ -66,7 +66,7 @@
     {
       "identifier": "fs:allow-write-file",
       "allow": [
-        "$HOME/.alloomi/**",
+        "$HOME/.openloomi/**",
         "$HOME/.agent/**",
         "$HOME/.claude/**",
         "$HOME/**",

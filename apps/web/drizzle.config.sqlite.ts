@@ -7,6 +7,6 @@ export default defineConfig({
   dbCredentials: {
     url:
       process.env.TAURI_DB_PATH ||
-      `${process.env.HOME || process.env.USERPROFILE || process.env.APPDATA || ""}/.alloomi/data/data.db`,
+      `${process.env.HOME || process.env.USERPROFILE || process.env.APPDATA || ""}/.openloomi/data/data.db`,
   },
 });

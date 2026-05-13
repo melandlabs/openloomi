@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/app/(auth)/auth";
 import { deleteUserFile, getUserStorageUsage } from "@/lib/db/storageService";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { deleteGoogleDriveFile } from "@/lib/files/google-drive";
 
 export async function DELETE(

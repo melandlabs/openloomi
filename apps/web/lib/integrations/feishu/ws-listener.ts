@@ -2,7 +2,7 @@
  * Feishu WebSocket Long Connection Listener (Bot Mode, based on OpenClaw)
  *
  * Unlike Telegram/iMessage "self-message mode": Feishu uses **bot mode**.
- * - User chats with "Feishu app/bot"; Alloomi listens to messages received by the bot and replies as the bot.
+ * - User chats with "Feishu app/bot"; openloomi listens to messages received by the bot and replies as the bot.
  * - One im.message.receive_v1 = one user message sent to the bot; processes only this message, no session history.
  * - Filtering: only processes sender_type=user (user to bot); ignores sender_type=app (bot's own messages to avoid treating its own replies as new messages).
  */
@@ -97,7 +97,7 @@ interface FeishuConnection {
   userId: string;
   account: Awaited<ReturnType<typeof getIntegrationAccountsByUserId>>[number];
   wsClient: Lark.WSClient | null;
-  /** Cloud token for bot to call AI in Tauri mode (Alloomi user's cloud token) */
+  /** Cloud token for bot to call AI in Tauri mode (openloomi user's cloud token) */
   authToken?: string;
   /** Used for fast response within 3 seconds (reaction), etc. */
   appId: string;
@@ -754,7 +754,7 @@ export function stopFeishuConnection(accountId: string): void {
 }
 
 /**
- * Start connections for all Feishu bots under a given Alloomi user (one bot per account, one connection per bot)
+ * Start connections for all Feishu bots under a given openloomi user (one bot per account, one connection per bot)
  * @param authToken Cloud auth token passed from frontend in Tauri mode, used for bot to call AI
  */
 export async function startFeishuListenersForUser(

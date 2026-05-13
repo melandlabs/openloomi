@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
 import { AgentSectionHeader } from "./section-header";

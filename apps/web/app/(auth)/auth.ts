@@ -195,7 +195,7 @@ function createProductionAuthModule() {
           const discordEmail =
             discordProfile?.email ??
             (discordProfile?.id
-              ? `${discordProfile.id}@discord.alloomi`
+              ? `${discordProfile.id}@discord.openloomi`
               : null);
 
           if (!discordEmail) {

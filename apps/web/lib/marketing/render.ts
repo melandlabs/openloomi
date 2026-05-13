@@ -12,10 +12,10 @@ const LOGO_BASE = (
   process.env.MARKETING_ASSET_BASE ??
   siteMetadata.appUrl ??
   siteMetadata.siteUrl ??
-  "https://app.alloomi.ai"
+  "https://app.openloomi.ai"
 ).replace(/\/$/, "");
 
-const ALLOOMI_LOGO_URL = `${LOGO_BASE}/images/logo_web.png`;
+const openloomi_LOGO_URL = `${LOGO_BASE}/images/logo_web.png`;
 const MELAND_FOOTER_URL = `${LOGO_BASE}/images/melandfooter.jpg`;
 
 function defaultGreeting(ctx: TemplateBuildContext) {
@@ -138,14 +138,14 @@ function renderHtml(
     : "";
   const checklist = content.checklist ? renderChecklist(content.checklist) : "";
   const ctas = content.ctas ? renderCtas(ctx, content.ctas) : "";
-  const signatureLine = "The Alloomi Team";
+  const signatureLine = "The openloomi Team";
   const closingLines = (() => {
     if (Array.isArray(content.closing) && content.closing.length > 0) {
       const hasSignature = content.closing.some(
         (line) =>
           typeof line === "string" &&
           line.toLowerCase().includes("meland labs") &&
-          line.toLowerCase().includes("builders of alloomi"),
+          line.toLowerCase().includes("builders of openloomi"),
       );
       return hasSignature
         ? content.closing
@@ -157,7 +157,7 @@ function renderHtml(
   const year = new Date().getFullYear();
   const { supportEmail, supportUrl, feedbackUrl, unsubscribeUrl } = ctx.support;
   const headerTagline =
-    "Alloomi is your conversation avatar, redefining communication through privacy, understanding, memory, and intelligence.";
+    "openloomi is your conversation avatar, redefining communication through privacy, understanding, memory, and intelligence.";
   const stageLabel = template.name || template.stage.replace(/_/g, " ");
 
   return `<!doctype html>
@@ -182,13 +182,13 @@ function renderHtml(
                   <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
                     <tr>
                       <td align="left" style="padding: 0 0 16px;">
-                        <img src="${ALLOOMI_LOGO_URL}" alt="Alloomi logo" width="88" style="display: block; max-width: 88px; height: auto;" />
+                        <img src="${openloomi_LOGO_URL}" alt="openloomi logo" width="88" style="display: block; max-width: 88px; height: auto;" />
                       </td>
                     </tr>
                     <tr>
                       <td align="center">
                         <p style="margin: 0 0 8px; font-weight: 700; font-size: 24px; letter-spacing: -0.01em; color: #ffffff;">
-                          Alloomi is your communication avatar
+                          openloomi is your communication avatar
                         </p>
                         <p style="margin: 0; max-width: 460px; font-size: 15px; line-height: 1.6; color: rgba(255,255,255,0.92);">
                           Simple communication. Stay focused.
@@ -217,12 +217,12 @@ function renderHtml(
                   Need support? Email <a href="mailto:${supportEmail}" style="color: #2a73cc; text-decoration: none; font-weight: 600;">${supportEmail}</a>.
                 </p>
                 <p style="margin: 0 0 10px; font-size: 13px; color: #64748b;">
-                  Share feedback any time: <a href="${feedbackUrl}" style="color: #2a73cc; text-decoration: none; font-weight: 600;">Tell the Alloomi team what you need</a>.
+                  Share feedback any time: <a href="${feedbackUrl}" style="color: #2a73cc; text-decoration: none; font-weight: 600;">Tell the openloomi team what you need</a>.
                 </p>
                 <p style="margin: 0 0 12px; font-size: 13px; color: #64748b;">
                   Prefer fewer emails? <a href="${unsubscribeUrl}" style="color: #2a73cc; text-decoration: none; font-weight: 600;">Unsubscribe</a>.
                 </p>
-                <p style="margin: 0; font-size: 12px; color: #94a3b8;">© ${year} Alloomi · Meland Labs</p>
+                <p style="margin: 0; font-size: 12px; color: #94a3b8;">© ${year} openloomi · Meland Labs</p>
               </td>
             </tr>
           </table>
@@ -267,13 +267,13 @@ function renderText(
         .map((cta) => `${cta.label}: ${ctx.links[cta.href]}`)
         .join("\n")}`
     : "";
-  const signatureLineText = "The Alloomi Team";
+  const signatureLineText = "The openloomi Team";
   const closing = (() => {
     if (Array.isArray(content.closing) && content.closing.length > 0) {
       const hasSignature = content.closing.some(
         (line) =>
           line.toLowerCase().includes("meland labs") &&
-          line.toLowerCase().includes("builders of alloomi"),
+          line.toLowerCase().includes("builders of openloomi"),
       );
       const lines = hasSignature
         ? content.closing

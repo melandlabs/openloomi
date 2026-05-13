@@ -10,12 +10,12 @@ import {
   lazy,
   Suspense,
 } from "react";
-import { ScrollArea } from "@alloomi/ui";
-import { Button, Tabs, TabsList, TabsTrigger } from "@alloomi/ui";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
+import { Button, Tabs, TabsList, TabsTrigger } from "@openloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import { useTranslation } from "react-i18next";
 import { RemixIcon } from "@/components/remix-icon";
-import { useLocalStorage } from "@alloomi/hooks/use-local-storage";
+import { useLocalStorage } from "@openloomi/hooks/use-local-storage";
 import { useSingleInsightRefresh } from "@/hooks/use-single-insight-refresh";
 import { useInsightCache } from "@/hooks/use-insight-cache";
 import { useInsightOptimisticUpdates } from "@/components/insight-optimistic-context";
@@ -24,7 +24,7 @@ import { useChatContext } from "@/components/chat-context";
 import { AgentChatPanel } from "@/components/agent/chat-panel";
 import type { Insight } from "@/lib/db/schema";
 import type { DetailData, TimelineData } from "@/lib/ai/subagents/insights";
-import { useIsMobile } from "@alloomi/hooks/use-is-mobile";
+import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
 import { InsightDetailContext } from "@/components/insight-detail-context";
 import { InsightDetailSourceInfo } from "@/components/insight-detail-source-info";
 import {
@@ -45,7 +45,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 
 const TimelineHistoryDialog = lazy(() =>
   import("@/components/timeline-history-dialog").then((mod) => ({
@@ -753,7 +753,7 @@ function InsightDetailDrawerContent({
   /** Detail inner Tabs: Digest | Sources | Attached | Files */
   const [detailTab, setDetailTab] = useLocalStorage<
     "digest" | "sources" | "attached" | "files"
-  >("alloomi_insight_detail_tab", "digest");
+  >("openloomi_insight_detail_tab", "digest");
 
   // Timeline history dialog state
   const [timelineHistoryDialog, setTimelineHistoryDialog] = useState<{

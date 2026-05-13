@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/app/(auth)/auth";
 import { createRssSubscription } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import {
   DEFAULT_MAX_OPML_FEEDS,
   parseOpmlFeeds,
   type ParsedOpmlFeed,
   type SkippedOpmlFeed,
-} from "@alloomi/rss";
+} from "@openloomi/rss";
 
 const MAX_OPML_FILE_BYTES = 2 * 1024 * 1024; // 2MB
 

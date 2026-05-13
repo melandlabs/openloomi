@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { auth } from "@/app/(auth)/auth";
 import { getIntegrationAccountByPlatform } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { pullNotionPages, type NotionMetadata } from "@/lib/files/notion";
 
 const requestSchema = z.object({

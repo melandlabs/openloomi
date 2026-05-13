@@ -343,8 +343,8 @@ html {
 article div[class*="table"] {
   overflow-x: auto;
 }
-body.mobile-menu-open section[aria-label="Alloomi Affiliate Program Promotion"],
-body.mobile-menu-open [aria-label="Alloomi Affiliate Program Promotion"] {
+body.mobile-menu-open section[aria-label="openloomi Affiliate Program Promotion"],
+body.mobile-menu-open [aria-label="openloomi Affiliate Program Promotion"] {
   display: none !important;
   opacity: 0 !important;
   visibility: hidden !important;

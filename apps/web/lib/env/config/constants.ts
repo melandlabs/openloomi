@@ -1,7 +1,7 @@
 /**
  * Application Constants
  *
- * Centralized configuration constants for Alloomi.
+ * Centralized configuration constants for openloomi.
  * All hardcoded values should be defined here for easy management.
  */
 
@@ -13,10 +13,10 @@ import { join } from "node:path";
 // ============================================================================
 
 /** Application name */
-export const APP_NAME = "alloomi";
+export const APP_NAME = "openloomi";
 
 /** Application data directory name (used in home directory) */
-export const APP_DIR_NAME = ".alloomi";
+export const APP_DIR_NAME = ".openloomi";
 
 /** Claude Code directory name (system config) */
 export const CLAUDE_DIR_NAME = ".claude";
@@ -62,8 +62,8 @@ export const MCP_CONFIG_FILE_NAME = "mcp.json";
 
 /** Config file search paths (relative) */
 export const CONFIG_SEARCH_PATHS = [
-  "./alloomi.config.json",
-  "./config/alloomi.json",
+  "./openloomi.config.json",
+  "./config/openloomi.json",
 ];
 
 // ============================================================================
@@ -119,7 +119,7 @@ export function getHomeDir(): string {
   return homedir();
 }
 
-/** Get Alloomi app data directory */
+/** Get openloomi app data directory */
 export function getAppDir(): string {
   return join(homedir(), APP_DIR_NAME);
 }
@@ -129,8 +129,8 @@ export function getClaudeDir(): string {
   return join(homedir(), CLAUDE_DIR_NAME);
 }
 
-/** Get Alloomi skills directory */
-export function getAlloomiSkillsDir(): string {
+/** Get openloomi skills directory */
+export function getopenloomiSkillsDir(): string {
   return join(getAppDir(), SKILLS_DIR_NAME);
 }
 
@@ -142,13 +142,13 @@ export function getClaudeSkillsDir(): string {
 /** Get all skills directories to search */
 export function getAllSkillsDirs(): { name: string; path: string }[] {
   return [
-    { name: "alloomi", path: getAlloomiSkillsDir() },
+    { name: "openloomi", path: getopenloomiSkillsDir() },
     { name: "claude", path: getClaudeSkillsDir() },
   ];
 }
 
-/** Get Alloomi MCP config path */
-export function getAlloomiMcpConfigPath(): string {
+/** Get openloomi MCP config path */
+export function getopenloomiMcpConfigPath(): string {
   return join(getAppDir(), MCP_CONFIG_FILE_NAME);
 }
 
@@ -160,7 +160,7 @@ export function getClaudeSettingsPath(): string {
 /** Get all MCP config paths to search */
 export function getAllMcpConfigPaths(): { name: string; path: string }[] {
   return [
-    { name: "alloomi", path: getAlloomiMcpConfigPath() },
+    { name: "openloomi", path: getopenloomiMcpConfigPath() },
     { name: "claude", path: getClaudeSettingsPath() },
   ];
 }

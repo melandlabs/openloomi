@@ -3,7 +3,7 @@ import {
   type AttachmentDownloadPayload,
   ingestExternalAttachment,
 } from "@/lib/files/external-ingest";
-import type { Attachment } from "@alloomi/shared";
+import type { Attachment } from "@openloomi/shared";
 import { recordAttachmentIngestFailure } from "@/lib/files/monitoring";
 
 type Logger = Pick<typeof console, "warn" | "error">;

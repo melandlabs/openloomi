@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/app/(auth)/auth";
 import { upsertIntegrationAccount } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
-import { decryptToken } from "@alloomi/security/token-encryption";
+import { AppError } from "@openloomi/shared/errors";
+import { decryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
 import type { IntegrationId } from "@/hooks/use-integrations";
 

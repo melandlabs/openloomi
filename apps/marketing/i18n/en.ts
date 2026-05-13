@@ -20,7 +20,7 @@ export const en = {
     downloadForMacIntel: "Download for macOS (Intel)",
     downloadForLinuxX86_64: "Download for Linux (x86_64)",
     downloadForLinuxARM64: "Download for Linux (ARM64)",
-    downloadAlloomi: "Download OpenLoomi",
+    downloadopenloomi: "Download OpenLoomi",
     macosAppleSilicon: "macOS Apple Silicon",
     macosIntel: "macOS Intel",
     linuxX86_64: "Linux x86_64",

@@ -19,7 +19,7 @@ import {
   type InsightRiskFlag,
   type InsightTaskItem,
 } from "@/lib/db/schema";
-import { extractJsonFromMarkdown } from "@alloomi/ai";
+import { extractJsonFromMarkdown } from "@openloomi/ai";
 import type { GeneratedInsightPayload } from "@/lib/insights/types";
 import {
   getInsightCompactionPlatform,

@@ -4,15 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import { RemixIcon } from "@/components/remix-icon";
-import { ScrollArea } from "@alloomi/ui";
-import { Button, Input } from "@alloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
+import { Button, Input } from "@openloomi/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 import { getFileColor } from "@/components/file-icons";
@@ -21,7 +21,7 @@ import { Spinner } from "@/components/spinner";
 import { FilePreviewPanel } from "@/components/file-preview-panel";
 import { FilePreviewDrawerShell } from "@/components/file-preview-drawer-shell";
 import { FilePreviewDrawerHeader } from "@/components/file-preview-drawer-header";
-import { useIsMobile } from "@alloomi/hooks/use-is-mobile";
+import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
 import { useSidePanel } from "@/components/agent/side-panel-context";
 import { useChatContextOptional } from "@/components/chat-context";
 import { AgentChatPanel } from "@/components/agent/chat-panel";

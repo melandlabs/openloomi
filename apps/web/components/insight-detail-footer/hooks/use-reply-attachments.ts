@@ -3,7 +3,7 @@
 import { useState, useCallback, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { Attachment } from "@alloomi/shared";
+import type { Attachment } from "@openloomi/shared";
 
 /**
  * Attachment management related Hook

@@ -7,16 +7,16 @@ import type { UseChatHelpers } from "@ai-sdk/react";
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { generateUUID } from "@/lib/utils";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import { VirtualizedMessages } from "@/components/messages-virtualized";
 import { MultimodalInput } from "@/components/multimodal-input";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
-import type { Attachment } from "@alloomi/shared";
+import type { Attachment } from "@openloomi/shared";
 import type { SuggestedPrompt } from "@/components/suggested-actions";
 import { useChatContext } from "../chat-context";
 import { ArrowUpIcon, ArrowDownIcon } from "@/components/icons";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { FocusedInsightFloatingBar } from "../focused-insight-floating-bar";
 import { WorkspaceFloatPanel } from "./workspace-float-panel";
 import { useGlobalInsightDrawer } from "@/components/global-insight-drawer";
@@ -28,7 +28,7 @@ interface AgentChatPanelProps {
   initialInput?: string;
   /** Refresh token for replacing the current draft with the latest initial input. */
   prefillToken?: string;
-  /** A message to send immediately after mount (e.g., from onboarding "Chat with Alloomi" card), sent only once */
+  /** A message to send immediately after mount (e.g., from onboarding "Chat with openloomi" card), sent only once */
   initialMessageToSend?: string;
 }
 
@@ -146,7 +146,7 @@ export function AgentChatPanel({
   const loadChatInput = useCallback(
     (targetChatId: string, initial?: string) => {
       if (typeof window === "undefined") return initial ?? "";
-      const key = `alloomi:chat-input-${targetChatId}`;
+      const key = `openloomi:chat-input-${targetChatId}`;
       chatInputKeyRef.current = key;
       const saved = localStorage.getItem(key);
       return saved ?? initial ?? "";
@@ -156,7 +156,7 @@ export function AgentChatPanel({
 
   // Update chatInputKeyRef when chatId changes (for new chats that don't trigger switch)
   useEffect(() => {
-    const key = `alloomi:chat-input-${chatId}`;
+    const key = `openloomi:chat-input-${chatId}`;
     chatInputKeyRef.current = key;
   }, [chatId]);
 
@@ -169,7 +169,7 @@ export function AgentChatPanel({
     // If this is a chat switch (not initial load)
     if (prevChatId && prevChatId !== chatId) {
       // Save previous chat's input using ref to avoid dependency issues
-      const prevKey = `alloomi:chat-input-${prevChatId}`;
+      const prevKey = `openloomi:chat-input-${prevChatId}`;
       const currentInput = inputRef.current;
       if (currentInput) {
         localStorage.setItem(prevKey, currentInput);
@@ -401,7 +401,7 @@ export function AgentChatPanel({
     [sendMessage, isAgentRunning],
   );
 
-  /** Auto-send initialMessageToSend after mount (e.g., from onboarding "Chat with Alloomi" click): switches to new chat first, then sends, runs only once; if from URL send param, clears after sending */
+  /** Auto-send initialMessageToSend after mount (e.g., from onboarding "Chat with openloomi" click): switches to new chat first, then sends, runs only once; if from URL send param, clears after sending */
   const initialMessageSentRef = useRef(false);
   useEffect(() => {
     if (

@@ -1,11 +1,11 @@
 import type { TFunction } from "i18next";
 
-// Re-export from @alloomi/shared for backward compatibility
+// Re-export from @openloomi/shared for backward compatibility
 export {
   stripMalformedToolCalls,
   containsMalformedToolCall,
   extractMalformedToolCalls,
-} from "@alloomi/shared";
+} from "@openloomi/shared";
 
 /**
  * Get the display name for a tool, translating MCP tool names

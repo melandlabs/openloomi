@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Button, Textarea } from "@alloomi/ui";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@alloomi/ui";
+import { Button, Textarea } from "@openloomi/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
 import { toast } from "@/components/toast";
 import { useTranslation } from "react-i18next";
 import { RemixIcon } from "@/components/remix-icon";

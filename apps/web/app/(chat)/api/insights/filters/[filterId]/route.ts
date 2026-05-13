@@ -4,7 +4,7 @@ import {
   removeInsightFilterForUser,
   updateInsightFilterForUser,
 } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import {
   insightFilterUpdateSchema,
   sanitizeColorToken,

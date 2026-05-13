@@ -5,15 +5,15 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import type { ReadonlyURLSearchParams } from "next/navigation";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button, Input } from "@alloomi/ui";
-import { ScrollArea } from "@alloomi/ui";
+import { Button, Input } from "@openloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { useTodoData } from "@/components/agent/use-todo-data";
 import { TodoTaskList } from "@/components/agent/todo-task-list";
 import type { AggregatedTask } from "@/components/agent/todo-types";

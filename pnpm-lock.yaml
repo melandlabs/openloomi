@@ -155,43 +155,43 @@ importers:
       '@ai-sdk/react':
         specifier: ^2.0.0
         version: 2.0.181(react@19.2.5)(zod@4.3.6)
-      '@alloomi/ai':
+      '@openloomi/ai':
         specifier: workspace:*
         version: link:../../packages/ai
-      '@alloomi/api':
+      '@openloomi/api':
         specifier: workspace:*
         version: link:../../packages/api
-      '@alloomi/audit':
+      '@openloomi/audit':
         specifier: workspace:*
         version: link:../../packages/audit
-      '@alloomi/hooks':
+      '@openloomi/hooks':
         specifier: workspace:*
         version: link:../../packages/hooks
-      '@alloomi/i18n':
+      '@openloomi/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
-      '@alloomi/indexeddb':
+      '@openloomi/indexeddb':
         specifier: workspace:*
         version: link:../../packages/indexeddb
-      '@alloomi/insights':
+      '@openloomi/insights':
         specifier: workspace:*
         version: link:../../packages/insights
-      '@alloomi/integrations':
+      '@openloomi/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
-      '@alloomi/mcp':
+      '@openloomi/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
-      '@alloomi/rag':
+      '@openloomi/rag':
         specifier: workspace:*
         version: link:../../packages/rag
-      '@alloomi/rss':
+      '@openloomi/rss':
         specifier: workspace:*
         version: link:../../packages/rss
-      '@alloomi/search':
+      '@openloomi/search':
         specifier: workspace:*
         version: link:../../packages/search
-      '@alloomi/shared':
+      '@openloomi/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@anthropic-ai/claude-agent-sdk':
@@ -885,7 +885,7 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^1.0.0
         version: 1.0.36(zod@4.3.6)
-      '@alloomi/shared':
+      '@openloomi/shared':
         specifier: workspace:*
         version: link:../shared
       '@vercel/sandbox':
@@ -901,7 +901,7 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
 
@@ -910,7 +910,7 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^1.0.0
         version: 1.0.36(zod@4.3.6)
-      '@alloomi/shared':
+      '@openloomi/shared':
         specifier: workspace:*
         version: link:../shared
       '@vercel/sandbox':
@@ -929,7 +929,7 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -938,7 +938,7 @@ importers:
 
   packages/api:
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -962,7 +962,7 @@ importers:
         specifier: '>=2.0.0'
         version: 2.4.1(react@19.2.5)
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -971,7 +971,7 @@ importers:
 
   packages/i18n:
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -984,7 +984,7 @@ importers:
         specifier: '>=18.0.0'
         version: 19.2.5
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -1000,7 +1000,7 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -1015,7 +1015,7 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -1024,7 +1024,7 @@ importers:
 
   packages/rag:
     dependencies:
-      '@alloomi/agent':
+      '@openloomi/agent':
         specifier: workspace:*
         version: link:../agent
       '@langchain/community':
@@ -1061,7 +1061,7 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -1080,7 +1080,7 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -1089,7 +1089,7 @@ importers:
 
   packages/search:
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -1102,7 +1102,7 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -1127,7 +1127,7 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:
@@ -1140,7 +1140,7 @@ importers:
         specifier: ^0.27.1
         version: 0.27.3
     devDependencies:
-      '@alloomi/config':
+      '@openloomi/config':
         specifier: workspace:*
         version: link:../config
       typescript:

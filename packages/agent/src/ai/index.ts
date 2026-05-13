@@ -1,5 +1,5 @@
 /**
- * @alloomi/ai - AI Layer: model pricing, token estimation, conversation windows,
+ * @openloomi/ai - AI Layer: model pricing, token estimation, conversation windows,
  * compaction, model providers, and intelligent routing.
  */
 

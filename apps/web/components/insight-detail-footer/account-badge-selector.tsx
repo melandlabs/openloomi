@@ -9,7 +9,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { useIntegrations, type IntegrationId } from "@/hooks/use-integrations";
 import IntegrationIcon from "@/components/integration-icon";
 import { cn } from "@/lib/utils";

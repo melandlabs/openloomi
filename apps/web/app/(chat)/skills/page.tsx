@@ -1,6 +1,6 @@
 "use client";
 
-import { PageSectionHeader } from "@alloomi/ui";
+import { PageSectionHeader } from "@openloomi/ui";
 import {
   SkillsPanel,
   AddSkillDropdown,
@@ -38,7 +38,7 @@ export default function SkillsPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [directories, setDirectories] = useState<{
     agent: string;
-    alloomi: string;
+    openloomi: string;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [openingFolder, setOpeningFolder] = useState(false);
@@ -146,7 +146,7 @@ export default function SkillsPage() {
         <p className="text-muted-foreground">
           {t(
             "agent.panels.workspacePanel.skillsTauriOnly",
-            "Skills are only available in the Alloomi desktop app.",
+            "Skills are only available in the openloomi desktop app.",
           )}
         </p>
       </div>
@@ -160,7 +160,7 @@ export default function SkillsPage() {
           onOpenLocalFolder={handleOpenLocalFolder}
           onCreateSkill={handleCreateSkill}
           openingFolder={openingFolder}
-          disabled={!directories?.alloomi || isLoading}
+          disabled={!directories?.openloomi || isLoading}
         />
       </PageSectionHeader>
       <SkillsPanel

@@ -3,10 +3,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-/** Skill metadata file path (only under ~/.alloomi) */
+/** Skill metadata file path (only under ~/.openloomi) */
 function getSkillMetadataPath(): string {
   const homeDir = homedir();
-  return join(homeDir, ".alloomi", "skill-metadata.json");
+  return join(homeDir, ".openloomi", "skill-metadata.json");
 }
 
 /** Read skill metadata: Record<skillId, { avatar?: string }> */
@@ -26,9 +26,9 @@ function readSkillMetadata(): Record<string, { avatar?: string }> {
 // Get all skills source directories (in priority order)
 function getAllSkillsDirs(): string[] {
   const homeDir = homedir();
-  // Priority: alloomi > claude > agents (first wins in dedup)
+  // Priority: openloomi > claude > agents (first wins in dedup)
   return [
-    join(homeDir, ".alloomi", "skills"),
+    join(homeDir, ".openloomi", "skills"),
     join(homeDir, ".claude", "skills"),
     join(homeDir, ".agents", "skills"),
   ];
@@ -202,7 +202,7 @@ export async function GET() {
       success: true,
       skills: skillsWithAvatar,
       directories: {
-        alloomi: sourceDirs[0],
+        openloomi: sourceDirs[0],
         claude: sourceDirs[1],
         agents: sourceDirs[2],
       },

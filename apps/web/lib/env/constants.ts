@@ -4,7 +4,7 @@
  * IMPORTANT: This file must not import any node: module.
  * For server-only path constants (TAURI_DATA_DIR, etc.), use @/lib/utils/path
  */
-import { DEV_PORT, PROD_PORT } from "@alloomi/shared";
+import { DEV_PORT, PROD_PORT } from "@openloomi/shared";
 
 export type DeploymentMode = "tauri" | "server";
 export type DatabaseType = "postgres" | "sqlite";

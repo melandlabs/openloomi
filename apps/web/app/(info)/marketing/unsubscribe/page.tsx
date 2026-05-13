@@ -38,7 +38,7 @@ export default async function MarketingUnsubscribePage({
           href="/"
           className="rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
         >
-          Head back to Alloomi
+          Head back to openloomi
         </Link>
       </main>
     );
@@ -67,7 +67,7 @@ export default async function MarketingUnsubscribePage({
           href="/"
           className="rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
         >
-          Return to Alloomi
+          Return to openloomi
         </Link>
       </main>
     );
@@ -86,14 +86,14 @@ export default async function MarketingUnsubscribePage({
       </h1>
       <p className="text-slate-600">
         {alreadyOptedOut
-          ? "You have already opted out of Alloomi lifecycle tips. No further emails will be sent."
-          : "You are now unsubscribed from Alloomi lifecycle tips and best-practice emails. Operational and billing updates may still be sent when required."}
+          ? "You have already opted out of openloomi lifecycle tips. No further emails will be sent."
+          : "You are now unsubscribed from openloomi lifecycle tips and best-practice emails. Operational and billing updates may still be sent when required."}
       </p>
       <div className="space-y-2 text-sm text-slate-500">
         <p>
           Changed your mind?{" "}
           <a
-            href={`mailto:${siteMetadata.contactEmail}?subject=Resubscribe%20me%20to%20Alloomi%20updates`}
+            href={`mailto:${siteMetadata.contactEmail}?subject=Resubscribe%20me%20to%20openloomi%20updates`}
             className="font-medium text-indigo-600 underline"
           >
             Email our team
@@ -115,7 +115,7 @@ export default async function MarketingUnsubscribePage({
         href="/"
         className="rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
       >
-        Return to Alloomi
+        Return to openloomi
       </Link>
     </main>
   );

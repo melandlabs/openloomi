@@ -1,11 +1,11 @@
-# @alloomi/insights
+# @openloomi/insights
 
 Pure algorithm and filter logic for insight/event management.
 
 ## Installation
 
 ```sh
-pnpm add @alloomi/insights
+pnpm add @openloomi/insights
 ```
 
 ## Exports

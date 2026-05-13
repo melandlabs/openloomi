@@ -1,5 +1,5 @@
 import { describe, test, expect, it } from "vitest";
-import { buildRssItemInserts, type RssSubscription } from "@alloomi/rss";
+import { buildRssItemInserts, type RssSubscription } from "@openloomi/rss";
 
 const baseSubscription: RssSubscription = {
   id: "sub-1",

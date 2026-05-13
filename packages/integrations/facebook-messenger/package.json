@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/integrations-facebook-messenger",
+  "name": "@openloomi/integrations-facebook-messenger",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -7,10 +7,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@alloomi/integrations-channels": "workspace:*"
+    "@openloomi/integrations-channels": "workspace:*"
   },
   "devDependencies": {
-    "@alloomi/config": "workspace:*",
+    "@openloomi/config": "workspace:*",
     "typescript": "^5.6.3"
   },
   "scripts": {

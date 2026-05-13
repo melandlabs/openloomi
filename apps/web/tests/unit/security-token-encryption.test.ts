@@ -55,7 +55,7 @@ describe("security token encryption", () => {
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
       const { encryptToken, decryptToken } =
-        await import("@alloomi/security/token-encryption");
+        await import("@openloomi/security/token-encryption");
 
       const original = "secret-token";
       const encrypted = encryptToken(original);
@@ -75,7 +75,7 @@ describe("security token encryption", () => {
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
       const { encryptTokenPair } =
-        await import("@alloomi/security/token-encryption");
+        await import("@openloomi/security/token-encryption");
 
       const [encryptedAccess, encryptedRefresh] = encryptTokenPair(
         "access",
@@ -95,7 +95,7 @@ describe("security token encryption", () => {
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
       const { encryptTokenPair } =
-        await import("@alloomi/security/token-encryption");
+        await import("@openloomi/security/token-encryption");
 
       const [encryptedAccess, encryptedRefresh] =
         encryptTokenPair("access-only");
@@ -112,7 +112,7 @@ describe("security token encryption", () => {
       process.env.ENCRYPTION_KEY = undefined;
 
       const { encryptToken } =
-        await import("@alloomi/security/token-encryption");
+        await import("@openloomi/security/token-encryption");
 
       expect(() => encryptToken("token")).toThrow("No encryption key");
     });
@@ -123,7 +123,7 @@ describe("security token encryption", () => {
       process.env.ENCRYPTION_KEY = undefined;
 
       const { decryptToken } =
-        await import("@alloomi/security/token-encryption");
+        await import("@openloomi/security/token-encryption");
 
       expect(() => decryptToken("encrypted-token")).toThrow(
         "No encryption key",
@@ -138,7 +138,7 @@ describe("security token encryption", () => {
       process.env.ENCRYPTION_KEY = "my-password";
 
       const { encryptToken } =
-        await import("@alloomi/security/token-encryption");
+        await import("@openloomi/security/token-encryption");
 
       // Should not throw - should derive key using PBKDF2
       expect(() => encryptToken("token")).not.toThrow();

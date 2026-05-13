@@ -8,7 +8,7 @@ interface TwoPaneSidebarLayoutProps {
   sidebar?: ReactNode;
   /** Whether to show the right sidebar */
   isSidebarOpen: boolean;
-  /** Breakpoint at which sidebar displays side-by-side with main area, defaults to lg (aligned with Alloomi Soul) */
+  /** Breakpoint at which sidebar displays side-by-side with main area, defaults to lg (aligned with openloomi Soul) */
   breakpoint?: "md" | "lg";
   /** Extra class name added to the outermost container */
   className?: string;

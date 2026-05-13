@@ -1,7 +1,7 @@
 import type React from "react";
 import { useState, useEffect } from "react";
-import { Button, Textarea } from "@alloomi/ui";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@alloomi/ui";
+import { Button, Textarea } from "@openloomi/ui";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import Image from "next/image";
 import { useTranslation } from "react-i18next";
@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { cn } from "@/lib/utils";
 import { toast } from "./toast";
 import { isTauri, openUrl } from "@/lib/tauri";
@@ -66,9 +66,9 @@ export default function ContactUs({
 
   const handleEmailClick = () => {
     if (isTauriEnv) {
-      openUrl(`mailto:${email}?subject=Alloomi Suggestions`);
+      openUrl(`mailto:${email}?subject=openloomi Suggestions`);
     } else {
-      openUrl(`mailto:${email}?subject=Alloomi Suggestions`);
+      openUrl(`mailto:${email}?subject=openloomi Suggestions`);
     }
     setShowEmailOptions(false);
   };

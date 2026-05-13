@@ -28,7 +28,7 @@ function loadRemarkGfm(): Promise<any> {
     .then((mod) => {
       const original = mod.default;
       if (typeof original !== "function") {
-        console.warn("[Alloomi] remark-gfm is disabled");
+        console.warn("[openloomi] remark-gfm is disabled");
         cachedPlugin = null;
         return null;
       }
@@ -68,14 +68,14 @@ function loadRemarkGfm(): Promise<any> {
               return original.call(safeThis, options);
             } catch (_) {
               console.warn(
-                "[Alloomi] remark-gfm plugin error, GFM features disabled:",
+                "[openloomi] remark-gfm plugin error, GFM features disabled:",
                 err,
               );
               return undefined;
             }
           }
           console.warn(
-            "[Alloomi] remark-gfm plugin error, GFM features disabled:",
+            "[openloomi] remark-gfm plugin error, GFM features disabled:",
             err,
           );
           return undefined;
@@ -86,7 +86,7 @@ function loadRemarkGfm(): Promise<any> {
     })
     .catch((err) => {
       console.warn(
-        "[Alloomi] remark-gfm load failed (browser may not support regex lookbehind), GFM features disabled:",
+        "[openloomi] remark-gfm load failed (browser may not support regex lookbehind), GFM features disabled:",
         err,
       );
       cachedPlugin = null;

@@ -3,9 +3,9 @@
 import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../i18n";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@alloomi/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Badge, Button, Switch } from "@alloomi/ui";
+import { Badge, Button, Switch } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import {
   useInsightTabs,

@@ -1,4 +1,4 @@
-import type { ExtractedMessageInfo } from "@alloomi/integrations/channels/sources/types";
+import type { ExtractedMessageInfo } from "@openloomi/integrations/channels/sources/types";
 
 /**
  * Normalize messages input to array

@@ -13,7 +13,7 @@
 import type {
   CredentialStore,
   InboundMessageHandler,
-} from "@alloomi/integrations/core";
+} from "@openloomi/integrations/core";
 import {
   weixinGetUpdates,
   weixinGetConfig,
@@ -24,11 +24,11 @@ import {
   MessageType as MSG_TYPE,
   MessageItemType,
   TypingStatus,
-} from "@alloomi/integrations/weixin/ilink-client";
+} from "@openloomi/integrations/weixin/ilink-client";
 import type {
   WeixinIlinkCredentials,
   WeixinMessage,
-} from "@alloomi/integrations/weixin/ilink-client";
+} from "@openloomi/integrations/weixin/ilink-client";
 
 const DEBUG = process.env.DEBUG_WEIXIN === "true";
 const DEDUP_TTL_MS = 5 * 60 * 1000;

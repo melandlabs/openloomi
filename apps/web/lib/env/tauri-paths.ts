@@ -2,8 +2,8 @@
  * Tauri path utilities module
  *
  * Consistent with Rust side get_data_dir():
- * - Unix: ~/.alloomi/data
- * - Windows: %USERPROFILE%\.alloomi\data or %APPDATA%\Alloomi\data
+ * - Unix: ~/.openloomi/data
+ * - Windows: %USERPROFILE%\.openloomi\data or %APPDATA%\openloomi\data
  *
  * Note: This module is for server-side only
  */
@@ -18,10 +18,10 @@ export function getTauriDataDir(): string {
   // For development and production, use difference data dir.
   if (process.env.NODE_ENV === "development") {
     return process.platform === "win32"
-      ? `${process.env.APPDATA}/alloomi`
+      ? `${process.env.APPDATA}/openloomi`
       : process.platform === "darwin"
-        ? `${process.env.HOME}/Library/Application Support/alloomi`
-        : `${process.env.HOME}/.config/alloomi`;
+        ? `${process.env.HOME}/Library/Application Support/openloomi`
+        : `${process.env.HOME}/.config/openloomi`;
   }
 
   const { homedir } = require("node:os");
@@ -32,13 +32,13 @@ export function getTauriDataDir(): string {
     // Windows: Prefer USERPROFILE, then APPDATA
     const userprofile = process.env.USERPROFILE;
     if (userprofile) {
-      return join(userprofile, ".alloomi", "data");
+      return join(userprofile, ".openloomi", "data");
     }
-    return join(process.env.APPDATA || home, "Alloomi", "data");
+    return join(process.env.APPDATA || home, "openloomi", "data");
   }
 
-  // Unix (Linux/macOS): ~/.alloomi/data
-  return join(home, ".alloomi", "data");
+  // Unix (Linux/macOS): ~/.openloomi/data
+  return join(home, ".openloomi", "data");
 }
 
 /**

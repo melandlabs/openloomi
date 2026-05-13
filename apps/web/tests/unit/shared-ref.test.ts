@@ -11,7 +11,7 @@ import {
   getRefMarkerRangeBeforeCursor,
   buildRefMarker,
   extractRefsFromContent,
-} from "@alloomi/shared/ref";
+} from "@openloomi/shared/ref";
 
 describe("shared-ref", () => {
   describe("parseContentWithRefs", () => {

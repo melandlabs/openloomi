@@ -1,18 +1,18 @@
-import { MessagePlatformAdapter } from "@alloomi/integrations/channels";
+import { MessagePlatformAdapter } from "@openloomi/integrations/channels";
 import type {
   Messages,
   Message,
   At,
   Image,
-} from "@alloomi/integrations/channels";
+} from "@openloomi/integrations/channels";
 import type {
   MessageEvent,
   MessageTarget,
-} from "@alloomi/integrations/channels";
+} from "@openloomi/integrations/channels";
 import type {
   DialogInfo,
   ExtractedMessageInfo,
-} from "@alloomi/integrations/channels/sources/types";
+} from "@openloomi/integrations/channels/sources/types";
 
 type MessengerParticipant = { id: string; name?: string };
 

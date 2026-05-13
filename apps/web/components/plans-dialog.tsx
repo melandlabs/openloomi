@@ -10,15 +10,15 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@alloomi/ui";
-import { Button } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Button } from "@openloomi/ui";
 import {
   Card,
   CardContent,
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
 import { getStoredAuthToken } from "@/lib/auth/remote-client";

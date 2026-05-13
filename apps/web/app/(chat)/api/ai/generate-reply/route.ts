@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { extractCloudAuthToken } from "@/lib/ai/request-context";
 import { jsonrepair } from "jsonrepair";
 

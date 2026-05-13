@@ -1,5 +1,5 @@
 /**
- * @alloomi/agent - Agent SDK Abstraction Layer
+ * @openloomi/agent - Agent SDK Abstraction Layer
  *
  * Core types, base class, plugin system, and registry for agent providers.
  */

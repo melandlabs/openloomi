@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useSWR from "swr";
 import { cn, fetcher } from "@/lib/utils";
-import { PageSectionHeader } from "@alloomi/ui";
-import { Badge, Button, Input } from "@alloomi/ui";
-import { ScrollArea } from "@alloomi/ui";
+import { PageSectionHeader } from "@openloomi/ui";
+import { Badge, Button, Input } from "@openloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 
 interface AuditEntry {

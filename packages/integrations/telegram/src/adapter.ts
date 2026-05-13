@@ -8,18 +8,18 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
-import { MessagePlatformAdapter } from "@alloomi/integrations/channels";
+import { MessagePlatformAdapter } from "@openloomi/integrations/channels";
 import type {
   Messages,
   At,
   Image,
   Message,
-} from "@alloomi/integrations/channels";
-import type { Attachment } from "@alloomi/shared";
+} from "@openloomi/integrations/channels";
+import type { Attachment } from "@openloomi/shared";
 import type {
   MessageEvent,
   MessageTarget,
-} from "@alloomi/integrations/channels";
+} from "@openloomi/integrations/channels";
 import type { Entity } from "telegram/define";
 import bigInt, { type BigInteger } from "big-integer";
 import { markdownToTelegramHtml } from "./markdown";
@@ -32,13 +32,13 @@ import {
   timeBeforeHours,
   type DialogInfo,
   type ExtractedMessageInfo,
-} from "@alloomi/integrations/channels/sources/types";
-import type { FileIngester, ClientRegistry } from "@alloomi/integrations/core";
+} from "@openloomi/integrations/channels/sources/types";
+import type { FileIngester, ClientRegistry } from "@openloomi/integrations/core";
 import type {
   ContactMeta,
   TelegramContactMeta,
-} from "@alloomi/integrations/contacts";
-import { isTelegramContactMeta } from "@alloomi/integrations/contacts";
+} from "@openloomi/integrations/contacts";
+import { isTelegramContactMeta } from "@openloomi/integrations/contacts";
 
 const DEBUG = process.env.DEBUG_TELEGRAM === "true";
 
@@ -1078,7 +1078,7 @@ export class TelegramAdapter extends MessagePlatformAdapter {
         continue;
       }
 
-      const text = alloomiMessageToTgText(message);
+      const text = openloomiMessageToTgText(message);
       if (text.trim().length > 0) {
         textParts.push(text);
       }
@@ -1505,14 +1505,14 @@ export class TelegramAdapter extends MessagePlatformAdapter {
   }
 }
 
-export { getTgUserNameString } from "@alloomi/integrations/channels/sources/types";
+export { getTgUserNameString } from "@openloomi/integrations/channels/sources/types";
 export type {
   DialogInfo,
   TgUserInfo,
   ExtractedMessageInfo,
-} from "@alloomi/integrations/channels/sources/types";
+} from "@openloomi/integrations/channels/sources/types";
 
-export function alloomiMessageToTgText(message: Message): string {
+export function openloomiMessageToTgText(message: Message): string {
   if (typeof message === "string") {
     return message;
   }
@@ -1524,13 +1524,13 @@ export function alloomiMessageToTgText(message: Message): string {
   }
   if ("nodes" in message) {
     return message.nodes
-      .map((node) => alloomiMessageToTgText(node as Message))
+      .map((node) => openloomiMessageToTgText(node as Message))
       .join("");
   }
   return "";
 }
 
-export function tgMessageToAlloomiMessage(message: Api.Message): Messages {
+export function tgMessageToopenloomiMessage(message: Api.Message): Messages {
   const messages: Messages = [];
 
   if (!message.message) {

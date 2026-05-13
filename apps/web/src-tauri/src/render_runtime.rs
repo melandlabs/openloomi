@@ -28,7 +28,7 @@ struct RenderEnginePlatformSpec {
 fn get_render_engine_root_dir() -> Option<PathBuf> {
     Some(
         get_home_dir()?
-            .join(".alloomi")
+            .join(".openloomi")
             .join("render-components")
             .join("render-engine"),
     )

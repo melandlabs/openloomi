@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import { useSWRConfig } from "swr";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import {
   Dialog,
   DialogContent,
@@ -14,14 +14,14 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import type { IntegrationId } from "@/hooks/use-integrations";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import {
   PlatformIntegrations,
   useTelegramTokenForm,

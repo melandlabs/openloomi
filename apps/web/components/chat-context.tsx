@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 
 import type { Insight } from "@/lib/db/schema";
 import {
@@ -31,7 +31,7 @@ import { useTranslation } from "react-i18next";
 import { saveMessagesToDatabase } from "@/lib/ai/chat/save-messages";
 import { getAuthToken } from "@/lib/auth/token-manager";
 import { uploadImageTUS } from "@/lib/files/tus-upload";
-import type { ImageAttachment } from "@alloomi/ai/agent/types";
+import type { ImageAttachment } from "@openloomi/ai/agent/types";
 import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 import {
   artifactPathBasename,
@@ -854,7 +854,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           conversation,
           taskId: stableActiveChatId ?? undefined, // Use stableActiveChatId as taskId so Workspace can correctly display files
           workDir: stableActiveChatId
-            ? `~/.alloomi/sessions/${stableActiveChatId}`
+            ? `~/.openloomi/sessions/${stableActiveChatId}`
             : undefined, // Pass complete workDir path to ensure files are created in the correct directory
           images,
           fileAttachments:
@@ -975,7 +975,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                       queryRawMessages,
                       queryRawMessagesGrouped,
                       formatRawMessagesForAI,
-                    } = await import("@alloomi/indexeddb/client");
+                    } = await import("@openloomi/indexeddb/client");
 
                     const params = outputObj.params;
                     let messages: any[];

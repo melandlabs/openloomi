@@ -1,6 +1,6 @@
 import { auth } from "@/app/(auth)/auth";
 import { updateUserCategory, deleteUserCategory } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { dbCategoryToApiCategory } from "@/lib/types/categories";

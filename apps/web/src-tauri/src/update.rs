@@ -1,4 +1,4 @@
-// Copyright 2026 Alloomi Team. All rights reserved.
+// Copyright 2026 openloomi Team. All rights reserved.
 //
 // Use of this source code is governed by a license that can be
 // found in the LICENSE file in the root of this source tree.
@@ -91,24 +91,24 @@ fn get_platform_download_filename(version: &str) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
         return if cfg!(target_arch = "aarch64") {
-            Some(format!("Alloomi_{}_macOS_aarch64.dmg", v))
+            Some(format!("openloomi_{}_macOS_aarch64.dmg", v))
         } else {
-            Some(format!("Alloomi_{}_macOS_x64.dmg", v))
+            Some(format!("openloomi_{}_macOS_x64.dmg", v))
         };
     }
 
     #[cfg(target_os = "linux")]
     {
         return if cfg!(target_arch = "aarch64") {
-            Some(format!("Alloomi_{}_linux_arm64.deb", v))
+            Some(format!("openloomi_{}_linux_arm64.deb", v))
         } else {
-            Some(format!("Alloomi_{}_linux_amd64.deb", v))
+            Some(format!("openloomi_{}_linux_amd64.deb", v))
         };
     }
 
     #[cfg(target_os = "windows")]
     {
-        return Some(format!("Alloomi_{}_windows_x64-setup.exe", v));
+        return Some(format!("openloomi_{}_windows_x64-setup.exe", v));
     }
 
     #[allow(unreachable_code)]
@@ -123,7 +123,7 @@ fn auto_install_platform(download_path: &std::path::Path) -> Result<(), String> 
     use std::fs;
     use std::process::Command;
 
-    let temp_mount = std::env::temp_dir().join("alloomi_update_mount");
+    let temp_mount = std::env::temp_dir().join("openloomi_update_mount");
     let mount_str = temp_mount.to_string_lossy().to_string();
     let dmg_str = download_path.to_string_lossy().to_string();
 
@@ -263,7 +263,7 @@ fn get_app_relaunch_path() -> Option<String> {
 
     #[cfg(target_os = "macos")]
     {
-        // exe path: .../Alloomi.app/Contents/MacOS/Alloomi
+        // exe path: .../openloomi.app/Contents/MacOS/openloomi
         // Need to go up 3 levels to reach .app bundle itself, so open command can correctly launch the app
         return exe
             .parent()
@@ -291,7 +291,7 @@ pub async fn do_check_for_update() -> Result<UpdateCheckResult, String> {
     let current_version = env!("CARGO_PKG_VERSION");
 
     let client = reqwest::Client::builder()
-        .user_agent("Alloomi-App")
+        .user_agent("openloomi-App")
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
@@ -430,7 +430,7 @@ pub async fn start_update_download(download_url: String, file_size: u64) -> Resu
     );
 
     let client = reqwest::Client::builder()
-        .user_agent("Alloomi-App")
+        .user_agent("openloomi-App")
         .timeout(Duration::from_secs(120))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
@@ -718,7 +718,7 @@ pub async fn download_and_install_update(
     );
 
     let client = reqwest::Client::builder()
-        .user_agent("Alloomi-App")
+        .user_agent("openloomi-App")
         .timeout(Duration::from_secs(120))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;

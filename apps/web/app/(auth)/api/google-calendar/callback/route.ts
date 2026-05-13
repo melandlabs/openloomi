@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/app/(auth)/auth";
-import { decryptToken } from "@alloomi/security/token-encryption";
+import { decryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
 import {
   getIntegrationAccountByPlatform,
@@ -12,8 +12,8 @@ import {
   createBot,
   updateBot,
 } from "@/lib/db/queries";
-import type { GoogleCalendarStoredCredentials } from "@alloomi/integrations/calendar";
-import { AppError } from "@alloomi/shared/errors";
+import type { GoogleCalendarStoredCredentials } from "@openloomi/integrations/calendar";
+import { AppError } from "@openloomi/shared/errors";
 
 type CalendarStatePayload = {
   userId: string;

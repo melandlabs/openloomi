@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/insights",
+  "name": "@openloomi/insights",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "react": ">=18.0.0"
   },
   "devDependencies": {
-    "@alloomi/config": "workspace:*",
+    "@openloomi/config": "workspace:*",
     "typescript": "^5.6.3"
   },
   "scripts": {

@@ -112,17 +112,17 @@ const getSessionFilePath = async (): Promise<string> => {
   // Client Tauri environment: use Tauri data directory
   if (isTauriClientEnv()) {
     const appDataDir = getDataDirectory();
-    const sessionPath = `${appDataDir}/alloomi_session.json`;
+    const sessionPath = `${appDataDir}/openloomi_session.json`;
     return sessionPath;
   }
 
   // Server Node environment: use system temp directory + app-specific directory (avoid permission issues)
   if (isServerEnv()) {
     const homeDir = os.homedir();
-    const appDataDir = path.join(homeDir, ".alloomi");
+    const appDataDir = path.join(homeDir, ".openloomi");
 
     await fs.mkdir(appDataDir, { recursive: true });
-    const sessionPath = path.join(appDataDir, "alloomi_session.json");
+    const sessionPath = path.join(appDataDir, "openloomi_session.json");
     return sessionPath;
   }
 

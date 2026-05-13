@@ -12,7 +12,7 @@ import {
   Input,
   Label,
   Separator,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { toast } from "@/components/toast";
 import { fetchWithAuth } from "@/lib/utils";
 import { useUserProfile } from "@/hooks/use-user-profile";
@@ -549,7 +549,7 @@ export function UserProfileSettings() {
 
         <div className="w-full mt-0">
           <p className="mb-6 px-0 pb-0 text-base font-semibold text-foreground-secondary">
-            {t("settings.alloomiSettings")}
+            {t("settings.openloomiSettings")}
           </p>
           <PersonalizationSwrBoundary>
             <PersonalizationBasicSettings open />

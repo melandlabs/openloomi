@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { RemixIcon } from "@/components/remix-icon";
 import { useTranslation } from "react-i18next";
 import "../../i18n";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 
 /**
  * Tips data interface
@@ -17,7 +17,7 @@ interface Tip {
 
 /**
  * Insight Tips card component
- * Shows random tips in empty state, helping users understand Alloomi's features and value
+ * Shows random tips in empty state, helping users understand openloomi's features and value
  */
 export function InsightTipsCard() {
   const { t } = useTranslation();
@@ -35,7 +35,7 @@ export function InsightTipsCard() {
         ),
         content: t(
           "insight.tabs.tips.platformIntegration.content",
-          "Most people switch between multiple platforms throughout the day\nAlloomi brings them together in one manageable view",
+          "Most people switch between multiple platforms throughout the day\nopenloomi brings them together in one manageable view",
         ),
       },
       {
@@ -43,7 +43,7 @@ export function InsightTipsCard() {
         title: t("insight.tabs.tips.privacy.title", "About Privacy"),
         content: t(
           "insight.tabs.tips.privacy.content",
-          "Alloomi only keeps structured insights\nOriginal messages are not stored long-term after processing",
+          "openloomi only keeps structured insights\nOriginal messages are not stored long-term after processing",
         ),
       },
       {
@@ -83,7 +83,7 @@ export function InsightTipsCard() {
         title: t("insight.tabs.tips.people.title", "People"),
         content: t(
           "insight.tabs.tips.people.content",
-          "Alloomi organizes related conversations and commitments under each person\nImportant relationships don't rely on memory",
+          "openloomi organizes related conversations and commitments under each person\nImportant relationships don't rely on memory",
         ),
       },
       {
@@ -94,7 +94,7 @@ export function InsightTipsCard() {
         ),
         content: t(
           "insight.tabs.tips.crossLanguage.content",
-          "Alloomi can help you understand and translate before replying\nReducing unnecessary back-and-forth",
+          "openloomi can help you understand and translate before replying\nReducing unnecessary back-and-forth",
         ),
       },
       {
@@ -105,7 +105,7 @@ export function InsightTipsCard() {
         ),
         content: t(
           "insight.tabs.tips.actionSuggestions.content",
-          "Alloomi generates next-step suggestions for Insight events\nWhether to act is always up to you",
+          "openloomi generates next-step suggestions for Insight events\nWhether to act is always up to you",
         ),
       },
     ],

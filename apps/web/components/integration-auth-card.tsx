@@ -1,5 +1,5 @@
 "use client";
-import { Button, Card, CardContent } from "@alloomi/ui";
+import { Button, Card, CardContent } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
@@ -51,7 +51,7 @@ export function IntegrationAuthCard({ showTitle }: { showTitle: boolean }) {
                 <>
                   <button
                     type="button"
-                    onClick={() => openUrl("https://app.alloomi.ai/privacy")}
+                    onClick={() => openUrl("https://app.openloomi.ai/privacy")}
                     className="text-blue-500 hover:underline bg-transparent border-none cursor-pointer p-0"
                   >
                     {t("auth.privacy")}
@@ -59,7 +59,7 @@ export function IntegrationAuthCard({ showTitle }: { showTitle: boolean }) {
                   {t("auth.and")}
                   <button
                     type="button"
-                    onClick={() => openUrl("https://app.alloomi.ai/terms")}
+                    onClick={() => openUrl("https://app.openloomi.ai/terms")}
                     className="text-blue-500 hover:underline bg-transparent border-none cursor-pointer p-0"
                   >
                     {t("auth.tos")}

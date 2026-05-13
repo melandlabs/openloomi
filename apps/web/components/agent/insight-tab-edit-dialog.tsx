@@ -3,16 +3,16 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../i18n";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@alloomi/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Button, Input, Label } from "@alloomi/ui";
+import { Button, Input, Label } from "@openloomi/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { toast } from "@/components/toast";
 import type { InsightFilterCondition } from "@/lib/insights/filter-schema";
@@ -27,7 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { useIntegrations } from "@/hooks/use-integrations";
 import {
   getSupportedFilterFields,

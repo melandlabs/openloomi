@@ -5,7 +5,7 @@ import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSWRConfig } from "swr";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { isTauri, openUrl } from "@/lib/tauri";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +23,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { toast } from "./toast";
 import type { TFunction } from "i18next";
 import type { IntegrationId } from "@/hooks/use-integrations";
@@ -37,7 +37,7 @@ import {
   getXAuthorizationUrl,
   getNotionAuthorizationUrl,
 } from "@/lib/integrations";
-import { useIsMobile } from "@alloomi/hooks/use-is-mobile";
+import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
 import {
   useIntegrations,
   type IntegrationAccountClient,
@@ -928,7 +928,7 @@ export function AddPlatformContent({
         label: "Lark/Feishu",
         description: t(
           "auth.feishuDes",
-          "Connect Lark/Feishu with App ID and App Secret to chat with Alloomi via WebSocket.",
+          "Connect Lark/Feishu with App ID and App Secret to chat with openloomi via WebSocket.",
         ),
         icon: "chat-smile",
         buttonClass: "bg-[#3370FF] text-white hover:bg-[#2860E6]",
@@ -940,7 +940,7 @@ export function AddPlatformContent({
         label: "DingTalk",
         description: t(
           "auth.dingtalkDes",
-          "Connect DingTalk via Stream mode using Client ID and Client Secret to chat with Alloomi.",
+          "Connect DingTalk via Stream mode using Client ID and Client Secret to chat with openloomi.",
         ),
         icon: "chat-smile",
         buttonClass: "bg-[#0089FF] text-white hover:bg-[#0078E0]",
@@ -952,7 +952,7 @@ export function AddPlatformContent({
         label: "QQ",
         description: t(
           "auth.qqbotDes",
-          "Connect QQ Open Platform using AppID and AppSecret via WebSocket to chat with Alloomi.",
+          "Connect QQ Open Platform using AppID and AppSecret via WebSocket to chat with openloomi.",
         ),
         icon: "qq",
         buttonClass: "bg-[#12B7F5] text-white hover:bg-[#0E9AD4]",
@@ -998,7 +998,7 @@ export function AddPlatformContent({
         label: "GitHub",
         description: t(
           "auth.githubDes",
-          "Connect GitHub repositories to let Alloomi learn from your code.",
+          "Connect GitHub repositories to let openloomi learn from your code.",
         ),
         icon: "github",
         buttonClass: "bg-black text-white hover:bg-neutral-800",
@@ -1015,7 +1015,7 @@ export function AddPlatformContent({
         label: "Google Docs",
         description: t(
           "auth.googleDocsDes",
-          "Connect Google Docs to watch document changes and update content directly from Alloomi.",
+          "Connect Google Docs to watch document changes and update content directly from openloomi.",
         ),
         icon: "file_text",
         buttonClass: "bg-[#1A73E8] text-white hover:bg-[#1558b0]",
@@ -1028,7 +1028,7 @@ export function AddPlatformContent({
         label: "HubSpot",
         description: t(
           "auth.hubspotDes",
-          "Connect HubSpot to watch pipeline changes and update deal stages from Alloomi.",
+          "Connect HubSpot to watch pipeline changes and update deal stages from openloomi.",
         ),
         icon: "orbit",
         buttonClass: "bg-[#FF7A59] text-white hover:bg-[#e66545]",
@@ -1041,7 +1041,7 @@ export function AddPlatformContent({
         label: "Outlook Calendar",
         description: t(
           "auth.outlookCalendarDes",
-          "Sync Outlook Calendar to see updates and manage events in Alloomi.",
+          "Sync Outlook Calendar to see updates and manage events in openloomi.",
         ),
         icon: "calendar",
         buttonClass: "bg-[#0F7BFF] text-white hover:bg-[#0c62ca]",
@@ -1054,7 +1054,7 @@ export function AddPlatformContent({
         label: "Google Calendar",
         description: t(
           "auth.googleCalendarDes",
-          "Sync your events and get reminders directly in Alloomi.",
+          "Sync your events and get reminders directly in openloomi.",
         ),
         icon: "calendar",
         buttonClass: "bg-[#1A73E8] text-white hover:bg-[#1558b0]",
@@ -1112,7 +1112,7 @@ export function AddPlatformContent({
         label: "Microsoft Teams",
         description: t(
           "auth.teamsDes",
-          "Connect Teams chats and channels for Alloomi insights.",
+          "Connect Teams chats and channels for openloomi insights.",
         ),
         icon: "panel_left",
         buttonClass: "bg-[#6264A7] text-white hover:bg-[#4e4f9a]",
@@ -1125,7 +1125,7 @@ export function AddPlatformContent({
         label: "Notion",
         description: t(
           "auth.notionDes",
-          "Save files to Notion and let Alloomi learn from selected pages.",
+          "Save files to Notion and let openloomi learn from selected pages.",
         ),
         icon: "blocks",
         buttonClass: "bg-black text-white hover:bg-neutral-800",
@@ -1322,7 +1322,7 @@ export function AddPlatformContent({
             <>
               <button
                 type="button"
-                onClick={() => openUrl("https://app.alloomi.ai/privacy")}
+                onClick={() => openUrl("https://app.openloomi.ai/privacy")}
                 className="text-blue-500 hover:underline bg-transparent border-none cursor-pointer p-0"
               >
                 {t("auth.privacy")}
@@ -1330,7 +1330,7 @@ export function AddPlatformContent({
               {t("auth.and")}
               <button
                 type="button"
-                onClick={() => openUrl("https://app.alloomi.ai/terms")}
+                onClick={() => openUrl("https://app.openloomi.ai/terms")}
                 className="text-blue-500 hover:underline bg-transparent border-none cursor-pointer p-0"
               >
                 {t("auth.tos")}
@@ -1390,11 +1390,11 @@ export function AddPlatformContent({
               {pendingPlatform === "slack"
                 ? t(
                     "auth.slackAdminConfirmDesc",
-                    "You need to be a Slack workspace administrator to authorize this integration. Regular members cannot add Alloomi to the workspace.",
+                    "You need to be a Slack workspace administrator to authorize this integration. Regular members cannot add openloomi to the workspace.",
                   )
                 : t(
                     "auth.discordAdminConfirmDesc",
-                    "You need to be a Discord server administrator to authorize this integration. Regular members cannot add Alloomi to the server.",
+                    "You need to be a Discord server administrator to authorize this integration. Regular members cannot add openloomi to the server.",
                   )}
             </AlertDialogDescription>
           </AlertDialogHeader>

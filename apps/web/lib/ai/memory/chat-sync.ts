@@ -62,7 +62,7 @@ export function chatHistoryToMarkdown(chat: ChatHistory): string {
         msg.role === "user"
           ? "👤 User"
           : msg.role === "assistant"
-            ? "🤖 Alloomi"
+            ? "🤖 openloomi"
             : "📝 System";
 
       const timestamp = msg.createdAt.toLocaleString("zh-CN");

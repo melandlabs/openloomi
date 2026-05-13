@@ -1,22 +1,22 @@
-# @alloomi/mcp
+# @openloomi/mcp
 
 Model Context Protocol (MCP) server configuration types and loader.
 
 ## Installation
 
 ```sh
-pnpm add @alloomi/mcp
+pnpm add @openloomi/mcp
 ```
 
 ## Usage
 
 ```ts
-import { loadMcpServers, getMcpConfigPath } from "@alloomi/mcp";
+import { loadMcpServers, getMcpConfigPath } from "@openloomi/mcp";
 
-// Load MCP servers from ~/.alloomi/mcp.json
+// Load MCP servers from ~/.openloomi/mcp.json
 const servers = await loadMcpServers();
 ```
 
 ## Configuration
 
-By default, reads from `~/.alloomi/mcp.json`. Override with `ALLOOMI_MCP_CONFIG_PATH` environment variable.
+By default, reads from `~/.openloomi/mcp.json`. Override with `openloomi_MCP_CONFIG_PATH` environment variable.

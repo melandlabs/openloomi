@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/integrations",
+  "name": "@openloomi/integrations",
   "version": "0.5.0",
   "private": true,
   "type": "module",

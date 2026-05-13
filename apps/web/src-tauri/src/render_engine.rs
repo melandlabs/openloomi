@@ -1,4 +1,4 @@
-// Copyright 2026 Alloomi Team. All rights reserved.
+// Copyright 2026 openloomi Team. All rights reserved.
 //
 // Use of this source code is governed by a license that can be
 // found in the LICENSE file in the root of this source tree.
@@ -60,7 +60,7 @@ fn find_in_path(name: &str) -> Option<PathBuf> {
 }
 
 /// Check if the bundled render engine is available
-/// This checks both the legacy path (~/.alloomi/render-engines/office/installed.json)
+/// This checks both the legacy path (~/.openloomi/render-engines/office/installed.json)
 /// and the bundled path (resources/render-engine/{platform}/)
 pub fn get_render_engine_status() -> RenderEngineStatus {
     // First, check the legacy installed.json path
@@ -78,11 +78,11 @@ pub fn get_render_engine_status() -> RenderEngineStatus {
     check_path_engine()
 }
 
-/// Check the legacy install location (~/.alloomi/render-engines/office/installed.json)
+/// Check the legacy install location (~/.openloomi/render-engines/office/installed.json)
 fn check_legacy_install() -> Option<RenderEngineStatus> {
     let home = std::env::var("HOME").ok()?;
     let installed_json = PathBuf::from(&home)
-        .join(".alloomi")
+        .join(".openloomi")
         .join("render-engines")
         .join("office")
         .join("installed.json");

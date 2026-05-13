@@ -3,7 +3,7 @@
  */
 import { NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
-import { advanceWeixinQrPoll } from "@alloomi/integrations/weixin/qr-login";
+import { advanceWeixinQrPoll } from "@openloomi/integrations/weixin/qr-login";
 import { completeWeixinIntegrationAfterQr } from "@/lib/integrations/weixin/complete-weixin-integration";
 
 export async function POST(request: Request) {

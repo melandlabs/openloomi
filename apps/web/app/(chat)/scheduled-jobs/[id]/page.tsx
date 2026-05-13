@@ -9,18 +9,18 @@ import { useSidePanel } from "@/components/agent/side-panel-context";
 import { useChatContext } from "@/components/chat-context";
 import { AgentChatPanel } from "@/components/agent/chat-panel";
 import { FilePreviewOverlay } from "@/components/file-preview-overlay";
-import { Badge, Button, Input, Label } from "@alloomi/ui";
+import { Badge, Button, Input, Label } from "@openloomi/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@alloomi/ui";
-import { DatePicker } from "@alloomi/ui";
-import { TimePicker } from "@alloomi/ui";
-import { MultiCombobox } from "@alloomi/ui";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { DatePicker } from "@openloomi/ui";
+import { TimePicker } from "@openloomi/ui";
+import { MultiCombobox } from "@openloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { Spinner } from "@/components/spinner";
 import { toast } from "@/components/toast";
@@ -1065,7 +1065,7 @@ export default function ScheduledJobDetailPage() {
         <p className="text-sm">
           {t(
             "agent.panels.scheduledJobsPanel.tauriOnly",
-            "Scheduled jobs are only available in the Alloomi desktop app.",
+            "Scheduled jobs are only available in the openloomi desktop app.",
           )}
         </p>
       </div>

@@ -4,15 +4,15 @@ import { createTransport } from "nodemailer";
 import type { SentMessageInfo } from "nodemailer";
 import type { Attachment as NodemailerAttachment } from "nodemailer/lib/mailer";
 import { Buffer } from "node:buffer";
-import { MessagePlatformAdapter } from "@alloomi/integrations/channels";
-import type { Messages, Message, Image } from "@alloomi/integrations/channels";
+import { MessagePlatformAdapter } from "@openloomi/integrations/channels";
+import type { Messages, Message, Image } from "@openloomi/integrations/channels";
 import {
   type MessageEvent,
   type MessageTarget,
   PrivateMessageEvent,
-} from "@alloomi/integrations/channels";
+} from "@openloomi/integrations/channels";
 import { type AddressObject, type ParsedMail, simpleParser } from "mailparser";
-import type { Attachment } from "@alloomi/shared";
+import type { Attachment } from "@openloomi/shared";
 import { ingestAttachmentForUser } from "@/lib/integrations/utils/attachments";
 import type { UserType } from "@/app/(auth)/auth";
 import {
@@ -20,13 +20,13 @@ import {
   buildSnippet,
   cleanupMarkdown,
   htmlToPlainText,
-} from "@alloomi/integrations/utils";
+} from "@openloomi/integrations/utils";
 
 export {
   stripQuotedText,
   isBoilerplate,
   buildSnippet,
-} from "@alloomi/integrations/utils";
+} from "@openloomi/integrations/utils";
 export { isPromotionalEmail };
 
 const GMAIL_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
@@ -594,7 +594,7 @@ export class EmailAdapter extends MessagePlatformAdapter {
     }
 
     const fallbackBody =
-      body.length > 0 ? body : "Image(s) attached via Alloomi.";
+      body.length > 0 ? body : "Image(s) attached via openloomi.";
 
     await this.smtpTransport.sendMail({
       from: this.gmailAddress,

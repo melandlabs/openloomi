@@ -7,7 +7,7 @@
 
 import { RemixIcon } from "@/components/remix-icon";
 import { InsightBadge } from "@/components/insight-badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import { useTranslation } from "react-i18next";
 import "../../i18n";
 import {

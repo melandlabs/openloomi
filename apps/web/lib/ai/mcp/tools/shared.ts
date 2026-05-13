@@ -2,7 +2,7 @@
  * Shared types and functions for MCP business tools
  */
 
-import { coerceDate } from "@alloomi/shared";
+import { coerceDate } from "@openloomi/shared";
 import { formatToLocalTime } from "@/lib/utils";
 import type { Insight } from "@/lib/db/schema";
 import type { TimelineData } from "@/lib/ai/subagents/insights";

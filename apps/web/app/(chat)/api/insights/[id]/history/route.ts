@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { message, chat, chatInsights, type Chat } from "@/lib/db/schema";

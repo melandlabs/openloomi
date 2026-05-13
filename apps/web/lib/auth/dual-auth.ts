@@ -58,7 +58,7 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
         // Non-shadow user or local fetch failed, try to get from cloud
         try {
           const response = await fetch(
-            `${process.env.CLOUD_API_URL || process.env.NEXT_PUBLIC_CLOUD_API_URL || "https://app.alloomi.ai"}/api/remote-auth/user`,
+            `${process.env.CLOUD_API_URL || process.env.NEXT_PUBLIC_CLOUD_API_URL || "https://app.openloomi.ai"}/api/remote-auth/user`,
             {
               headers: {
                 Authorization: `Bearer ${token}`,

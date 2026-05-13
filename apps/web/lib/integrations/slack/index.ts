@@ -1,25 +1,25 @@
 import { App, LogLevel } from "@slack/bolt";
 import { createReadStream } from "node:fs";
 import { basename } from "node:path";
-import { MessagePlatformAdapter } from "@alloomi/integrations/channels";
+import { MessagePlatformAdapter } from "@openloomi/integrations/channels";
 import type {
   Messages,
   At,
   Image,
   Message,
-} from "@alloomi/integrations/channels";
-import type { Attachment } from "@alloomi/shared";
+} from "@openloomi/integrations/channels";
+import type { Attachment } from "@openloomi/shared";
 import type { UserType } from "@/app/(auth)/auth";
 import { ingestExternalAttachment } from "@/lib/files/external-ingest";
 import {
   delay,
   timeBeforeHours,
   type ExtractedMessageInfo,
-} from "@alloomi/shared";
+} from "@openloomi/shared";
 import type {
   MessageEvent,
   MessageTarget,
-} from "@alloomi/integrations/channels";
+} from "@openloomi/integrations/channels";
 
 const DEBUG = process.env.DEBUG_SLACK === "true";
 
@@ -1009,7 +1009,7 @@ export class SlackAdapter extends MessagePlatformAdapter {
   }
 }
 
-export function slackMessageToAlloomiMessage(
+export function slackMessageToopenloomiMessage(
   message: any,
   bot_self?: string,
 ): Messages {

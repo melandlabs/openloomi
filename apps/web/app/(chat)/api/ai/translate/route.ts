@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { generateText } from "ai";
 import { getModel } from "@/lib/ai";
 import { setAIUserContextFromRequest } from "@/lib/ai/request-context";

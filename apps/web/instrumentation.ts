@@ -10,7 +10,7 @@ export function register() {
     process.env.IS_TAURI !== "true"
   ) {
     const { registerOTel } = require("@vercel/otel");
-    registerOTel({ serviceName: "alloomi" });
+    registerOTel({ serviceName: "openloomi" });
   }
 
   // Initialize Sentry server-side for Node.js runtime
@@ -27,7 +27,7 @@ export function register() {
   // Install audit interceptors: Only load in Node.js runtime, Edge Runtime does not support fs/child_process
   if (process.env.NEXT_RUNTIME === "nodejs") {
     try {
-      const { installAuditInterceptors } = require("@alloomi/audit");
+      const { installAuditInterceptors } = require("@openloomi/audit");
       installAuditInterceptors();
     } catch (e) {
       console.warn("[Audit] Failed to load audit interceptors:", e);

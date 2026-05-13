@@ -2,19 +2,19 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Input, Label } from "@alloomi/ui";
+import { Button, Input, Label } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@alloomi/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@alloomi/ui";
-import { ScrollArea } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@openloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
 import { toast } from "@/components/toast";
 import { useKnowledgeFiles } from "@/hooks/use-knowledge-files";
-import { useEnterSendWithIme } from "@alloomi/hooks/use-enter-send-ime";
+import { useEnterSendWithIme } from "@openloomi/hooks/use-enter-send-ime";
 
 /** Supported file MIME types; consistent with insight-document-list */
 const SUPPORTED_FILE_TYPES = [

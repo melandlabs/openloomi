@@ -13,7 +13,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RemixIcon } from "@/components/remix-icon";
-import { Badge, Button, Switch } from "@alloomi/ui";
+import { Badge, Button, Switch } from "@openloomi/ui";
 import { toast } from "./toast";
 import { getPlatformDisplayInfo } from "./add-platform-dialog";
 import {
@@ -29,7 +29,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 
 export interface TelegramTokenFormContextType {
   showTelegramTokenForm: (reconnectAccountId?: string) => void;
@@ -297,10 +297,10 @@ export function PlatformIntegrations({
       setIsAddPlatformDialogOpen(true);
     };
 
-    window.addEventListener("alloomi:add-platform", handleAddPlatform);
+    window.addEventListener("openloomi:add-platform", handleAddPlatform);
 
     return () => {
-      window.removeEventListener("alloomi:add-platform", handleAddPlatform);
+      window.removeEventListener("openloomi:add-platform", handleAddPlatform);
     };
   }, []);
 

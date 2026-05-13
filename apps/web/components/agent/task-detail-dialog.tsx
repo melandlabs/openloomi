@@ -11,18 +11,18 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@alloomi/ui";
-import { Button, Combobox, Input, Label, Textarea } from "@alloomi/ui";
-import { DatePicker } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Button, Combobox, Input, Label, Textarea } from "@openloomi/ui";
+import { DatePicker } from "@openloomi/ui";
 import {
   Dialog,
   DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@alloomi/ui";
-import { TimePicker } from "@alloomi/ui";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { TimePicker } from "@openloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import { useInsightOptimisticUpdates } from "@/components/insight-optimistic-context";
 import { useTaskOperations } from "@/hooks/use-task-operations";
 import type { InsightTaskItem } from "@/lib/ai/subagents/insights";

@@ -21,19 +21,19 @@ const data = {
   downloadLinks: {
     macOS: {
       arm64:
-        "https://github.com/melandlabs/release/releases/download/v0.4.2/Alloomi_0.4.2_macOS_aarch64.dmg",
+        "https://github.com/melandlabs/release/releases/download/v0.4.2/openloomi_0.4.2_macOS_aarch64.dmg",
       amd64:
-        "https://github.com/melandlabs/release/releases/download/v0.4.2/Alloomi_0.4.2_macOS_amd64.dmg",
+        "https://github.com/melandlabs/release/releases/download/v0.4.2/openloomi_0.4.2_macOS_amd64.dmg",
     },
     linux: {
       amd64:
-        "https://github.com/melandlabs/release/releases/download/v0.4.2/Alloomi_0.4.2_linux_amd64.deb",
+        "https://github.com/melandlabs/release/releases/download/v0.4.2/openloomi_0.4.2_linux_amd64.deb",
       arm64:
-        "https://github.com/melandlabs/release/releases/download/v0.4.2/Alloomi_0.4.2_linux_aarch64.deb",
+        "https://github.com/melandlabs/release/releases/download/v0.4.2/openloomi_0.4.2_linux_aarch64.deb",
     },
     windows: {
       amd64:
-        "https://github.com/melandlabs/release/releases/download/v0.4.2/Alloomi_0.4.2_windows_amd64.exe",
+        "https://github.com/melandlabs/release/releases/download/v0.4.2/openloomi_0.4.2_windows_amd64.exe",
       arm64: null,
     },
     github: "https://github.com/melandlabs/release/releases",
@@ -49,31 +49,31 @@ const data = {
       title: "Proactive Awareness — Before You Ask",
       description:
         "OpenLoomi continuously monitors signals across platforms—Slack, Email, Calendar, Documents—alerting you to important events proactively. Anomaly detection 10 minutes early, critical opportunities never missed.",
-      videoUrl: "/img/alloomi/alloomi-event.gif",
+      videoUrl: "/img/openloomi/openloomi-event.gif",
     },
     {
       title: "95% Noise Filtering — Focus on What Matters",
       description:
         "Hundreds of daily messages refined into one focused panel. OpenLoomi tells you what you should act on—not drowning you in information overload.",
-      videoUrl: "/img/alloomi/alloomi-filter.gif",
+      videoUrl: "/img/openloomi/openloomi-filter.gif",
     },
     {
       title: "Long-Term Memory — Context Across Connectors",
       description:
         "OpenLoomi builds persistent knowledge graphs of people, projects, and decisions. Six months later, it still remembers your commitments and context. No more repeating yourself, no more context loss.",
-      videoUrl: "/img/alloomi/alloomi-connectors.gif",
+      videoUrl: "/img/openloomi/openloomi-connectors.gif",
     },
     {
       title: "Autonomous Execution — Complete the Loop",
       description:
         "Not just telling you what to do—OpenLoomi does it. Drafts replies, schedules meetings, generates reports, tracks and validates results end-to-end.",
-      videoUrl: "/img/alloomi/alloomi-actions.gif",
+      videoUrl: "/img/openloomi/openloomi-actions.gif",
     },
     {
       title: "200+ Skills — Rich Execution Capabilities",
       description:
         "From code generation to PDF creation, data analysis to browser automation—OpenLoomi's Skills ecosystem covers every work scenario and keeps expanding.",
-      videoUrl: "/img/alloomi/alloomi-skills.gif",
+      videoUrl: "/img/openloomi/openloomi-skills.gif",
     },
   ],
   support: {
@@ -378,7 +378,7 @@ const MarketingPage = () => {
                       <a
                         href={data.downloadLinks.macOS.arm64}
                         className="bg-primary-gradient text-primary-foreground px-8 py-4 rounded-lg shadow-sm font-medium transition-all transform flex items-center gap-2 relative z-20 hover:brightness-95 min-w-[220px] justify-center"
-                        aria-label={`Download Alloomi for ${t("hero.macosAppleSilicon")}`}
+                        aria-label={`Download openloomi for ${t("hero.macosAppleSilicon")}`}
                       >
                         <RemixIcon name="download" size="size-5" />
                         {t("hero.macosAppleSilicon")}
@@ -388,7 +388,7 @@ const MarketingPage = () => {
                       <a
                         href={data.downloadLinks.macOS.amd64}
                         className="bg-primary-gradient text-primary-foreground px-8 py-4 rounded-lg shadow-sm font-medium transition-all transform flex items-center gap-2 relative z-20 hover:brightness-95 min-w-[220px] justify-center"
-                        aria-label={`Download Alloomi for ${t("hero.macosIntel")}`}
+                        aria-label={`Download openloomi for ${t("hero.macosIntel")}`}
                       >
                         <RemixIcon name="download" size="size-5" />
                         {t("hero.macosIntel")}
@@ -402,7 +402,7 @@ const MarketingPage = () => {
                       <a
                         href={data.downloadLinks.linux.amd64}
                         className="bg-primary-gradient text-primary-foreground px-8 py-4 rounded-lg shadow-sm font-medium transition-all transform flex items-center gap-2 relative z-20 hover:brightness-95 min-w-[220px] justify-center"
-                        aria-label={`Download Alloomi for ${t("hero.linuxX86_64")}`}
+                        aria-label={`Download openloomi for ${t("hero.linuxX86_64")}`}
                       >
                         <RemixIcon name="download" size="size-5" />
                         {t("hero.linuxX86_64")}
@@ -412,7 +412,7 @@ const MarketingPage = () => {
                       <a
                         href={data.downloadLinks.linux.arm64}
                         className="bg-primary-gradient text-primary-foreground px-8 py-4 rounded-lg shadow-sm font-medium transition-all transform flex items-center gap-2 relative z-20 hover:brightness-95 min-w-[220px] justify-center"
-                        aria-label={`Download Alloomi for ${t("hero.linuxARM64")}`}
+                        aria-label={`Download openloomi for ${t("hero.linuxARM64")}`}
                       >
                         <RemixIcon name="download" size="size-5" />
                         {t("hero.linuxARM64")}
@@ -438,10 +438,10 @@ const MarketingPage = () => {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="bg-primary-gradient text-primary-foreground px-8 py-4 rounded-lg shadow-sm font-medium transition-all transform flex items-center gap-2 relative z-20 hover:brightness-95"
-                    aria-label={t("hero.downloadAlloomi")}
+                    aria-label={t("hero.downloadopenloomi")}
                   >
                     <RemixIcon name="download" size="size-5" />
-                    {t("hero.downloadAlloomi")}
+                    {t("hero.downloadopenloomi")}
                   </a>
                 )}
               </div> */}
@@ -543,7 +543,7 @@ const MarketingPage = () => {
                 {t("openSource.cta")}
               </a>
               <a
-                href="https://discord.gg/alloomi"
+                href="https://discord.gg/openloomi"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-transparent border border-border-primary text-foreground px-8 py-4 rounded-lg font-medium transition-all hover:bg-background-secondary"
@@ -598,7 +598,7 @@ const MarketingPage = () => {
                 {t("sovereignty.subtitle")}
               </p>
               <Link
-                href="https://app.alloomi.ai/privacy"
+                href="https://app.openloomi.ai/privacy"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex w-fit items-center bg-transparent border border-border-primary text-foreground px-8 py-4 rounded-lg font-medium transition-all transform relative z-20 hover:bg-background-secondary"

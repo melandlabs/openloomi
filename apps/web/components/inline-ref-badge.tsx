@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { InlineRefKind } from "@alloomi/shared/ref";
+import type { InlineRefKind } from "@openloomi/shared/ref";
 
 /**
  * Inline reference Badge: displayed mixed with text inside message bubbles or input fields.

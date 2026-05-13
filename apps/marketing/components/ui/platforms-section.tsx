@@ -53,7 +53,7 @@ export const PlatformsSection: React.FC<PlatformsSectionProps> = ({
         <div className="flex flex-col gap-1 flex-1 min-w-0 overflow-hidden p-6 pr-0">
           {/* Title: Supported Platforms */}
           <a
-            href="https://alloomi.ai/docs/alloomi/connectors"
+            href="https://openloomi.ai/docs/openloomi/connectors"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-base font-normal text-foreground mb-2 px-0 text-left hover:opacity-80 transition-opacity"

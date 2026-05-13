@@ -1,4 +1,4 @@
-import type { ExtractedMessageInfo } from "@alloomi/integrations/channels/sources/types";
+import type { ExtractedMessageInfo } from "@openloomi/integrations/channels/sources/types";
 import type { ExtractEmailInfo } from "../integrations/email";
 import type {
   DetailData,
@@ -7,8 +7,8 @@ import type {
 } from "@/lib/ai/subagents/insights";
 import type { BotWithAccount } from "../db/queries";
 import type { UserType } from "@/app/(auth)/auth";
-import type { Platform } from "@alloomi/integrations/channels/sources/types";
-import type { RawMessageData } from "@alloomi/indexeddb/extractor";
+import type { Platform } from "@openloomi/integrations/channels/sources/types";
+import type { RawMessageData } from "@openloomi/indexeddb/extractor";
 
 export type ExtractedMessageInfoWithoutAttachments = Omit<
   ExtractedMessageInfo,

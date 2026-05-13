@@ -5,7 +5,7 @@ import { useBriefPanelState } from "@/hooks/use-brief-panel-state";
 import { useInsightActions } from "@/hooks/use-insight-actions";
 import { useInsightPagination } from "@/hooks/use-insight-data";
 import { useBatchInsightActions } from "@/hooks/use-batch-insight-actions";
-import { useIsMobile } from "@alloomi/hooks/use-is-mobile";
+import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useState, useCallback, useEffect } from "react";
@@ -14,14 +14,14 @@ import { useTranslation } from "react-i18next";
 import "../../i18n";
 import InsightDetailDrawer from "@/components/insight-detail-drawer";
 import { Spinner } from "@/components/spinner";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { BriefCategoryBlock } from "./brief-category-block";
 import { BatchActionBar } from "./batch-action-bar";
@@ -72,9 +72,9 @@ export function AgentBriefPanel({
         : "/connectors?addPlatform=true";
       router.push(url);
     };
-    window.addEventListener("alloomi:request-integration", handler);
+    window.addEventListener("openloomi:request-integration", handler);
     return () =>
-      window.removeEventListener("alloomi:request-integration", handler);
+      window.removeEventListener("openloomi:request-integration", handler);
   }, [router]);
 
   const state = useBriefPanelState({

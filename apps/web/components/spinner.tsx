@@ -13,7 +13,7 @@ type SpinnerProps = {
 
 export function Spinner({
   size = 28,
-  label = "Alloomi is getting things ready",
+  label = "openloomi is getting things ready",
   className,
 }: SpinnerProps) {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);

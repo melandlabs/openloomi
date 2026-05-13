@@ -3,9 +3,9 @@
 import * as React from "react";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
-import { Button } from "@alloomi/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@alloomi/ui";
-import { ScrollArea } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@openloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
 const MINUTES = Array.from({ length: 60 }, (_, i) =>

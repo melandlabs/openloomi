@@ -10,7 +10,7 @@ import type {
   JobExecutionContext,
 } from "./types";
 import { prepareConversationWindows } from "@/lib/ai";
-import { preprocessCompactionMessages } from "@alloomi/ai/agent";
+import { preprocessCompactionMessages } from "@openloomi/ai/agent";
 import { formatAgentStreamErrorForUser } from "@/lib/ai/runtime/format-error";
 import {
   saveChat,
@@ -108,10 +108,10 @@ function buildSchedulerWorkspaceOverride(
 The current working directory is already the execution output directory:
 ${sessionDir}
 
-This instruction overrides any generic workspace instruction that asks you to recreate or hand-copy the full ~/.alloomi/sessions path.
+This instruction overrides any generic workspace instruction that asks you to recreate or hand-copy the full ~/.openloomi/sessions path.
 
 File output rules for this scheduled execution:
-- Do NOT run mkdir for ~/.alloomi/sessions/...; the runtime has already created the output directory.
+- Do NOT run mkdir for ~/.openloomi/sessions/...; the runtime has already created the output directory.
 - Do NOT manually reconstruct chatId/executionId paths.
 - Save final deliverables directly in the current working directory using short paths such as "report.md", "output.html", or "analysis.xlsx".
 - Save temporary scripts under "temp/" using short paths such as "temp/script.py".
@@ -528,10 +528,10 @@ After calling chatInsight with withDetail=true, if any insights have attachments
       if (isMacOS) {
         platformNotificationName = "macOS";
         platformNotificationSection = `**macOS Notification (ALWAYS send if no platform specified):**
-- dialog: (sleep 18 && osascript -e 'display dialog "Notification content" buttons {"OK"} default button 1 with title "Alloomi Reminder"') &
-- notification: (sleep 18 && osascript -e 'display notification "Notification content" with title "Alloomi Reminder"') &`;
+- dialog: (sleep 18 && osascript -e 'display dialog "Notification content" buttons {"OK"} default button 1 with title "openloomi Reminder"') &
+- notification: (sleep 18 && osascript -e 'display notification "Notification content" with title "openloomi Reminder"') &`;
         platformNotificationWorkflow =
-          "5. macOS notification - ALWAYS use the delayed notification pattern: (sleep 18 && osascript -e 'display notification ...' with title \"Alloomi Reminder\") & AND also (sleep 18 && osascript -e 'display dialog ...' with title \"Alloomi Reminder\") & - BOTH commands must be used with proper background delay execution (the & at the end makes it run in background)";
+          "5. macOS notification - ALWAYS use the delayed notification pattern: (sleep 18 && osascript -e 'display notification ...' with title \"openloomi Reminder\") & AND also (sleep 18 && osascript -e 'display dialog ...' with title \"openloomi Reminder\") & - BOTH commands must be used with proper background delay execution (the & at the end makes it run in background)";
         platformNotificationExamples = `- Task: "Remind me to attend meeting at 9 AM every day" (no platform specified)
   - Platforms: ALL available platforms + macOS notification
   - Reminder: "Time for meeting!"
@@ -542,10 +542,10 @@ After calling chatInsight with withDetail=true, if any insights have attachments
       } else if (isLinux) {
         platformNotificationName = "Linux";
         platformNotificationSection = `**Linux Notification (ALWAYS send if no platform specified):**
-- Use the Bash tool to send system notification: (sleep 18 && notify-send "Alloomi Reminder" "Notification content") &
-- Alternative: (sleep 18 && zenity --info --text="Notification content" --title="Alloomi Reminder") &`;
+- Use the Bash tool to send system notification: (sleep 18 && notify-send "openloomi Reminder" "Notification content") &
+- Alternative: (sleep 18 && zenity --info --text="Notification content" --title="openloomi Reminder") &`;
         platformNotificationWorkflow =
-          '5. Linux notification - ALWAYS use the delayed notification pattern: (sleep 18 && notify-send "Alloomi Reminder" "Notification content") & - must run in background with & at the end';
+          '5. Linux notification - ALWAYS use the delayed notification pattern: (sleep 18 && notify-send "openloomi Reminder" "Notification content") & - must run in background with & at the end';
         platformNotificationExamples = `- Task: "Remind me to attend meeting at 9 AM every day" (no platform specified)
   - Platforms: ALL available platforms + Linux notification
   - Reminder: "Time for meeting!"
@@ -556,9 +556,9 @@ After calling chatInsight with withDetail=true, if any insights have attachments
       } else if (isWindows) {
         platformNotificationName = "Windows";
         platformNotificationSection = `**Windows Notification (ALWAYS send if no platform specified):**
-- Use PowerShell: Start-Process powershell -ArgumentList '-Command', 'Start-Sleep -Seconds 18; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(\"Notification content\", \"Alloomi Reminder\")'`;
+- Use PowerShell: Start-Process powershell -ArgumentList '-Command', 'Start-Sleep -Seconds 18; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(\"Notification content\", \"openloomi Reminder\")'`;
         platformNotificationWorkflow =
-          "5. Windows notification - ALWAYS use the delayed notification pattern: Start-Process powershell -ArgumentList '-Command', 'Start-Sleep -Seconds 18; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(\"Notification content\", \"Alloomi Reminder\")' - must run in background";
+          "5. Windows notification - ALWAYS use the delayed notification pattern: Start-Process powershell -ArgumentList '-Command', 'Start-Sleep -Seconds 18; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(\"Notification content\", \"openloomi Reminder\")' - must run in background";
         platformNotificationExamples = `- Task: "Remind me to attend meeting at 9 AM every day" (no platform specified)
   - Platforms: ALL available platforms + Windows notification
   - Reminder: "Time for meeting!"

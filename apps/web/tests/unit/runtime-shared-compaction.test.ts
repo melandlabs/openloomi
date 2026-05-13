@@ -9,7 +9,7 @@ vi.mock("@/lib/ai/runtime/register-plugins", () => ({
   registerPlugins: vi.fn(),
 }));
 
-vi.mock("@alloomi/ai/store", () => ({
+vi.mock("@openloomi/ai/store", () => ({
   saveCompactionSummary: vi.fn(),
 }));
 
@@ -18,11 +18,11 @@ vi.mock("@/lib/ai", () => ({
   triggerCompactionAsync: vi.fn(),
 }));
 
-vi.mock("@alloomi/ai/agent", () => ({
+vi.mock("@openloomi/ai/agent", () => ({
   sanitizeCompactionMessages: vi.fn(),
 }));
 
-vi.mock("@alloomi/ai/agent/registry", () => ({
+vi.mock("@openloomi/ai/agent/registry", () => ({
   getAgentRegistry: vi.fn(),
 }));
 
@@ -31,8 +31,8 @@ import {
   getUserInsightSettings,
 } from "@/lib/db/queries";
 import { prepareConversationWindows, triggerCompactionAsync } from "@/lib/ai";
-import { sanitizeCompactionMessages } from "@alloomi/ai/agent";
-import { getAgentRegistry } from "@alloomi/ai/agent/registry";
+import { sanitizeCompactionMessages } from "@openloomi/ai/agent";
+import { getAgentRegistry } from "@openloomi/ai/agent/registry";
 import { handleAgentRuntime } from "@/lib/ai/runtime/shared";
 
 function createDoneOnlyGenerator() {

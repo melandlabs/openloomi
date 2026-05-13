@@ -1,7 +1,7 @@
 "use client";
 
 import { cn, formatBytes } from "@/lib/utils";
-import type { Attachment } from "@alloomi/shared";
+import type { Attachment } from "@openloomi/shared";
 import { LoaderIcon } from "./icons";
 import { RemixIcon } from "./remix-icon";
 import { useTranslation } from "react-i18next";

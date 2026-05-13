@@ -1,6 +1,6 @@
 /**
  * QQ Bot inbound message handling (Bot mode, consistent with Feishu)
- * User → QQ Bot → Alloomi replies on behalf
+ * User → QQ Bot → openloomi replies on behalf
  */
 import { sendReplyByBotId } from "@/lib/bots/send-reply";
 import type { IntegrationAccountWithBot } from "@/lib/db/queries";
@@ -58,7 +58,7 @@ export async function handleQQInboundMessage(
 
   try {
     const prompt = [
-      "You are the Alloomi assistant. Help the user based on the following cross-platform message summaries.",
+      "You are the openloomi assistant. Help the user based on the following cross-platform message summaries.",
       "When information is insufficient, say so instead of making up content.",
       "",
       "=== User's question (this single message to the bot) ===",

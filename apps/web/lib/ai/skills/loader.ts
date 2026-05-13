@@ -1,7 +1,7 @@
 /**
  * Skills Loader
  *
- * Load skill definitions from ~/.alloomi/skills/ directory
+ * Load skill definitions from ~/.openloomi/skills/ directory
  * and sync skills to ~/.claude/skills/ for Claude SDK usage
  */
 
@@ -34,7 +34,7 @@ export interface SkillMetadata {
  * Get default skills directory path
  */
 export function getDefaultSkillsDir(): string {
-  return join(homedir(), ".alloomi", "skills");
+  return join(homedir(), ".openloomi", "skills");
 }
 
 /**
@@ -49,13 +49,13 @@ export function getClaudeSkillsDir(): string {
  */
 export function getAllSkillsDirs(): string[] {
   return [
-    join(homedir(), ".alloomi", "skills"),
+    join(homedir(), ".openloomi", "skills"),
     join(homedir(), ".claude", "skills"),
     join(homedir(), ".agents", "skills"),
   ];
 }
 
-// Priority: alloomi > claude > agents (first wins in dedup)
+// Priority: openloomi > claude > agents (first wins in dedup)
 
 /**
  * Determine if a directory entry is a valid skill (must be non-hidden and contain SKILL.md).
@@ -68,7 +68,7 @@ function isValidSkillDir(sourceDir: string, entryName: string): boolean {
 
 /**
  * Sync skills from multiple sources to .claude/skills/ in project working directory.
- * Sources: ~/.alloomi/skills/, ~/.claude/skills/, ~/.agents/skills/
+ * Sources: ~/.openloomi/skills/, ~/.claude/skills/, ~/.agents/skills/
  * When using project source, SDK loads skills from .claude/skills/ in project directory
  *
  * On Windows: copy skills directory to avoid symlink/junction issues
@@ -271,7 +271,7 @@ function parseSkillMetadata(content: string, skillPath: string): SkillMetadata {
 
 /**
  * Load all available skills from all source directories.
- * Deduplicates by name, prioritizing in order: .alloomi > .agent > .claude
+ * Deduplicates by name, prioritizing in order: .openloomi > .agent > .claude
  */
 export function loadSkills(): SkillMetadata[] {
   const skills: SkillMetadata[] = [];

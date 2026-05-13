@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslation } from "react-i18next";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@alloomi/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
 
 interface WeixinStepsDialogProps {
   open: boolean;

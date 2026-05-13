@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import type { NextRequest } from "next/server";
 import { searchEvents, searchChats, searchFiles } from "@/lib/db/queries";
 import type { SearchResultItem } from "@/components/global-search-dialog";

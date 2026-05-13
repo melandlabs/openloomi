@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { detectLanguageFromText } from "../utils";
 import type { Insight } from "@/lib/db/schema";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 
 interface UseReplyLanguageProps {
   insight: Insight;

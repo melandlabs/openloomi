@@ -11,7 +11,7 @@
 export async function getDefaultSkillsDir(): Promise<string> {
   const { join } = await import("node:path");
   const { homedir } = await import("node:os");
-  return join(homedir(), ".alloomi", "skills");
+  return join(homedir(), ".openloomi", "skills");
 }
 
 export async function needsSkillsInitialization(): Promise<boolean> {
@@ -97,8 +97,8 @@ async function getBundledSkillsPath(): Promise<string | null> {
 
     if (isWindows) {
       // process.cwd() = apps/web/ where Next.js server runs
-      // skills are at Alloomi/_up_/_up_/_up_/skills
-      // go up 5 from apps/web/ to reach Alloomi/, then _up_/_up_/_up_/skills
+      // skills are at openloomi/_up_/_up_/_up_/skills
+      // go up 5 from apps/web/ to reach openloomi/, then _up_/_up_/_up_/skills
       possiblePaths.push(
         join(process.cwd(), "..", "..", "..", "..", "..", "_up_", "_up_", "_up_", "skills"),
         join(process.cwd(), "..", "..", "..", "_up_", "_up_", "_up_", "skills"),
@@ -113,14 +113,14 @@ async function getBundledSkillsPath(): Promise<string | null> {
       possiblePaths.push(
         join(execDir, "Resources", "skills"),
         join(execDir, "Resources", "_up_", "_up_", "_up_", "skills"),
-        "/Applications/Alloomi.app/Contents/Resources/skills",
-        "/Applications/Alloomi.app/Contents/Resources/_up_/_up_/_up_/skills",
+        "/Applications/openloomi.app/Contents/Resources/skills",
+        "/Applications/openloomi.app/Contents/Resources/_up_/_up_/_up_/skills",
       );
     } else {
-      // Linux: resource_dir/_up_/_up_/_up_/skills (e.g. /usr/lib/Alloomi/_up_/_up_/_up_/skills)
+      // Linux: resource_dir/_up_/_up_/_up_/skills (e.g. /usr/lib/openloomi/_up_/_up_/_up_/skills)
       possiblePaths.push(
-        join(execDir, "..", "lib", "Alloomi", "_up_", "_up_", "_up_", "skills"),
-        join("/usr", "lib", "Alloomi", "_up_", "_up_", "_up_", "skills"),
+        join(execDir, "..", "lib", "openloomi", "_up_", "_up_", "_up_", "skills"),
+        join("/usr", "lib", "openloomi", "_up_", "_up_", "_up_", "skills"),
         join(execDir, "_up_", "_up_", "_up_", "skills"),
       );
     }

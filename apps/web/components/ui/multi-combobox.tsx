@@ -4,9 +4,9 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
-import { Badge, Input } from "@alloomi/ui";
-import { ScrollArea } from "@alloomi/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@alloomi/ui";
+import { Badge, Input } from "@openloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@openloomi/ui";
 
 export interface MultiComboboxOption {
   value: string;

@@ -27,10 +27,10 @@ import {
   parsePlanningResponse,
   PLANNING_INSTRUCTION,
   type SandboxOptions,
-} from "@alloomi/ai/agent";
+} from "@openloomi/ai/agent";
 // Import plugin definition helpers
-import { CLAUDE_METADATA, defineAgentPlugin } from "@alloomi/ai/agent/plugin";
-import type { AgentPlugin } from "@alloomi/ai/agent/plugin";
+import { CLAUDE_METADATA, defineAgentPlugin } from "@openloomi/ai/agent/plugin";
+import type { AgentPlugin } from "@openloomi/ai/agent/plugin";
 import type {
   AgentConfig,
   AgentMessage,
@@ -43,7 +43,7 @@ import type {
   PDFAttachment,
   PlanOptions,
   SkillsConfig,
-} from "@alloomi/ai/agent/types";
+} from "@openloomi/ai/agent/types";
 import { MAX_CONVERSATION_HISTORY_TOKENS } from "@/lib/ai/runtime/shared";
 import {
   DEFAULT_API_HOST,
@@ -56,7 +56,7 @@ import {
   PDF_MAX_SIZE_MB,
   PREFER_NATIVE_PDF,
 } from "@/lib/files/config";
-import { filterToolCallText } from "@alloomi/shared";
+import { filterToolCallText } from "@openloomi/shared";
 import { generateUUID } from "@/lib/utils";
 import { estimateTokens } from "@/lib/ai";
 import {
@@ -65,10 +65,10 @@ import {
   type McpServerConfig,
 } from "@/lib/ai/mcp";
 
-// Skills are loaded directly by Claude SDK from ~/.alloomi/skills/ via settingSources: ['user']
+// Skills are loaded directly by Claude SDK from ~/.openloomi/skills/ via settingSources: ['user']
 // No custom loading needed
 // ============================================================================
-// Logging - uses shared logger (writes to ~/.alloomi/logs/alloomi.log)
+// Logging - uses shared logger (writes to ~/.openloomi/logs/openloomi.log)
 // ============================================================================
 import { createLogger, LOG_FILE_PATH } from "@/lib/utils/logger";
 
@@ -148,9 +148,9 @@ function spawnClaudeCodeProcess(options: {
     let nodeToUse: string;
     if (os === "win32") {
       // On Windows, the bundled node is a Linux ELF binary (not usable).
-      // Try the Rust-downloaded .alloomi\node\node.exe first, then system PATH.
-      const alloomiNode = join(homedir(), ".alloomi", "node", "node.exe");
-      nodeToUse = existsSync(alloomiNode) ? alloomiNode : "node";
+      // Try the Rust-downloaded .openloomi\node\node.exe first, then system PATH.
+      const openloomiNode = join(homedir(), ".openloomi", "node", "node.exe");
+      nodeToUse = existsSync(openloomiNode) ? openloomiNode : "node";
     } else {
       // Unix: use bundled node if it exists, otherwise system node
       const nodeBinPath = join(bundleDir, "node");
@@ -340,7 +340,7 @@ async function installClaudeCode(): Promise<boolean> {
       console.error("[Claude] Claude Code is not installed on your system.");
       console.error(getInstallationInstructions(os));
       console.error(
-        "[Claude] After installation, please restart Alloomi to continue.",
+        "[Claude] After installation, please restart openloomi to continue.",
       );
       return false;
     }
@@ -403,8 +403,8 @@ function isPackagedApp(): boolean {
   const execPath = process.execPath;
   if (
     execPath.includes(".app/Contents/MacOS") ||
-    execPath.includes("\\Alloomi\\") ||
-    execPath.includes("/Alloomi/")
+    execPath.includes("\\openloomi\\") ||
+    execPath.includes("/openloomi/")
   ) {
     return true;
   }
@@ -462,7 +462,7 @@ function getSidecarClaudeCodePath(): string | undefined {
     join(process.cwd(), "apps", "web", "cli-bundle"),
     join(process.cwd(), "cli-bundle"),
     join(process.cwd(), "..", "web", "cli-bundle"),
-    // Same directory as alloomi-api
+    // Same directory as openloomi-api
     join(execDir, "cli-bundle"),
     // macOS: Tauri places resources in Resources
     join(execDir, "..", "Resources", "cli-bundle"),
@@ -475,7 +475,7 @@ function getSidecarClaudeCodePath(): string | undefined {
       execDir,
       "..",
       "lib",
-      "Alloomi",
+      "openloomi",
       "_up_",
       "src-api",
       "dist",
@@ -485,7 +485,7 @@ function getSidecarClaudeCodePath(): string | undefined {
       execDir,
       "..",
       "lib",
-      "alloomi",
+      "openloomi",
       "_up_",
       "src-api",
       "dist",
@@ -514,7 +514,7 @@ function getSidecarClaudeCodePath(): string | undefined {
       if (!existsSync(wrapperScriptPath)) {
         if (os === "win32") {
           // Windows batch file
-          // Priority: bundled node.exe > .alloomi\node\node.exe (Rust-downloaded) > system node
+          // Priority: bundled node.exe > .openloomi\node\node.exe (Rust-downloaded) > system node
           const wrapperContent = `@echo off
 setlocal
 chcp 65001 >nul
@@ -523,8 +523,8 @@ set NODE_OPTIONS=--max-old-space-size=8192
 if exist "%~dp0\\node.exe" (
   "%~dp0\\node.exe" --max-old-space-size=8192 "%~dp0\\cli.js" %*
 ) else (
-  if exist "%USERPROFILE%\\.alloomi\\node\\node.exe" (
-    "%USERPROFILE%\\.alloomi\\node\\node.exe" --max-old-space-size=8192 "%~dp0\\cli.js" %*
+  if exist "%USERPROFILE%\\.openloomi\\node\\node.exe" (
+    "%USERPROFILE%\\.openloomi\\node\\node.exe" --max-old-space-size=8192 "%~dp0\\cli.js" %*
   ) else (
     node --max-old-space-size=8192 "%~dp0\\cli.js" %*
   )
@@ -767,7 +767,7 @@ function getClaudeCodePath(): string | undefined {
   if (os === "win32") {
     console.warn(getInstallationInstructions(os));
     console.warn(
-      "[Claude] After installing, restart Alloomi for the changes to take effect.",
+      "[Claude] After installing, restart openloomi for the changes to take effect.",
     );
   } else {
     console.warn(
@@ -816,7 +816,7 @@ async function ensureClaudeCode(): Promise<string | undefined> {
           "[Claude] ✗ Installation completed but Claude Code still not found in PATH",
         );
         console.error(
-          "[Claude] Please restart Alloomi after installation completes",
+          "[Claude] Please restart openloomi after installation completes",
         );
       }
     } else {
@@ -930,8 +930,8 @@ function getSessionWorkDir(
   }
 
   // Check if the workDir is already a session folder path from frontend
-  // Session paths from frontend look like: ~/.alloomi/sessions/{sessionId}/task-{xx}
-  // or: ~/.alloomi/sessions/{sessionId}
+  // Session paths from frontend look like: ~/.openloomi/sessions/{sessionId}/task-{xx}
+  // or: ~/.openloomi/sessions/{sessionId}
   // Support both Unix (/) and Windows (\) path separators (case-insensitive for Windows)
   const normalizedForCheck = os === "win32" ? safePath.toLowerCase() : safePath;
   const hasSessionsPath =
@@ -950,7 +950,7 @@ function getSessionWorkDir(
 
   let folderName: string;
   // PRIORITY: Always use taskId when available (it's the chatId from frontend)
-  // This ensures the workspace files are stored at ~/.alloomi/sessions/{chatId}/
+  // This ensures the workspace files are stored at ~/.openloomi/sessions/{chatId}/
   // which matches what WorkspacePanel expects
   if (taskId) {
     folderName = taskId;
@@ -1474,7 +1474,7 @@ export class ClaudeAgent extends BaseAgent {
    * Build settingSources for Claude SDK
    *
    * IMPORTANT: Claude SDK loads skills from ~/.claude/skills/ when 'user' source is enabled.
-   * We sync ~/.alloomi/skills/ to ~/.claude/skills/ on agent creation via syncSkillsToClaude().
+   * We sync ~/.openloomi/skills/ to ~/.claude/skills/ on agent creation via syncSkillsToClaude().
    *
    * IMPORTANT: When using custom API (baseUrl + apiKey configured), we MUST NOT use 'user'
    * source because SDK reads ~/.claude/settings.json which takes priority over environment variables.
@@ -1505,7 +1505,7 @@ export class ClaudeAgent extends BaseAgent {
     const env: Record<string, string | undefined> = { ...process.env };
 
     // IMPORTANT: Remove CLAUDECODE environment variable to allow nested sessions
-    // This is necessary when Alloomi itself is running inside a Claude Code environment
+    // This is necessary when openloomi itself is running inside a Claude Code environment
     // Without this, the child Claude Code process will detect the nested session
     // and exit with error "Claude Code cannot be launched inside another Claude Code session"
     // Use delete operator to completely remove the key
@@ -1993,7 +1993,7 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
     // Use settingSources based on skillsConfig to control skill loading
     // - 'user' source loads from ~/.claude directory (User skills)
     // - 'project' source loads from project/.claude directory
-    // User's custom API settings from Alloomi settings page are passed via env config
+    // User's custom API settings from openloomi settings page are passed via env config
     // which takes priority over ~/.claude/settings.json because we set ANTHROPIC_API_KEY directly
     const settingSources: ("user" | "project")[] = this.buildSettingSources(
       options?.skillsConfig,
@@ -3520,7 +3520,7 @@ If you need to create any files during planning, use this directory.
  * Factory function to create Claude agent
  */
 export function createClaudeAgent(config: AgentConfig): ClaudeAgent {
-  // Sync ~/.alloomi/skills/ to project .claude/skills/ for Claude SDK to load them
+  // Sync ~/.openloomi/skills/ to project .claude/skills/ for Claude SDK to load them
   // When using custom API, we use 'project' source which reads from .claude/skills/ in the working directory
   try {
     const { syncSkillsToClaude } = require("@/lib/ai/skills/loader");

@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       throw new Error("Discord OAuth is not configured");
     }
 
-    const redirectUri = `${process.env.CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://app.alloomi.ai"}/discord-authorized`;
+    const redirectUri = `${process.env.CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://app.openloomi.ai"}/discord-authorized`;
 
     const tokenResponse = await fetch(`${DISCORD_API_BASE}/oauth2/token`, {
       method: "POST",

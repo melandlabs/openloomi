@@ -5,7 +5,7 @@ import { forwardRef, useEffect } from "react";
 import { Command as CommandPrimitive, useCommandState } from "cmdk";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
-import { Command, CommandGroup, CommandItem, CommandList } from "@alloomi/ui";
+import { Command, CommandGroup, CommandItem, CommandList } from "@openloomi/ui";
 
 export interface Option {
   value: string;

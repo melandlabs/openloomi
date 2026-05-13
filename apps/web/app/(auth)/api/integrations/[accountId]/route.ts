@@ -21,7 +21,7 @@ import {
   updateIntegrationAccount,
 } from "@/lib/db/queries";
 import { integrationAccounts } from "@/lib/db/schema";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { WhatsAppAdapter } from "@/lib/integrations/whatsapp";
 import { WhatsAppBaileysAuthState } from "@/lib/integrations/whatsapp/whatsapp-auth-state";
 import { isTauriMode } from "@/lib/env/constants";

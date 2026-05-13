@@ -9,7 +9,7 @@ import {
   normalizeImportanceOption,
   normalizeUrgencyOption,
   normalizePlatformOption,
-} from "@alloomi/insights";
+} from "@openloomi/insights";
 
 describe("Filter Utils", () => {
   describe("toInsightFilterResponse", () => {

@@ -10,8 +10,8 @@ import {
   getTagConfig,
   extractRssTags,
   buildTagConfigMetadata,
-} from "@alloomi/rss";
-import type { RssSubscription, InsertRssItem } from "@alloomi/rss";
+} from "@openloomi/rss";
+import type { RssSubscription, InsertRssItem } from "@openloomi/rss";
 
 describe("rss-tagging", () => {
   describe("getTagConfig", () => {

@@ -79,8 +79,8 @@ export class UniversalEmbeddings {
 
       if (this.baseURL.includes("openrouter.ai")) {
         headers["HTTP-Referer"] =
-          process.env.NEXT_PUBLIC_APP_URL || "https://alloomi.ai";
-        headers["X-Title"] = "Alloomi AI";
+          process.env.NEXT_PUBLIC_APP_URL || "https://openloomi.ai";
+        headers["X-Title"] = "openloomi AI";
       }
     } else if (this.userAuthToken) {
       headers.Authorization = `Bearer ${this.userAuthToken}`;

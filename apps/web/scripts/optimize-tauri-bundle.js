@@ -32,7 +32,7 @@ let appBundle = APP_BUNDLE;
 if (!appBundle) {
   appBundle = path.join(
     webDir,
-    "src-tauri/target/release/bundle/macos/Alloomi.app",
+    "src-tauri/target/release/bundle/macos/openloomi.app",
   );
 }
 
@@ -240,17 +240,17 @@ if (fs.existsSync(infoPlist)) {
       `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "${infoPlist}" 2>/dev/null`,
       { encoding: "utf8" },
     ).trim();
-    if (currentId !== "com.alloomi.app") {
+    if (currentId !== "com.openloomi.app") {
       execSync(
-        `/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.alloomi.app" "${infoPlist}"`,
+        `/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.openloomi.app" "${infoPlist}"`,
         { stdio: "pipe" },
       );
-      console.log("  Bundle identifier set to: com.alloomi.app");
+      console.log("  Bundle identifier set to: com.openloomi.app");
     }
   } catch {}
 
   if (!SKIP_SIGNING) {
-    const mainBinary = path.join(appBundle, "Contents/MacOS/alloomi");
+    const mainBinary = path.join(appBundle, "Contents/MacOS/openloomi");
     const mainEntitlements = path.join(webDir, "src-tauri/entitlements.plist");
     if (fs.existsSync(mainBinary) && fs.existsSync(mainEntitlements)) {
       console.log("Signing main binary with entitlements...");
@@ -258,7 +258,7 @@ if (fs.existsSync(infoPlist)) {
         shell: true,
       });
       execSync(
-        `codesign --deep --force --sign "${SIGNING_IDENTITY}" --options runtime --timestamp --identifier "com.alloomi.app" --entitlements "${mainEntitlements}" "${mainBinary}"`,
+        `codesign --deep --force --sign "${SIGNING_IDENTITY}" --options runtime --timestamp --identifier "com.openloomi.app" --entitlements "${mainEntitlements}" "${mainBinary}"`,
         { stdio: "pipe" },
       );
       console.log("  Main binary signed");

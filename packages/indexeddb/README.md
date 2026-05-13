@@ -1,11 +1,11 @@
-# @alloomi/indexeddb
+# @openloomi/indexeddb
 
 Client-side IndexedDB manager for browser storage.
 
 ## Installation
 
 ```sh
-pnpm add @alloomi/indexeddb
+pnpm add @openloomi/indexeddb
 ```
 
 ## Exports

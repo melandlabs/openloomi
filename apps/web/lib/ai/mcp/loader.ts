@@ -1,1 +1,1 @@
-export * from "@alloomi/mcp";
+export * from "@openloomi/mcp";

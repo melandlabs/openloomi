@@ -1,13 +1,13 @@
 export const siteMetadata = {
-  name: "Alloomi",
+  name: "openloomi",
   headline: "Scale Your Influence. Clone Your Execution.",
   title:
-    "Alloomi | Privacy-first AI agent that reads, thinks, and acts locally for you",
+    "openloomi | Privacy-first AI agent that reads, thinks, and acts locally for you",
   description:
-    "Alloomi is the privacy-first AI agent that reads, thinks, and acts for you—locally. It connects Telegram, Slack, Gmail, Discord, WhatsApp, and more, recalls long-context, executes intents, and never trains on your data thanks to TEE encryption and a Zero-Training Guarantee.",
-  siteUrl: "https://alloomi.ai",
-  marketingUrl: "https://alloomi.ai",
-  appUrl: "https://app.alloomi.ai",
+    "openloomi is the privacy-first AI agent that reads, thinks, and acts for you—locally. It connects Telegram, Slack, Gmail, Discord, WhatsApp, and more, recalls long-context, executes intents, and never trains on your data thanks to TEE encryption and a Zero-Training Guarantee.",
+  siteUrl: "https://openloomi.ai",
+  marketingUrl: "https://openloomi.ai",
+  appUrl: "https://app.openloomi.ai",
   contactEmail: "support@melandlabs.ai",
   keywords: [
     "privacy-first AI agent",
@@ -23,7 +23,7 @@ export const siteMetadata = {
     "AI CRM enrichment",
     "long-memory AI",
     "Zero-Training Guarantee",
-    "Alloomi AI",
+    "openloomi AI",
   ],
   languages: [
     { iso: "en", label: "English" },

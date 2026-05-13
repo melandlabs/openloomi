@@ -10,7 +10,7 @@ import {
 } from "@/lib/files/config";
 import { getChatById, getMessageById } from "@/lib/db/queries";
 import { createUserFile, getUserStorageUsage } from "@/lib/db/storageService";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { uploadFileToGoogleDrive } from "@/lib/files/google-drive";
 import {
   deriveNotionTextPreview,
@@ -18,7 +18,7 @@ import {
 } from "@/lib/files/notion";
 import { isTauriMode } from "@/lib/env";
 import { fileExists, readFile } from "@/lib/storage";
-import { fetchWithSSRFProtection } from "@alloomi/security/url-validator";
+import { fetchWithSSRFProtection } from "@openloomi/security/url-validator";
 
 function deriveBlobPathFromUrl(source?: string | null) {
   if (!source) return null;
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "Saving is unavailable for this attachment because it is not stored in Alloomi.",
+          "Saving is unavailable for this attachment because it is not stored in openloomi.",
       },
       { status: 400 },
     );

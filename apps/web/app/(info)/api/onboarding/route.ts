@@ -1,7 +1,7 @@
 // app/api/survey/route.ts
 import { auth } from "@/app/(auth)/auth";
 import { getUserById, updateUserOnboarding } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { z } from "zod";
 
 const onboardingRequestBodySchema = z.object({

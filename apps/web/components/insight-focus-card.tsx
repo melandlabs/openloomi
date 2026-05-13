@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import type { Insight } from "@/lib/db/schema";
 import { AgentEmptyState } from "@/components/agent/agent-empty-state";
 

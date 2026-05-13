@@ -3,9 +3,9 @@ import { google } from "googleapis";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/app/(auth)/auth";
-import { encryptToken } from "@alloomi/security/token-encryption";
+import { encryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
-import { GOOGLE_CALENDAR_SCOPES } from "@alloomi/integrations/calendar";
+import { GOOGLE_CALENDAR_SCOPES } from "@openloomi/integrations/calendar";
 
 export async function GET() {
   const session = await auth();
@@ -23,7 +23,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          "Google Calendar integration is not configured. Contact the Alloomi team to enable it.",
+          "Google Calendar integration is not configured. Contact the openloomi team to enable it.",
       },
       { status: 500 },
     );

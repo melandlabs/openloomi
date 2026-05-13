@@ -3,11 +3,11 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@alloomi/ui";
-import { Button, Input } from "@alloomi/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
+import { Button, Input } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@alloomi/hooks/use-is-mobile";
+import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
 import { useChatContextOptional } from "@/components/chat-context";
 import {
   DropdownMenu,
@@ -15,11 +15,11 @@ import {
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { getRecentInsights, type RecentInsight } from "@/lib/insights/recent";
 import { fetcher } from "@/lib/utils";
 import useSWR from "swr";
-import { getIndexedDBManager } from "@alloomi/indexeddb/manager";
+import { getIndexedDBManager } from "@openloomi/indexeddb/manager";
 import { useSession } from "next-auth/react";
 
 /**

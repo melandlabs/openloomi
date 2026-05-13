@@ -17,8 +17,8 @@ import {
 import { zhCN, enUS } from "date-fns/locale";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
-import { Button } from "@alloomi/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@openloomi/ui";
 
 const WEEKDAY_ZH = ["日", "一", "二", "三", "四", "五", "六"];
 const WEEKDAY_EN = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];

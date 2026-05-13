@@ -1,6 +1,6 @@
 "use client";
 
-import { TabsList, TabsTrigger } from "@alloomi/ui";
+import { TabsList, TabsTrigger } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { useTranslation } from "react-i18next";
 

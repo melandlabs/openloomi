@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
  *
  * Chunks are saved to temporary directory, to be merged after all chunks are uploaded
  */
-const UPLOAD_TEMP_DIR = path.join(tmpdir(), "alloomi-uploads");
+const UPLOAD_TEMP_DIR = path.join(tmpdir(), "openloomi-uploads");
 
 // Ensure temporary directory exists
 async function ensureUploadDir() {

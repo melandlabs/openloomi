@@ -1,7 +1,7 @@
 "use client";
 
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@alloomi/ui";
-import { ScrollArea } from "@alloomi/ui";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@openloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
 import { InsightCard } from "@/components/insight-card";
 import type { Insight } from "@/lib/db/schema";
 import { useTranslation } from "react-i18next";

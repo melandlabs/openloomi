@@ -1,6 +1,6 @@
 import { type BotWithAccount, decryptPayload } from "../db/queries";
-import { AppError } from "@alloomi/shared/errors";
-import type { HubspotCredentials } from "@alloomi/integrations/hubspot";
+import { AppError } from "@openloomi/shared/errors";
+import type { HubspotCredentials } from "@openloomi/integrations/hubspot";
 
 export type BotAdapter =
   | "slack"

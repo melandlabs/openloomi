@@ -4,8 +4,8 @@
  * Common agent runtime logic used by Telegram and WhatsApp
  */
 
-import type { AgentConfig, AgentOptions } from "@alloomi/ai/agent/types";
-import { getAgentRegistry } from "@alloomi/ai/agent/registry";
+import type { AgentConfig, AgentOptions } from "@openloomi/ai/agent/types";
+import { getAgentRegistry } from "@openloomi/ai/agent/registry";
 import {
   getUserTypeForService,
   getUserInsightSettings,
@@ -17,8 +17,8 @@ import {
   prepareConversationWindows,
   type ConversationWindowMessage,
 } from "@/lib/ai";
-import { sanitizeCompactionMessages } from "@alloomi/ai/agent";
-import { saveCompactionSummary } from "@alloomi/ai/store";
+import { sanitizeCompactionMessages } from "@openloomi/ai/agent";
+import { saveCompactionSummary } from "@openloomi/ai/store";
 import { getAppMemoryDir } from "@/lib/utils/path";
 import { stripMalformedToolCalls } from "@/lib/utils/tool-names";
 import { formatAgentStreamErrorForUser } from "./format-error";

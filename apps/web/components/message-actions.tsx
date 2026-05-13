@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { memo } from "react";
 import equal from "fast-deep-equal";
 import { toast } from "sonner";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import { useTranslation } from "react-i18next";
 import { useInsightPagination } from "@/hooks/use-insight-data";
 import IntegrationIcon from "./integration-icon";

@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import {
   artifactPathBasename,
   extractArtifactPathsFromText,

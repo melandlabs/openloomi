@@ -15,8 +15,8 @@ import {
   CardHeader,
   CardTitle,
   Progress,
-} from "@alloomi/ui";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import { useFileStorageUsage } from "@/hooks/use-file-storage";
 import { formatBytes } from "@/lib/utils";
 import { openUrl } from "@/lib/tauri";
@@ -524,7 +524,7 @@ export function SavedFiles() {
                   <p className="font-medium text-foreground">
                     {t(
                       "files.uploadDescription",
-                      "Add files from your device to store them in Alloomi for later analysis.",
+                      "Add files from your device to store them in openloomi for later analysis.",
                     )}
                   </p>
                   <p className="mt-1 text-muted-foreground">
@@ -662,7 +662,7 @@ export function SavedFiles() {
                         ? "Google Drive"
                         : file.storageProvider === "notion"
                           ? "Notion"
-                          : "Alloomi Cloud",
+                          : "openloomi Cloud",
                     )}
                   </span>
                 </div>

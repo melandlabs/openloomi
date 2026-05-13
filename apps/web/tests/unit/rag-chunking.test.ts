@@ -11,7 +11,7 @@ import {
   countTokens,
   getOptimalChunkSize,
   estimateChunkCount,
-} from "@alloomi/rag";
+} from "@openloomi/rag";
 
 describe("rag-chunking", () => {
   describe("chunkText", () => {

@@ -18,7 +18,7 @@ export {
   getTauriLogsPath,
 } from "@/lib/utils/path";
 
-import { DEV_PORT, PROD_PORT } from "@alloomi/shared";
+import { DEV_PORT, PROD_PORT } from "@openloomi/shared";
 import {
   DEPLOYMENT_MODE,
   TAURI_SERVER_PORT,

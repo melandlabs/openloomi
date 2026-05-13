@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   triggerCompaction,
   triggerCompactionAsync,
-} from "@alloomi/ai/agent/compaction";
+} from "@openloomi/ai/agent/compaction";
 
 describe("compaction client", () => {
   const originalFetch = global.fetch;

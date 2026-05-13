@@ -5,7 +5,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
-import { Toggle } from "@alloomi/ui";
+import { Toggle } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef } from "react";

@@ -9,10 +9,10 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-// Get Alloomi skills directory path
-function getAlloomiSkillsDir(): string {
+// Get openloomi skills directory path
+function getopenloomiSkillsDir(): string {
   const homeDir = homedir();
-  return join(homeDir, ".alloomi", "skills");
+  return join(homeDir, ".openloomi", "skills");
 }
 
 // Parse and update SKILL.md
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const skillsDir = getAlloomiSkillsDir();
+    const skillsDir = getopenloomiSkillsDir();
     const skillPath = join(skillsDir, skillId);
 
     if (!existsSync(skillPath)) {

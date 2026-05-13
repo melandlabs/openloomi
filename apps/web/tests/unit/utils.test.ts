@@ -18,9 +18,9 @@ import {
   formatBytes,
   filterToolCallText,
 } from "@/lib/utils";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import type { DBMessage } from "@/lib/db/schema";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import { formatISO } from "date-fns";
 
 const uuidRegex =

@@ -32,7 +32,7 @@ export const htmlToPlainText = (html: string): string =>
   turndownService.turndown(html ?? "").trim();
 
 export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export const DRAFT_STORAGE_KEY = "alloomi:insight-reply";
+export const DRAFT_STORAGE_KEY = "openloomi:insight-reply";
 export const TG_SEND_INVALID_PEER_ID_ERR_MSG =
   "Could not find the input entity";
 

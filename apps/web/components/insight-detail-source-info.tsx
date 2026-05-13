@@ -15,8 +15,8 @@ import { enGB, zhCN } from "date-fns/locale";
 import type { Insight } from "@/lib/db/schema";
 import type { DetailData } from "@/lib/ai/subagents/insights";
 import InsightDetailContent from "@/components/insight-detail-content";
-import { Badge, Button, Input } from "@alloomi/ui";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+import { Badge, Button, Input } from "@openloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,8 +27,8 @@ import {
   DropdownMenuSub,
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
-} from "@alloomi/ui";
-import { coerceDate } from "@alloomi/shared";
+} from "@openloomi/ui";
+import { coerceDate } from "@openloomi/shared";
 import { ReplyWorkspace } from "@/components/insight-detail-footer";
 
 /**
@@ -42,7 +42,7 @@ function convertIndexedDBTimestamp(secondsTimestamp: number): number {
 import { useIntegrations, type IntegrationId } from "@/hooks/use-integrations";
 import { useSendInsightReply } from "@/components/insight-detail-footer/hooks";
 import { cn, normalizeTimestamp } from "@/lib/utils";
-import { IndexedDBManager } from "@alloomi/indexeddb/manager";
+import { IndexedDBManager } from "@openloomi/indexeddb/manager";
 import { toast } from "sonner";
 import { useInsightOptimisticUpdates } from "@/components/insight-optimistic-context";
 

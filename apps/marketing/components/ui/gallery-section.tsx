@@ -58,62 +58,62 @@ export default function GallerySection() {
   // Gallery image data - using existing OpenLoomi product screenshots
   const galleryItems: GalleryItem[] = [
     {
-      image: "/img/alloomi/chat.png",
+      image: "/img/openloomi/chat.png",
       title: "Smart Chat Interface",
       category: "chat",
     },
     {
-      image: "/img/alloomi/chat-project.png",
+      image: "/img/openloomi/chat-project.png",
       title: "Project Context Tracking",
       category: "chat",
     },
     {
-      image: "/img/alloomi/insight-box.png",
+      image: "/img/openloomi/insight-box.png",
       title: "Insight Cards",
       category: "insight",
     },
     {
-      image: "/img/alloomi/agent-setting.png",
+      image: "/img/openloomi/agent-setting.png",
       title: "Agent Configuration",
       category: "settings",
     },
     {
-      image: "/img/alloomi/agent-setting-people.png",
+      image: "/img/openloomi/agent-setting-people.png",
       title: "People Preferences",
       category: "settings",
     },
     {
-      image: "/img/alloomi/agent-setting-topic.png",
+      image: "/img/openloomi/agent-setting-topic.png",
       title: "Theme Preferences",
       category: "settings",
     },
     {
-      image: "/img/alloomi/chat-history.png",
+      image: "/img/openloomi/chat-history.png",
       title: "Chat History Management",
       category: "chat",
     },
     {
-      image: "/img/alloomi/chat-report.png",
+      image: "/img/openloomi/chat-report.png",
       title: "Smart Report Generation",
       category: "insight",
     },
     {
-      image: "/img/alloomi/individual-plan.png",
+      image: "/img/openloomi/individual-plan.png",
       title: "Personal Plan Management",
       category: "planning",
     },
     {
-      image: "/img/alloomi/business-plan.png",
+      image: "/img/openloomi/business-plan.png",
       title: "Business Plan Tracking",
       category: "planning",
     },
     {
-      image: "/img/alloomi/im-choose.png",
+      image: "/img/openloomi/im-choose.png",
       title: "Multi-platform Integration",
       category: "platform",
     },
     {
-      image: "/img/alloomi/chat-project-source-1.png",
+      image: "/img/openloomi/chat-project-source-1.png",
       title: "Source Tracing",
       category: "chat",
     },

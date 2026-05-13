@@ -1,11 +1,11 @@
 /**
  * ConfigProvider implementation for apps/web
  *
- * Implements the ConfigProvider interface from @alloomi/integrations/core
+ * Implements the ConfigProvider interface from @openloomi/integrations/core
  * using environment variables from apps/web.
  */
 
-import type { AppConfigProvider } from "@alloomi/integrations/core";
+import type { AppConfigProvider } from "@openloomi/integrations/core";
 import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 import { getAppMemoryDir } from "@/lib/utils/path";
 

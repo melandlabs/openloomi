@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { RemixIcon } from "@/components/remix-icon";
 
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 
 type Placement = "top" | "bottom" | "left" | "right";
 
@@ -164,10 +164,10 @@ export function GuidedTour({
       if (!currentStep) return;
       updateRect(currentStep, { scroll: false });
     };
-    window.addEventListener("alloomi:guided-tour:update", handleTourUpdate);
+    window.addEventListener("openloomi:guided-tour:update", handleTourUpdate);
     return () => {
       window.removeEventListener(
-        "alloomi:guided-tour:update",
+        "openloomi:guided-tour:update",
         handleTourUpdate,
       );
     };

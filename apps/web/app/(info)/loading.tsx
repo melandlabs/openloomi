@@ -1,4 +1,4 @@
-import { Skeleton } from "@alloomi/ui";
+import { Skeleton } from "@openloomi/ui";
 
 export default function InfoLoading() {
   return (

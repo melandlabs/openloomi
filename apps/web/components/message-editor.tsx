@@ -11,7 +11,7 @@ import {
 import { Textarea } from "./ui/textarea";
 import { deleteTrailingMessages } from "@/app/(chat)/actions";
 import type { UseChatHelpers } from "@ai-sdk/react";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import { getTextFromMessage } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 

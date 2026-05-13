@@ -1,6 +1,6 @@
 // app/api/survey/route.ts
 import { auth } from "@/app/(auth)/auth";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { getLatestSurveyByUserId, saveSurvey } from "@/lib/db/queries";
 import { z } from "zod";
 

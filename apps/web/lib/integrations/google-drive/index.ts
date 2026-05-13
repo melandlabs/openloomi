@@ -4,7 +4,7 @@ import { Readable } from "node:stream";
 import { google, type drive_v3 } from "googleapis";
 import type { OAuth2Client } from "google-auth-library";
 
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import {
   getIntegrationAccountByPlatform,
   loadIntegrationCredentials,

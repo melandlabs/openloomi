@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Exchange code → token
-  const redirectUri = `${process.env.CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://app.alloomi.ai"}/slack-authorized`;
+  const redirectUri = `${process.env.CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://app.openloomi.ai"}/slack-authorized`;
 
   const response = await fetch("https://slack.com/api/oauth.v2.access", {
     method: "POST",

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Textarea } from "@alloomi/ui";
+import { Textarea } from "@openloomi/ui";
 import { Spinner } from "@/components/spinner";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";

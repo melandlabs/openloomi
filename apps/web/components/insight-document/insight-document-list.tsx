@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Button, Input, Label } from "@alloomi/ui";
-import { ScrollArea } from "@alloomi/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@alloomi/ui";
+import { Button, Input, Label } from "@openloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@openloomi/ui";
 import { useTranslation } from "react-i18next";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
 import { RemixIcon } from "@/components/remix-icon";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +18,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { toast } from "@/components/toast";
 import {
   useKnowledgeFiles,

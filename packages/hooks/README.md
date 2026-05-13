@@ -1,11 +1,11 @@
-# @alloomi/hooks
+# @openloomi/hooks
 
-A collection of pure React hooks extracted from the Alloomi web app.
+A collection of pure React hooks extracted from the openloomi web app.
 
 ## Installation
 
 ```sh
-pnpm add @alloomi/hooks
+pnpm add @openloomi/hooks
 ```
 
 ## Hooks

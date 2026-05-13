@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/integrations-x",
+  "name": "@openloomi/integrations-x",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -7,11 +7,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@alloomi/shared": "workspace:*",
+    "@openloomi/shared": "workspace:*",
     "@xdevplatform/xdk": "^0.5.0"
   },
   "devDependencies": {
-    "@alloomi/config": "workspace:*",
+    "@openloomi/config": "workspace:*",
     "typescript": "^5.6.3"
   },
   "scripts": {

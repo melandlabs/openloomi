@@ -1,7 +1,7 @@
 <div align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/images/logo-dark-light.svg">
-  <img src="apps/web/public/images/logo-full-light.svg" alt="Alloomi Logo" width="400">
+  <img src="apps/web/public/images/logo-full-light.svg" alt="OpenLoomi Logo" width="400">
 </picture>
 
 <br>
@@ -10,10 +10,10 @@
 
 <br>
 
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-4B4B4B?logo=linux&logoColor=white)](https://alloomi.ai)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-4B4B4B?logo=linux&logoColor=white)](https://openloomi.ai)
 [![License](https://img.shields.io/badge/License-Apache%202.0-F8D52A?logo=apache)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/xkJaJyWcsv)
-[![X](https://img.shields.io/badge/X-Follow-000000?logo=x&logoColor=white)](https://x.com/AlloomiAI)
+[![X](https://img.shields.io/badge/X-Follow-000000?logo=x&logoColor=white)](https://x.com/openloomiAI)
 
 </div>
 
@@ -102,7 +102,7 @@ This is early-stage software. We're looking for people who'll actually install i
 
 - [GitHub Issues](https://github.com/melandlabs/openloomi/issues) — bugs, install problems, feature requests
 - [Discord](https://discord.com/invite/xkJaJyWcsv) — discussion, questions, help
-- [Email](mailto:developer@alloomi.ai) — anything else
+- [Email](mailto:developer@openloomi.ai) — anything else
 
 ## Contributing
 

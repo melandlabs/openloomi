@@ -1,4 +1,4 @@
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 
 /**
  * Jira API credentials stored in the database

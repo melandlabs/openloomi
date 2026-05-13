@@ -1,4 +1,4 @@
-import { AppError } from "@alloomi/shared";
+import { AppError } from "@openloomi/shared";
 
 export type AsanaCredentials = {
   accessToken: string;

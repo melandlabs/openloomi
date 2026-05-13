@@ -2,11 +2,11 @@
 
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@alloomi/ui";
-import { useEnterSendWithIme } from "@alloomi/hooks/use-enter-send-ime";
+import { Button } from "@openloomi/ui";
+import { useEnterSendWithIme } from "@openloomi/hooks/use-enter-send-ime";
 import { Spinner } from "@/components/spinner";
 import { RemixIcon } from "@/components/remix-icon";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import { ReplyRecipients } from "./reply-recipients";
 import type { UserContact } from "./types";
 import type { ReplyOption } from "./reply-options";

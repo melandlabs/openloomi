@@ -2,7 +2,7 @@
 import { cn } from "@/lib/utils";
 import { RemixIcon } from "@/components/remix-icon";
 import IntegrationIcon from "@/components/integration-icon";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 
 /**
  * Citation Badge component

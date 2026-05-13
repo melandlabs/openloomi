@@ -91,7 +91,7 @@ export async function generateMetadata({ params }) {
       description:
         "The article you requested is unavailable. Browse the OpenLoomi blog for calm communication guides | inbox intelligence playbooks | productivity systems references | automation & translation tips | OpenLoomi product updates.",
       alternates: {
-        canonical: `https://alloomi.ai/blogs/${slug}`,
+        canonical: `https://openloomi.ai/blogs/${slug}`,
       },
     };
   }
@@ -117,9 +117,9 @@ export async function generateMetadata({ params }) {
   ];
   const pageDescription = descriptionSegments.join(" | ");
 
-  const canonical = `https://alloomi.ai/blogs/${slug}`;
+  const canonical = `https://openloomi.ai/blogs/${slug}`;
   const imageUrl = post.meta.image
-    ? new URL(post.meta.image, "https://alloomi.ai").toString()
+    ? new URL(post.meta.image, "https://openloomi.ai").toString()
     : undefined;
 
   return {
@@ -160,9 +160,9 @@ export default async function BlogPage({ params }) {
     notFound();
   }
 
-  const canonical = `https://alloomi.ai/blogs/${slug}`;
+  const canonical = `https://openloomi.ai/blogs/${slug}`;
   const imageUrl = post.meta.image
-    ? new URL(post.meta.image, "https://alloomi.ai").toString()
+    ? new URL(post.meta.image, "https://openloomi.ai").toString()
     : undefined;
 
   const articleJsonLd = {
@@ -176,14 +176,14 @@ export default async function BlogPage({ params }) {
     author: {
       "@type": "Organization",
       name: "OpenLoomi",
-      url: "https://alloomi.ai",
+      url: "https://openloomi.ai",
     },
     publisher: {
       "@type": "Organization",
       name: "OpenLoomi",
       logo: {
         "@type": "ImageObject",
-        url: "https://alloomi.ai/images/logo_web.png",
+        url: "https://openloomi.ai/images/logo_web.png",
       },
     },
     mainEntityOfPage: { "@type": "WebPage", "@id": canonical },
@@ -197,13 +197,13 @@ export default async function BlogPage({ params }) {
         "@type": "ListItem",
         position: 1,
         name: "Home",
-        item: "https://alloomi.ai",
+        item: "https://openloomi.ai",
       },
       {
         "@type": "ListItem",
         position: 2,
         name: "Blogs",
-        item: "https://alloomi.ai/blogs",
+        item: "https://openloomi.ai/blogs",
       },
       {
         "@type": "ListItem",

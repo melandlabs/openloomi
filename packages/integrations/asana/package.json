@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/integrations-asana",
+  "name": "@openloomi/integrations-asana",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -8,14 +8,14 @@
     "./client": "./src/client.ts"
   },
   "dependencies": {
-    "@alloomi/shared": "workspace:*",
+    "@openloomi/shared": "workspace:*",
     "zod": "^4.3.6"
   },
   "peerDependencies": {
     "react": ">=18.0.0"
   },
   "devDependencies": {
-    "@alloomi/config": "workspace:*",
+    "@openloomi/config": "workspace:*",
     "typescript": "^5.6.3"
   },
   "scripts": {

@@ -11,7 +11,7 @@ import * as crypto from "node:crypto";
 
 const PBKDF2_ITERATIONS = 100000;
 const KEY_LENGTH = 32; // 256 bits for Fernet
-const SALT_PREFIX = "alloomi-account-key-v1:";
+const SALT_PREFIX = "openloomi-account-key-v1:";
 
 export interface DerivedKey {
   key: Buffer;
@@ -47,7 +47,7 @@ export class KeyManager {
       // If not a valid Fernet key (32 bytes), derive using PBKDF2
       this.masterKey = this.deriveKey(
         this.masterKey,
-        Buffer.from("alloomi-master-salt"),
+        Buffer.from("openloomi-master-salt"),
       );
     }
 

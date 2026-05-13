@@ -6,8 +6,8 @@ import { syncChatToFilesystem } from "@/lib/ai/memory/chat-sync";
 import { isTauriMode } from "@/lib/env";
 import { setAIUserContextFromRequest } from "@/lib/ai/request-context";
 import { clearAIUserContext } from "@/lib/ai";
-import type { ChatMessage } from "@alloomi/shared";
-import type { Attachment } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
+import type { Attachment } from "@openloomi/shared";
 
 /**
  * Save Native Agent messages to database

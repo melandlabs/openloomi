@@ -1,7 +1,7 @@
 /**
  * MCP Config Loader
  *
- * Loads MCP server configuration from ~/.alloomi/mcp.json
+ * Loads MCP server configuration from ~/.openloomi/mcp.json
  */
 
 import fs from "node:fs/promises";
@@ -33,14 +33,14 @@ export type McpServerConfig =
   | McpSSEServerConfig;
 
 /**
- * Get the MCP config path (default: ~/.alloomi/mcp.json)
- * Override by setting ALLOOMI_MCP_CONFIG_PATH environment variable.
+ * Get the MCP config path (default: ~/.openloomi/mcp.json)
+ * Override by setting openloomi_MCP_CONFIG_PATH environment variable.
  */
 export function getMcpConfigPath(): string {
-  if (process.env.ALLOOMI_MCP_CONFIG_PATH) {
-    return process.env.ALLOOMI_MCP_CONFIG_PATH;
+  if (process.env.openloomi_MCP_CONFIG_PATH) {
+    return process.env.openloomi_MCP_CONFIG_PATH;
   }
-  return path.join(os.homedir(), ".alloomi", "mcp.json");
+  return path.join(os.homedir(), ".openloomi", "mcp.json");
 }
 
 /**
@@ -107,7 +107,7 @@ export interface McpConfig {
 }
 
 /**
- * Load MCP servers configuration from ~/.alloomi/mcp.json
+ * Load MCP servers configuration from ~/.openloomi/mcp.json
  *
  * @param mcpConfig Optional config to control loading
  * @returns Record of server name to config
@@ -120,6 +120,6 @@ export async function loadMcpServers(
   }
 
   const configPath = getMcpConfigPath();
-  const servers = await loadMcpServersFromFile(configPath, "alloomi");
+  const servers = await loadMcpServersFromFile(configPath, "openloomi");
   return servers;
 }

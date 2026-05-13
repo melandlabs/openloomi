@@ -8,7 +8,7 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { authenticateCloudRequest } from "@/lib/auth/cloud-auth";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { withRateLimit, RateLimitPresets } from "@/lib/rate-limit/middleware";
 import { saveFeedback } from "@/lib/db/queries";
 import { generateUUID } from "@/lib/utils";

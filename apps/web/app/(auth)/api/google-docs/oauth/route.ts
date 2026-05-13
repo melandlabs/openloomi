@@ -3,9 +3,9 @@ import { google } from "googleapis";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/app/(auth)/auth";
-import { encryptToken } from "@alloomi/security/token-encryption";
+import { encryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
-import { GOOGLE_DOCS_SCOPES } from "@alloomi/integrations/google-docs";
+import { GOOGLE_DOCS_SCOPES } from "@openloomi/integrations/google-docs";
 
 export async function GET() {
   const session = await auth();
@@ -26,7 +26,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          "Google Docs integration is not configured. Contact the Alloomi team to enable it.",
+          "Google Docs integration is not configured. Contact the openloomi team to enable it.",
       },
       { status: 500 },
     );

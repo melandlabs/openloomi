@@ -15,7 +15,7 @@ import {
   getSelectedSoulPresetId,
   DEFAULT_PROMPT_EN,
   DEFAULT_PROMPT_ZH,
-} from "@alloomi/shared/soul";
+} from "@openloomi/shared/soul";
 
 describe("shared soul", () => {
   describe("getDefaultPrompt", () => {
@@ -23,14 +23,14 @@ describe("shared soul", () => {
     it("SO-01: should return English prompt for en-US locale", () => {
       const result = getDefaultPrompt("en-US");
       expect(result).toBe(DEFAULT_PROMPT_EN);
-      expect(result).toContain("You are Alloomi");
+      expect(result).toContain("You are openloomi");
     });
 
     // SO-02: getDefaultPrompt Chinese locale
     it("SO-02: should return Chinese prompt for zh-Hans locale", () => {
       const result = getDefaultPrompt("zh-Hans");
       expect(result).toBe(DEFAULT_PROMPT_ZH);
-      expect(result).toContain("你是 Alloomi");
+      expect(result).toContain("你是 openloomi");
     });
 
     // SO-03: getDefaultPrompt other locale

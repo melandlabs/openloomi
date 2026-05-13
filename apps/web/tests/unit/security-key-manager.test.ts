@@ -52,7 +52,7 @@ describe("security key manager", () => {
       testKey.fill("a");
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
-      const { KeyManager } = await import("@alloomi/security/key-manager");
+      const { KeyManager } = await import("@openloomi/security/key-manager");
       const km = new KeyManager();
 
       expect(km).toBeTruthy();
@@ -66,7 +66,7 @@ describe("security key manager", () => {
       testKey.fill("a");
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
-      const { KeyManager } = await import("@alloomi/security/key-manager");
+      const { KeyManager } = await import("@openloomi/security/key-manager");
       const km = new KeyManager();
 
       const result = km.encryptWithAccountKey(
@@ -87,7 +87,7 @@ describe("security key manager", () => {
       testKey.fill("a");
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
-      const { KeyManager } = await import("@alloomi/security/key-manager");
+      const { KeyManager } = await import("@openloomi/security/key-manager");
       const km = new KeyManager();
 
       const result1 = km.encryptWithAccountKey("same-data", "account-1", 1);
@@ -105,7 +105,7 @@ describe("security key manager", () => {
       testKey.fill("a");
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
-      const { KeyManager } = await import("@alloomi/security/key-manager");
+      const { KeyManager } = await import("@openloomi/security/key-manager");
       const km = new KeyManager();
 
       const plaintext = "my-secret-credentials";
@@ -129,7 +129,7 @@ describe("security key manager", () => {
       testKey.fill("a");
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
-      const { KeyManager } = await import("@alloomi/security/key-manager");
+      const { KeyManager } = await import("@openloomi/security/key-manager");
       const km = new KeyManager();
 
       const result = km.rotateAccountKey("account-123", 1);
@@ -145,7 +145,7 @@ describe("security key manager", () => {
       testKey.fill("a");
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
-      const { KeyManager } = await import("@alloomi/security/key-manager");
+      const { KeyManager } = await import("@openloomi/security/key-manager");
       const km = new KeyManager();
 
       const result1 = km.rotateAccountKey("account-123", 1);
@@ -163,7 +163,7 @@ describe("security key manager", () => {
       testKey.fill("a");
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
-      const { KeyManager } = await import("@alloomi/security/key-manager");
+      const { KeyManager } = await import("@openloomi/security/key-manager");
       const km = new KeyManager();
 
       const key1 = km.deriveAccountKey("account-123", 1);
@@ -179,7 +179,7 @@ describe("security key manager", () => {
       testKey.fill("a");
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
-      const { KeyManager } = await import("@alloomi/security/key-manager");
+      const { KeyManager } = await import("@openloomi/security/key-manager");
       const km = new KeyManager();
 
       const key1 = km.deriveAccountKey("account-123", 1);
@@ -196,7 +196,7 @@ describe("security key manager", () => {
     it("KM-09: Should throw error when ENCRYPTION_KEY is not set", async () => {
       process.env.ENCRYPTION_KEY = "";
 
-      const { KeyManager } = await import("@alloomi/security/key-manager");
+      const { KeyManager } = await import("@openloomi/security/key-manager");
       const km = new KeyManager();
 
       expect(() => km.encryptWithAccountKey("data", "account", 1)).toThrow(
@@ -212,7 +212,7 @@ describe("security key manager", () => {
       testKey.fill("a");
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
-      const { KeyManager } = await import("@alloomi/security/key-manager");
+      const { KeyManager } = await import("@openloomi/security/key-manager");
       const km = new KeyManager();
 
       // Derive a key to populate cache
@@ -231,7 +231,7 @@ describe("security key manager", () => {
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
       const { encryptWithAccountKey } =
-        await import("@alloomi/security/key-manager");
+        await import("@openloomi/security/key-manager");
 
       const result = encryptWithAccountKey("data", "account-123", 1);
 
@@ -246,7 +246,7 @@ describe("security key manager", () => {
       process.env.ENCRYPTION_KEY = testKey.toString("base64");
 
       const { encryptWithAccountKey, decryptWithAccountKey } =
-        await import("@alloomi/security/key-manager");
+        await import("@openloomi/security/key-manager");
 
       const { encrypted } = encryptWithAccountKey("data", "account-123", 1);
       const decrypted = decryptWithAccountKey(encrypted, "account-123", 1);

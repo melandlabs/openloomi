@@ -18,7 +18,7 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { DetailData, TimelineData } from "../ai/subagents/insights";
-import type { ContactMeta } from "@alloomi/integrations/contacts";
+import type { ContactMeta } from "@openloomi/integrations/contacts";
 import type { InsightFilter } from "@/lib/insights/filter-schema";
 
 export const user = pgTable("User", {

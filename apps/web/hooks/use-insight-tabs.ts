@@ -83,7 +83,7 @@ export function useInsightTabs() {
    */
   const storageKey = useMemo(() => {
     const userId = data?.user?.id ?? data?.user?.email ?? "guest";
-    return `alloomi:insight:usertabs:${userId}`;
+    return `openloomi:insight:usertabs:${userId}`;
   }, [data?.user?.email, data?.user?.id]);
 
   /**
@@ -192,13 +192,13 @@ export function useInsightTabs() {
 
     // Listen for changes
     window.addEventListener("storage", loadTabs);
-    window.addEventListener("alloomi:tabs-update", loadTabs);
+    window.addEventListener("openloomi:tabs-update", loadTabs);
 
     // Cleanup function
     return () => {
       isMounted = false;
       window.removeEventListener("storage", loadTabs);
-      window.removeEventListener("alloomi:tabs-update", loadTabs);
+      window.removeEventListener("openloomi:tabs-update", loadTabs);
     };
   }, [storageKey, migrateFilter]);
 
@@ -212,7 +212,7 @@ export function useInsightTabs() {
         window.localStorage.setItem(storageKey, JSON.stringify(newTabs));
         setTabs(newTabs);
         // Dispatch custom event for same-window synchronization
-        window.dispatchEvent(new CustomEvent("alloomi:tabs-update"));
+        window.dispatchEvent(new CustomEvent("openloomi:tabs-update"));
       } catch (error) {
         console.error(
           "[useInsightTabs] Failed to save tabs to localStorage:",

@@ -1,7 +1,7 @@
 /**
  * Provider implementations for apps/web
  *
- * These implementations connect the interfaces from @alloomi/integrations/core
+ * These implementations connect the interfaces from @openloomi/integrations/core
  * to the concrete infrastructure in apps/web (DB, storage, auth, config).
  */
 

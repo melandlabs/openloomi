@@ -1,4 +1,4 @@
-// Copyright 2026 Alloomi Team. All rights reserved.
+// Copyright 2026 openloomi Team. All rights reserved.
 //
 // Use of this source code is governed by a license that can be
 // found in the LICENSE file in the root of this source tree.
@@ -7,7 +7,7 @@
 
 #[cfg(test)]
 mod base64_decode_tests {
-    use alloomi_lib::node::base64_decode;
+    use openloomi_lib::node::base64_decode;
 
     #[test]
     fn test_base64_decode_simple() {

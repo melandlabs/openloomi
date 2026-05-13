@@ -69,7 +69,7 @@ describe("iMessage Sending", () => {
 
       const { IMessageAdapter } = await import("@/lib/integrations/imessage");
       const adapter = new IMessageAdapter({ botId: "imessage-send-test" });
-      const text = `[Alloomi] iMessage unit test ${new Date().toISOString()}`;
+      const text = `[openloomi] iMessage unit test ${new Date().toISOString()}`;
 
       await adapter.sendMessage("private", chatId, text);
       await adapter.kill();

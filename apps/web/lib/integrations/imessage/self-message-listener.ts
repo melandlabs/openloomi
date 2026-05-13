@@ -8,9 +8,9 @@
  * How it works:
  * - Uses @photon-ai/imessage-kit SDK to poll the iMessage database for new messages
  * - Identifies self-message conversations via the user's configured phone number/email
- * - Distinguishes user messages from AI responses via the "(By Alloomi AI)" suffix
+ * - Distinguishes user messages from AI responses via the "(By openloomi AI)" suffix
  * - User messages trigger Agent Runtime execution
- * - AI responses are sent back to the self-chat via iMessage, tagged with "(By Alloomi AI)"
+ * - AI responses are sent back to the self-chat via iMessage, tagged with "(By openloomi AI)"
  *
  * macOS only; requires full disk access permission
  */
@@ -19,9 +19,9 @@ import type { Message as IMessage } from "@photon-ai/imessage-kit";
 import {
   isIMessageAvailable,
   formatIMessageChatId,
-} from "@alloomi/integrations/imessage";
+} from "@openloomi/integrations/imessage";
 import { handleAgentRuntime } from "./handlers";
-import { IMessageConversationStore } from "@alloomi/integrations/imessage/conversation-store";
+import { IMessageConversationStore } from "@openloomi/integrations/imessage/conversation-store";
 import { getAppMemoryDir } from "@/lib/utils/path";
 import { createTaskSession } from "@/lib/files/workspace/sessions";
 
@@ -34,7 +34,7 @@ import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 const DEBUG = process.env.NODE_ENV === "development";
 
 // AI response suffix marker
-const AI_SUFFIX = "(By Alloomi AI)";
+const AI_SUFFIX = "(By openloomi AI)";
 
 // Polling interval (milliseconds)
 const POLLING_INTERVAL_MS = 3000;
@@ -766,7 +766,7 @@ end tell`;
           continue;
         }
 
-        // Distinguish AI responses from user messages via "(By Alloomi AI)" suffix
+        // Distinguish AI responses from user messages via "(By openloomi AI)" suffix
         // Check if message contains the AI suffix (may appear at the end or in the middle)
         if (text.includes(AI_SUFFIX)) {
           if (DEBUG)

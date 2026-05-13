@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/ai",
+  "name": "@openloomi/ai",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -26,11 +26,11 @@
     "@vercel/sandbox": "^1.7.1",
     "ai": "5.0.0-beta.6",
     "@ai-sdk/openai-compatible": "^1.0.0",
-    "@alloomi/shared": "workspace:*"
+    "@openloomi/shared": "workspace:*"
   },
   "peerDependencies": {},
   "devDependencies": {
-    "@alloomi/config": "workspace:*",
+    "@openloomi/config": "workspace:*",
     "typescript": "^5.6.3"
   },
   "scripts": {

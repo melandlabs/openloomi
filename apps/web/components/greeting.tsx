@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import type { UseChatHelpers } from "@ai-sdk/react";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import { useMemo, useEffect, memo } from "react";
 import {
   getAllDefaultSuggestions,

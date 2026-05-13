@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { MessageEditor } from "../message-editor";
 import { MessageReasoning } from "../message-reasoning";
 import type { UseChatHelpers } from "@ai-sdk/react";
-import type { ChatMessage } from "@alloomi/shared";
+import type { ChatMessage } from "@openloomi/shared";
 import { useTranslation } from "react-i18next";
 import { useCopyToClipboard } from "usehooks-ts";
 import { useIntegrations } from "@/hooks/use-integrations";
@@ -34,8 +34,8 @@ import { QuestionInput } from "../question-input";
 import { PasswordInput } from "../password-input";
 import { useChatContext } from "../chat-context";
 import { useGlobalInsightDrawer } from "../global-insight-drawer";
-import type { ContentSegment } from "@alloomi/shared/ref";
-import { parseContentWithRefs } from "@alloomi/shared/ref";
+import type { ContentSegment } from "@openloomi/shared/ref";
+import { parseContentWithRefs } from "@openloomi/shared/ref";
 import { InlineRefBadge } from "../inline-ref-badge";
 
 // Extracted components

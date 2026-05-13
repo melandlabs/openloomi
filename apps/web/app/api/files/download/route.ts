@@ -11,7 +11,7 @@ import { getChatById, getMessageById } from "@/lib/db/queries";
 import { deriveBlobPathFromUrl } from "@/lib/files/blob-path";
 import { isTauriMode, getAppUrl } from "@/lib/env";
 import { readFile, fileExists } from "@/lib/storage";
-import { fetchWithSSRFProtection } from "@alloomi/security/url-validator";
+import { fetchWithSSRFProtection } from "@openloomi/security/url-validator";
 
 const downloadSchema = z.union([
   z.object({
@@ -334,7 +334,7 @@ export async function POST(request: Request) {
 
   if (!resolvedBlobPath) {
     return NextResponse.json(
-      { error: "Attachment is not stored in Alloomi." },
+      { error: "Attachment is not stored in openloomi." },
       { status: 400 },
     );
   }

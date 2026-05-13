@@ -4,7 +4,7 @@ import { getApplicationBaseUrl } from "@/lib/env";
 import { getCloudUrl } from "@/lib/auth/cloud-proxy";
 import { isTauriMode } from "@/lib/env/constants";
 import { getAuthUser } from "@/lib/auth/dual-auth";
-import { encryptToken } from "@alloomi/security/token-encryption";
+import { encryptToken } from "@openloomi/security/token-encryption";
 
 const NOTION_AUTHORIZE_URL = "https://api.notion.com/v1/oauth/authorize";
 const NOTION_STATE_COOKIE = "notion_oauth_state";

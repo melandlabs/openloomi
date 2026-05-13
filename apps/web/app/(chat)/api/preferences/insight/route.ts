@@ -7,7 +7,7 @@ import {
   removeUserRole,
   getLatestSurveyByUserId,
 } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { formatToLocalTime } from "@/lib/utils";
 import { NextResponse } from "next/server";
 import { z } from "zod";

@@ -9,7 +9,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { ScrollableTabs, TabBadge, TabButton } from "./scrollable-tabs";
 import { AgentSectionHeader } from "./section-header";
 import type { TaskFilterTab } from "./todo-types";

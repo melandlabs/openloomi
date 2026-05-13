@@ -26,11 +26,11 @@ import {
   buildCategoriesPrompt,
   type InsightData,
 } from "../ai/subagents/insights";
-import { AppError } from "@alloomi/shared/errors";
-import type { ExtractedMessageInfo } from "@alloomi/integrations/channels/sources/types";
-import { TelegramAdapter } from "@alloomi/integrations/telegram";
-import { FacebookMessengerAdapter } from "@alloomi/integrations/facebook-messenger";
-import type { InsertRssItem } from "@alloomi/rss";
+import { AppError } from "@openloomi/shared/errors";
+import type { ExtractedMessageInfo } from "@openloomi/integrations/channels/sources/types";
+import { TelegramAdapter } from "@openloomi/integrations/telegram";
+import { FacebookMessengerAdapter } from "@openloomi/integrations/facebook-messenger";
+import type { InsertRssItem } from "@openloomi/rss";
 import { maxChunkSummaryCount } from "@/lib/env/constants";
 import {
   deleteInsightsSession,
@@ -58,34 +58,34 @@ import {
   generateInsightPayload,
   type GeneratedInsightPayload,
 } from "@/lib/insights/transform";
-import { LinkedInAdapter } from "@alloomi/integrations/linkedin";
-import { InstagramAdapter } from "@alloomi/integrations/instagram";
-import { GoogleCalendarAdapter } from "@alloomi/integrations/calendar";
-import { HubspotClient, type HubspotDeal } from "@alloomi/integrations/hubspot";
+import { LinkedInAdapter } from "@openloomi/integrations/linkedin";
+import { InstagramAdapter } from "@openloomi/integrations/instagram";
+import { GoogleCalendarAdapter } from "@openloomi/integrations/calendar";
+import { HubspotClient, type HubspotDeal } from "@openloomi/integrations/hubspot";
 import { setAIUserContext, clearAIUserContext } from "@/lib/ai";
 import {
   OutlookCalendarAdapter,
   type OutlookCalendarEvent,
-} from "@alloomi/integrations/calendar";
+} from "@openloomi/integrations/calendar";
 import { IMessageAdapter, parseIMessageChatId } from "../integrations/imessage";
-import type { Platform } from "@alloomi/integrations/channels/sources/types";
+import type { Platform } from "@openloomi/integrations/channels/sources/types";
 import { getBotCredentials } from "@/lib/bots/token";
 import {
   buildInsightRecord,
   fetchFeed,
   getCachedRssBotId,
 } from "@/lib/bots/rss";
-import { buildRssItemInserts } from "@alloomi/rss";
+import { buildRssItemInserts } from "@openloomi/rss";
 import {
   listRecentDocuments,
   type GoogleDocSummary,
-} from "@alloomi/integrations/google-docs";
+} from "@openloomi/integrations/google-docs";
 import {
   extractRawMessages,
   type RawMessageData,
-} from "@alloomi/indexeddb/extractor";
+} from "@openloomi/indexeddb/extractor";
 import { shouldSkipGmailEmail } from "../integrations/email/classifier";
-import { FeishuAdapter } from "@alloomi/integrations/feishu";
+import { FeishuAdapter } from "@openloomi/integrations/feishu";
 
 import {
   DEFAULT_CATEGORIES,
@@ -2283,7 +2283,7 @@ export async function getInsightsByBotId({
               await markRssItemsProcessed(processedPayload);
 
               const { extractRawMessages: extractRawMessagesLocal } =
-                await import("@alloomi/indexeddb/extractor");
+                await import("@openloomi/indexeddb/extractor");
               const extractedMessages = extractRawMessagesLocal(
                 feedResult.items,
                 "rss",

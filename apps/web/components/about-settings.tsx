@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import Image from "next/image";
-import { Badge, Button, Separator } from "@alloomi/ui";
+import { Badge, Button, Separator } from "@openloomi/ui";
 import { useTranslation } from "react-i18next";
 import { RemixIcon } from "@/components/remix-icon";
 import ContactUs from "@/components/contact-us";
@@ -33,12 +33,12 @@ interface AboutSettingsButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
 const SOCIAL_LINKS = [
   {
     name: "X",
-    href: "https://x.com/AlloomiAI",
+    href: "https://x.com/openloomiAI",
     iconSrc: "/images/apps/twitter.png",
   },
   {
     name: "LinkedIn",
-    href: "https://www.linkedin.com/company/alloomiai",
+    href: "https://www.linkedin.com/company/openloomiai",
     iconSrc: "/images/apps/linkedin.png",
   },
   {
@@ -98,7 +98,7 @@ export function AboutSettings() {
   const [appVersion, setAppVersion] = useState("Web");
   const [showWechatQR, setShowWechatQR] = useState(false);
   const isTauriEnv = useMemo(() => isTauri(), []);
-  const websiteLink = "https://alloomi.ai";
+  const websiteLink = "https://openloomi.ai";
 
   /**
    * Load app version on mount.
@@ -139,13 +139,13 @@ export function AboutSettings() {
             <div className="flex items-center gap-3">
               <img
                 src="/images/logo.svg"
-                alt="Alloomi Logo"
+                alt="openloomi Logo"
                 className="size-16 object-contain shrink-0"
               />
               <div className="flex flex-col items-start gap-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-base font-semibold text-foreground">
-                    alloomi
+                    openloomi
                   </p>
                   {/* Match app-sidebar logo row Alpha badge */}
                   <Badge
@@ -164,7 +164,7 @@ export function AboutSettings() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => openUrl("https://alloomi.ai/docs/changelog")}
+                onClick={() => openUrl("https://openloomi.ai/docs/changelog")}
                 className="shrink-0 text-sm font-normal"
               >
                 <RemixIcon
@@ -298,7 +298,7 @@ export function AboutSettings() {
         <div className="flex flex-col gap-3">
           <AboutSettingsButton
             type="button"
-            onClick={() => openUrl("https://app.alloomi.ai/privacy")}
+            onClick={() => openUrl("https://app.openloomi.ai/privacy")}
           >
             <span>{t("common.privacy", "Privacy Policy")}</span>
             <RemixIcon
@@ -310,7 +310,7 @@ export function AboutSettings() {
 
           <AboutSettingsButton
             type="button"
-            onClick={() => openUrl("https://app.alloomi.ai/terms")}
+            onClick={() => openUrl("https://app.openloomi.ai/terms")}
           >
             <span>{t("common.terms", "Terms of Service")}</span>
             <RemixIcon

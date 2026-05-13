@@ -1,11 +1,11 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@alloomi/ui";
-import { Button, Textarea } from "@alloomi/ui";
-import { ScrollArea } from "@alloomi/ui";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@openloomi/ui";
+import { Button, Textarea } from "@openloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
 import { useTranslation } from "react-i18next";
-import { SOUL_PRESETS, SOUL_PRESET_CUSTOM_ID } from "@alloomi/shared/soul";
+import { SOUL_PRESETS, SOUL_PRESET_CUSTOM_ID } from "@openloomi/shared/soul";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
 

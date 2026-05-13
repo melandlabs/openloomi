@@ -1,7 +1,7 @@
 /**
  * Integration Interfaces Unit Tests
  *
- * Tests for core interfaces in @alloomi/integrations
+ * Tests for core interfaces in @openloomi/integrations
  */
 import { describe, test, expect, vi } from "vitest";
 import type {
@@ -10,7 +10,7 @@ import type {
   ClientRegistry,
   CredentialStore,
   ConfigProvider,
-} from "@alloomi/integrations/core";
+} from "@openloomi/integrations/core";
 
 describe("BaileysAuthStateProvider", () => {
   test("should be a valid interface", () => {

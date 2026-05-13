@@ -2,18 +2,18 @@
  * AI Router - web app implementation
  *
  * Full implementation with cloud routing support for the web app.
- * Imports core routing logic from @alloomi/ai/router for local model calls.
+ * Imports core routing logic from @openloomi/ai/router for local model calls.
  */
 
 import { isTauriMode } from "@/lib/env/constants";
-import { getModelProvider } from "@alloomi/ai/agent/model";
+import { getModelProvider } from "@openloomi/ai/agent/model";
 import type {
   ModelCallOptions,
   ModelCallResult,
-} from "@alloomi/ai/agent/routing";
+} from "@openloomi/ai/agent/routing";
 
 export type { ModelCallOptions, ModelCallResult };
-export { getRecommendedMode } from "@alloomi/ai/agent/routing";
+export { getRecommendedMode } from "@openloomi/ai/agent/routing";
 
 export interface CloudAIRequest {
   messages: Array<{ role: string; content: string }>;
@@ -35,7 +35,7 @@ async function callLocalModel(
   const { streamText, createUIMessageStream, JsonToSseTransformStream } =
     await import("ai");
 
-  const { generateUUID } = await import("@alloomi/shared");
+  const { generateUUID } = await import("@openloomi/shared");
 
   const modelProvider = getModelProvider(isTauriMode());
   const model = options.model

@@ -3,7 +3,7 @@ import { google } from "googleapis";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/app/(auth)/auth";
-import { encryptToken } from "@alloomi/security/token-encryption";
+import { encryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
 import { GMAIL_SCOPES } from "@/lib/integrations/gmail";
 
@@ -21,7 +21,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          "Gmail integration is not configured. Contact the Alloomi team to enable it.",
+          "Gmail integration is not configured. Contact the openloomi team to enable it.",
       },
       { status: 500 },
     );

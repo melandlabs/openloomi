@@ -4,11 +4,11 @@
  * Global registry to track all active Baileys WASocket instances.
  * Used by the self-message listener to access connected sockets.
  *
- * Implements the ClientRegistry interface from @alloomi/integrations/core
+ * Implements the ClientRegistry interface from @openloomi/integrations/core
  */
 
 import type { WASocket } from "@whiskeysockets/baileys";
-import type { ClientRegistry } from "@alloomi/integrations/core";
+import type { ClientRegistry } from "@openloomi/integrations/core";
 
 // Module instance ID to detect if the module is being re-imported
 const MODULE_ID = Math.random().toString(36).slice(2, 8);

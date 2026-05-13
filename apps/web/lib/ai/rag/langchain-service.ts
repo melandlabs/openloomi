@@ -15,7 +15,7 @@ import { parseFile } from "@/lib/files/parsers";
 import { randomUUID } from "node:crypto";
 import { isTauriMode } from "@/lib/env";
 import { estimateTokens } from "@/lib/ai";
-import { UniversalEmbeddings } from "@alloomi/rag/universal-embeddings";
+import { UniversalEmbeddings } from "@openloomi/rag/universal-embeddings";
 
 // Re-export for consumers of langchain-service
 export { UniversalEmbeddings };

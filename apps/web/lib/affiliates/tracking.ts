@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 
-export const AFFILIATE_COOKIE_NAME = "alloomi_affiliate_code";
+export const AFFILIATE_COOKIE_NAME = "openloomi_affiliate_code";
 export const AFFILIATE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 export function normalizeAffiliateCode(value: string | null | undefined) {

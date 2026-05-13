@@ -7,7 +7,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { isTauri, openUrl } from "@/lib/tauri";
 
 const DINGTALK_DEV_URL =
@@ -84,7 +84,7 @@ export function DingTalkStepsDialog({
                   <li>
                     {t(
                       "auth.dingtalkSteps3",
-                      "After publishing the app, fill in Client ID and Client Secret in Alloomi and connect",
+                      "After publishing the app, fill in Client ID and Client Secret in openloomi and connect",
                     )}
                   </li>
                   <li>

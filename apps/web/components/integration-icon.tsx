@@ -211,7 +211,7 @@ const getIntegrationIcon = (platform: string, size = "size-4") => {
       return (
         <Image
           src="/images/apps/default.png"
-          alt="Alloomi"
+          alt="openloomi"
           width={24}
           height={24}
           className={size}
@@ -254,7 +254,7 @@ const getIntegrationIcon = (platform: string, size = "size-4") => {
         />
       );
     default:
-      /* AI-generated or unknown channels (e.g., "Project", "Alloomi") use default icon */
+      /* AI-generated or unknown channels (e.g., "Project", "openloomi") use default icon */
       return (
         <Image
           src="/images/apps/default.png"

@@ -1,5 +1,5 @@
 import type { Friend, GroupMember, Group } from "./entities";
-import type { Attachment } from "@alloomi/shared";
+import type { Attachment } from "@openloomi/shared";
 import type { Messages } from "./message";
 
 export type MessageTarget = "private" | "group";

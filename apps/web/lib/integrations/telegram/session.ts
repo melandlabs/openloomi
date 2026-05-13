@@ -5,7 +5,7 @@ import {
   updateIntegrationAccount,
 } from "@/lib/db/queries";
 import type { Bot } from "@/lib/db/schema";
-import { isTelegramAuthIssue } from "@alloomi/shared/errors";
+import { isTelegramAuthIssue } from "@openloomi/shared/errors";
 
 function hashSessionKey(botId: string, sessionKey?: string | null) {
   const raw = sessionKey && sessionKey.trim().length > 0 ? sessionKey : botId;

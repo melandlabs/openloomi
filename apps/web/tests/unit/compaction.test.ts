@@ -4,7 +4,7 @@ import {
   COMPACTION_EMERGENCY_RATIO,
   COMPACTION_HARD_RATIO,
   COMPACTION_SOFT_RATIO,
-} from "@alloomi/ai/agent/compaction";
+} from "@openloomi/ai/agent/compaction";
 
 describe("compaction prompt", () => {
   it("includes the soft-level instruction and response marker", () => {

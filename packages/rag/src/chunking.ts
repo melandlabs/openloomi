@@ -2,7 +2,7 @@
  * Text chunking utilities for RAG
  */
 
-import { estimateTokens } from "@alloomi/agent/ai/tokens";
+import { estimateTokens } from "@openloomi/agent/ai/tokens";
 
 export interface ChunkOptions {
   maxChunkSize?: number; // Maximum characters per chunk

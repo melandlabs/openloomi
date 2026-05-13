@@ -8,8 +8,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@alloomi/ui";
-import { Button } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Button } from "@openloomi/ui";
 import { cn } from "@/lib/utils";
 
 /** Supported UI languages (flag kept for potential future use, not shown in menu UI). */

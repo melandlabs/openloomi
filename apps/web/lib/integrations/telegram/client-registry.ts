@@ -6,7 +6,7 @@
  * avoiding multiple MTProto connections for the same session.
  */
 
-import type { ClientRegistry } from "@alloomi/integrations/core";
+import type { ClientRegistry } from "@openloomi/integrations/core";
 import type { TelegramClient } from "telegram";
 import { getActiveListenerClientBySession } from "./user-listener";
 

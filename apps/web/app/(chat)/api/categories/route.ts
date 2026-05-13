@@ -4,7 +4,7 @@ import {
   createUserCategory,
   updateUserCategoriesSortOrder,
 } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {

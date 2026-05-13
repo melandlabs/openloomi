@@ -9,7 +9,7 @@ import {
 } from "@/lib/db/queries";
 import { insight } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 
 /**
  * Refresh a single Insight

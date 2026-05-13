@@ -1,4 +1,4 @@
-import { TelegramAdapter } from "@alloomi/integrations/telegram/adapter";
+import { TelegramAdapter } from "@openloomi/integrations/telegram/adapter";
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import {

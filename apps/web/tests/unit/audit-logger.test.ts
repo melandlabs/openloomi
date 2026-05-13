@@ -33,7 +33,7 @@ describe("audit logger", () => {
   describe("CredentialAccessEntry interface", () => {
     // AL-01: CredentialAccessEntry should have correct type
     it("AL-01: CredentialAccessEntry should have required fields", async () => {
-      const { logCredentialAccess } = await import("@alloomi/audit");
+      const { logCredentialAccess } = await import("@openloomi/audit");
       // Just verify that logCredentialAccess exists and is a function
       expect(typeof logCredentialAccess).toBe("function");
 
@@ -52,7 +52,7 @@ describe("audit logger", () => {
   describe("logCredentialAccess", () => {
     // AL-02: logCredentialAccess should accept valid parameters
     it("AL-02: logCredentialAccess should accept valid credential access parameters", async () => {
-      const { logCredentialAccess } = await import("@alloomi/audit");
+      const { logCredentialAccess } = await import("@openloomi/audit");
 
       expect(() =>
         logCredentialAccess({
@@ -66,7 +66,7 @@ describe("audit logger", () => {
 
     // AL-03: logCredentialAccess should accept optional parameters
     it("AL-03: logCredentialAccess should accept optional ipAddress and userAgent", async () => {
-      const { logCredentialAccess } = await import("@alloomi/audit");
+      const { logCredentialAccess } = await import("@openloomi/audit");
 
       expect(() =>
         logCredentialAccess({
@@ -83,7 +83,7 @@ describe("audit logger", () => {
 
     // AL-04: logCredentialAccess should accept failure case
     it("AL-04: logCredentialAccess should log failed access with errorMessage", async () => {
-      const { logCredentialAccess } = await import("@alloomi/audit");
+      const { logCredentialAccess } = await import("@openloomi/audit");
 
       expect(() =>
         logCredentialAccess({
@@ -98,7 +98,7 @@ describe("audit logger", () => {
 
     // AL-05: logCredentialAccess should accept all action types
     it("AL-05: logCredentialAccess should accept all valid action types", async () => {
-      const { logCredentialAccess } = await import("@alloomi/audit");
+      const { logCredentialAccess } = await import("@openloomi/audit");
       const actions = ["read", "update", "rotate", "delete"] as const;
 
       for (const action of actions) {
@@ -117,7 +117,7 @@ describe("audit logger", () => {
   describe("logFileRead", () => {
     // AL-06: logFileRead should still work
     it("AL-06: logFileRead should be available", async () => {
-      const { logFileRead } = await import("@alloomi/audit");
+      const { logFileRead } = await import("@openloomi/audit");
 
       expect(() => logFileRead("/path/to/file")).not.toThrow();
     });
@@ -126,14 +126,14 @@ describe("audit logger", () => {
   describe("logCommandExec", () => {
     // AL-07: logCommandExec should still work
     it("AL-07: logCommandExec should be available", async () => {
-      const { logCommandExec } = await import("@alloomi/audit");
+      const { logCommandExec } = await import("@openloomi/audit");
 
       expect(() => logCommandExec("ls", ["-la"])).not.toThrow();
     });
 
     // AL-08: logCommandExec should work without args
     it("AL-08: logCommandExec should work without args", async () => {
-      const { logCommandExec } = await import("@alloomi/audit");
+      const { logCommandExec } = await import("@openloomi/audit");
 
       expect(() => logCommandExec("pwd")).not.toThrow();
     });

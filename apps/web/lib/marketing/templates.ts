@@ -37,14 +37,14 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Welcome Orientation",
     stage: "welcome",
     goal: "Welcome new users and guide them to connect their first channel.",
-    subject: "Welcome to Alloomi",
+    subject: "Welcome to openloomi",
     previewText:
       "Your communication avatar—bringing order to conversations across all your platforms.",
     recommendedDelayHours: 0,
     buildContent: (ctx: TemplateBuildContext) => ({
       intro: [
-        "Welcome to Alloomi. We're glad you're here.",
-        "Alloomi brings all your conversations into one place—Telegram, WhatsApp, Gmail, Slack, Discord, and more. Here's what Alloomi can do for you:",
+        "Welcome to openloomi. We're glad you're here.",
+        "openloomi brings all your conversations into one place—Telegram, WhatsApp, Gmail, Slack, Discord, and more. Here's what openloomi can do for you:",
       ],
       highlights: [
         {
@@ -71,7 +71,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
         {
           title: "Let's get started",
           paragraphs: [
-            "Connect any messaging platform and Alloomi will start organizing your conversations immediately.",
+            "Connect any messaging platform and openloomi will start organizing your conversations immediately.",
           ],
         },
       ],
@@ -89,7 +89,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
       ],
       closing: [
         "Questions? Just hit reply—we're here to help.",
-        "The Alloomi Team",
+        "The openloomi Team",
       ],
     }),
   },
@@ -98,14 +98,14 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Activation — Connect a Platform",
     stage: "activation",
     goal: "Encourage users to connect at least one messaging channel within 24 hours.",
-    subject: "Connect Slack, Telegram, or Gmail to unlock Alloomi",
+    subject: "Connect Slack, Telegram, or Gmail to unlock openloomi",
     previewText:
-      "It only takes 30 seconds to connect your first platform and see Alloomi in action.",
+      "It only takes 30 seconds to connect your first platform and see openloomi in action.",
     recommendedDelayHours: 24,
     buildContent: () => ({
       intro: [
-        "You took the first step with Alloomi, nice! Right now, your AI teammate is waiting to plug into your world.",
-        "Once you connect a messaging platform, Alloomi instantly starts triaging and summarizing the noise.",
+        "You took the first step with openloomi, nice! Right now, your AI teammate is waiting to plug into your world.",
+        "Once you connect a messaging platform, openloomi instantly starts triaging and summarizing the noise.",
       ],
       sections: [
         {
@@ -125,7 +125,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
       checklist: [
         "Pick the platform you check most often.",
         "Click connect and approve access.",
-        "Let Alloomi collect the last few days of history.",
+        "Let openloomi collect the last few days of history.",
       ],
       ctas: [
         {
@@ -140,7 +140,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
         },
       ],
       closing: [
-        "Need a hand or have security questions? Just reply—real humans from the Alloomi team are on standby.",
+        "Need a hand or have security questions? Just reply—real humans from the openloomi team are on standby.",
       ],
     }),
   },
@@ -149,19 +149,19 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Activation — Trigger First Summary",
     stage: "activation",
     goal: "Prompt the user to generate their first summary once a platform is connected.",
-    subject: "✨ Ask Alloomi for your first summary today",
+    subject: "✨ Ask openloomi for your first summary today",
     previewText:
-      "Let Alloomi show you what really matters—just ask for a daily recap.",
+      "Let openloomi show you what really matters—just ask for a daily recap.",
     recommendedDelayHours: 48,
     buildContent: () => ({
       intro: [
-        "Great job linking a channel! Now it is time to see Alloomi work for you in real time.",
+        "Great job linking a channel! Now it is time to see openloomi work for you in real time.",
       ],
       sections: [
         {
           title: "Try this quick prompt:",
           paragraphs: [
-            'Open Alloomi and ask, <strong>"Summarize what I missed today."</strong>',
+            'Open openloomi and ask, <strong>"Summarize what I missed today."</strong>',
             "In seconds you'll see:",
           ],
           bullets: [
@@ -179,13 +179,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
       ],
       ctas: [
         {
-          label: "Open Alloomi & run my first summary",
+          label: "Open openloomi & run my first summary",
           href: "startSummary",
           variant: "primary",
         },
       ],
       closing: [
-        "Let us know how your first summary feels—every message helps us sharpen Alloomi for you.",
+        "Let us know how your first summary feels—every message helps us sharpen openloomi for you.",
       ],
     }),
   },
@@ -194,17 +194,17 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Education — Value Proof",
     stage: "education",
     goal: "Highlight key value propositions and encourage deeper usage.",
-    subject: "How Alloomi saves you 2 hours every day 🌟",
+    subject: "How openloomi saves you 2 hours every day 🌟",
     previewText:
-      "Multiplying your focus starts with a few simple habits inside Alloomi.",
+      "Multiplying your focus starts with a few simple habits inside openloomi.",
     recommendedDelayHours: 96,
     buildContent: () => ({
       intro: [
-        "You have already taken the right steps—now let’s show you how power users reclaim serious time with Alloomi.",
+        "You have already taken the right steps—now let’s show you how power users reclaim serious time with openloomi.",
       ],
       sections: [
         {
-          title: "Where Alloomi shines:",
+          title: "Where openloomi shines:",
           paragraphs: [],
           bullets: [
             "One calm inbox for Slack, Telegram, Gmail, WhatsApp, Discord, and more.",
@@ -216,13 +216,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
         {
           title: "Adopt one ritual today",
           paragraphs: [
-            "Set a recurring reminder to ask Alloomi for a recap before you log off. The habit compounds quickly.",
+            "Set a recurring reminder to ask openloomi for a recap before you log off. The habit compounds quickly.",
           ],
         },
       ],
       ctas: [
         {
-          label: "Jump back into Alloomi",
+          label: "Jump back into openloomi",
           href: "appHome",
           variant: "primary",
         },
@@ -234,9 +234,9 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Education — Power Tips",
     stage: "education",
     goal: "Share workflow best practices to deepen daily engagement.",
-    subject: "Pro tips: make Alloomi work harder for you",
+    subject: "Pro tips: make openloomi work harder for you",
     previewText:
-      "Pin Alloomi, explore by event, and let auto-translate keep every thread flowing.",
+      "Pin openloomi, explore by event, and let auto-translate keep every thread flowing.",
     recommendedDelayHours: 144,
     buildContent: () => ({
       intro: [
@@ -247,17 +247,17 @@ const templates: MarketingEmailTemplateDefinition[] = [
           title: "Try these today:",
           paragraphs: [],
           bullets: [
-            "Pin Alloomi in your browser so it is one click away.",
+            "Pin openloomi in your browser so it is one click away.",
             "Use event-based summaries to catch up after meetings or travel windows.",
             "Enable auto-translate to draft and respond fluently in any language.",
             "Glance at your daily recap to see open actions before they slip.",
-            "Drop important attachments into Alloomi - they stay available from any device, and you control who can download them.",
+            "Drop important attachments into openloomi - they stay available from any device, and you control who can download them.",
           ],
         },
       ],
       ctas: [
         {
-          label: "Explore tips inside Alloomi",
+          label: "Explore tips inside openloomi",
           href: "viewTips",
           variant: "primary",
         },
@@ -274,13 +274,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Education — Keep Momentum",
     stage: "education",
     goal: "Encourage consistent usage and highlight adaptive learning.",
-    subject: "Keep the habit—Alloomi learns with you",
+    subject: "Keep the habit—openloomi learns with you",
     previewText:
-      "The more you lean on Alloomi, the smarter your summaries and auto-replies become.",
+      "The more you lean on openloomi, the smarter your summaries and auto-replies become.",
     recommendedDelayHours: 216,
     buildContent: () => ({
       intro: [
-        "Every interaction teaches Alloomi what matters to you—topics, tone, and the people you prioritize.",
+        "Every interaction teaches openloomi what matters to you—topics, tone, and the people you prioritize.",
       ],
       sections: [
         {
@@ -288,20 +288,20 @@ const templates: MarketingEmailTemplateDefinition[] = [
           paragraphs: [],
           bullets: [
             "Favoriting people or channels you never want to miss.",
-            "Tagging tasks with urgency so Alloomi escalates them automatically.",
-            "Replying from Alloomi when you approve a draft—your style gets sharper each time.",
+            "Tagging tasks with urgency so openloomi escalates them automatically.",
+            "Replying from openloomi when you approve a draft—your style gets sharper each time.",
           ],
         },
       ],
       ctas: [
         {
-          label: "Open Alloomi and review today's queue",
+          label: "Open openloomi and review today's queue",
           href: "appHome",
           variant: "primary",
         },
       ],
       closing: [
-        "We would love to hear how Alloomi is landing in your workflow—reply with anything that would make it even better.",
+        "We would love to hear how openloomi is landing in your workflow—reply with anything that would make it even better.",
       ],
     }),
   },
@@ -310,19 +310,19 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Reinforcement — Progress Recap",
     stage: "reinforcement",
     goal: "Celebrate streaks and showcase value to maintain engagement.",
-    subject: "Look at your Alloomi streak 🙌",
+    subject: "Look at your openloomi streak 🙌",
     previewText:
       "Seven active days unlock richer insights—here is how to keep momentum.",
     recommendedDelayHours: 336,
     buildContent: (ctx) => ({
       intro: [
-        "Consistency pays off—Alloomi now has enough context to surface deeper insights tailored to you.",
+        "Consistency pays off—openloomi now has enough context to surface deeper insights tailored to you.",
       ],
       sections: [
         {
-          title: "What Alloomi has learned so far",
+          title: "What openloomi has learned so far",
           paragraphs: [
-            "Based on your recent activity, Alloomi is prioritizing:",
+            "Based on your recent activity, openloomi is prioritizing:",
           ],
           bullets: [
             "People you collaborate with most often.",
@@ -346,7 +346,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
         },
       ],
       closing: [
-        "Thanks for letting Alloomi ride shotgun in your comms. Tell us what else you want to automate next—we build from your ideas.",
+        "Thanks for letting openloomi ride shotgun in your comms. Tell us what else you want to automate next—we build from your ideas.",
       ],
     }),
   },
@@ -355,13 +355,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Reinforcement — Advanced Features",
     stage: "reinforcement",
     goal: "Introduce advanced features to power users.",
-    subject: "Unlock advanced Alloomi workflows",
+    subject: "Unlock advanced openloomi workflows",
     previewText:
       "Turn on advanced automations and approval flows to supercharge your inbox.",
     recommendedDelayHours: 504,
     buildContent: () => ({
       intro: [
-        "You are officially in the Alloomi power lane. Ready to automate even more?",
+        "You are officially in the openloomi power lane. Ready to automate even more?",
       ],
       sections: [
         {
@@ -369,14 +369,14 @@ const templates: MarketingEmailTemplateDefinition[] = [
           paragraphs: [],
           bullets: [
             "Auto-route VIP mentions into instant summaries.",
-            "Set escalation rules so Alloomi pings you only when action is required.",
+            "Set escalation rules so openloomi pings you only when action is required.",
             "Export recaps into Notion or Google Docs for team visibility.",
           ],
         },
         {
           title: "Need a tailored walkthrough?",
           paragraphs: [
-            "Schedule 15 minutes with our product specialists—we will tune Alloomi to your stack live.",
+            "Schedule 15 minutes with our product specialists—we will tune openloomi to your stack live.",
           ],
         },
       ],
@@ -394,17 +394,17 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Conversion — Free Limit Approaching",
     stage: "conversion",
     goal: "Alert free users nearing usage limits and prompt upgrade.",
-    subject: "You are approaching the free Alloomi limit",
+    subject: "You are approaching the free openloomi limit",
     previewText:
       "Upgrade now to keep summaries refreshing instantly and unlock premium automations.",
     recommendedDelayHours: 0,
     buildContent: () => ({
       intro: [
-        "Great news—your team is leaning on Alloomi heavily. You are nearly at the free plan ceiling and we do not want momentum to stall.",
+        "Great news—your team is leaning on openloomi heavily. You are nearly at the free plan ceiling and we do not want momentum to stall.",
       ],
       sections: [
         {
-          title: "Upgrade to Alloomi Pro to unlock:",
+          title: "Upgrade to openloomi Pro to unlock:",
           paragraphs: [],
           bullets: [
             "Unlimited integrations and accounts.",
@@ -423,7 +423,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
       ],
       ctas: [
         {
-          label: "Upgrade to Alloomi Pro",
+          label: "Upgrade to openloomi Pro",
           href: "upgrade",
           variant: "primary",
         },
@@ -440,13 +440,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Conversion — ROI Stories",
     stage: "conversion",
     goal: "Share ROI and testimonials to motivate upgrades.",
-    subject: "See how teams 3x their output with Alloomi Pro",
+    subject: "See how teams 3x their output with openloomi Pro",
     previewText:
       "Real users reclaim 10+ hours a week once they unlock Pro automations.",
     recommendedDelayHours: 24,
     buildContent: () => ({
       intro: [
-        "Curious how Alloomi Pro performs in the wild? Here is what operations leaders and chiefs of staff report after upgrading.",
+        "Curious how openloomi Pro performs in the wild? Here is what operations leaders and chiefs of staff report after upgrading.",
       ],
       sections: [
         {
@@ -480,7 +480,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Conversion — Limited Offer",
     stage: "conversion",
     goal: "Create urgency with a time-bound incentive.",
-    subject: "24 hours left: lock Alloomi Pro with bonus support",
+    subject: "24 hours left: lock openloomi Pro with bonus support",
     previewText:
       "Upgrade now and get dedicated onboarding plus an extended trial window.",
     recommendedDelayHours: 48,
@@ -521,17 +521,17 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Weekly Digest",
     stage: "weekly_digest",
     goal: "Share a weekly recap to reinforce habit and highlight insight.",
-    subject: "Your Alloomi weekly recap is ready",
+    subject: "Your openloomi weekly recap is ready",
     previewText:
       "Highlights, completed to-dos, and what needs your focus next week.",
     recommendedDelayHours: 168,
     buildContent: () => ({
       intro: [
-        "Here is what Alloomi monitored, summarized, and surfaced for you this past week.",
+        "Here is what openloomi monitored, summarized, and surfaced for you this past week.",
       ],
       sections: [
         {
-          title: "Ask Alloomi about Your Weekly highlights",
+          title: "Ask openloomi about Your Weekly highlights",
           paragraphs: ["Your personalized digest includes:"],
           bullets: [
             "Top threads and decisions that moved projects forward.",
@@ -569,7 +569,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
     stage: "product_updates",
     goal: "Inform users about new features and drive adoption.",
     subject:
-      "New in Alloomi: personalized insights, long-term memory, smart file storage, and fresh integrations",
+      "New in openloomi: personalized insights, long-term memory, smart file storage, and fresh integrations",
     previewText:
       "Catch this month’s feature drops and watch quick demos to put them to work.",
     recommendedDelayHours: 0,
@@ -623,13 +623,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Upgrade Prompt — Capacity",
     stage: "upgrade_prompt",
     goal: "Encourage paying customers to move up a tier when they hit limits.",
-    subject: "Running into limits? Scale Alloomi with a larger plan",
+    subject: "Running into limits? Scale openloomi with a larger plan",
     previewText:
       "Add more seats, channels, or refresh capacity in just a few clicks.",
     recommendedDelayHours: 0,
     buildContent: () => ({
       intro: [
-        "We noticed you are maxing out the capacity on your current plan—great signal that Alloomi is embedded in your workflow.",
+        "We noticed you are maxing out the capacity on your current plan—great signal that openloomi is embedded in your workflow.",
       ],
       sections: [
         {
@@ -659,13 +659,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Upgrade Prompt — Refresh Rate",
     stage: "upgrade_prompt",
     goal: "Encourage upgrades for faster refresh cadence and automations.",
-    subject: "Need faster Alloomi refreshes? Let’s unlock them",
+    subject: "Need faster openloomi refreshes? Let’s unlock them",
     previewText:
       "Upgrade to boost summary frequency, automation slots, and reporting.",
     recommendedDelayHours: 72,
     buildContent: () => ({
       intro: [
-        "Your team is moving fast—which means you deserve faster Alloomi updates.",
+        "Your team is moving fast—which means you deserve faster openloomi updates.",
       ],
       sections: [
         {
@@ -695,13 +695,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Renewal Reminder — 7 Days",
     stage: "renewal",
     goal: "Remind customers of upcoming renewal with value reinforcement.",
-    subject: "Your Alloomi subscription renews in 7 days",
+    subject: "Your openloomi subscription renews in 7 days",
     previewText:
       "Keep auto-summaries, digests, and approvals running without interruption.",
     recommendedDelayHours: 0,
     buildContent: () => ({
       intro: [
-        "Quick heads up—your Alloomi subscription renews in one week. We want to make sure nothing interrupts your automations.",
+        "Quick heads up—your openloomi subscription renews in one week. We want to make sure nothing interrupts your automations.",
       ],
       sections: [
         {
@@ -731,13 +731,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Renewal Reminder — 3 Days",
     stage: "renewal",
     goal: "Increase urgency as renewal approaches.",
-    subject: "3 days left—keep Alloomi superpowers active",
+    subject: "3 days left—keep openloomi superpowers active",
     previewText:
       "React now to avoid losing access to the automations your team relies on.",
     recommendedDelayHours: 96,
     buildContent: () => ({
       intro: [
-        "You are three days from renewal. Let’s make sure your Alloomi automations keep running without disruption.",
+        "You are three days from renewal. Let’s make sure your openloomi automations keep running without disruption.",
       ],
       sections: [
         {
@@ -767,13 +767,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Renewal Reminder — Final Day",
     stage: "renewal",
     goal: "Drive last-day renewals with urgent CTA.",
-    subject: "Final reminder: renew Alloomi today",
+    subject: "Final reminder: renew openloomi today",
     previewText:
       "Avoid downtime—renew now or tell us how we can help make it easy.",
     recommendedDelayHours: 144,
     buildContent: () => ({
       intro: [
-        "This is the final reminder—your Alloomi subscription expires tonight. Renew now to prevent any pauses in service.",
+        "This is the final reminder—your openloomi subscription expires tonight. Renew now to prevent any pauses in service.",
       ],
       sections: [
         {
@@ -790,7 +790,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
       ],
       ctas: [
         {
-          label: "Renew Alloomi now",
+          label: "Renew openloomi now",
           href: "manageSubscription",
           variant: "primary",
         },
@@ -807,17 +807,17 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Loyalty — Community Invite",
     stage: "loyalty",
     goal: "Invite long-term customers into community and feedback loop.",
-    subject: "Join the Alloomi power user circle",
+    subject: "Join the openloomi power user circle",
     previewText:
       "Get sneak peeks, share feedback, and connect with workflow experts.",
     recommendedDelayHours: 0,
     buildContent: () => ({
       intro: [
-        "You have been with Alloomi for over a month—we could not be more grateful. We would love to bring you into our private community.",
+        "You have been with openloomi for over a month—we could not be more grateful. We would love to bring you into our private community.",
       ],
       sections: [
         {
-          title: "Inside the Alloomi circle you will find:",
+          title: "Inside the openloomi circle you will find:",
           paragraphs: [],
           bullets: [
             "Early access to upcoming features and roadmap previews.",
@@ -848,17 +848,17 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Loyalty — Team Expansion",
     stage: "loyalty",
     goal: "Encourage referrals and team expansion.",
-    subject: "Invite your team—amplify Alloomi across the org",
+    subject: "Invite your team—amplify openloomi across the org",
     previewText:
-      "Share Alloomi with your colleagues and keep everyone aligned automatically.",
+      "Share openloomi with your colleagues and keep everyone aligned automatically.",
     recommendedDelayHours: 168,
     buildContent: () => ({
       intro: [
-        "Ready to multiply the calm across your team? Alloomi is even more powerful when everyone shares the same source of truth.",
+        "Ready to multiply the calm across your team? openloomi is even more powerful when everyone shares the same source of truth.",
       ],
       sections: [
         {
-          title: "Organizations love Alloomi because it:",
+          title: "Organizations love openloomi because it:",
           paragraphs: [],
           bullets: [
             "Keeps exec, ops, and support teams in a single AI-prioritized inbox.",
@@ -886,11 +886,11 @@ const templates: MarketingEmailTemplateDefinition[] = [
     goal: "Re-engage users inactive for 7 days.",
     subject: "We saved your week—come see the highlights",
     previewText:
-      "Alloomi kept listening. Open your recap and jump back in without the overwhelm.",
+      "openloomi kept listening. Open your recap and jump back in without the overwhelm.",
     recommendedDelayHours: 0,
     buildContent: () => ({
       intro: [
-        "We noticed it has been a little while since you last checked Alloomi. No worries—we continued to summarize and triage in the background.",
+        "We noticed it has been a little while since you last checked openloomi. No worries—we continued to summarize and triage in the background.",
       ],
       sections: [
         {
@@ -916,7 +916,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
         },
       ],
       closing: [
-        "If something felt off or noisy, reply and tell us—we will tune Alloomi so your next login feels perfect.",
+        "If something felt off or noisy, reply and tell us—we will tune openloomi so your next login feels perfect.",
       ],
     }),
   },
@@ -925,13 +925,13 @@ const templates: MarketingEmailTemplateDefinition[] = [
     name: "Winback — 14 Day Trigger",
     stage: "winback",
     goal: "Offer incentive or support to re-engage dormant users.",
-    subject: "Still quiet? Let’s reboot Alloomi with a fresh start",
+    subject: "Still quiet? Let’s reboot openloomi with a fresh start",
     previewText:
       "We will refresh your inbox and extend your trial so you can feel the impact again.",
     recommendedDelayHours: 168,
     buildContent: () => ({
       intro: [
-        "It has been a couple of weeks since we saw you in Alloomi. We would love to welcome you back with a clean slate.",
+        "It has been a couple of weeks since we saw you in openloomi. We would love to welcome you back with a clean slate.",
       ],
       sections: [
         {
@@ -957,7 +957,7 @@ const templates: MarketingEmailTemplateDefinition[] = [
         },
       ],
       closing: [
-        "Reply with whatever would make Alloomi valuable for you again—we are listening and ready to help.",
+        "Reply with whatever would make openloomi valuable for you again—we are listening and ready to help.",
       ],
     }),
   },

@@ -60,7 +60,7 @@ export function HtmlToolPreview({
         // Otherwise, load from file API
         setIsLoading(true);
         try {
-          // Extract taskId from file path (format: /.alloomi/sessions/{taskId}/...)
+          // Extract taskId from file path (format: /.openloomi/sessions/{taskId}/...)
           const pathParts = filePath.split("/sessions/");
           if (pathParts.length >= 2) {
             const taskIdAndPath = pathParts[1]; // {taskId}/index.html

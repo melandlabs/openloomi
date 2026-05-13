@@ -17,7 +17,7 @@ import { getAuthToken } from "@/lib/auth/token-manager";
  * AI generated reply cache configuration
  */
 const REPLY_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
-const REPLY_CACHE_KEY_PREFIX = "alloomi_ai_reply_cache_";
+const REPLY_CACHE_KEY_PREFIX = "openloomi_ai_reply_cache_";
 
 /**
  * Cache data structure
@@ -335,7 +335,7 @@ export function useReplyAiAssist({
       toast.error(
         t(
           "insight.aiPolishEmpty",
-          "Add some text before asking Alloomi to polish it.",
+          "Add some text before asking openloomi to polish it.",
         ),
       );
       return;
@@ -375,7 +375,7 @@ export function useReplyAiAssist({
         toast.error(
           t(
             "insight.aiPolishEmpty",
-            "Add some text before asking Alloomi to polish it.",
+            "Add some text before asking openloomi to polish it.",
           ),
         );
         return;

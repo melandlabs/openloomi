@@ -11,8 +11,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@alloomi/ui";
-import { Button, Input, Label } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Button, Input, Label } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { createIntegrationAccount } from "@/lib/integrations/client";
 import { FeishuStepsDialog } from "@/components/feishu-steps-dialog";
@@ -276,7 +276,7 @@ export function FeishuAuthForm({
           name,
           description: t(
             "auth.feishuBotDescription",
-            "Chat with Alloomi via Lark/Feishu",
+            "Chat with openloomi via Lark/Feishu",
           ),
           adapter: "feishu",
           enable: true,
@@ -464,7 +464,7 @@ export function FeishuAuthForm({
             <p className="text-sm text-muted-foreground">
               {t(
                 "auth.feishuDescription",
-                "Create an enterprise self-built app on Lark/Feishu Open Platform and enable bot capability, select Use long connection to receive events and subscribe to im.message.receive_v1, fill in the credentials below to chat with Alloomi.",
+                "Create an enterprise self-built app on Lark/Feishu Open Platform and enable bot capability, select Use long connection to receive events and subscribe to im.message.receive_v1, fill in the credentials below to chat with openloomi.",
               )}
             </p>
             {manualFields}
@@ -502,7 +502,7 @@ export function FeishuAuthForm({
                 <p className="text-sm text-muted-foreground">
                   {t(
                     "auth.feishuDescription",
-                    "Create an enterprise self-built app on Lark/Feishu Open Platform and enable bot capability, select Use long connection to receive events and subscribe to im.message.receive_v1, fill in the credentials below to chat with Alloomi.",
+                    "Create an enterprise self-built app on Lark/Feishu Open Platform and enable bot capability, select Use long connection to receive events and subscribe to im.message.receive_v1, fill in the credentials below to chat with openloomi.",
                   )}
                 </p>
                 {manualFields}

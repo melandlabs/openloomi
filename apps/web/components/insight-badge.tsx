@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { RemixIcon } from "@/components/remix-icon";
 import IntegrationIcon from "@/components/integration-icon";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 
 export type InsightBadgeType =
   | "keyword"

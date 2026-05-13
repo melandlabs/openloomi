@@ -3,7 +3,7 @@ import {
   createInsightFilterForUser,
   listInsightFilters,
 } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import {
   insightFilterCreateSchema,
   sanitizeColorToken,

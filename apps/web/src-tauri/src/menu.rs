@@ -11,21 +11,21 @@ pub fn build_native_menu(app: &tauri::AppHandle) -> Result<(), tauri::Error> {
 
     // About item - use predefined on macOS, custom on Linux/Windows
     #[cfg(target_os = "macos")]
-    let about_item = PredefinedMenuItem::about(app, Some("About Alloomi"), None)?;
+    let about_item = PredefinedMenuItem::about(app, Some("About openloomi"), None)?;
 
     #[cfg(not(target_os = "macos"))]
-    let about_item = MenuItemBuilder::with_id("about-alloomi", "About Alloomi").build(app)?;
+    let about_item = MenuItemBuilder::with_id("about-openloomi", "About openloomi").build(app)?;
 
-    // Alloomi app menu
-    let alloomi_menu = SubmenuBuilder::new(app, "Alloomi")
+    // openloomi app menu
+    let openloomi_menu = SubmenuBuilder::new(app, "openloomi")
         .item(&about_item)
         .separator()
         .separator()
-        .item(&PredefinedMenuItem::hide(app, Some("Hide Alloomi"))?)
+        .item(&PredefinedMenuItem::hide(app, Some("Hide openloomi"))?)
         .item(&PredefinedMenuItem::hide_others(app, Some("Hide Others"))?)
         .item(&PredefinedMenuItem::show_all(app, Some("Show All"))?)
         .separator()
-        .item(&PredefinedMenuItem::quit(app, Some("Quit Alloomi"))?)
+        .item(&PredefinedMenuItem::quit(app, Some("Quit openloomi"))?)
         .build()?;
 
     // Edit menu
@@ -41,7 +41,7 @@ pub fn build_native_menu(app: &tauri::AppHandle) -> Result<(), tauri::Error> {
         .build()?;
 
     let menu = MenuBuilder::new(app)
-        .item(&alloomi_menu)
+        .item(&openloomi_menu)
         .item(&edit_menu)
         .item(&help_submenu)
         .build()?;
@@ -54,19 +54,19 @@ pub fn build_native_menu(app: &tauri::AppHandle) -> Result<(), tauri::Error> {
 
         let id = event.id().as_ref();
         if id == "help-docs" {
-            if let Err(e) = crate::system::open_url_custom("https://alloomi.ai/docs".to_string()) {
+            if let Err(e) = crate::system::open_url_custom("https://openloomi.ai/docs".to_string()) {
                 // Show error dialog to user
                 app.dialog()
                     .message(format!("Failed to open documentation: {}", e))
                     .kind(tauri_plugin_dialog::MessageDialogKind::Error)
                     .show(|_| {});
             }
-        } else if id == "about-alloomi" {
+        } else if id == "about-openloomi" {
             // Show About dialog (Linux/Windows)
             let version = env!("CARGO_PKG_VERSION");
             app.dialog()
-                .message(format!("Alloomi v{}", version))
-                .title("About Alloomi")
+                .message(format!("openloomi v{}", version))
+                .title("About openloomi")
                 .kind(tauri_plugin_dialog::MessageDialogKind::Info)
                 .show(|_| {});
         }

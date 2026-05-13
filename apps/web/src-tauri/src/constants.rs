@@ -1,9 +1,9 @@
-// Copyright 2026 Alloomi Team. All rights reserved.
+// Copyright 2026 openloomi Team. All rights reserved.
 //
 // Use of this source code is governed by a license that can be
 // found in the LICENSE file in the root of this source tree.
 
-//! Shared constants for the Alloomi Tauri application.
+//! Shared constants for the openloomi Tauri application.
 
 /// The port where the Next.js development server runs.
 #[cfg(debug_assertions)]

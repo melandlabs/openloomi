@@ -6,7 +6,7 @@ import {
 } from "./model-pricing";
 
 // Re-export estimateTokens from shared
-export { estimateTokens } from "@alloomi/shared";
+export { estimateTokens } from "@openloomi/shared";
 
 // Legacy constants for backward compatibility
 // These are based on Claude Sonnet pricing (default model)

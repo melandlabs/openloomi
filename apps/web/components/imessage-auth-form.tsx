@@ -9,8 +9,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@alloomi/ui";
-import { Button, Input, Label } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Button, Input, Label } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { createIntegrationAccount } from "@/lib/integrations/client";
 import { useIntegrations } from "@/hooks/use-integrations";
@@ -333,7 +333,7 @@ export function IMessageAuthForm({
               <p className="text-xs text-muted-foreground">
                 {t(
                   "auth.imessageDisplayNameHint",
-                  "This name will be used to identify your iMessage account in Alloomi",
+                  "This name will be used to identify your iMessage account in openloomi",
                 )}
               </p>
             </div>
@@ -350,7 +350,7 @@ export function IMessageAuthForm({
                   <p>
                     {t(
                       "auth.imessageDataNote",
-                      "Your message data stays on your local device. Alloomi will only read recent messages when you use it to generate insights.",
+                      "Your message data stays on your local device. openloomi will only read recent messages when you use it to generate insights.",
                     )}
                   </p>
                 </div>
@@ -390,7 +390,7 @@ export function IMessageAuthForm({
               <p className="mt-2 text-sm text-muted-foreground">
                 {t(
                   "auth.imessageConnectedDesc",
-                  "You can now access your iMessage messages through Alloomi.",
+                  "You can now access your iMessage messages through openloomi.",
                 )}
               </p>
             </div>
@@ -507,7 +507,7 @@ export function IMessageAuthForm({
         <p className="text-sm text-muted-foreground mb-2">
           {t(
             "auth.imessageConnectDescription",
-            "Connect your Mac iMessage to read and send messages in Alloomi.",
+            "Connect your Mac iMessage to read and send messages in openloomi.",
           )}
         </p>
         {renderContent()}
@@ -542,7 +542,7 @@ export function IMessageAuthForm({
               <DialogDescription>
                 {t(
                   "auth.imessageConnectDescription",
-                  "Connect your Mac iMessage to read and send messages in Alloomi.",
+                  "Connect your Mac iMessage to read and send messages in openloomi.",
                 )}
               </DialogDescription>
             </div>

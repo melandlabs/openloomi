@@ -1,11 +1,11 @@
-# @alloomi/rss
+# @openloomi/rss
 
 RSS feed parsing, OPML support, and tagging utilities.
 
 ## Installation
 
 ```sh
-pnpm add @alloomi/rss
+pnpm add @openloomi/rss
 ```
 
 ## Exports

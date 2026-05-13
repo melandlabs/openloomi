@@ -1,6 +1,6 @@
 import { and, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { db } from "./queries";
 import {
   affiliates,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslation } from "react-i18next";
-import { Card } from "@alloomi/ui";
+import { Card } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { htmlToPlainText } from "./utils";
 import { cn } from "@/lib/utils";

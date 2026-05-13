@@ -6,8 +6,8 @@ import { SkillsTab } from "@/components/automation/skills-tab";
 import { AutomationTabsList } from "@/components/automation/tabs-list";
 import type { ScheduledJobsPanelRef } from "@/components/scheduled-jobs-panel";
 import type { AgentTabRef } from "@/components/automation/agent-tab";
-import { PageSectionHeader } from "@alloomi/ui";
-import { Button, Input, Tabs, TabsContent } from "@alloomi/ui";
+import { PageSectionHeader } from "@openloomi/ui";
+import { Button, Input, Tabs, TabsContent } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import {
   DropdownMenu,
@@ -16,7 +16,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { AddSkillDropdown } from "@/components/skills-panel";
 import type { AddSkillDropdownProps } from "@/components/skills-panel";
 import { useTranslation } from "react-i18next";
@@ -81,7 +81,7 @@ export default function ScheduledJobsPage() {
             <p className="text-muted-foreground">
               {t(
                 "agent.panels.scheduledJobsPanel.tauriOnly",
-                "Scheduled jobs are only available in the Alloomi desktop app.",
+                "Scheduled jobs are only available in the openloomi desktop app.",
               )}
             </p>
           </div>

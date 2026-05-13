@@ -1,6 +1,6 @@
 User-agent: *
 Allow: /
-Sitemap: https://alloomi.ai/sitemap.xml
+Sitemap: https://openloomi.ai/sitemap.xml
 
 # Disallow restricted areas
 Disallow: /admin/

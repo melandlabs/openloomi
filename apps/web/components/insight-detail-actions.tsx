@@ -16,7 +16,7 @@ import { format } from "date-fns";
 import { enGB, zhCN } from "date-fns/locale";
 import type { Insight } from "@/lib/db/schema";
 import type { InsightTaskItem } from "@/lib/ai/subagents/insights";
-import { Button, Input, Label, Textarea } from "@alloomi/ui";
+import { Button, Input, Label, Textarea } from "@openloomi/ui";
 import { generateUUID } from "@/lib/utils";
 import { InsightBadge } from "@/components/insight-badge";
 import {
@@ -25,12 +25,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@alloomi/ui";
-import { DatePicker } from "@alloomi/ui";
-import { TimePicker } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { DatePicker } from "@openloomi/ui";
+import { TimePicker } from "@openloomi/ui";
 import { useChatContextOptional } from "@/components/chat-context";
 import { useRouter } from "next/navigation";
-import { useOnClickOutside } from "@alloomi/hooks/use-on-click-outside";
+import { useOnClickOutside } from "@openloomi/hooks/use-on-click-outside";
 import { useTaskOperations } from "@/hooks/use-task-operations";
 import { useInsightOptimisticUpdates } from "@/components/insight-optimistic-context";
 import { toast } from "./toast";

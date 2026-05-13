@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import useSWR from "swr";

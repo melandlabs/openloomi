@@ -360,7 +360,7 @@ export function UserMenuContent({
             type="button"
             onClick={() => {
               onMenuItemClick();
-              openUrl("https://alloomi.ai/docs");
+              openUrl("https://openloomi.ai/docs");
             }}
             className={cn(
               "flex items-center w-full rounded-sm text-foreground cursor-pointer bg-transparent border-none",
@@ -379,7 +379,7 @@ export function UserMenuContent({
           type="button"
           onClick={() => {
             onMenuItemClick?.();
-            openUrl("https://alloomi.ai/docs");
+            openUrl("https://openloomi.ai/docs");
           }}
           className={cn(
             "flex items-center w-full rounded-sm text-foreground",
@@ -421,7 +421,7 @@ export function UserMenuContent({
           type="button"
           onClick={() => {
             onMenuItemClick();
-            openUrl("https://app.alloomi.ai/privacy");
+            openUrl("https://app.openloomi.ai/privacy");
           }}
           className={cn(
             "flex items-center w-full rounded-sm text-foreground cursor-pointer bg-transparent border-none",
@@ -457,7 +457,7 @@ export function UserMenuContent({
           type="button"
           onClick={() => {
             onMenuItemClick();
-            openUrl("https://app.alloomi.ai/terms");
+            openUrl("https://app.openloomi.ai/terms");
           }}
           className={cn(
             "flex items-center w-full rounded-sm text-foreground cursor-pointer bg-transparent border-none",

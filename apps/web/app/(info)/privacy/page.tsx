@@ -90,10 +90,10 @@ export default function PrivacyPolicy() {
   return (
     <>
       <Head>
-        <title>Privacy Policy | Alloomi</title>
+        <title>Privacy Policy | openloomi</title>
         <meta
           name="description"
-          content="Alloomi Privacy Policy - Learn how we collect, use, and protect your data"
+          content="openloomi Privacy Policy - Learn how we collect, use, and protect your data"
         />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
@@ -108,7 +108,7 @@ export default function PrivacyPolicy() {
             transition={{ duration: 0.5 }}
             className="text-4xl md:text-5xl font-bold text-gray-900 mb-6"
           >
-            Alloomi Privacy Policy
+            openloomi Privacy Policy
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -141,14 +141,14 @@ export default function PrivacyPolicy() {
           >
             <p className="text-gray-700 leading-relaxed">
               Welcome to{" "}
-              <strong>Alloomi Cross-Platform Communication Agent</strong>{" "}
-              (&quot;Alloomi&quot;, &quot;we&quot;, &quot;our&quot;, or
+              <strong>openloomi Cross-Platform Communication Agent</strong>{" "}
+              (&quot;openloomi&quot;, &quot;we&quot;, &quot;our&quot;, or
               &quot;us&quot;).
             </p>
             <p className="text-gray-700 leading-relaxed mt-3">
               We value your privacy and data security. This Privacy Policy
               explains how we collect, use, store, and protect your personal
-              information, as well as your rights when using Alloomi.
+              information, as well as your rights when using openloomi.
             </p>
             <p className="text-gray-700 leading-relaxed mt-3">
               By accessing or using the Service, you acknowledge that you have
@@ -220,7 +220,7 @@ export default function PrivacyPolicy() {
                           remain on your device and are not uploaded to our
                           cloud.
                         </strong>{" "}
-                        Alloomi processes raw content locally and may upload
+                        openloomi processes raw content locally and may upload
                         only derived information—such as AI-generated summaries,
                         extracted action items, and smart reply suggestions—to
                         our cloud infrastructure to deliver the Service.
@@ -297,7 +297,7 @@ export default function PrivacyPolicy() {
                   </p>
                   <ul className="text-gray-600 leading-relaxed list-disc pl-5 space-y-2">
                     <li>
-                      To provide and improve Alloomi&apos; core features
+                      To provide and improve openloomi&apos; core features
                       (message aggregation, summarization, notifications,
                       conversations)
                     </li>
@@ -388,7 +388,7 @@ export default function PrivacyPolicy() {
                   <ul className="text-gray-600 leading-relaxed list-disc pl-5 space-y-2">
                     <li>
                       <strong>Vercel (Cloud Infrastructure):</strong> We use
-                      Vercel to host and serve the Alloomi web application.
+                      Vercel to host and serve the openloomi web application.
                       Vercel may process technical data (such as IP addresses
                       and request logs) as part of providing hosting services.
                     </li>
@@ -796,7 +796,7 @@ export default function PrivacyPolicy() {
                     </li>
                     <li>
                       <strong>Protection of Rights:</strong> When necessary to
-                      protect the rights, property, or safety of Alloomi, our
+                      protect the rights, property, or safety of openloomi, our
                       users, or the public.
                     </li>
                     <li>
@@ -843,10 +843,10 @@ export default function PrivacyPolicy() {
               >
                 <div className="pl-13 space-y-4">
                   <p className="text-gray-600 leading-relaxed">
-                    Alloomi services are intended for users aged{" "}
+                    openloomi services are intended for users aged{" "}
                     <strong>18 and above</strong>, or the age of legal majority
                     in your jurisdiction, whichever is higher. If you are under
-                    the applicable age of majority, you may not use Alloomi
+                    the applicable age of majority, you may not use openloomi
                     without verified parental or guardian consent and
                     supervision.
                   </p>
@@ -969,7 +969,7 @@ export default function PrivacyPolicy() {
               Compliance Statement
             </h2>
             <p className="text-indigo-700 leading-relaxed">
-              Alloomi is committed to complying with applicable data protection
+              openloomi is committed to complying with applicable data protection
               regulations, including but not limited to the GDPR (General Data
               Protection Regulation) and the Personal Data Protection Act (PDPA)
               of Singapore. Our privacy practices are designed to protect your
@@ -984,7 +984,7 @@ export default function PrivacyPolicy() {
                 href="/terms"
                 className="text-indigo-900 font-medium hover:underline"
               >
-                Alloomi Terms of Service
+                openloomi Terms of Service
               </a>
               , which provides for binding arbitration in Singapore administered
               by the Singapore International Arbitration Centre (SIAC).

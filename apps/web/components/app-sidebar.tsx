@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { signOut, useSession } from "next-auth/react";
-import { Badge, Button } from "@alloomi/ui";
+import { Badge, Button } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
@@ -12,7 +12,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import {
   useState,
   useEffect,
@@ -22,9 +22,9 @@ import {
 } from "react";
 import { generateUUID } from "@/lib/utils";
 import { useMobileDetection } from "@/hooks/use-mobile-detection";
-import { useCustomEvent } from "@alloomi/hooks/use-custom-event";
+import { useCustomEvent } from "@openloomi/hooks/use-custom-event";
 import "../i18n";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@alloomi/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@openloomi/ui";
 import { toast } from "./toast";
 import { isTauri } from "@/lib/tauri";
 import useSWR from "swr";
@@ -107,16 +107,16 @@ export function AppSidebar() {
   // Use custom hooks for localStorage sync
   const [contextTimeFilter, setContextTimeFilter] = useLocalStorage<
     "all" | "24h" | "today"
-  >("alloomi_focusTimeFilter", "24h");
+  >("openloomi_focusTimeFilter", "24h");
 
   const [categoryStats, setCategoryStats] = useLocalStorage<
     Record<string, number>
-  >("alloomi_categoryStats", {});
+  >("openloomi_categoryStats", {});
 
   // Total insights count (not affected by filter conditions)
   const [totalCategoryStats, setTotalCategoryStats] = useLocalStorage<
     Record<string, number>
-  >("alloomi_totalCategoryStats", {});
+  >("openloomi_totalCategoryStats", {});
 
   const [plan, setPlan] = useState<string | null>(null);
   const { profile } = useUserProfile();
@@ -226,7 +226,7 @@ export function AppSidebar() {
 
   // Listen for category stats updates from EventsPanel
   useCustomEvent<Record<string, number>>(
-    "alloomi:categoryStatsUpdate",
+    "openloomi:categoryStatsUpdate",
     (stats) => {
       if (stats) {
         setCategoryStats(stats);
@@ -236,7 +236,7 @@ export function AppSidebar() {
 
   // Listen for total category stats updates (unfiltered count) from EventsPanel
   useCustomEvent<Record<string, number>>(
-    "alloomi:totalCategoryStatsUpdate",
+    "openloomi:totalCategoryStatsUpdate",
     (stats) => {
       if (stats) {
         setTotalCategoryStats(stats);
@@ -343,7 +343,7 @@ export function AppSidebar() {
     const isProfileSettingsPage =
       currentPage === "profile" ||
       currentPage === "profile-soul" ||
-      currentPage === "alloomi-soul" ||
+      currentPage === "openloomi-soul" ||
       currentPage === "account-settings" ||
       currentPage === "profile-edit" ||
       currentPage === "about" ||
@@ -522,10 +522,10 @@ export function AppSidebar() {
       if (!isSidebarMinimal) setIsCollapsed(false);
     };
 
-    window.addEventListener("alloomi:open-sidebar", handleOpenSidebar);
+    window.addEventListener("openloomi:open-sidebar", handleOpenSidebar);
 
     return () => {
-      window.removeEventListener("alloomi:open-sidebar", handleOpenSidebar);
+      window.removeEventListener("openloomi:open-sidebar", handleOpenSidebar);
     };
   }, [isSidebarMinimal]);
 
@@ -602,7 +602,7 @@ export function AppSidebar() {
                         if (isMobile) {
                           setIsCollapsed(true);
                           window.dispatchEvent(
-                            new CustomEvent("alloomi:close-sidebar"),
+                            new CustomEvent("openloomi:close-sidebar"),
                           );
                         }
                       });
@@ -626,7 +626,7 @@ export function AppSidebar() {
                         <div className="flex items-center gap-2">
                           <Image
                             src="/images/logo-full-light.svg"
-                            alt="Alloomi Logo"
+                            alt="openloomi Logo"
                             width={96}
                             height={24}
                             className="h-5 w-auto object-contain shrink-0"
@@ -648,7 +648,7 @@ export function AppSidebar() {
                       onClick={() => {
                         setIsCollapsed(true);
                         window.dispatchEvent(
-                          new CustomEvent("alloomi:close-sidebar"),
+                          new CustomEvent("openloomi:close-sidebar"),
                         );
                       }}
                       aria-label={t("toggleSidebar")}
@@ -679,7 +679,7 @@ export function AppSidebar() {
                   >
                     <Image
                       src="/images/logo_web.png"
-                      alt="Alloomi Logo"
+                      alt="openloomi Logo"
                       width={24}
                       height={24}
                       className="object-contain"
@@ -729,7 +729,7 @@ export function AppSidebar() {
                                       setIsCollapsed(true);
                                       window.dispatchEvent(
                                         new CustomEvent(
-                                          "alloomi:close-sidebar",
+                                          "openloomi:close-sidebar",
                                         ),
                                       );
                                     }
@@ -806,7 +806,7 @@ export function AppSidebar() {
                                       });
                                       window.dispatchEvent(
                                         new CustomEvent(
-                                          "alloomi:close-sidebar",
+                                          "openloomi:close-sidebar",
                                         ),
                                       );
                                     }
@@ -875,7 +875,7 @@ export function AppSidebar() {
                                         setIsCollapsed(true);
                                         window.dispatchEvent(
                                           new CustomEvent(
-                                            "alloomi:close-sidebar",
+                                            "openloomi:close-sidebar",
                                           ),
                                         );
                                       }
@@ -937,7 +937,7 @@ export function AppSidebar() {
                                   if (isMobile) {
                                     setIsCollapsed(true);
                                     window.dispatchEvent(
-                                      new CustomEvent("alloomi:close-sidebar"),
+                                      new CustomEvent("openloomi:close-sidebar"),
                                     );
                                   }
                                 }}
@@ -998,7 +998,7 @@ export function AppSidebar() {
                                   if (isMobile) {
                                     setIsCollapsed(true);
                                     window.dispatchEvent(
-                                      new CustomEvent("alloomi:close-sidebar"),
+                                      new CustomEvent("openloomi:close-sidebar"),
                                     );
                                   }
                                 });
@@ -1062,7 +1062,7 @@ export function AppSidebar() {
                                   if (isMobile) {
                                     setIsCollapsed(true);
                                     window.dispatchEvent(
-                                      new CustomEvent("alloomi:close-sidebar"),
+                                      new CustomEvent("openloomi:close-sidebar"),
                                     );
                                   }
                                 }}
@@ -1114,7 +1114,7 @@ export function AppSidebar() {
                               if (isMobile) {
                                 setIsCollapsed(true);
                                 window.dispatchEvent(
-                                  new CustomEvent("alloomi:close-sidebar"),
+                                  new CustomEvent("openloomi:close-sidebar"),
                                 );
                               }
                             }}
@@ -1356,12 +1356,12 @@ export function AppSidebar() {
                               onClick={() => {
                                 window.dispatchEvent(
                                   new CustomEvent(
-                                    "alloomi:open-personalization",
+                                    "openloomi:open-personalization",
                                   ),
                                 );
                                 setIsCollapsed(true);
                                 window.dispatchEvent(
-                                  new CustomEvent("alloomi:close-sidebar"),
+                                  new CustomEvent("openloomi:close-sidebar"),
                                 );
                               }}
                             >
@@ -1430,12 +1430,12 @@ export function AppSidebar() {
                                   onClick={() => {
                                     window.dispatchEvent(
                                       new CustomEvent(
-                                        "alloomi:open-personalization",
+                                        "openloomi:open-personalization",
                                       ),
                                     );
                                     setIsCollapsed(true);
                                     window.dispatchEvent(
-                                      new CustomEvent("alloomi:close-sidebar"),
+                                      new CustomEvent("openloomi:close-sidebar"),
                                     );
                                   }}
                                 >
@@ -1511,7 +1511,7 @@ export function AppSidebar() {
                             )}
                             onClick={() => {
                               window.dispatchEvent(
-                                new CustomEvent("alloomi:open-personalization"),
+                                new CustomEvent("openloomi:open-personalization"),
                               );
                             }}
                           >
@@ -1619,7 +1619,7 @@ export function AppSidebar() {
                                 onClick={() => {
                                   window.dispatchEvent(
                                     new CustomEvent(
-                                      "alloomi:open-personalization",
+                                      "openloomi:open-personalization",
                                     ),
                                   );
                                 }}

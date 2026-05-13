@@ -17,7 +17,7 @@ import {
 } from "@/lib/files/config";
 import { uploadFile } from "@/lib/storage";
 
-const UPLOAD_TEMP_DIR = path.join(tmpdir(), "alloomi-uploads");
+const UPLOAD_TEMP_DIR = path.join(tmpdir(), "openloomi-uploads");
 
 /**
  * Complete chunked upload - Merge all chunks and process document

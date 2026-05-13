@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { useTranslation } from "react-i18next";
 
 type LinkStatus = "pending" | "success" | "error";

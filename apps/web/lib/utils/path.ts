@@ -29,8 +29,8 @@ export function joinPath(...paths: string[]): string {
 /**
  * Get application data directory (cross-platform)
  * Consistent with Rust side get_data_dir():
- * - Unix: ~/.alloomi
- * - Windows: %USERPROFILE%\.alloomi or %APPDATA%\Alloomi
+ * - Unix: ~/.openloomi
+ * - Windows: %USERPROFILE%\.openloomi or %APPDATA%\openloomi
  *
  * Note: This function is only available in Node.js environment
  */
@@ -43,13 +43,13 @@ export function getAppDataDir(): string {
     // Windows: prioritize USERPROFILE, then APPDATA
     const userprofile = process.env.USERPROFILE;
     if (userprofile) {
-      return join(userprofile, ".alloomi");
+      return join(userprofile, ".openloomi");
     }
-    return join(process.env.APPDATA || home, "Alloomi");
+    return join(process.env.APPDATA || home, "openloomi");
   }
 
-  // Unix (Linux/macOS): ~/.alloomi
-  return join(home, ".alloomi");
+  // Unix (Linux/macOS): ~/.openloomi
+  return join(home, ".openloomi");
 }
 
 /**
@@ -103,8 +103,8 @@ export function getLogsPath(): string {
 // ============================================================================
 // Tauri-specific path utilities
 // Consistent with Rust side get_data_dir():
-// - Unix: ~/.alloomi/data
-// - Windows: %USERPROFILE%\.alloomi\data or %APPDATA%\Alloomi\data
+// - Unix: ~/.openloomi/data
+// - Windows: %USERPROFILE%\.openloomi\data or %APPDATA%\openloomi\data
 // ============================================================================
 
 /**

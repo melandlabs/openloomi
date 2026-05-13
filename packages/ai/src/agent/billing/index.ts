@@ -1,5 +1,5 @@
 /**
- * @alloomi/ai - Billing: token estimation and model pricing
+ * @openloomi/ai - Billing: token estimation and model pricing
  */
 
 export {

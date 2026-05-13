@@ -1,5 +1,5 @@
 {
-  "name": "@alloomi/agent",
+  "name": "@openloomi/agent",
   "version": "0.4.1",
   "private": false,
   "type": "module",
@@ -20,10 +20,10 @@
     "@vercel/sandbox": "^1.7.1",
     "ai": "5.0.0-beta.6",
     "@ai-sdk/openai-compatible": "^1.0.0",
-    "@alloomi/shared": "workspace:*"
+    "@openloomi/shared": "workspace:*"
   },
   "devDependencies": {
-    "@alloomi/config": "workspace:*"
+    "@openloomi/config": "workspace:*"
   },
   "scripts": {
     "build": "echo no build needed"

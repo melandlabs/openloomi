@@ -1,6 +1,6 @@
-const PREVIEW_SCROLL_FIX_ATTR = "data-alloomi-preview-scroll-fix";
-const PREVIEW_SNAPSHOT_CLAMP_ATTR = "data-alloomi-preview-snapshot-clamp";
-const PREVIEW_PAGE_FLOW_ATTR = "data-alloomi-preview-page-flow";
+const PREVIEW_SCROLL_FIX_ATTR = "data-openloomi-preview-scroll-fix";
+const PREVIEW_SNAPSHOT_CLAMP_ATTR = "data-openloomi-preview-snapshot-clamp";
+const PREVIEW_PAGE_FLOW_ATTR = "data-openloomi-preview-page-flow";
 
 /**
  * Inject high-priority styles into HTML for iframe `srcDoc`:

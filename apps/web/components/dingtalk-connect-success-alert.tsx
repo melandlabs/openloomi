@@ -9,7 +9,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { isTauri } from "@/lib/tauri";
 
 type DingTalkConnectSuccessAlertProps = {
@@ -42,7 +42,7 @@ export function DingTalkConnectSuccessAlert({
             {isTauri()
               ? t(
                   "auth.dingtalkConnectRestartDescTauri",
-                  "To ensure stable DingTalk message listening, please fully quit and restart the Alloomi desktop client",
+                  "To ensure stable DingTalk message listening, please fully quit and restart the openloomi desktop client",
                 )
               : t(
                   "auth.dingtalkConnectRestartDescWeb",

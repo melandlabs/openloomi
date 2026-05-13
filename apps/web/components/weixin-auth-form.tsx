@@ -10,8 +10,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@alloomi/ui";
-import { Button, Input, Label } from "@alloomi/ui";
+} from "@openloomi/ui";
+import { Button, Input, Label } from "@openloomi/ui";
 import { Spinner } from "@/components/spinner";
 import { toast } from "@/components/toast";
 import { WeixinStepsDialog } from "@/components/weixin-steps-dialog";

@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { RemixIcon } from "@/components/remix-icon";
-import type { AgentQuestion } from "@alloomi/ai/agent/types";
+import type { AgentQuestion } from "@openloomi/ai/agent/types";
 import "../i18n";
 
 interface QuestionInputProps {

@@ -7,7 +7,7 @@
 
 import type { NextRequest } from "next/server";
 import { auth } from "@/app/(auth)/auth";
-import { getAgentRegistry } from "@alloomi/ai/agent/registry";
+import { getAgentRegistry } from "@openloomi/ai/agent/registry";
 import { claudePlugin } from "@/lib/ai/extensions";
 
 // Register Claude Agent plugin

@@ -3,7 +3,7 @@
  *
  * Defines the contract for AI runtime handlers used by platform integrations.
  * The web application provides an implementation that delegates to its specific
- * AI runtime (e.g., Claude via @alloomi/ai).
+ * AI runtime (e.g., Claude via @openloomi/ai).
  */
 
 import type { PlatformId } from "./index.js";
@@ -32,7 +32,7 @@ export interface AIHandlerOptions {
  * Interface for AI runtime handlers used by platform integrations.
  *
  * Implementations should delegate to the application's specific AI runtime
- * (e.g., Claude Agent via @alloomi/ai).
+ * (e.g., Claude Agent via @openloomi/ai).
  */
 export interface AIHandler {
   /**

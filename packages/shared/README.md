@@ -1,11 +1,11 @@
-# @alloomi/shared
+# @openloomi/shared
 
-Reusable utilities, types, and constants extracted from the Alloomi web app.
+Reusable utilities, types, and constants extracted from the openloomi web app.
 
 ## Installation
 
 ```sh
-pnpm add @alloomi/shared
+pnpm add @openloomi/shared
 ```
 
 ## Exports

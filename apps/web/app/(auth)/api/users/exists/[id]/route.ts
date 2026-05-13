@@ -1,4 +1,4 @@
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { getUser } from "@/lib/db/queries";
 
 export async function GET(

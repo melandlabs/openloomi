@@ -3,7 +3,7 @@ import { generateProjectInsights } from "@/lib/ai/subagents/insights";
 import type { DetailData } from "@/lib/ai/subagents/insights";
 import type { Insight } from "@/lib/db/schema";
 import { getInsightByIdForUser, updateInsightById } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { generateInsightPayload } from "@/lib/insights/transform";
 import type { GeneratedInsightPayload } from "@/lib/insights/types";
 import { setAIUserContext } from "@/lib/ai";

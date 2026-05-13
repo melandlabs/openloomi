@@ -1,6 +1,6 @@
 import { TodoHeaderPanel } from "@/components/agent/todo-header-panel";
 import { AgentTodoPanel } from "@/components/agent/todo-panel";
-import { Button } from "@alloomi/ui";
+import { Button } from "@openloomi/ui";
 import { cn } from "@/lib/utils";
 import { RemixIcon } from "@/components/remix-icon";
 import { memo } from "react";

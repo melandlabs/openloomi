@@ -21,7 +21,7 @@ import { getHomePath } from "@/lib/utils";
 import {
   getTgUserNameString,
   type TgUserInfo,
-} from "@alloomi/integrations/channels/sources/types";
+} from "@openloomi/integrations/channels/sources/types";
 
 export const PHONE_REGEX = /^\+[1-9]\d{1,14}$/;
 export const CODE_REGEX = /^\d{4,6}$/;
@@ -875,7 +875,7 @@ export function TelegramTokenForm({
                 {checkIsTauri() ? (
                   <button
                     type="button"
-                    onClick={() => openUrl("https://app.alloomi.ai/privacy")}
+                    onClick={() => openUrl("https://app.openloomi.ai/privacy")}
                     className="text-sky-500 hover:underline text-sm flex items-center bg-transparent border-none cursor-pointer p-0"
                   >
                     {t("securityPrompt.learnMore")}

@@ -26,7 +26,7 @@ import useSWR from "swr";
 import { fetcher, fetcherWithCloudAuth } from "@/lib/utils";
 import equal from "fast-deep-equal";
 import type { UseChatHelpers } from "@ai-sdk/react";
-import type { Attachment, ChatMessage } from "@alloomi/shared";
+import type { Attachment, ChatMessage } from "@openloomi/shared";
 import { useTranslation } from "react-i18next";
 import type { Insight } from "@/lib/db/schema";
 import type { SuggestedPrompt } from "./suggested-actions";
@@ -41,7 +41,7 @@ import {
   extractRefsFromContent,
   getRefMarkerRangeBeforeCursor,
   type InlineRefKind,
-} from "@alloomi/shared/ref";
+} from "@openloomi/shared/ref";
 import { InlineRefBadge } from "./inline-ref-badge";
 import {
   DropdownMenu,
@@ -2637,7 +2637,7 @@ function PureMultimodalInput({
               <Textarea
                 data-testid="multimodal-input"
                 ref={textareaRef}
-                id="alloomi-reply-textarea"
+                id="openloomi-reply-textarea"
                 placeholder={t("common.message")}
                 value={input}
                 onChange={handleInput}

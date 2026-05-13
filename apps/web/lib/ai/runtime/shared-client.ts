@@ -5,8 +5,8 @@
  * Used for iMessage Tauri frontend environment
  */
 
-import type { AgentConfig, AgentOptions } from "@alloomi/ai/agent/types";
-import { getAgentRegistry } from "@alloomi/ai/agent/registry";
+import type { AgentConfig, AgentOptions } from "@openloomi/ai/agent/types";
+import { getAgentRegistry } from "@openloomi/ai/agent/registry";
 import { registerPlugins } from "./register-plugins";
 import { formatAgentStreamErrorForUser } from "./shared";
 

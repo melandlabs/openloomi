@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Card, CardContent } from "@alloomi/ui";
+import { Card, CardContent } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { openUrl } from "@/lib/tauri";
 

@@ -10,7 +10,7 @@ import { Button } from "./ui/button";
 import { RemixIcon } from "@/components/remix-icon";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
-import { buildRefMarker } from "@alloomi/shared/ref";
+import { buildRefMarker } from "@openloomi/shared/ref";
 import type { Insight } from "@/lib/db/schema";
 
 type SkillItem = {

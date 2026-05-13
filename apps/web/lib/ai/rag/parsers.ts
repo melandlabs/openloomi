@@ -1,9 +1,9 @@
 /**
  * RAG document parsers — app-side re-export layer.
- * Configures the @alloomi/rag/parsers package with app-specific dependencies.
+ * Configures the @openloomi/rag/parsers package with app-specific dependencies.
  */
 
-import { estimateTokens } from "@alloomi/ai";
+import { estimateTokens } from "@openloomi/ai";
 import {
   PDF_MAX_PAGES,
   PDF_MAX_SIZE_MB,
@@ -20,7 +20,7 @@ import {
   shouldUseNativePdf,
   isSupportedContentType,
   type FileContent,
-} from "@alloomi/rag/parsers";
+} from "@openloomi/rag/parsers";
 
 // Configure the package parsers with app-specific dependencies
 configureParsers({

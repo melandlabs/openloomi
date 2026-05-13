@@ -7,7 +7,7 @@ import {
   getIntegrationCatalogEntryBySlug,
   getRssSubscriptionsByUser,
 } from "@/lib/db/queries";
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 
 const CreateRssSubscriptionSchema = z
   .object({

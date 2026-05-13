@@ -15,7 +15,7 @@ export function safeLocalStorageSetItem(key: string, value: string): void {
     if (e instanceof DOMException && e.name === "QuotaExceededError") {
       if (process.env.NODE_ENV === "development") {
         console.warn(
-          "[alloomi] localStorage quota exceeded, skip persisting:",
+          "[openloomi] localStorage quota exceeded, skip persisting:",
           key,
         );
       }
@@ -41,7 +41,7 @@ export function timeFilterToDays(timeFilter: "all" | "24h" | "today"): number {
       return 1;
   }
 }
-import { coerceDate } from "@alloomi/shared";
+import { coerceDate } from "@openloomi/shared";
 import type { FocusDayInsight } from "@/components/insight-focus-card";
 import {
   classifyFocusInsight,

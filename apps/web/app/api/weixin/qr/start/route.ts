@@ -7,7 +7,7 @@ import {
   DEFAULT_WEIXIN_QR_BOT_TYPE,
   fetchWeixinBotQrCode,
   startWeixinQrSession,
-} from "@alloomi/integrations/weixin/qr-login";
+} from "@openloomi/integrations/weixin/qr-login";
 
 const DEFAULT_BASE = "https://ilinkai.weixin.qq.com";
 

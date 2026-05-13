@@ -47,7 +47,7 @@ vi.mock("@/lib/db/schema", () => {
   return placeholder;
 });
 
-vi.mock("@alloomi/shared/errors", () => ({
+vi.mock("@openloomi/shared/errors", () => ({
   AppError: class AppError extends Error {
     constructor(
       public code: string,
@@ -59,7 +59,7 @@ vi.mock("@alloomi/shared/errors", () => ({
   },
 }));
 
-vi.mock("@alloomi/security/token-encryption", () => ({
+vi.mock("@openloomi/security/token-encryption", () => ({
   encryptToken: vi.fn((value: string) => value),
   decryptToken: vi.fn((value: string) => value),
 }));

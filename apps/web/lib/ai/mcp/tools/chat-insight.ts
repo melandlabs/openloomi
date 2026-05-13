@@ -89,8 +89,8 @@ export function createChatInsightTool(session: Session) {
       "- Supports single keyword or array: keyword='PR' or keyword=['PR', 'development', 'dev']",
       "- Search strategy: use multiple independent keywords instead of long phrases",
       "- Examples:",
-      "  ❌ BAD: keyword='Alloomi PR feature development' (too specific, hard to match)",
-      "  ✅ GOOD: keyword=['Alloomi', 'PR', 'feature', 'development'] (multiple keywords)",
+      "  ❌ BAD: keyword='openloomi PR feature development' (too specific, hard to match)",
+      "  ✅ GOOD: keyword=['openloomi', 'PR', 'feature', 'development'] (multiple keywords)",
       "  ✅ GOOD: keyword=['SmartBI', 'project']",
       "",
       "**📝 USAGE EXAMPLES:**",
@@ -102,7 +102,7 @@ export function createChatInsightTool(session: Session) {
       "",
       "[Project Progress]",
       "- 'SmartBI project progress' → keyword=['SmartBI', 'progress'], days=30, withDetail=true, searchMode='basic'",
-      "- 'Alloomi PR status' → keyword=['Alloomi', 'PR', 'pull request'], days=30, searchMode='basic'",
+      "- 'openloomi PR status' → keyword=['openloomi', 'PR', 'pull request'], days=30, searchMode='basic'",
       "- 'Any important updates recently' → filterDefinition={kind:'importance', values:['Important']}, days=7",
       "",
       "[Chat History]",
@@ -578,7 +578,7 @@ export function createChatInsightTool(session: Session) {
               ? `Successfully retrieved ${paginatedInsights.length} insight(s) (page ${page} of ${totalPages})`
               : notFound
                 ? "No insights match the specified filter criteria. Try using different or broader search terms."
-                : "Alloomi has not yet completed your history message aggregation, please add more integrations and try again later",
+                : "openloomi has not yet completed your history message aggregation, please add more integrations and try again later",
           insights: paginatedInsights,
           pagination: {
             page,

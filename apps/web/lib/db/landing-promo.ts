@@ -2,7 +2,7 @@ import * as crypto from "node:crypto";
 
 import { and, count, eq, gte, sql } from "drizzle-orm";
 
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import { db } from "./queries";
 import { user } from "./schema";
 import { landingPromoRegistrations } from "./schema";

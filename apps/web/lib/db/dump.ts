@@ -16,7 +16,7 @@ import {
 } from "./queries";
 import type { Insight, UserContact } from "./schema";
 import { config } from "dotenv";
-import { timeBeforeHours } from "@alloomi/shared";
+import { timeBeforeHours } from "@openloomi/shared";
 import type { DetailData } from "../ai/subagents/insights";
 
 config({

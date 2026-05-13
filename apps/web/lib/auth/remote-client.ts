@@ -40,7 +40,7 @@ export function getCloudApiBaseUrl(): string | null {
   const cloudUrl =
     process.env.CLOUD_API_URL ||
     process.env.NEXT_PUBLIC_CLOUD_API_URL ||
-    "https://app.alloomi.ai";
+    "https://app.openloomi.ai";
 
   return cloudUrl;
 }

@@ -3,7 +3,7 @@
  * Decides which store to use based on the store factory provided by the caller.
  *
  * Usage (in the app):
- *   import { configureVectorService } from "@alloomi/rag/vector-service";
+ *   import { configureVectorService } from "@openloomi/rag/vector-service";
  *   configureVectorService({
  *     getStore: async () => { return configuredStore; },
  *   });

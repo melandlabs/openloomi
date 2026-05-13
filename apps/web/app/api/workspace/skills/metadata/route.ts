@@ -1,7 +1,7 @@
 /**
  * Skills Metadata API Route
  * PATCH: Update single skill metadata (e.g. avatar)
- * Read/write ~/.alloomi/skill-metadata.json, only allows .alloomi path under homedir
+ * Read/write ~/.openloomi/skill-metadata.json, only allows .openloomi path under homedir
  */
 
 import { type NextRequest, NextResponse } from "next/server";
@@ -9,12 +9,12 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-function getAlloomiDir(): string {
-  return join(homedir(), ".alloomi");
+function getopenloomiDir(): string {
+  return join(homedir(), ".openloomi");
 }
 
 function getSkillMetadataPath(): string {
-  return join(getAlloomiDir(), "skill-metadata.json");
+  return join(getopenloomiDir(), "skill-metadata.json");
 }
 
 /** Ensure metadata file directory exists and write JSON */
@@ -22,7 +22,7 @@ function writeSkillMetadata(
   data: Record<string, { avatar?: string }>,
 ): { success: boolean; error?: string } {
   try {
-    const dir = getAlloomiDir();
+    const dir = getopenloomiDir();
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }

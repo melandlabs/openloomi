@@ -42,7 +42,7 @@ export function loadAvatarConfigFromStorage(
   if (typeof window === "undefined") return null;
 
   try {
-    const key = `alloomi_avatar_config_${userId}`;
+    const key = `openloomi_avatar_config_${userId}`;
     const stored = localStorage.getItem(key);
     if (stored) {
       return JSON.parse(stored) as AvatarConfiguration;
@@ -66,7 +66,7 @@ export function saveAvatarConfigToStorage(
   if (typeof window === "undefined") return;
 
   try {
-    const key = `alloomi_avatar_config_${userId}`;
+    const key = `openloomi_avatar_config_${userId}`;
     localStorage.setItem(key, JSON.stringify(config));
   } catch (error) {
     console.error("Failed to save avatar config to storage:", error);
@@ -81,14 +81,14 @@ export function clearAvatarConfigFromStorage(userId: string): void {
   if (typeof window === "undefined") return;
 
   try {
-    const key = `alloomi_avatar_config_${userId}`;
+    const key = `openloomi_avatar_config_${userId}`;
     localStorage.removeItem(key);
   } catch (error) {
     console.error("Failed to clear avatar config from storage:", error);
   }
 }
 
-const ASSISTANT_NAME_PREFIX = "alloomi_assistant_name_";
+const ASSISTANT_NAME_PREFIX = "openloomi_assistant_name_";
 
 /**
  * Load assistant name from local storage

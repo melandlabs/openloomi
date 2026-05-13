@@ -1,4 +1,4 @@
-import { AppError } from "@alloomi/shared/errors";
+import { AppError } from "@openloomi/shared/errors";
 import type { BotWithAccount } from "@/lib/db/queries";
 import type { UserType } from "@/app/(auth)/auth";
 

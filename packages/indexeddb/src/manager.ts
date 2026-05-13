@@ -3,7 +3,7 @@
  * This allows AI tools to query original message content during insight generation
  */
 
-const DB_NAME = "alloomi_messages_db";
+const DB_NAME = "openloomi_messages_db";
 const DB_VERSION = 3; // Incremented to add memory stage fields and summaries store
 const STORE_NAME = "raw_messages";
 const SUMMARY_STORE_NAME = "memory_summaries";

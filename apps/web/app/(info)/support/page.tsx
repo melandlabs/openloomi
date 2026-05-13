@@ -56,9 +56,9 @@ export default function SupportPage() {
   const faqItems: FAQItem[] = [
     {
       id: "1",
-      question: "How do I create a Alloomi account?",
+      question: "How do I create a openloomi account?",
       answer:
-        'Creating a Alloomi account is simple. Click the "Sign Up" button in the top right corner of the website, fill in your name, email address, and create a password. After completing registration, you will receive a verification email. Please click the link in the email to verify your account. Once verified, you can start using all Alloomi features.',
+        'Creating a openloomi account is simple. Click the "Sign Up" button in the top right corner of the website, fill in your name, email address, and create a password. After completing registration, you will receive a verification email. Please click the link in the email to verify your account. Once verified, you can start using all openloomi features.',
       category: "account",
     },
     {
@@ -70,9 +70,9 @@ export default function SupportPage() {
     },
     {
       id: "3",
-      question: "Which third-party platforms does Alloomi integrate with?",
+      question: "Which third-party platforms does openloomi integrate with?",
       answer:
-        'Currently, Alloomi supports integration with Slack, Telegram, Discord, Gmail, Outlook, Microsoft Teams, WhatsApp, and Facebook Messenger. We are constantly expanding our supported platforms, so stay tuned for future updates. You can manage your integrations in the "Settings > Integrations" page.',
+        'Currently, openloomi supports integration with Slack, Telegram, Discord, Gmail, Outlook, Microsoft Teams, WhatsApp, and Facebook Messenger. We are constantly expanding our supported platforms, so stay tuned for future updates. You can manage your integrations in the "Settings > Integrations" page.',
       category: "integrations",
     },
     {
@@ -84,16 +84,16 @@ export default function SupportPage() {
     },
     {
       id: "5",
-      question: "How does Alloomi ensure my data security?",
+      question: "How does openloomi ensure my data security?",
       answer:
-        "Alloomi uses multiple security measures to protect your data, including end-to-end encryption, regular security audits, two-factor authentication, and data backups. We follow industry best practices and privacy regulations and will not sell your data to third parties. You can learn more about data security in our privacy policy.",
+        "openloomi uses multiple security measures to protect your data, including end-to-end encryption, regular security audits, two-factor authentication, and data backups. We follow industry best practices and privacy regulations and will not sell your data to third parties. You can learn more about data security in our privacy policy.",
       category: "security",
     },
     {
       id: "6",
-      question: "How do I use Alloomi's intelligent aggregation feature?",
+      question: "How do I use openloomi's intelligent aggregation feature?",
       answer:
-        "Intelligent aggregation is Alloomi's core feature. Once you connect your integration accounts, Alloomi automatically collects and organizes all your messages. You can use the filters on the dashboard to filter by integration, importance, date, or keywords. The system also automatically identifies important messages and displays them at the top to help you prioritize critical information.",
+        "Intelligent aggregation is openloomi's core feature. Once you connect your integration accounts, openloomi automatically collects and organizes all your messages. You can use the filters on the dashboard to filter by integration, importance, date, or keywords. The system also automatically identifies important messages and displays them at the top to help you prioritize critical information.",
       category: "features",
     },
     {
@@ -151,10 +151,10 @@ export default function SupportPage() {
   return (
     <>
       <Head>
-        <title>Support Center | Alloomi</title>
+        <title>Support Center | openloomi</title>
         <meta
           name="description"
-          content="Alloomi Support Center - Get help with any issues you encounter"
+          content="openloomi Support Center - Get help with any issues you encounter"
         />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
@@ -169,11 +169,11 @@ export default function SupportPage() {
           className="text-center mb-16 max-w-3xl mx-auto"
         >
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
-            Alloomi Support Center
+            openloomi Support Center
           </h1>
           <p className="text-lg text-muted-foreground mb-8">
             We&apos;re here to help with any issues you may encounter while
-            using Alloomi. Browse our frequently asked questions or contact our
+            using openloomi. Browse our frequently asked questions or contact our
             support team.
           </p>
 
@@ -379,7 +379,7 @@ export default function SupportPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <button
               type="button"
-              onClick={() => openUrl("https://alloomi.ai/docs")}
+              onClick={() => openUrl("https://openloomi.ai/docs")}
               className="block group text-left w-full"
             >
               <div className="bg-card h-full p-6 rounded-xl shadow-sm border border-border hover:shadow-md transition-all group-hover:border-primary/30">
@@ -391,7 +391,7 @@ export default function SupportPage() {
                 </h3>
                 <p className="text-muted-foreground">
                   Detailed feature explanations, API references, and usage
-                  guides to help you make the most of all Alloomi features.
+                  guides to help you make the most of all openloomi features.
                 </p>
               </div>
             </button>
@@ -412,7 +412,7 @@ export default function SupportPage() {
                 </h3>
                 <p className="text-muted-foreground">
                   Step-by-step video tutorials covering basic operations to
-                  advanced techniques for mastering Alloomi.
+                  advanced techniques for mastering openloomi.
                 </p>
               </div>
             </button>

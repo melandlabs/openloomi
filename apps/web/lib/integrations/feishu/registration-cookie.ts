@@ -3,4 +3,4 @@ export {
   signRegistrationCookie,
   verifyRegistrationCookie,
   type FeishuRegistrationCookiePayload,
-} from "@alloomi/integrations/feishu/registration-cookie";
+} from "@openloomi/integrations/feishu/registration-cookie";

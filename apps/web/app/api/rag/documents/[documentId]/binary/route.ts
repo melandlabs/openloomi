@@ -4,7 +4,7 @@ import { auth } from "@/app/(auth)/auth";
 import { getDocument } from "@/lib/ai/rag/langchain-service";
 import { isTauriMode } from "@/lib/env";
 import { fileExists, readFile } from "@/lib/storage";
-import { fetchWithSSRFProtection } from "@alloomi/security/url-validator";
+import { fetchWithSSRFProtection } from "@openloomi/security/url-validator";
 
 /**
  * Infer content type from filename extension.

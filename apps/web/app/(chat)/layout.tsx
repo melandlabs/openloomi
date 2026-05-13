@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider } from "@alloomi/ui";
+import { SidebarInset, SidebarProvider } from "@openloomi/ui";
 import { auth } from "../(auth)/auth";
 import Script from "next/script";
 import CookieConfirm from "@/components/cookie-confirm";

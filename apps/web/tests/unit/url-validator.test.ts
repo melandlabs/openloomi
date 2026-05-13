@@ -5,7 +5,7 @@ import {
   fetchWithSSRFProtection,
   isTrustedStorageUrl,
   SSRFValidationError,
-} from "@alloomi/security/url-validator";
+} from "@openloomi/security/url-validator";
 
 vi.mock("server-only", () => ({}));
 

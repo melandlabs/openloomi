@@ -19,12 +19,12 @@ export const metadata = {
   title: blogIndexTitle,
   description: blogIndexDescription,
   alternates: {
-    canonical: "https://alloomi.ai/blogs",
+    canonical: "https://openloomi.ai/blogs",
   },
   openGraph: {
     title: blogIndexTitle,
     description: blogIndexDescription,
-    url: "https://alloomi.ai/blogs",
+    url: "https://openloomi.ai/blogs",
     type: "website",
   },
   twitter: {

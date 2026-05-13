@@ -64,26 +64,26 @@ export function Footer({
   const finalShowBackgroundImage =
     variant !== undefined ? false : (showBackgroundImage ?? false);
   const useUnifiedStyle = true;
-  const appDomain = "https://app.alloomi.ai";
+  const appDomain = "https://app.openloomi.ai";
 
   const [showWechatQR, setShowWechatQR] = useState(false);
 
   const downloadLinks = {
     macOS: {
       arm64:
-        "https://github.com/melandlabs/release/releases/download/v0.4.2/Alloomi_0.4.2_macOS_aarch64.dmg",
+        "https://github.com/melandlabs/release/releases/download/v0.4.2/openloomi_0.4.2_macOS_aarch64.dmg",
       amd64:
-        "https://github.com/melandlabs/release/releases/download/v0.4.2/Alloomi_0.4.2_macOS_amd64.dmg",
+        "https://github.com/melandlabs/release/releases/download/v0.4.2/openloomi_0.4.2_macOS_amd64.dmg",
     },
     linux: {
       amd64:
-        "https://github.com/melandlabs/release/releases/download/v0.4.2/Alloomi_0.4.2_linux_amd64.deb",
+        "https://github.com/melandlabs/release/releases/download/v0.4.2/openloomi_0.4.2_linux_amd64.deb",
       arm64:
-        "https://github.com/melandlabs/release/releases/download/v0.4.2/Alloomi_0.4.2_linux_aarch64.deb",
+        "https://github.com/melandlabs/release/releases/download/v0.4.2/openloomi_0.4.2_linux_aarch64.deb",
     },
     windows: {
       amd64:
-        "https://github.com/melandlabs/release/releases/download/v0.4.2/Alloomi_0.4.2_windows_amd64.exe",
+        "https://github.com/melandlabs/release/releases/download/v0.4.2/openloomi_0.4.2_windows_amd64.exe",
       arm64: null,
     },
     github: "https://github.com/melandlabs/release/releases",
@@ -146,12 +146,12 @@ export function Footer({
       items: [
         {
           name: "X",
-          href: "https://x.com/AlloomiAI",
+          href: "https://x.com/openloomiAI",
           icon: <RemixIcon name="twitter-x" variant="line" size="size-4" />,
         },
         {
           name: "LinkedIn",
-          href: "https://www.linkedin.com/company/alloomiai",
+          href: "https://www.linkedin.com/company/openloomiai",
           icon: <RemixIcon name="linkedin-box" variant="line" size="size-4" />,
         },
         {
@@ -355,10 +355,10 @@ export function Footer({
                       target="_blank"
                       rel="noopener noreferrer"
                       className="bg-primary-gradient text-primary-foreground px-6 py-3 rounded-lg shadow-sm font-medium transition-all transform flex items-center gap-2 hover:brightness-95"
-                      aria-label={t("hero.downloadAlloomi")}
+                      aria-label={t("hero.downloadopenloomi")}
                     >
                       <RemixIcon name="download" size="size-4" />
-                      {t("hero.downloadAlloomi")}
+                      {t("hero.downloadopenloomi")}
                     </a>
                   )}
                 </div> */}

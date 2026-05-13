@@ -101,7 +101,7 @@ export function FocusSourceIcon({
   const isDanger = variant === "danger";
   const logoSrc = getSourceLogo(source.type, source.label);
   const title = isSystemSource(source.type, source.label)
-    ? "Alloomi"
+    ? "openloomi"
     : source.label;
 
   return (

@@ -13,23 +13,23 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button, Input, Textarea } from "@alloomi/ui";
-import { ScrollArea } from "@alloomi/ui";
-import { usePullToRefresh } from "@alloomi/hooks/use-pull-to-refresh";
+import { Button, Input, Textarea } from "@openloomi/ui";
+import { ScrollArea } from "@openloomi/ui";
+import { usePullToRefresh } from "@openloomi/hooks/use-pull-to-refresh";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@alloomi/ui";
+} from "@openloomi/ui";
 import { getToolDisplayName } from "@/lib/utils/tool-names";
 import { FilePreviewPanel } from "@/components/file-preview-panel";
 import { FilePreviewDrawerShell } from "@/components/file-preview-drawer-shell";

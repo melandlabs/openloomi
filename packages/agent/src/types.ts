@@ -196,7 +196,7 @@ export interface AgentConfig {
 export interface SkillsConfig {
   /** Whether skills are globally enabled */
   enabled: boolean;
-  /** Whether to load skills from user directory (~/.alloomi/skills) */
+  /** Whether to load skills from user directory (~/.openloomi/skills) */
   userDirEnabled: boolean;
   /** Whether to load skills from app directory (workspace/skills) */
   appDirEnabled: boolean;
@@ -212,7 +212,7 @@ export interface McpConfig {
   enabled: boolean;
   /** Whether to load MCP servers from user directory (claude config) */
   userDirEnabled: boolean;
-  /** Whether to load MCP servers from app directory (alloomi config) */
+  /** Whether to load MCP servers from app directory (openloomi config) */
   appDirEnabled: boolean;
   /** Custom MCP config file path (legacy support) */
   mcpConfigPath?: string;
