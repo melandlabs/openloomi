@@ -64,7 +64,8 @@ export class NativeProvider extends BaseSandboxProvider {
     console.log(`[NativeProvider] Executing: ${command} ${args.join(" ")}`);
 
     return new Promise((resolve) => {
-      const proc = spawn(command, args, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const proc: any = spawn(command, args, {
         cwd: workDir,
         env: { ...process.env, ...env },
       });
@@ -72,15 +73,15 @@ export class NativeProvider extends BaseSandboxProvider {
       let stdout = "";
       let stderr = "";
 
-      proc.stdout?.on("data", (data) => {
+      proc.stdout?.on("data", (data: Buffer) => {
         stdout += data.toString();
       });
 
-      proc.stderr?.on("data", (data) => {
+      proc.stderr?.on("data", (data: Buffer) => {
         stderr += data.toString();
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code: number | null) => {
         const duration = Date.now() - startTime;
         resolve({
           stdout,
@@ -95,7 +96,7 @@ export class NativeProvider extends BaseSandboxProvider {
         });
       });
 
-      proc.on("error", (error) => {
+      proc.on("error", (error: Error) => {
         const duration = Date.now() - startTime;
         resolve({
           stdout,

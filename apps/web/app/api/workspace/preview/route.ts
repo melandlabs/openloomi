@@ -110,7 +110,8 @@ export async function POST(req: NextRequest) {
     const port = allocatePort();
 
     // Start Vite
-    const viteProcess = spawn(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const viteProcess: any = spawn(
       "npm",
       ["run", "dev", "--", "--port", String(port)],
       {

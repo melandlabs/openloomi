@@ -133,7 +133,8 @@ export class ClaudeProvider extends BaseSandboxProvider {
     const srtPath = this.srtPath;
 
     return new Promise((resolve) => {
-      const proc = spawn(srtPath, ["run", "--", command, ...args], {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const proc: any = spawn(srtPath, ["run", "--", command, ...args], {
         cwd: workDir,
         env: { ...process.env, ...env },
       });
@@ -141,11 +142,11 @@ export class ClaudeProvider extends BaseSandboxProvider {
       let stdout = "";
       let stderr = "";
 
-      proc.stdout?.on("data", (data) => {
+      proc.stdout?.on("data", (data: Buffer) => {
         stdout += data.toString();
       });
 
-      proc.stderr?.on("data", (data) => {
+      proc.stderr?.on("data", (data: Buffer) => {
         stderr += data.toString();
       });
 
@@ -153,7 +154,7 @@ export class ClaudeProvider extends BaseSandboxProvider {
         proc.kill("SIGTERM");
       }, execTimeout);
 
-      proc.on("close", (code) => {
+      proc.on("close", (code: number | null) => {
         clearTimeout(timeoutHandle);
         const duration = Date.now() - startTime;
         resolve({
@@ -169,7 +170,7 @@ export class ClaudeProvider extends BaseSandboxProvider {
         });
       });
 
-      proc.on("error", (error) => {
+      proc.on("error", (error: Error) => {
         clearTimeout(timeoutHandle);
         const duration = Date.now() - startTime;
         resolve({
