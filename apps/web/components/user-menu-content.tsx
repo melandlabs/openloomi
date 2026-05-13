@@ -8,7 +8,6 @@ import type { Session } from "next-auth";
 import { RemixIcon } from "@/components/remix-icon";
 import { cn } from "@/lib/utils";
 import { guestRegex } from "@/lib/env/constants";
-import { isTauri, openUrl } from "@/lib/tauri";
 import {
   LanguageSettingsMenu,
   languages,
@@ -49,8 +48,6 @@ interface UserMenuContentProps {
   onLogin: () => void;
   /** Menu item click handler */
   onMenuItemClick: () => void;
-  /** Opens the "Contact Us" dialog (entry from menu when sidebar is collapsed) */
-  onOpenContactUs?: () => void;
   /** Callback when clicking the "Personal Settings" icon on the user card (navigates to personal settings page) */
   onPersonalSettingsClick?: () => void;
   /** Callback when clicking the user card to navigate to subscription management page */
@@ -76,7 +73,6 @@ export function UserMenuContent({
   onLanguageChange,
   onLogin,
   onMenuItemClick,
-  onOpenContactUs,
   onPersonalSettingsClick,
   onGoToSubscriptionManagement,
 }: UserMenuContentProps) {
@@ -330,162 +326,6 @@ export function UserMenuContent({
         <RemixIcon name="settings_line" size={styles.iconSize} />
         <span>{t("settings.menuSettings", "Settings")}</span>
       </Link>
-
-      <Link
-        href={
-          isFullscreen
-            ? "/?page=profile-soul&fromUserMenu=true"
-            : "/?page=profile-soul"
-        }
-        onClick={onMenuItemClick}
-        className={cn(
-          "flex items-center w-full rounded-sm text-foreground",
-          styles.itemGap,
-          styles.itemPadding,
-          styles.itemTextSize,
-          styles.itemHover,
-        )}
-      >
-        <RemixIcon name="brain_ai_3" size={styles.iconSize} />
-        <span>{t("settings.personalization")}</span>
-      </Link>
-
-      {/* Divider */}
-      <div className={cn("border-t border-border", styles.dividerMargin)} />
-
-      {/* Help */}
-      {isTauri() ? (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              onMenuItemClick();
-              openUrl("https://openloomi.ai/docs");
-            }}
-            className={cn(
-              "flex items-center w-full rounded-sm text-foreground cursor-pointer bg-transparent border-none",
-              styles.itemGap,
-              styles.itemPadding,
-              styles.itemTextSize,
-              styles.itemHover,
-            )}
-          >
-            <RemixIcon name="question" size={styles.iconSize} />
-            <span>{t("nav.help")}</span>
-          </button>
-        </>
-      ) : (
-        <button
-          type="button"
-          onClick={() => {
-            onMenuItemClick?.();
-            openUrl("https://openloomi.ai/docs");
-          }}
-          className={cn(
-            "flex items-center w-full rounded-sm text-foreground",
-            styles.itemGap,
-            styles.itemPadding,
-            styles.itemTextSize,
-            styles.itemHover,
-          )}
-        >
-          <RemixIcon name="question" size={styles.iconSize} />
-          <span>{t("nav.help")}</span>
-        </button>
-      )}
-
-      {/* Contact us - opened from this entry when sidebar is collapsed */}
-      {onOpenContactUs && (
-        <button
-          type="button"
-          onClick={() => {
-            onMenuItemClick();
-            onOpenContactUs();
-          }}
-          className={cn(
-            "flex items-center w-full rounded-sm text-foreground",
-            styles.itemGap,
-            styles.itemPadding,
-            styles.itemTextSize,
-            styles.itemHover,
-          )}
-        >
-          <RemixIcon name="message_3" size={styles.iconSize} />
-          <span>{t("common.contactUs")}</span>
-        </button>
-      )}
-
-      {/* Privacy policy */}
-      {isTauri() ? (
-        <button
-          type="button"
-          onClick={() => {
-            onMenuItemClick();
-            openUrl("https://app.openloomi.ai/privacy");
-          }}
-          className={cn(
-            "flex items-center w-full rounded-sm text-foreground cursor-pointer bg-transparent border-none",
-            styles.itemGap,
-            styles.itemPadding,
-            styles.itemTextSize,
-            styles.itemHover,
-          )}
-        >
-          <RemixIcon name="shield_check" size={styles.iconSize} />
-          <span>{t("common.privacy")}</span>
-        </button>
-      ) : (
-        <Link
-          href="/privacy"
-          onClick={onMenuItemClick}
-          className={cn(
-            "flex items-center w-full rounded-sm text-foreground",
-            styles.itemGap,
-            styles.itemPadding,
-            styles.itemTextSize,
-            styles.itemHover,
-          )}
-        >
-          <RemixIcon name="shield_check" size={styles.iconSize} />
-          <span>{t("common.privacy")}</span>
-        </Link>
-      )}
-
-      {/* Terms of service */}
-      {isTauri() ? (
-        <button
-          type="button"
-          onClick={() => {
-            onMenuItemClick();
-            openUrl("https://app.openloomi.ai/terms");
-          }}
-          className={cn(
-            "flex items-center w-full rounded-sm text-foreground cursor-pointer bg-transparent border-none",
-            styles.itemGap,
-            styles.itemPadding,
-            styles.itemTextSize,
-            styles.itemHover,
-          )}
-        >
-          <RemixIcon name="file_text" size={styles.iconSize} />
-          <span>{t("common.terms")}</span>
-        </button>
-      ) : (
-        <Link
-          href="/terms"
-          onClick={onMenuItemClick}
-          className={cn(
-            "flex items-center w-full rounded-sm text-foreground",
-            styles.itemGap,
-            styles.itemPadding,
-            styles.itemTextSize,
-            styles.itemHover,
-          )}
-        >
-          <RemixIcon name="file_text" size={styles.iconSize} />
-          <span>{t("common.terms")}</span>
-        </Link>
-      )}
     </>
   );
 

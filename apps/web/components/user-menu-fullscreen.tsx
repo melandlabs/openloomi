@@ -40,8 +40,6 @@ interface UserMenuFullscreenProps {
   onLogin: () => void;
   /** Callback for closing sidebar on mobile */
   onCloseSidebar?: () => void;
-  /** Opens the "Contact Us" dialog */
-  onOpenContactUs?: () => void;
 }
 
 /**
@@ -60,7 +58,6 @@ export function UserMenuFullscreen({
   onLanguageChange,
   onLogin,
   onCloseSidebar,
-  onOpenContactUs,
 }: UserMenuFullscreenProps) {
   const { t } = useTranslation();
   const router = useRouter();
@@ -98,77 +95,6 @@ export function UserMenuFullscreen({
     onClose();
     router.push("/?page=profile&fromUserMenu=true");
   };
-
-  /**
-   * Listen for open personalization settings event.
-   */
-  useEffect(() => {
-    const handleOpenPersonalization = (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        targetPage?: "profile-soul";
-        tab?: "basic" | "contexts" | "roles" | "people" | "linkedAccounts";
-        addPlatform?: boolean;
-      }>;
-
-      if (customEvent.detail?.targetPage === "profile-soul") {
-        onClose();
-        router.push("/?page=profile-soul");
-        return;
-      }
-
-      if (
-        customEvent.detail?.tab === "roles" ||
-        customEvent.detail?.tab === "people"
-      ) {
-        onClose();
-        router.push("/?page=profile-soul");
-        return;
-      }
-
-      if (customEvent.detail?.tab === "linkedAccounts") {
-        onClose();
-        const q = customEvent.detail?.addPlatform ? "?addPlatform=true" : "";
-        router.push(`/connectors${q}`);
-        return;
-      }
-
-      if (customEvent.detail?.tab === "basic") {
-        onClose();
-        router.push("/?page=openloomi-soul");
-        return;
-      }
-      if (customEvent.detail?.tab === "contexts") {
-        onClose();
-        router.push("/?page=profile-soul");
-        return;
-      }
-
-      onClose();
-      router.push("/?page=openloomi-soul");
-    };
-
-    window.addEventListener(
-      "openloomi:open-personalization",
-      handleOpenPersonalization as EventListener,
-    );
-
-    // Backwards compatibility with old event name
-    window.addEventListener(
-      "openloomi:open-user-settings",
-      handleOpenPersonalization as EventListener,
-    );
-
-    return () => {
-      window.removeEventListener(
-        "openloomi:open-personalization",
-        handleOpenPersonalization as EventListener,
-      );
-      window.removeEventListener(
-        "openloomi:open-user-settings",
-        handleOpenPersonalization as EventListener,
-      );
-    };
-  }, [onClose, router]);
 
   // When opening/closing, set data attribute on body to hide the bottom menu
   useEffect(() => {
@@ -258,7 +184,6 @@ export function UserMenuFullscreen({
               onLanguageChange={onLanguageChange}
               onLogin={onLogin}
               onMenuItemClick={handleMenuItemClick}
-              onOpenContactUs={onOpenContactUs}
               onPersonalSettingsClick={handlePersonalSettingsClick}
             />
           </div>

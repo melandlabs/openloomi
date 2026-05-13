@@ -594,55 +594,9 @@ After uploading documents, you can ask AI questions about them directly.
 2. **Ask questions** - Ask AI "What's in the document about XXX?"
 3. **Get full content** - View the complete document when needed
 
----
-
-## Subscription & Pricing
-
-openloomi offers flexible plans to suit different needs.
-
-### Plans
-
-| Plan | Description |
-|------|-------------|
-| **Free** | Limited credits and features to get started |
-| **Basic** | Higher limits and more features |
-| **Pro** | Full features, highest limits, and priority support |
-
-### How to Upgrade
-
-1. Click your profile icon in the top right
-2. Select **"Upgrade"** or **"Manage Plan"**
-3. Choose your preferred plan
-4. Complete the payment
-
-Your upgrade takes effect immediately.
-
-### Credits System
-
-Credits are used to power AI tasks such as message analysis, insight generation, and skill execution.
-
-**How to top up credits:**
-1. Click your profile icon → **"Upgrade"** or **"Manage Plan"**
-2. Select **"Top Up Credits"**
-3. Choose a credit package and complete payment
-
-Credits do not expire and can be purchased anytime without upgrading to Pro.
-
----
-
-## Legal
-
-### Terms of Service
-
-By using openloomi, you agree to our Terms of Service. These terms outline the rules, guidelines, and legal obligations governing your use of openloomi — including acceptable use, account responsibilities, and limitations of liability.
-
-📄 **[Read Terms of Service](https://app.openloomi.ai/terms)**
-
 ### Privacy Policy
 
 Your privacy matters. Our Privacy Policy explains in detail how we collect, use, store, and protect your data — including what data we access, how it's encrypted, how long we retain it, and your rights to access, export, or delete it at any time.
-
-📄 **[Read Privacy Policy](https://app.openloomi.ai/privacy)**
 
 ### Privacy & Security
 

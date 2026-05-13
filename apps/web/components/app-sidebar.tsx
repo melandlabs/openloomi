@@ -394,9 +394,6 @@ export function AppSidebar() {
     i18n.changeLanguage(code);
   };
 
-  /** Open "Contact Us" dialog from user dropdown menu (entry when sidebar is collapsed) */
-  const onOpenContactUs = () => setContactDialogOpen(true);
-
   const handleLogout = async () => {
     if (status === "loading") {
       toast({
@@ -1300,7 +1297,6 @@ export function AppSidebar() {
                           onLanguageChange={handleLanguageChange}
                           onLogin={handleLogin}
                           onCloseSidebar={() => setIsCollapsed(true)}
-                          onOpenContactUs={onOpenContactUs}
                         />
                       </>
                     ) : (
@@ -1313,7 +1309,6 @@ export function AppSidebar() {
                         onLanguageChange={handleLanguageChange}
                         onLogin={handleLogin}
                         onCloseSidebar={() => setIsCollapsed(true)}
-                        onOpenContactUs={onOpenContactUs}
                       >
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -1347,45 +1342,6 @@ export function AppSidebar() {
                           : "flex-row items-center",
                       )}
                     >
-                      {/* When collapsed: personalization above avatar */}
-                      {isCollapsed && (
-                        <Tooltip open={false}>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-hover-foreground"
-                              aria-label={t(
-                                "nav.personalization",
-                                "Personalization",
-                              )}
-                              onClick={() => {
-                                window.dispatchEvent(
-                                  new CustomEvent(
-                                    "openloomi:open-personalization",
-                                  ),
-                                );
-                                setIsCollapsed(true);
-                                window.dispatchEvent(
-                                  new CustomEvent("openloomi:close-sidebar"),
-                                );
-                              }}
-                            >
-                              <RemixIcon
-                                name="brain_ai_3"
-                                size={SIDEBAR_NAV_ICON_SIZE}
-                                className="shrink-0"
-                              />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="right"
-                            className="border border-border bg-card text-card-foreground z-[9999]"
-                          >
-                            <p>{t("nav.personalization", "Personalization")}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
                       <div
                         className={cn(
                           "flex w-full items-center gap-0",
@@ -1420,51 +1376,6 @@ export function AppSidebar() {
                             <p>{t("nav.myAccount")}</p>
                           </TooltipContent>
                         </Tooltip>
-                        {/* When expanded: personalization right-aligned */}
-                        {!isCollapsed && (
-                          <div className="ml-auto flex items-center gap-1 shrink-0">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-hover-foreground"
-                                  aria-label={t(
-                                    "nav.personalization",
-                                    "Personalization",
-                                  )}
-                                  onClick={() => {
-                                    window.dispatchEvent(
-                                      new CustomEvent(
-                                        "openloomi:open-personalization",
-                                      ),
-                                    );
-                                    setIsCollapsed(true);
-                                    window.dispatchEvent(
-                                      new CustomEvent(
-                                        "openloomi:close-sidebar",
-                                      ),
-                                    );
-                                  }}
-                                >
-                                  <RemixIcon
-                                    name="brain_ai_3"
-                                    size={SIDEBAR_NAV_ICON_SIZE}
-                                    className="shrink-0"
-                                  />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent
-                                side="right"
-                                className="border border-border bg-card text-card-foreground z-[9999]"
-                              >
-                                <p>
-                                  {t("nav.personalization", "Personalization")}
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                        )}
                       </div>
                     </div>
                     <UserMenuFullscreen
@@ -1493,7 +1404,6 @@ export function AppSidebar() {
                       onLanguageChange={handleLanguageChange}
                       onLogin={handleLogin}
                       onCloseSidebar={() => setIsCollapsed(true)}
-                      onOpenContactUs={onOpenContactUs}
                     />
                   </>
                 ) : (
@@ -1505,41 +1415,6 @@ export function AppSidebar() {
                         : "flex-row items-center",
                     )}
                   >
-                    {/* When collapsed: personalization above avatar */}
-                    {isCollapsed && (
-                      <Tooltip open={false}>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-hover-foreground"
-                            aria-label={t(
-                              "nav.personalization",
-                              "Personalization",
-                            )}
-                            onClick={() => {
-                              window.dispatchEvent(
-                                new CustomEvent(
-                                  "openloomi:open-personalization",
-                                ),
-                              );
-                            }}
-                          >
-                            <RemixIcon
-                              name="brain_ai_3"
-                              size={SIDEBAR_NAV_ICON_SIZE}
-                              className="shrink-0"
-                            />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="right"
-                          className="border border-border bg-card text-card-foreground z-[9999]"
-                        >
-                          <p>{t("nav.personalization", "Personalization")}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
                     <div
                       className={cn(
                         "flex w-full items-center gap-0",
@@ -1555,7 +1430,6 @@ export function AppSidebar() {
                         onLanguageChange={handleLanguageChange}
                         onLogin={handleLogin}
                         onCloseSidebar={() => setIsCollapsed(true)}
-                        onOpenContactUs={onOpenContactUs}
                       >
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1613,41 +1487,6 @@ export function AppSidebar() {
                               className="border border-border bg-card text-card-foreground z-[9999]"
                             >
                               <p>{t("settings.menuSettings", "Settings")}</p>
-                            </TooltipContent>
-                          </Tooltip>
-
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-hover-foreground"
-                                aria-label={t(
-                                  "nav.personalization",
-                                  "Personalization",
-                                )}
-                                onClick={() => {
-                                  window.dispatchEvent(
-                                    new CustomEvent(
-                                      "openloomi:open-personalization",
-                                    ),
-                                  );
-                                }}
-                              >
-                                <RemixIcon
-                                  name="brain_ai_3"
-                                  size={SIDEBAR_NAV_ICON_SIZE}
-                                  className="shrink-0"
-                                />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="right"
-                              className="border border-border bg-card text-card-foreground z-[9999]"
-                            >
-                              <p>
-                                {t("nav.personalization", "Personalization")}
-                              </p>
                             </TooltipContent>
                           </Tooltip>
                         </div>
