@@ -104,7 +104,7 @@
     "@slack/bolt": "^4.6.0",
     "@standard-schema/spec": "^1.1.0",
     "@tanstack/react-virtual": "^3.13.18",
-    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-deep-link": "^2.4.6",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "@tauri-apps/plugin-store": "^2.4.2",

@@ -1,14 +1,7 @@
-import type { Metadata } from "next";
 import { Noto_Sans_SC, Noto_Serif_SC } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { I18nProvider } from "@/components/i18n-provider";
 import { TooltipProvider } from "@openloomi/ui";
-import {
-  organizationJsonLd,
-  siteMetadata,
-  softwareApplicationJsonLd,
-  webSiteJsonLd,
-} from "@/lib/marketing/seo";
 
 import "./globals.css";
 import "remixicon/fonts/remixicon.css";
@@ -30,63 +23,6 @@ const notoSerifSC = Noto_Serif_SC({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  metadataBase: new URL(siteMetadata.siteUrl),
-  title: {
-    default: siteMetadata.title,
-    template: `%s | ${siteMetadata.name}`,
-  },
-  description: siteMetadata.description,
-  keywords: siteMetadata.keywords,
-  applicationName: siteMetadata.name,
-  authors: [{ name: siteMetadata.name }],
-  creator: siteMetadata.name,
-  publisher: siteMetadata.name,
-  category: "productivity",
-  alternates: {
-    canonical: siteMetadata.siteUrl,
-  },
-  openGraph: {
-    type: "website",
-    url: siteMetadata.siteUrl,
-    title: siteMetadata.title,
-    description: siteMetadata.description,
-    siteName: siteMetadata.name,
-    locale: "en_US",
-    alternateLocale: ["zh_CN"],
-    images: [
-      {
-        url: `${siteMetadata.siteUrl}/images/home/intelligence-hero.png`,
-        width: 1024,
-        height: 1024,
-        alt: "openloomi privacy-first AI agent that reads, thinks, and acts locally across your channels",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: siteMetadata.title,
-    description: siteMetadata.description,
-    images: [`${siteMetadata.siteUrl}/images/home/intelligence-hero.png`],
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-snippet": -1,
-      "max-image-preview": "large",
-      "max-video-preview": -1,
-    },
-  },
-  other: {
-    distribution: "global",
-    "area-served": "Worldwide",
-    "marketing-site": siteMetadata.marketingUrl,
-  },
-};
-
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -106,22 +42,6 @@ export default async function RootLayout({
         <Suspense fallback={null}>
           <GeddleScript />
         </Suspense>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteJsonLd) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(organizationJsonLd),
-          }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(softwareApplicationJsonLd),
-          }}
-        />
       </head>
       <body className="antialiased" suppressHydrationWarning>
         {/* Only initialize ScheduledJobs in Tauri environment */}

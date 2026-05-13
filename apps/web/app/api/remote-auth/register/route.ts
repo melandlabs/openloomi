@@ -23,7 +23,6 @@ import {
 import { setAuthCookies } from "@/lib/auth/cookie-auth";
 import { createCloudClientForRequest } from "@/lib/auth/remote-client";
 import { isTauriMode } from "@/lib/env/constants";
-import { sendLifecycleEmail } from "@/lib/marketing/service";
 import { authFormSchema } from "@/lib/auth/validation";
 
 export async function POST(request: NextRequest) {
@@ -91,12 +90,6 @@ export async function POST(request: NextRequest) {
 
     // Create new user
     const [newUser] = await createUser(email, password);
-
-    // Send welcome email
-    void sendLifecycleEmail({
-      templateId: "welcome_day0",
-      userId: newUser.id,
-    });
 
     // Generate auth token
     const token = generateToken(newUser.id, newUser.email);

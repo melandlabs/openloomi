@@ -11,7 +11,6 @@ import { SessionProvider } from "next-auth/react";
 import { InsightOptimisticProvider } from "@/components/insight-optimistic-context";
 import { MobileLayoutWrapper } from "@/components/mobile-layout-wrapper";
 import { MobileBackButton } from "@/components/mobile-back-button";
-import { PosthogIdentityListener } from "@/components/posthog-identity-listener";
 import { TelegramSelfListenerInit } from "@/components/telegram-self-listener-init";
 import { WhatsAppSelfListenerInit } from "@/components/whatsapp-self-listener-init";
 import { IMessageSelfListenerInit } from "@/components/imessage-self-listener-init";
@@ -42,15 +41,6 @@ const IntegrationInitComponents = memo(() => (
 
 IntegrationInitComponents.displayName = "IntegrationInitComponents";
 
-// Lazy load listener components
-const ListenerComponents = memo(() => (
-  <Suspense fallback={null}>
-    <PosthogIdentityListener />
-  </Suspense>
-));
-
-ListenerComponents.displayName = "ListenerComponents";
-
 // Lazy load mobile components
 const MobileComponents = memo(() => (
   <Suspense fallback={null}>
@@ -64,12 +54,7 @@ MobileComponents.displayName = "MobileComponents";
  * Core app content - only includes necessary initialization
  */
 export function AppContent({ children }: { children: React.ReactNode }) {
-  return (
-    <InsightOptimisticProvider>
-      <ListenerComponents />
-      {children}
-    </InsightOptimisticProvider>
-  );
+  return <InsightOptimisticProvider>{children}</InsightOptimisticProvider>;
 }
 
 /**

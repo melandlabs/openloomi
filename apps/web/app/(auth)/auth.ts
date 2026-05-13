@@ -5,14 +5,12 @@ import {
   getUser,
   createUser,
   getUserTypeForService,
-  markUserLoggedIn,
   getLatestSurveyByUserId,
   getUserById,
 } from "@/lib/db/queries";
 import { authConfig } from "./auth.config";
 import { DUMMY_PASSWORD, authSessionVersion } from "@/lib/env/constants";
 import type { DefaultJWT } from "next-auth/jwt";
-import { sendLifecycleEmail } from "@/lib/marketing/service";
 import { isTauriProductionEnv, createTauriProductionAuthModule } from "./tauri";
 
 export type SignInResult = {
@@ -228,25 +226,6 @@ function createProductionAuthModule() {
           } catch (error) {
             console.error(
               "[Auth] Failed to resolve user subscription type",
-              error,
-            );
-          }
-        }
-
-        if (user && token.id) {
-          try {
-            const { isFirstLogin, user: updatedUser } = await markUserLoggedIn(
-              token.id,
-            );
-            if (isFirstLogin && updatedUser) {
-              void sendLifecycleEmail({
-                templateId: "welcome_day0",
-                userId: token.id,
-              });
-            }
-          } catch (error) {
-            console.error(
-              "[Auth] Failed to process marketing welcome flow",
               error,
             );
           }

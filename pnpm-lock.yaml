@@ -155,45 +155,6 @@ importers:
       '@ai-sdk/react':
         specifier: ^2.0.0
         version: 2.0.181(react@19.2.5)(zod@4.3.6)
-      '@openloomi/ai':
-        specifier: workspace:*
-        version: link:../../packages/ai
-      '@openloomi/api':
-        specifier: workspace:*
-        version: link:../../packages/api
-      '@openloomi/audit':
-        specifier: workspace:*
-        version: link:../../packages/audit
-      '@openloomi/hooks':
-        specifier: workspace:*
-        version: link:../../packages/hooks
-      '@openloomi/i18n':
-        specifier: workspace:*
-        version: link:../../packages/i18n
-      '@openloomi/indexeddb':
-        specifier: workspace:*
-        version: link:../../packages/indexeddb
-      '@openloomi/insights':
-        specifier: workspace:*
-        version: link:../../packages/insights
-      '@openloomi/integrations':
-        specifier: workspace:*
-        version: link:../../packages/integrations
-      '@openloomi/mcp':
-        specifier: workspace:*
-        version: link:../../packages/mcp
-      '@openloomi/rag':
-        specifier: workspace:*
-        version: link:../../packages/rag
-      '@openloomi/rss':
-        specifier: workspace:*
-        version: link:../../packages/rss
-      '@openloomi/search':
-        specifier: workspace:*
-        version: link:../../packages/search
-      '@openloomi/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.71
         version: 0.2.117(@cfworker/json-schema@4.1.1)(zod@4.3.6)
@@ -251,6 +212,45 @@ importers:
       '@notionhq/client':
         specifier: ^2.2.15
         version: 2.3.0
+      '@openloomi/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
+      '@openloomi/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@openloomi/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@openloomi/hooks':
+        specifier: workspace:*
+        version: link:../../packages/hooks
+      '@openloomi/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@openloomi/indexeddb':
+        specifier: workspace:*
+        version: link:../../packages/indexeddb
+      '@openloomi/insights':
+        specifier: workspace:*
+        version: link:../../packages/insights
+      '@openloomi/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
+      '@openloomi/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
+      '@openloomi/rag':
+        specifier: workspace:*
+        version: link:../../packages/rag
+      '@openloomi/rss':
+        specifier: workspace:*
+        version: link:../../packages/rss
+      '@openloomi/search':
+        specifier: workspace:*
+        version: link:../../packages/search
+      '@openloomi/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
@@ -339,8 +339,8 @@ importers:
         specifier: ^3.13.18
         version: 3.13.24(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@tauri-apps/api':
-        specifier: ^2.10.1
-        version: 2.10.1
+        specifier: ^2.11.0
+        version: 2.11.0
       '@tauri-apps/plugin-deep-link':
         specifier: ^2.4.6
         version: 2.4.8
@@ -1024,9 +1024,6 @@ importers:
 
   packages/rag:
     dependencies:
-      '@openloomi/agent':
-        specifier: workspace:*
-        version: link:../agent
       '@langchain/community':
         specifier: ^1.1.1
         version: 1.1.27(09c322bbc6be57b7d7e1287e747fcb64)
@@ -1036,6 +1033,9 @@ importers:
       '@langchain/textsplitters':
         specifier: ^1.0.1
         version: 1.0.1(@langchain/core@1.1.40(@opentelemetry/api@1.9.1)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.1))(openai@4.104.0(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)))
+      '@openloomi/agent':
+        specifier: workspace:*
+        version: link:../agent
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0
@@ -5051,8 +5051,8 @@ packages:
   '@tanstack/virtual-core@3.14.0':
     resolution: {integrity: sha512-JLANqGy/D6k4Ujmh8Tr25lGimuOXNiaVyXaCAZS0W+1390sADdGnyUdSWNIfd49gebtIxGMij4IktRVzrdr12Q==}
 
-  '@tauri-apps/api@2.10.1':
-    resolution: {integrity: sha512-hKL/jWf293UDSUN09rR69hrToyIXBb8CjGaWC7gfinvnQrBVvnLr08FeFi38gxtugAVyVcTa5/FD/Xnkb1siBw==}
+  '@tauri-apps/api@2.11.0':
+    resolution: {integrity: sha512-7CinYODhky9lmO23xHnUFv0Xt43fbtWMyxZcLcRBlFkcgXKuEirBvHpmtJ89YMhyeGcq20Wuc47Fa4XjyniywA==}
 
   '@tauri-apps/cli-darwin-arm64@2.10.1':
     resolution: {integrity: sha512-Z2OjCXiZ+fbYZy7PmP3WRnOpM9+Fy+oonKDEmUE6MwN4IGaYqgceTjwHucc/kEEYZos5GICve35f7ZiizgqEnQ==}
@@ -16516,7 +16516,7 @@ snapshots:
 
   '@tanstack/virtual-core@3.14.0': {}
 
-  '@tauri-apps/api@2.10.1': {}
+  '@tauri-apps/api@2.11.0': {}
 
   '@tauri-apps/cli-darwin-arm64@2.10.1':
     optional: true
@@ -16567,19 +16567,19 @@ snapshots:
 
   '@tauri-apps/plugin-deep-link@2.4.8':
     dependencies:
-      '@tauri-apps/api': 2.10.1
+      '@tauri-apps/api': 2.11.0
 
   '@tauri-apps/plugin-opener@2.5.3':
     dependencies:
-      '@tauri-apps/api': 2.10.1
+      '@tauri-apps/api': 2.11.0
 
   '@tauri-apps/plugin-shell@2.3.5':
     dependencies:
-      '@tauri-apps/api': 2.10.1
+      '@tauri-apps/api': 2.11.0
 
   '@tauri-apps/plugin-store@2.4.2':
     dependencies:
-      '@tauri-apps/api': 2.10.1
+      '@tauri-apps/api': 2.11.0
 
   '@tencent-weixin/openclaw-weixin@1.0.3':
     dependencies:
@@ -16813,7 +16813,7 @@ snapshots:
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 22.19.17
+      '@types/node': 25.7.0
 
   '@types/chai@5.2.3':
     dependencies:
@@ -16971,7 +16971,7 @@ snapshots:
 
   '@types/express-serve-static-core@5.1.1':
     dependencies:
-      '@types/node': 22.19.17
+      '@types/node': 25.7.0
       '@types/qs': 6.15.0
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -17140,12 +17140,12 @@ snapshots:
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 22.19.17
+      '@types/node': 25.7.0
 
   '@types/serve-static@2.2.0':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 22.19.17
+      '@types/node': 25.7.0
 
   '@types/shimmer@1.2.0': {}
 
@@ -20910,7 +20910,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 22.19.17
+      '@types/node': 25.7.0
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -25076,7 +25076,7 @@ snapshots:
       acorn-import-phases: 1.0.4(acorn@8.16.0)
       browserslist: 4.28.2
       chrome-trace-event: 1.0.4
-      enhanced-resolve: 5.20.1
+      enhanced-resolve: 5.21.3
       es-module-lexer: 2.0.0
       eslint-scope: 5.1.1
       events: 3.3.0
