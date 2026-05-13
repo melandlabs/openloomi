@@ -24,8 +24,6 @@ import {
 import { toast } from "@/components/toast";
 import { fetchWithAuth } from "@/lib/utils";
 import { useUserProfile } from "@/hooks/use-user-profile";
-import { PersonalizationSwrBoundary } from "@/components/personalization/personalization-swr-boundary";
-import { PersonalizationBasicSettings } from "@/components/personalization/personalization-basic-settings";
 
 type ProfileResponse = {
   user: {
@@ -546,15 +544,6 @@ export function UserProfileSettings() {
         </div>
 
         <Separator className="mb-8" />
-
-        <div className="w-full mt-0">
-          <p className="mb-6 px-0 pb-0 text-base font-semibold text-foreground-secondary">
-            {t("settings.openloomiSettings")}
-          </p>
-          <PersonalizationSwrBoundary>
-            <PersonalizationBasicSettings open />
-          </PersonalizationSwrBoundary>
-        </div>
       </div>
 
       {/* Change full name */}

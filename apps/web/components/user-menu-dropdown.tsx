@@ -36,8 +36,6 @@ interface UserMenuDropdownProps {
   onLogin: () => void;
   /** Mobile sidebar close callback */
   onCloseSidebar?: () => void;
-  /** Open "Contact Us" dialog (accessed from menu when sidebar is collapsed) */
-  onOpenContactUs?: () => void;
   /** Child elements (trigger) */
   children: React.ReactNode;
 }
@@ -59,7 +57,6 @@ export function UserMenuDropdown({
   onLanguageChange,
   onLogin,
   onCloseSidebar,
-  onOpenContactUs,
   children,
 }: UserMenuDropdownProps) {
   const { t } = useTranslation();
@@ -195,7 +192,6 @@ export function UserMenuDropdown({
             onLanguageChange={onLanguageChange}
             onLogin={onLogin}
             onMenuItemClick={handleMenuItemClick}
-            onOpenContactUs={onOpenContactUs}
             onPersonalSettingsClick={handlePersonalSettingsClick}
           />
         </DropdownMenuContent>
