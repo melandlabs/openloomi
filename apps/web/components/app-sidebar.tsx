@@ -937,7 +937,9 @@ export function AppSidebar() {
                                   if (isMobile) {
                                     setIsCollapsed(true);
                                     window.dispatchEvent(
-                                      new CustomEvent("openloomi:close-sidebar"),
+                                      new CustomEvent(
+                                        "openloomi:close-sidebar",
+                                      ),
                                     );
                                   }
                                 }}
@@ -998,7 +1000,9 @@ export function AppSidebar() {
                                   if (isMobile) {
                                     setIsCollapsed(true);
                                     window.dispatchEvent(
-                                      new CustomEvent("openloomi:close-sidebar"),
+                                      new CustomEvent(
+                                        "openloomi:close-sidebar",
+                                      ),
                                     );
                                   }
                                 });
@@ -1062,7 +1066,9 @@ export function AppSidebar() {
                                   if (isMobile) {
                                     setIsCollapsed(true);
                                     window.dispatchEvent(
-                                      new CustomEvent("openloomi:close-sidebar"),
+                                      new CustomEvent(
+                                        "openloomi:close-sidebar",
+                                      ),
                                     );
                                   }
                                 }}
@@ -1435,7 +1441,9 @@ export function AppSidebar() {
                                     );
                                     setIsCollapsed(true);
                                     window.dispatchEvent(
-                                      new CustomEvent("openloomi:close-sidebar"),
+                                      new CustomEvent(
+                                        "openloomi:close-sidebar",
+                                      ),
                                     );
                                   }}
                                 >
@@ -1511,7 +1519,9 @@ export function AppSidebar() {
                             )}
                             onClick={() => {
                               window.dispatchEvent(
-                                new CustomEvent("openloomi:open-personalization"),
+                                new CustomEvent(
+                                  "openloomi:open-personalization",
+                                ),
                               );
                             }}
                           >

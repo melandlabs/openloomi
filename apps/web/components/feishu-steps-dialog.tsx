@@ -1,7 +1,12 @@
 "use client";
 
 import { useTranslation } from "react-i18next";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@openloomi/ui";
 import { isTauri, openUrl } from "@/lib/tauri";
 
 const FEISHU_OPEN_PLATFORM_URL = "https://open.feishu.cn/app";

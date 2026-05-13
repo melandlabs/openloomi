@@ -1,5 +1,10 @@
 "use client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@openloomi/ui";
 import { Spinner } from "@/components/spinner";
 import type { InsightTimelineHistory } from "@/lib/db/schema";
 import { format } from "date-fns";

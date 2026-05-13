@@ -5,7 +5,11 @@
  * Reference: https://bot.q.qq.com/wiki/
  */
 import { MessagePlatformAdapter } from "@openloomi/integrations/channels";
-import type { Messages, Message, Image } from "@openloomi/integrations/channels";
+import type {
+  Messages,
+  Message,
+  Image,
+} from "@openloomi/integrations/channels";
 import type {
   MessageEvent,
   MessageTarget,

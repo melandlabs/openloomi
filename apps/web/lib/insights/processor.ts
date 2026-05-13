@@ -61,7 +61,10 @@ import {
 import { LinkedInAdapter } from "@openloomi/integrations/linkedin";
 import { InstagramAdapter } from "@openloomi/integrations/instagram";
 import { GoogleCalendarAdapter } from "@openloomi/integrations/calendar";
-import { HubspotClient, type HubspotDeal } from "@openloomi/integrations/hubspot";
+import {
+  HubspotClient,
+  type HubspotDeal,
+} from "@openloomi/integrations/hubspot";
 import { setAIUserContext, clearAIUserContext } from "@/lib/ai";
 import {
   OutlookCalendarAdapter,

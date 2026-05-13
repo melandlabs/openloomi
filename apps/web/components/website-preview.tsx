@@ -75,7 +75,9 @@ export function WebsitePreview({
         fileDir = filePath.substring(0, lastSlashIndex);
 
         // Extract taskId from path if available
-        const sessionMatch = filePath.match(/\/\.openloomi\/sessions\/([^\/]+)/);
+        const sessionMatch = filePath.match(
+          /\/\.openloomi\/sessions\/([^\/]+)/,
+        );
         if (sessionMatch) {
           setExtractedTaskId(sessionMatch[1]);
         }

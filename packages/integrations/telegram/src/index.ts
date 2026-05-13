@@ -17,5 +17,8 @@ export type {
 } from "@openloomi/integrations/contacts";
 
 // Re-export utility functions
-export { openloomiMessageToTgText, tgMessageToopenloomiMessage } from "./adapter";
+export {
+  openloomiMessageToTgText,
+  tgMessageToopenloomiMessage,
+} from "./adapter";
 export { withTimeout, CONNECT_TIMEOUT_MS } from "./adapter";

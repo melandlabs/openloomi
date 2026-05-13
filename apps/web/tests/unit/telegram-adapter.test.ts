@@ -80,7 +80,9 @@ describe("openloomiMessageToTgText", async () => {
   });
 
   test("converts message with text property", async () => {
-    expect(openloomiMessageToTgText({ text: "Hello world" })).toBe("Hello world");
+    expect(openloomiMessageToTgText({ text: "Hello world" })).toBe(
+      "Hello world",
+    );
   });
 
   test("converts At mention to Telegram format", async () => {

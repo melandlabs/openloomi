@@ -969,12 +969,13 @@ export default function PrivacyPolicy() {
               Compliance Statement
             </h2>
             <p className="text-indigo-700 leading-relaxed">
-              openloomi is committed to complying with applicable data protection
-              regulations, including but not limited to the GDPR (General Data
-              Protection Regulation) and the Personal Data Protection Act (PDPA)
-              of Singapore. Our privacy practices are designed to protect your
-              personal data and ensure your privacy rights are respected. This
-              Privacy Policy is governed by the laws of Singapore.
+              openloomi is committed to complying with applicable data
+              protection regulations, including but not limited to the GDPR
+              (General Data Protection Regulation) and the Personal Data
+              Protection Act (PDPA) of Singapore. Our privacy practices are
+              designed to protect your personal data and ensure your privacy
+              rights are respected. This Privacy Policy is governed by the laws
+              of Singapore.
             </p>
             <p className="text-indigo-700 leading-relaxed mt-3">
               Any disputes arising out of or in connection with this Privacy

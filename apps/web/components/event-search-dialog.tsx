@@ -2,7 +2,12 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@openloomi/ui";
 import type { Insight } from "@/lib/db/schema";
 import type { SearchResultItem } from "@/components/global-search-dialog";
 import { useGlobalInsightDrawer } from "@/components/global-insight-drawer";

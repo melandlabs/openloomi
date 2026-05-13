@@ -33,7 +33,10 @@ import {
   type DialogInfo,
   type ExtractedMessageInfo,
 } from "@openloomi/integrations/channels/sources/types";
-import type { FileIngester, ClientRegistry } from "@openloomi/integrations/core";
+import type {
+  FileIngester,
+  ClientRegistry,
+} from "@openloomi/integrations/core";
 import type {
   ContactMeta,
   TelegramContactMeta,

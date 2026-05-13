@@ -4,7 +4,11 @@
  * Needs to work with Feishu WebSocket long-poll listener to receive messages
  */
 import { MessagePlatformAdapter } from "@openloomi/integrations/channels";
-import type { Messages, Message, Image } from "@openloomi/integrations/channels";
+import type {
+  Messages,
+  Message,
+  Image,
+} from "@openloomi/integrations/channels";
 import type {
   MessageEvent,
   MessageTarget,

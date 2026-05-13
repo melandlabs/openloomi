@@ -22,7 +22,12 @@ import { getSecureFileUrl } from "@/lib/files/secure-url";
 import { useRouter } from "next/navigation";
 import { RemixIcon } from "@/components/remix-icon";
 import type { Attachment } from "@openloomi/shared";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@openloomi/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@openloomi/ui";
 import { cn, formatBytes } from "@/lib/utils";
 import { useIntegrations } from "@/hooks/use-integrations";
 

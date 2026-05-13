@@ -173,8 +173,8 @@ export default function SupportPage() {
           </h1>
           <p className="text-lg text-muted-foreground mb-8">
             We&apos;re here to help with any issues you may encounter while
-            using openloomi. Browse our frequently asked questions or contact our
-            support team.
+            using openloomi. Browse our frequently asked questions or contact
+            our support team.
           </p>
 
           {/* Search Box */}

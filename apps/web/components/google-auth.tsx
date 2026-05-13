@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { RemixIcon } from "@/components/remix-icon";
-import { Button, Input, Label, Tabs, TabsList, TabsTrigger } from "@openloomi/ui";
+import {
+  Button,
+  Input,
+  Label,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@openloomi/ui";
 import { useTranslation } from "react-i18next";
 import { toast } from "./toast";
 import { openUrl } from "@/lib/tauri";

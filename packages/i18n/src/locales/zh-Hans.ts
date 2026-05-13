@@ -1815,7 +1815,8 @@ const zhHans = {
     githubAddAssignees: "添加分配人",
     githubAddAssigneesSuccess: "分配成功！",
     githubAddAssigneesFailed: "添加分配人失败。",
-    hubspotDes: "连接 HubSpot，感知交易/线索的变化，并在 openloomi 内更新阶段。",
+    hubspotDes:
+      "连接 HubSpot，感知交易/线索的变化，并在 openloomi 内更新阶段。",
     asanaDes: "连接 Asana，管理任务、跟踪项目并更新工作项。",
     jiraDes: "连接 Jira，跟踪问题、管理项目并与团队协作。",
     linearDes: "连接 Linear，管理问题、跟踪项目并优化工作流程。",
@@ -1998,7 +1999,8 @@ const zhHans = {
       "您的消息数据将保留在本地设备上。openloomi 只会在您使用时读取最近的消息用于生成洞察。",
     imessageConnecting: "正在连接 iMessage...",
     imessageConnected: "iMessage 已连接",
-    imessageConnectedDesc: "您现在可以通过 openloomi 访问您的 iMessage 消息了。",
+    imessageConnectedDesc:
+      "您现在可以通过 openloomi 访问您的 iMessage 消息了。",
     imessageError: "连接失败",
     imessageConnect: "连接 iMessage",
     displayNameRequired: "请输入显示名称",
@@ -3092,7 +3094,8 @@ const zhHans = {
     subtitle:
       "在此管理你从对话中保存的图片、视频和文档（每次保存会消耗 2 积分）。",
     uploadTitle: "上传文件",
-    uploadDescription: "从本地上传文件到 openloomi 存储，之后即可直接进行分析。",
+    uploadDescription:
+      "从本地上传文件到 openloomi 存储，之后即可直接进行分析。",
     uploadButton: "上传文件",
     uploading: "正在上传...",
     uploadSuccess: "文件上传成功。",
@@ -5241,7 +5244,8 @@ const zhHans = {
     },
     painPoints: {
       title: "openloomi 该如何组织你的注意力？",
-      subtitle: "选择关注的情景，openloomi将自动归类事件，助你轻松切换关注模式。",
+      subtitle:
+        "选择关注的情景，openloomi将自动归类事件，助你轻松切换关注模式。",
       configuredTitle: "已设置的关注规则",
       configuredSubtitle: "需要时可以继续添加或删除",
       configuredEmpty: "还没有关注规则，先从下方模板填写几个场景吧。",

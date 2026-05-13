@@ -326,26 +326,27 @@ export default function TermsOfService() {
                   </div>
                   <div className="prose prose-gray max-w-none">
                     <p>
-                      <strong>1. Account Creation:</strong> To use openloomi, you
-                      must have a valid email account and authorize openloomi to
-                      access your IM or email. You must provide accurate
-                      information during setup.
+                      <strong>1. Account Creation:</strong> To use openloomi,
+                      you must have a valid email account and authorize
+                      openloomi to access your IM or email. You must provide
+                      accurate information during setup.
                     </p>
 
                     <p>
                       <strong>2. Account Responsibility:</strong> You are
                       responsible for all activities conducted through your
-                      openloomi account. You must maintain the security of your IM
-                      or email credentials, as they control access to openloomi.
+                      openloomi account. You must maintain the security of your
+                      IM or email credentials, as they control access to
+                      openloomi.
                     </p>
 
                     <p>
                       <strong>3. Eligibility:</strong> You must be at least{" "}
                       <strong>18 years old</strong>, or the age of legal
                       majority in your jurisdiction, whichever is higher, to use
-                      openloomi. By using openloomi, you represent and warrant that
-                      you meet this age requirement and have the legal capacity
-                      to enter into this Agreement.
+                      openloomi. By using openloomi, you represent and warrant
+                      that you meet this age requirement and have the legal
+                      capacity to enter into this Agreement.
                     </p>
 
                     <p>
@@ -375,9 +376,9 @@ export default function TermsOfService() {
                   </h2>
                   <div className="bg-gray-50 p-4 rounded-md mb-6">
                     <p className="text-sm font-medium text-gray-700">
-                      <strong>Short version:</strong> Use openloomi in a way that
-                      complies with laws and doesn&apos;t harm others or the
-                      service.
+                      <strong>Short version:</strong> Use openloomi in a way
+                      that complies with laws and doesn&apos;t harm others or
+                      the service.
                     </p>
                   </div>
                   <div className="prose prose-gray max-w-none">
@@ -400,7 +401,9 @@ export default function TermsOfService() {
                         Interfere with or disrupt the Service or its security
                       </li>
                       <li>Attempt to access unauthorized data or accounts</li>
-                      <li>Use openloomi to send spam or unsolicited messages</li>
+                      <li>
+                        Use openloomi to send spam or unsolicited messages
+                      </li>
                       <li>
                         Reverse engineer, decompile, or attempt to extract
                         openloomi&apos; source code
@@ -484,16 +487,16 @@ export default function TermsOfService() {
                   </h2>
                   <div className="bg-gray-50 p-4 rounded-md mb-6">
                     <p className="text-sm font-medium text-gray-700">
-                      <strong>Short version:</strong> openloomi treats your IM or
-                      email data as confidential and only uses it to provide the
-                      service. Raw messages stay on your device; only processed
-                      summaries may be sent to the cloud.
+                      <strong>Short version:</strong> openloomi treats your IM
+                      or email data as confidential and only uses it to provide
+                      the service. Raw messages stay on your device; only
+                      processed summaries may be sent to the cloud.
                     </p>
                   </div>
                   <div className="prose prose-gray max-w-none">
                     <p>
-                      <strong>1. Data Access:</strong> openloomi accesses your IM
-                      or email data only as necessary to provide features
+                      <strong>1. Data Access:</strong> openloomi accesses your
+                      IM or email data only as necessary to provide features
                       you&apos;ve enabled, and in accordance with our Privacy
                       Policy.
                     </p>
@@ -505,8 +508,8 @@ export default function TermsOfService() {
                       our cloud servers. Only derived information—such as AI-
                       generated summaries, extracted action items, and smart
                       reply suggestions—may be transmitted to and stored on
-                      openloomi cloud infrastructure for the purpose of delivering
-                      the Service.
+                      openloomi cloud infrastructure for the purpose of
+                      delivering the Service.
                     </p>
 
                     <p>
@@ -730,8 +733,9 @@ export default function TermsOfService() {
                   </h2>
                   <div className="bg-gray-50 p-4 rounded-md mb-6">
                     <p className="text-sm font-medium text-gray-700">
-                      <strong>Short version:</strong> openloomi respects copyright
-                      law and will respond to valid infringement claims.
+                      <strong>Short version:</strong> openloomi respects
+                      copyright law and will respond to valid infringement
+                      claims.
                     </p>
                   </div>
                   <div className="prose prose-gray max-w-none">
@@ -795,13 +799,14 @@ export default function TermsOfService() {
                       code, algorithms, machine learning models, trademarks,
                       logos, trade names, trade secrets, and any content or
                       materials created by openloomi. All rights not expressly
-                      granted to you in this Agreement are reserved by openloomi.
+                      granted to you in this Agreement are reserved by
+                      openloomi.
                     </p>
 
                     <p>
                       <strong>2. Limited License to You:</strong> Subject to
-                      your compliance with this Agreement, openloomi grants you a
-                      limited, non-exclusive, non-transferable,
+                      your compliance with this Agreement, openloomi grants you
+                      a limited, non-exclusive, non-transferable,
                       non-sublicensable, revocable license to access and use the
                       Service solely for your personal or internal business
                       purposes. This license does not include the right to:
@@ -826,12 +831,12 @@ export default function TermsOfService() {
                     </ul>
 
                     <p>
-                      <strong>3. Feedback:</strong> If you provide openloomi with
-                      any feedback, suggestions, or ideas regarding the Service
-                      (&quot;Feedback&quot;), you grant openloomi a worldwide,
-                      royalty-free, irrevocable, perpetual license to use, copy,
-                      modify, and incorporate such Feedback into the Service
-                      without any obligation to you.
+                      <strong>3. Feedback:</strong> If you provide openloomi
+                      with any feedback, suggestions, or ideas regarding the
+                      Service (&quot;Feedback&quot;), you grant openloomi a
+                      worldwide, royalty-free, irrevocable, perpetual license to
+                      use, copy, modify, and incorporate such Feedback into the
+                      Service without any obligation to you.
                     </p>
 
                     <p>
@@ -887,9 +892,9 @@ export default function TermsOfService() {
                           ensure it remains accurate, complete, and up to date.
                         </li>
                         <li>
-                          By submitting payment, the user authorizes openloomi to
-                          charge the applicable fees via Stripe for each billing
-                          cycle.
+                          By submitting payment, the user authorizes openloomi
+                          to charge the applicable fees via Stripe for each
+                          billing cycle.
                         </li>
                       </ul>
                     </li>
@@ -1007,8 +1012,8 @@ export default function TermsOfService() {
                     <p className="text-sm font-medium text-gray-700">
                       <strong>Short version:</strong> openloomi&apos; liability
                       for direct damages is capped at the subscription fees you
-                      paid. openloomi is not liable for indirect or consequential
-                      losses.
+                      paid. openloomi is not liable for indirect or
+                      consequential losses.
                     </p>
                   </div>
                   <div className="prose prose-gray max-w-none">
@@ -1028,8 +1033,8 @@ export default function TermsOfService() {
 
                     <p>
                       <strong>2. Exclusion of Indirect Damages:</strong> To the
-                      maximum extent permitted by applicable law, openloomi shall
-                      not be liable for any indirect, incidental, special,
+                      maximum extent permitted by applicable law, openloomi
+                      shall not be liable for any indirect, incidental, special,
                       consequential, punitive, or exemplary damages, including
                       but not limited to loss of profits, loss of data, loss of
                       goodwill, business interruption, or cost of substitute
@@ -1038,9 +1043,9 @@ export default function TermsOfService() {
                     </p>
 
                     <p>
-                      <strong>3. AI-Generated Content:</strong> openloomi assumes
-                      no liability for any loss or damage arising from your use
-                      of or reliance on AI-generated content, including
+                      <strong>3. AI-Generated Content:</strong> openloomi
+                      assumes no liability for any loss or damage arising from
+                      your use of or reliance on AI-generated content, including
                       summaries, smart reply suggestions, action item
                       extractions, or operation execution recommendations. All
                       AI-generated output is provided &quot;as is&quot; without
@@ -1051,8 +1056,8 @@ export default function TermsOfService() {
                     </p>
 
                     <p>
-                      <strong>4. Service Availability:</strong> openloomi does not
-                      warrant that the Service will be uninterrupted,
+                      <strong>4. Service Availability:</strong> openloomi does
+                      not warrant that the Service will be uninterrupted,
                       error-free, or free from harmful components. The Service
                       is provided on an &quot;as is&quot; and &quot;as
                       available&quot; basis.
@@ -1178,15 +1183,15 @@ export default function TermsOfService() {
                     <p>
                       <strong>4. Assignment:</strong> You may not assign or
                       transfer this Agreement without openloomi&apos; prior
-                      written consent. openloomi may assign this Agreement without
-                      restriction.
+                      written consent. openloomi may assign this Agreement
+                      without restriction.
                     </p>
 
                     <p>
-                      <strong>5. Amendments:</strong> openloomi reserves the right
-                      to modify these Terms at any time. We will notify you of
-                      material changes via email or prominent notice on the
-                      Service. Your continued use of the Service after such
+                      <strong>5. Amendments:</strong> openloomi reserves the
+                      right to modify these Terms at any time. We will notify
+                      you of material changes via email or prominent notice on
+                      the Service. Your continued use of the Service after such
                       notice constitutes your acceptance of the updated Terms.
                     </p>
 

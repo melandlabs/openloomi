@@ -24,7 +24,8 @@ export const platformAdapterPaths: Record<
   telegram: () => import("@openloomi/integrations/telegram"),
   whatsapp: () => import("../integrations/whatsapp"),
   teams: () => import("../integrations/teams"),
-  facebook_messenger: () => import("@openloomi/integrations/facebook-messenger"),
+  facebook_messenger: () =>
+    import("@openloomi/integrations/facebook-messenger"),
   linkedin: () => import("@openloomi/integrations/linkedin"),
   instagram: () => import("@openloomi/integrations/instagram"),
   google_calendar: () => import("@openloomi/integrations/calendar"),

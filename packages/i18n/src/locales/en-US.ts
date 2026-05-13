@@ -1810,7 +1810,8 @@ const enUS = {
     resetSubmitCta: "Save new password",
     resetSubmitting: "Saving…",
     resetSuccessHeading: "Password updated",
-    resetSuccessBody: "You can now sign in to openloomi with your new password.",
+    resetSuccessBody:
+      "You can now sign in to openloomi with your new password.",
     resetBackToLogin: "Return to Log In",
     requestAnotherLink: "Request another reset link",
     toastSignInSuccess: "Signed in successfully!",
@@ -3474,7 +3475,8 @@ const enUS = {
             "Connect WhatsApp so you can chat with openloomi directly in WhatsApp.",
           connectIMessage:
             "Connect iMessage so you can chat with openloomi directly in iMessage.",
-          connectQQ: "Connect QQ so you can chat with openloomi directly in QQ.",
+          connectQQ:
+            "Connect QQ so you can chat with openloomi directly in QQ.",
           connectFeishu:
             "Connect Lark/Feishu so you can chat with openloomi directly in Lark/Feishu.",
           linkPlatform:
@@ -5183,7 +5185,8 @@ const enUS = {
     openloomiSettings: "Language",
     profileSoulPageTitle: "Personalization",
     profileSoulNavTitle: "Personalization",
-    profileDescription: "Update how your name and avatar appear across openloomi",
+    profileDescription:
+      "Update how your name and avatar appear across openloomi",
     accountOverviewTitle: "Account overview",
     accountOverviewDescription:
       "Stay on top of your identity, credit usage, and activity.",
@@ -5698,7 +5701,8 @@ const enUS = {
         keywordWatch: {
           title: "Specific keywords or topics",
           description: "Product launches, funding, competitors…",
-          helper: "Tell openloomi the keyword and the scope it should apply to.",
+          helper:
+            "Tell openloomi the keyword and the scope it should apply to.",
           preview:
             "Flag any conversation mentioning {{keyword}} that relates to {{context}}.",
           fields: {

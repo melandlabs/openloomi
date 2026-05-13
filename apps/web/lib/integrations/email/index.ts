@@ -5,7 +5,11 @@ import type { SentMessageInfo } from "nodemailer";
 import type { Attachment as NodemailerAttachment } from "nodemailer/lib/mailer";
 import { Buffer } from "node:buffer";
 import { MessagePlatformAdapter } from "@openloomi/integrations/channels";
-import type { Messages, Message, Image } from "@openloomi/integrations/channels";
+import type {
+  Messages,
+  Message,
+  Image,
+} from "@openloomi/integrations/channels";
 import {
   type MessageEvent,
   type MessageTarget,

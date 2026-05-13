@@ -34,7 +34,8 @@ runTest(
   async () => {
     const { generateProjectInsights } =
       await import("@/lib/ai/subagents/insights");
-    const { TelegramAdapter } = await import("@openloomi/integrations/telegram");
+    const { TelegramAdapter } =
+      await import("@openloomi/integrations/telegram");
     const adapter = new TelegramAdapter({
       session: process.env.TG_SESSION,
     });
@@ -64,7 +65,8 @@ runTest(
   async () => {
     const { generateProjectInsights } =
       await import("@/lib/ai/subagents/insights");
-    const { TelegramAdapter } = await import("@openloomi/integrations/telegram");
+    const { TelegramAdapter } =
+      await import("@openloomi/integrations/telegram");
     const adapter = new TelegramAdapter({
       session: process.env.TG_SESSION,
     });
@@ -88,7 +90,8 @@ runTest(
 runTest(
   "telegram send messages",
   async () => {
-    const { TelegramAdapter } = await import("@openloomi/integrations/telegram");
+    const { TelegramAdapter } =
+      await import("@openloomi/integrations/telegram");
     const adapter = new TelegramAdapter({
       session: process.env.TG_SESSION,
     });
