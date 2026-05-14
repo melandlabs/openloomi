@@ -31,7 +31,6 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { buildNavigationUrl, cn, generateUUID, fetcher } from "@/lib/utils";
 import { UserProfileSettings } from "@/components/user-profile-settings";
 import { ProfileOverview } from "@/components/profile-overview";
-import { AboutSettings } from "@/components/about-settings";
 import { StorageManagementPanel } from "@/components/storage-management-panel";
 import { PersonalizationProfileSoulPanel } from "@/components/personalization/personalization-profile-soul-panel";
 import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
@@ -594,8 +593,6 @@ export function Home() {
         return t("settings.profileSoulPageTitle", "About me");
       case "openloomi-soul":
         return t("settings.general", "General");
-      case "about":
-        return t("about.title", "About");
       case "storage-management":
         return t("settings.storageManagementTitle", "Storage management");
       case "coupons":
@@ -615,7 +612,6 @@ export function Home() {
       "profile-edit",
       "profile-soul",
       "openloomi-soul",
-      "about",
       "storage-management",
     ].includes(pageParam ?? "");
   }
@@ -674,10 +670,6 @@ export function Home() {
 
     if (page === "openloomi-soul") {
       return renderUtilityPanel(<UserProfileSettings />, "account-settings");
-    }
-
-    if (page === "about") {
-      return renderUtilityPanel(<AboutSettings />, "about");
     }
 
     if (page === "storage-management") {
