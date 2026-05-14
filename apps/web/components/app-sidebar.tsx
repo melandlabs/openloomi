@@ -332,7 +332,6 @@ export function AppSidebar() {
       currentPage === "openloomi-soul" ||
       currentPage === "account-settings" ||
       currentPage === "profile-edit" ||
-      currentPage === "about" ||
       pathname === "/inbox";
     return isProfileSettingsPage;
   }, [pathname, searchParams]);
@@ -363,13 +362,6 @@ export function AppSidebar() {
         icon: "radar",
         type: "internal" as const,
         href: "/inbox",
-      },
-      {
-        key: "about",
-        title: "about.title",
-        icon: "information",
-        type: "internal" as const,
-        href: "/?page=about",
       },
     ],
     [],
@@ -686,8 +678,6 @@ export function AppSidebar() {
                         (item.href === "/?page=account-settings" &&
                           (searchParams?.get("page") === "account-settings" ||
                             searchParams?.get("page") === "profile-edit")) ||
-                        (item.href === "/?page=about" &&
-                          searchParams?.get("page") === "about") ||
                         (item.href === "/inbox" && pathname === "/inbox");
 
                       return (
