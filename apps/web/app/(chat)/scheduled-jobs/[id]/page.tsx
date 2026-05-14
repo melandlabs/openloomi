@@ -820,13 +820,6 @@ export default function ScheduledJobDetailPage() {
   }, []);
 
   /**
-   * Toggles the instruction input expand/collapse state.
-   */
-  const handleOpenInlineEventPicker = useCallback(() => {
-    inlineEditorRef.current?.openEventPicker();
-  }, []);
-
-  /**
    * Opens the "Select skill" picker inside the main input editor.
    */
   const handleOpenInlineSkillPicker = useCallback(() => {
@@ -1362,16 +1355,6 @@ export default function ScheduledJobDetailPage() {
                   >
                     <div className="shrink-0 flex items-center justify-between gap-2 border-b border-border px-2 py-2">
                       <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          onClick={handleOpenInlineEventPicker}
-                        >
-                          <span className="font-mono leading-none">@</span>
-                          {t("chat.addEvent", "Add tracking event")}
-                        </Button>
                         <Button
                           type="button"
                           size="sm"
