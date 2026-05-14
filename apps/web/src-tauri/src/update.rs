@@ -296,7 +296,7 @@ pub async fn do_check_for_update() -> Result<UpdateCheckResult, String> {
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
     let mut req = client
-        .get("https://api.github.com/repos/melandlabs/release/tags")
+        .get("https://api.github.com/repos/melandlabs/openloomi/tags")
         .header("Accept", "application/vnd.github+json");
     if let Ok(token) = std::env::var("GITHUB_TOKEN") {
         if !token.is_empty() {
@@ -337,7 +337,7 @@ pub async fn do_check_for_update() -> Result<UpdateCheckResult, String> {
 
     // Check if a release exists for this tag before showing update
     let release_url = format!(
-        "https://api.github.com/repos/melandlabs/release/releases/tags/{}",
+        "https://api.github.com/repos/melandlabs/openloomi/releases/tags/{}",
         latest_tag
     );
     let mut release_req = client
@@ -385,7 +385,7 @@ pub async fn do_check_for_update() -> Result<UpdateCheckResult, String> {
 
     let download_url = if !download_filename.is_empty() {
         format!(
-            "https://github.com/melandlabs/release/releases/download/{}/{}",
+            "https://github.com/melandlabs/openloomi/releases/download/{}/{}",
             latest_tag, download_filename
         )
     } else {
@@ -398,7 +398,7 @@ pub async fn do_check_for_update() -> Result<UpdateCheckResult, String> {
         current_version: current_version.to_string(),
         download_url,
         release_url: format!(
-            "https://github.com/melandlabs/release/releases/tag/{}",
+            "https://github.com/melandlabs/openloomi/releases/tag/{}",
             latest_tag
         ),
         file_size,

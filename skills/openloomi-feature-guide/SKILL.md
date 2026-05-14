@@ -278,7 +278,7 @@ openloomi also offers a **desktop app** (macOS, Linux, and Windows) that provide
 
 **Windows:**
 
-1. Download the latest `.exe` installer from [GitHub Releases](https://github.com/melandlabs/release/releases/latest)
+1. Download the latest `.exe` installer from [GitHub Releases](https://github.com/melandlabs/openloomi/releases/latest)
 2. Run the installer — if Windows SmartScreen shows a warning, click **"More info"** then **"Run anyway"**. This is normal for new applications without a long code-signing reputation; openloomi is open-source and the code is publicly verifiable
 3. After the first run, SmartScreen typically bypasses automatically on subsequent updates
 
@@ -292,11 +292,11 @@ winget install openloomi.openloomi
 
 **macOS:**
 
-Download the latest `.dmg` from [GitHub Releases](https://github.com/melandlabs/release/releases/latest) and drag openloomi to your Applications folder.
+Download the latest `.dmg` from [GitHub Releases](https://github.com/melandlabs/openloomi/releases/latest) and drag openloomi to your Applications folder.
 
 **Linux:**
 
-Download the latest `.AppImage` or `.deb` from [GitHub Releases](https://github.com/melandlabs/release/releases/latest).
+Download the latest `.AppImage` or `.deb` from [GitHub Releases](https://github.com/melandlabs/openloomi/releases/latest).
 
 | Platform | Status | Installer |
 |----------|--------|----------|
