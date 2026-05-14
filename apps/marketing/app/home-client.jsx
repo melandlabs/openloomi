@@ -70,7 +70,7 @@ const data = {
       videoUrl: "/img/openloomi/openloomi-actions.gif",
     },
     {
-      title: "200+ Skills — Rich Execution Capabilities",
+      title: "Builtin Skills — Rich Execution Capabilities",
       description:
         "From code generation to PDF creation, data analysis to browser automation—OpenLoomi's Skills ecosystem covers every work scenario and keeps expanding.",
       videoUrl: "/img/openloomi/openloomi-skills.gif",

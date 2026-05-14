@@ -95,7 +95,7 @@ export const OpenLoomiDocsCards = (): JSX.Element => {
     {
       id: "skills",
       title: "Skills",
-      description: "200+ skills that extend your capabilities",
+      description: "Builtin skills that extend your capabilities",
     },
     {
       id: "library",

@@ -93,7 +93,7 @@ export const en = {
           "Slack, email, calendar, docs, Telegram, Discord — OpenLoomi connects your entire tool stack into one unified context.",
       },
       {
-        title: "200+ Professional Skills",
+        title: "Builtin Professional Skills",
         description:
           "From drafting contracts to writing code — the right expertise at every critical moment.",
       },
@@ -173,7 +173,7 @@ export const en = {
         "Not just telling you what to do — OpenLoomi does it. Draft replies, schedule meetings, generate reports, track and verify results, end-to-end.",
     },
     {
-      title: "200+ skills — rich execution capabilities",
+      title: "Builtin skills — rich execution capabilities",
       description:
         "From code generation to PDF creation, data analysis to browser automation — OpenLoomi's skill ecosystem covers every work scenario, and keeps expanding.",
     },

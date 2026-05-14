@@ -41,7 +41,7 @@ const capabilitiesItemsStatic = [
     backgroundImage: "/img/pic/function/action.png",
   },
   {
-    title: "200+ professional skills",
+    title: "Builtin professional skills",
     icon: "apps-2",
     backgroundImage: "/img/pic/function/Skills.png",
   },

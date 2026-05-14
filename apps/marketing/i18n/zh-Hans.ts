@@ -93,7 +93,7 @@ export const zhHans = {
           "Slack、邮件、日历、文档、Telegram、Discord——OpenLoomi 将你的整个工具栈连接成统一的上下文。",
       },
       {
-        title: "200+ 专业技能",
+        title: "内置专业技能",
         description: "从起草合同到编写代码——每个关键时刻都有正确的专业能力。",
       },
       {
@@ -170,7 +170,7 @@ export const zhHans = {
         "不只是告诉你该做什么——OpenLoomi 直接执行。起草回复、安排会议、生成报告、跟踪验证结果，端到端。",
     },
     {
-      title: "200+ 技能——丰富的执行能力",
+      title: "内置技能——丰富的执行能力",
       description:
         "从代码生成到 PDF 创建，从数据分析到浏览器自动化——OpenLoomi 的技能生态系统覆盖所有工作场景，并持续扩展。",
     },

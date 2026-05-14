@@ -21,7 +21,7 @@ openloomi transforms how individuals and SMB teams work by:
 - **Proactive Awareness** — Monitors signals across platforms and alerts you before you ask
 - **Long-Term Memory** — Remembers context across months, never forgets commitments
 - **Autonomous Execution** — Not just telling you what to do, but doing it
-- **200+ Skills** — Rich execution capabilities for every work scenario
+- **Builtin Skills** — Rich execution capabilities for every work scenario
 
 ---
 
@@ -39,8 +39,8 @@ Intent understanding, automatic orchestration. When you say "Help me prepare an 
 ### 🔐 Security & Privacy
 Your data, your sovereignty. Local-first architecture—your raw data never leaves your device. End-to-end AES-256 encryption, zero-data-training commitment, SOC 2 compliance audit.
 
-### 🛠️ 200+ Skills
-200+ Skills covering every work scenario, continuously expanding:
+### 🛠️ Builtin Skills
+Builtin Skills covering every work scenario, continuously expanding:
 - 📊 Data Analysis
 - 💻 Code Generation
 - 📄 Document Creation
@@ -49,7 +49,7 @@ Your data, your sovereignty. Local-first architecture—your raw data never leav
 - 📧 Email Writing
 - 🔍 Deep Research
 - 📊 PPT Creation
-- +200 more skills...
+- more skills...
 
 ---
 
