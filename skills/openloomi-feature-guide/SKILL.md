@@ -2,7 +2,7 @@
 name: openloomi-feature-guide
 description: "Use this when users ask about openloomi features, capabilities, or how to use it. Examples: 'openloomi 怎么用', '你能做什么', 'What can you do?', 'How does openloomi work?', 'Tell me about openloomi features', 'What platforms does openloomi support?', 'How do I use scheduled tasks?', 'What is Insights system?', 'How do I connect Telegram?', 'How to create automation?', '什么是 openloomi 事件?'
 metadata:
-  version: 0.4.3
+  version: 0.5.0
 ---
 
 # openloomi Product Features

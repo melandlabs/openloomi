@@ -2,7 +2,7 @@
 name: openloomi-api
 description: "openloomi API documentation and reference. Use when working with openloomi backend APIs, AI, authentication, characters, messages, files, integrations, billing, or any server-side functionality. Triggers: API endpoints, backend routes, authentication, cloud API, integrations"
 metadata:
-  version: 0.4.3
+  version: 0.5.0
 ---
 
 # openloomi API Documentation
