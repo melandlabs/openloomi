@@ -33,7 +33,6 @@ import { UserMenuDropdown } from "@/components/user-menu-dropdown";
 import { LanguageSettingsMenu } from "@/components/language-settings-menu";
 import { saveLanguage } from "@/i18n";
 import dynamic from "next/dynamic";
-import ContactUs from "@/components/contact-us";
 import { useLocalStorage } from "usehooks-ts";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { guestRegex } from "@/lib/env/constants";
@@ -70,16 +69,6 @@ const UserMenuFullscreen = dynamic(
   },
 );
 
-const GlobalSearchDialog = dynamic(
-  () =>
-    import("@/components/global-search-dialog").then((mod) => ({
-      default: mod.GlobalSearchDialog,
-    })),
-  {
-    ssr: false,
-  },
-);
-
 // Extract static navigation items outside component to prevent re-creation on each render.
 // Focus page entry is intentionally hidden from sidebar navigation.
 const MAIN_NAV_ITEMS: Array<{ title: string; url: string; icon: string }> = [];
@@ -98,9 +87,6 @@ export function AppSidebar() {
   const [canManageCoupons, setCanManageCoupons] = useState(false);
   const [isUserMenuFullscreenOpen, setIsUserMenuFullscreenOpen] =
     useState(false);
-  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
-  /** Dialog opened when "Contact Us" is clicked from user menu */
-  const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [isContextExpanded, setIsContextExpanded] = useState(true);
   const [isMyStuffExpanded, setIsMyStuffExpanded] = useState(true);
 
@@ -1103,38 +1089,6 @@ export function AppSidebar() {
                         </Tooltip>
                       )}
 
-                      {/* Search button - below workspace */}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            className={cn(
-                              "w-full gap-2 px-3 py-2 h-auto rounded-md transition-colors flex items-center text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-hover-foreground",
-                              isCollapsed ? "justify-center" : "justify-start",
-                            )}
-                            onClick={() => {
-                              setIsGlobalSearchOpen(true);
-                              if (isMobile) {
-                                setIsCollapsed(true);
-                                window.dispatchEvent(
-                                  new CustomEvent("openloomi:close-sidebar"),
-                                );
-                              }
-                            }}
-                          >
-                            <RemixIcon
-                              name="search"
-                              size={SIDEBAR_NAV_ICON_SIZE}
-                            />
-                            {!isCollapsed && (
-                              <span className="truncate font-normal text-sidebar-foreground">
-                                {t("common.search")}
-                              </span>
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                      </Tooltip>
-
                       {/* When collapsed: hide context submenu trigger per UX requirement */}
                       {false && isCollapsed && !isMobile && (
                         <DropdownMenu>
@@ -1499,19 +1453,6 @@ export function AppSidebar() {
           </div>
         </div>
       </div>
-
-      {/* Global search dialog */}
-      <GlobalSearchDialog
-        open={isGlobalSearchOpen}
-        onOpenChange={setIsGlobalSearchOpen}
-      />
-
-      {/* Dialog opened from user menu "Contact Us" (controlled only, no trigger) */}
-      <ContactUs
-        placement="sidebar"
-        dialogOpen={contactDialogOpen}
-        onDialogOpenChange={setContactDialogOpen}
-      />
     </>
   );
 }
