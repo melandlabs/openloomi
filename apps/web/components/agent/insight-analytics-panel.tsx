@@ -71,11 +71,7 @@ const TREND_STYLES: Record<AccessTrend, string> = {
   stable: "border-sky-200 bg-sky-50 text-sky-700",
 };
 
-function formatDate(
-  value: string | null,
-  fallback: string,
-  locale: string,
-) {
+function formatDate(value: string | null, fallback: string, locale: string) {
   if (!value) return fallback;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return fallback;
@@ -194,7 +190,9 @@ function InsightAnalyticsRow({
               count: item.accessCountTotal,
             })}
           </span>
-          <span>{formatDate(item.lastAccessedAt, fallback, i18n.language)}</span>
+          <span>
+            {formatDate(item.lastAccessedAt, fallback, i18n.language)}
+          </span>
         </div>
       </div>
       <div className="flex min-w-[86px] flex-col items-end gap-2">

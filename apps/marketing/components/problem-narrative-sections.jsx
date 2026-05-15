@@ -23,7 +23,7 @@ const thenItActsStepsStatic = [
   { num: "05", icon: "checkbox-circle" },
 ];
 
-/** Capabilities: six-grid copy */
+/** Capabilities: five-grid copy */
 const capabilitiesItemsStatic = [
   {
     title: "Cross-channel memory",
@@ -34,11 +34,6 @@ const capabilitiesItemsStatic = [
     title: "Priority intelligence",
     icon: "radar",
     backgroundImage: "/img/pic/function/Priority.png",
-  },
-  {
-    title: "Proactive action",
-    icon: "flashlight",
-    backgroundImage: "/img/pic/function/action.png",
   },
   {
     title: "Builtin professional skills",

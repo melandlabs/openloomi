@@ -447,7 +447,7 @@ const MarketingPage = () => {
               </div> */}
               <div className="w-full mt-8">
                 <Image
-                  src="/img/pic/Main.png"
+                  src="/img/pic/index.png"
                   alt="OpenLoomi main workspace preview"
                   className="w-full h-auto rounded-3xl"
                   width={1440}

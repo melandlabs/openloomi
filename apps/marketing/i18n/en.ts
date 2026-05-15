@@ -41,8 +41,7 @@ export const en = {
   },
   howItWorks: {
     eyebrow: "02 — How It Works",
-    heading: "Multi-channel connection.",
-    headingAccent: "Your AI finally sees the full picture.",
+    heading: "Your AI finally sees the full picture.",
     description:
       "OpenLoomi connects across Slack, email, calendar, docs, and more — not to archive, but to understand. It builds a living picture of your work: who matters, what's at stake, and what needs to move forward.",
     quote: "Not because you asked. Because it already knows.",
@@ -75,7 +74,7 @@ export const en = {
     eyebrow: "Capabilities",
     heading: "Three pillars. One workspace.",
     description:
-      "Context, memory, and multi-channel connection — working together to give your AI the awareness it needs.",
+      "Context and memory — working together to give your AI the awareness it needs.",
     items: [
       {
         title: "Context",
@@ -86,11 +85,6 @@ export const en = {
         title: "Memory",
         description:
           "Yesterday's discussion, last week's decision, the project's evolution — OpenLoomi remembers it all, across sessions and across days.",
-      },
-      {
-        title: "Multi-Channel Connection",
-        description:
-          "Slack, email, calendar, docs, Telegram, Discord — OpenLoomi connects your entire tool stack into one unified context.",
       },
       {
         title: "Builtin Professional Skills",
@@ -152,11 +146,6 @@ export const en = {
     community: "Join the community on Discord",
   },
   features: [
-    {
-      title: "Multi-channel connection — your AI sees the full picture",
-      description:
-        "OpenLoomi connects across Slack, email, calendar, docs, and more — building a unified context of your work. Not just reading messages, but understanding relationships, priorities, and what matters.",
-    },
     {
       title: "Persistent memory — context that never resets",
       description:

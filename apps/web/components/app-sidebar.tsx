@@ -4,7 +4,7 @@ import { RemixIcon } from "@/components/remix-icon";
 import { useMobileDetection } from "@/hooks/use-mobile-detection";
 import { generateUUID } from "@/lib/utils";
 import { useCustomEvent } from "@openloomi/hooks/use-custom-event";
-import { Badge, Button } from "@openloomi/ui";
+import { Button } from "@openloomi/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
