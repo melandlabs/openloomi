@@ -1,0 +1,58 @@
+## OpenLoomi 0.5.0 - May 15, 2026
+
+OpenLoomi 0.5.0 brings a wave of intelligence and integration upgrades. Unified vector search across your memory knowledge base, a full platform connectors ecosystem with OAuth and contact management, AI-powered skills for UI/UX design and browser automation, richer document previews including PPTX, and a streamlined content structure — all backed by automated CI/CD with Homebrew cask support for seamless distribution.
+
+### Notable Changes
+
+#### Unified Vector Search
+
+Memory now features unified vector search that spans across all memory sources simultaneously. A new `search-all` command lets you query memory, knowledge base, and insights in one shot. Filtering by `--keyword` and `--channel` flags gives you fine-grained control over results, and empty queries gracefully list directory contents.
+
+#### Platform Connectors Ecosystem
+
+The connectors system expands with:
+
+- **OAuth Connections**: A new OAuth-based connection flow for platform integrations
+- **Contact Management**: `query-contacts` and `send-reply` commands for direct contact operations
+- **Multi-Account Support**: List and manage multiple connected accounts across platforms
+- **Simplified Setup**: Cleaner Telegram connection steps with improved desktop UI authorization guide
+
+#### AI Skills Library
+
+Two powerful new skills join the OpenLoomi arsenal:
+
+- **ui-ux-pro-max**: UI/UX design intelligence covering 50+ styles, 161 color palettes, 57 font pairings, and 99 UX guidelines across React, Next.js, Vue, Svelte, SwiftUI, and more
+- **agent-browser**: Browser automation for web testing, form filling, screenshots, and data extraction
+
+#### Enhanced Document Previews
+
+PPTX preview support joins the existing document preview lineup. Combined with existing PDF, DOCX, CSV, TXT, HTML, and image previews, the library now offers comprehensive format coverage for all your workspace files.
+
+#### Streamlined Architecture
+
+A series of cleanup and refactor PRs reduce complexity and improve maintainability:
+
+- Content directory flattened for simpler navigation
+- Posthog analytics and marketing libraries removed for a leaner codebase
+- Legacy personalization and tracking UI components stripped out
+- Unused `agent` package and `billing` module removed
+- OpenLoomi rebrand completed across all packages, README, and i18n
+
+#### Automated Release Pipeline
+
+The release process is now fully automated:
+
+- Tag-based release workflow triggering
+- Homebrew cask formula for macOS installation via `brew install --cask openloomi`
+- Multi-version CI testing on Node.js 22, 24, and 25
+
+#### UI/UX Polish
+
+Additional refinements across the web app:
+
+- Insight analytics date formatting respects i18n language
+- Logo and sidebar padding aligned for consistent visual rhythm
+- Next.js route types path optimized
+- Auth secrets and encryption keys auto-generated on dev startup
+- Citation badges with hover tooltips for source attribution
+- Streaming resilience with exponential backoff retry
