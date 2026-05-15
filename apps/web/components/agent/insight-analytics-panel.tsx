@@ -71,11 +71,15 @@ const TREND_STYLES: Record<AccessTrend, string> = {
   stable: "border-sky-200 bg-sky-50 text-sky-700",
 };
 
-function formatDate(value: string | null, fallback: string) {
+function formatDate(
+  value: string | null,
+  fallback: string,
+  locale: string,
+) {
   if (!value) return fallback;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return fallback;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
   }).format(date);
@@ -164,7 +168,7 @@ function InsightAnalyticsRow({
   rank: number;
   mode: "top" | "bottom";
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const fallback =
     mode === "bottom"
       ? t("insight.analytics.neverAccessed", "Never")
@@ -190,7 +194,7 @@ function InsightAnalyticsRow({
               count: item.accessCountTotal,
             })}
           </span>
-          <span>{formatDate(item.lastAccessedAt, fallback)}</span>
+          <span>{formatDate(item.lastAccessedAt, fallback, i18n.language)}</span>
         </div>
       </div>
       <div className="flex min-w-[86px] flex-col items-end gap-2">
@@ -272,7 +276,7 @@ function InsightRecommendationRow({ item }: { item: AnalyticsInsight }) {
 }
 
 export function InsightAnalyticsPanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data, error, isLoading, mutate } =
     useSWR<InsightUsageAnalyticsResponse>(
       "/api/insights/analytics?limit=10",
@@ -312,7 +316,7 @@ export function InsightAnalyticsPanel() {
     );
   }
 
-  const generatedAt = new Intl.DateTimeFormat(undefined, {
+  const generatedAt = new Intl.DateTimeFormat(i18n.language, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
