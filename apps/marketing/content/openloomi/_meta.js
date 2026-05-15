@@ -4,6 +4,7 @@ const meta = {
   chat: "Chat",
   connectors: "Connectors",
   "messaging-apps": "Messaging Apps",
+  "automation": "Automation",
   skills: "Skills",
   library: "Library",
   "privacy-security": "Privacy & Security",
