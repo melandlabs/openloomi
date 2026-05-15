@@ -49,7 +49,7 @@ jobs:
       - name: Calculate SHA256 for Intel DMG
         id: sha_intel
         run: |
-          URL="https://github.com/melandlabs/openloomi/releases/download/v${{ steps.version.outputs.version }}/openloomi_${{ steps.version.outputs.version }}_x64.dmg"
+          URL="https://github.com/melandlabs/openloomi/releases/download/v${{ steps.version.outputs.version }}/openloomi_${{ steps.version.outputs.version }}_amd64.dmg"
           echo "Downloading from: $URL"
           SHA=$(curl -sfL "$URL" | shasum -a 256 | cut -d ' ' -f 1)
           if [ -z "$SHA" ]; then

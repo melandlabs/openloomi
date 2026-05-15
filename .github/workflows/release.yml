@@ -855,6 +855,7 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/}"
           VERSION="${VERSION#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Version: $VERSION"
 
       - name: Download all artifacts
@@ -883,6 +884,7 @@ jobs:
           draft: false
           prerelease: false
           overwrite_files: true
+          generate_release_notes: true
           files: |
             artifacts/openloomi_${{ steps.version.outputs.version }}_aarch64.dmg
             artifacts/openloomi_${{ steps.version.outputs.version }}_amd64.dmg
