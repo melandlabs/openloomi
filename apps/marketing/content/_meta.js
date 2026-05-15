@@ -8,6 +8,7 @@ const meta = {
   automation: "Automation",
   skills: "Skills",
   library: "Library",
+  memory: "Memory",
   "privacy-security": "Privacy & Security",
   glossary: "Glossary",
   changelog: "Changelog",

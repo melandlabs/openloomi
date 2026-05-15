@@ -1,0 +1,521 @@
+---
+title: "Memory"
+description: "OpenLoomi memory system — local-first tiered storage with hybrid vector search and automatic lifecycle management"
+icon: "FaBrain"
+---
+
+# Memory
+
+OpenLoomi's memory system is a local-first, tiered knowledge base built from messages across connected platforms. It combines structured storage, vector search, and a scheduled forgetting engine that manages lifecycle transitions automatically.
+
+This document covers the system architecture, data model, and the relationships between components.
+
+---
+
+## System Overview
+
+The memory system spans five distinct data layers, each serving a different purpose in the information architecture:
+
+| Layer | Storage | Purpose |
+| ----- | ------- | ------- |
+| **raw_messages** | Local | Verbatim message records — the ground truth |
+| **memory_summaries** | Local | Compressed summaries — derived from raw messages |
+| **Insights** | Local | AI-extracted structured records from platform messages |
+| **Knowledge Base** | Local | User-uploaded document chunks for RAG |
+| **Vector index** | Local | Semantic search across all layers |
+
+All layers originate from platform messages (and broader context inputs such as local files, audio/video, screenshots, Browser Use / Computer Use operation traces, etc.), but diverge into different representations for different purposes. The full pipeline maps to the MelandOS architecture:
+
+```
+接收 (Connectors) → 处理 (Processor) → 记忆 (Memory) → 理解 (Insights) → 服务 (Chat/Search) → 优化 (Weight Adjustment + Forgetting Engine) → 生态 (Knowledge Base + MCP Tools)
+```
+
+When a message arrives from a connector, it flows through this pipeline:
+
+1. Stored as a `raw_messages` record with `memoryStage: "short"`
+2. AAAK-encoded and embedded; embedding stored alongside the record
+3. Added to the vector index for semantic retrieval
+4. Periodically processed by the forgetting engine, which may compress groups of records into `memory_summaries`
+
+The three layers are not redundant — they serve different query patterns. Raw messages answer "what was said exactly." Summaries answer "what was the gist of this time period." Vector index answers "what messages are semantically similar to this query."
+
+---
+
+## Data Model
+
+### Raw Messages
+
+`raw_messages` is the primary local object store. Each record represents a single ingested message.
+
+```
+raw_messages
+├── id                    # Auto-increment primary key
+├── messageId             # Platform-specific message ID (unique index)
+├── platform              # slack | discord | telegram | imessage | ...
+├── userId                # Owner of this record
+├── botId                 # Bot/user who sent the message
+├── channel               # Platform channel identifier
+├── person                # Contact or conversation identifier
+├── timestamp             # Unix ms when message was sent
+├── createdAt             # Unix ms when stored locally
+├── content               # Full message text
+├── attachments          # [{name, url, contentType, sizeBytes}]
+├── embedding             # 1536-dim float array
+├── embeddingModel        # e.g. "text-embedding-3-small"
+├── embeddingContentHash  # FNV-64a of content for dream/re-embed detection
+├── embeddingDimensions   # Should be 1536
+├── embeddingUpdatedAt    # When embedding was last computed
+├── metadata             # Platform-specific extras
+├── memoryStage          # "short" | "mid" | "long"
+├── accessCount           # Number of times this record was retrieved
+├── lastAccessAt         # Unix ms of last retrieval
+├── importanceScore      # 0-1, provided importance signal
+├── archivedAt            # Set when details are archived after summarization
+├── isPinned             # User-marked important
+└── summaryRefId          # Reference to the memory_summaries record, if summarized
+```
+
+**Indexes:**
+
+- `userId_memoryStage` (compound) — filters records by owner and tier for forgetting engine candidate scans
+- `userId_timestamp` (compound) — enables time-bounded queries sorted by recency
+- `messageId` (unique) — fast platform-ID lookup
+- `archivedAt` — cleanup for hard delete of old archived records
+- `isPinned` — filter pinned records
+
+### Memory Summaries
+
+`memory_summaries` stores compressed representations of groups of raw messages. Created by the forgetting engine during tier transitions.
+
+```
+memory_summaries
+├── summaryId          # "ms_<hash>" — deterministic ID from inputs
+├── userId             # Owner
+├── summaryTier        # "L1" | "L2" | "L3" (maps from short→L1, mid→L2, long→L3)
+├── sourceTier         # The tier before transition
+├── startTimestamp     # Inclusive start of the grouped window
+├── endTimestamp       # Inclusive end
+├── messageCount       # How many raw records are in this summary
+├── sourceRecordIds    # IDs of the compressed raw_messages records
+├── keyPoints          # Extracted highlights from the group
+├── keywords           # Extracted keyword tokens
+├── keywordsText       # keywords[] joined for contains() search
+├── summaryText        # Human-readable one-paragraph summary
+├── dimensions         # {platform, channel, person, botId} — preserved from source
+├── qualityScore       # 0-1 quality indicator from summarizer
+├── createdAt          # When summary was created
+└── updatedAt          # Last modification time
+```
+
+**Indexes:**
+
+- `userId_summaryTier` (compound) — filter by summary level
+- `userId_endTimestamp` (compound) — time-bounded queries by recency
+
+The `sourceRecordIds` array is the link between layers. A summary references the raw records it was derived from. Raw records reference their summary via `summaryRefId`.
+
+### Relationships
+
+```
+raw_messages (N) ←─────── (1) memory_summaries
+     │
+     └── summaryRefId ──────────→ summaryId
+     └── sourceRecordIds ────────→ id (reverse)
+
+One raw_messages record belongs to one summary (after summarization).
+One memory_summaries record covers N raw_messages records.
+```
+
+When a record is archived (`archivedAt` is set), its `content` field is omitted from the in-memory representation — the details are considered "compressed." The original raw message is preserved in `metadata.__rawMessage` for potential reconstruction.
+
+---
+
+## AAAK Symbol Language
+
+Before a message is embedded, its text is encoded into AAAK (OpenLoomi's compressed symbol language). This encoding normalizes the text and appends structured metadata as a prefix, so the resulting embedding captures both semantic content and contextual signals.
+
+### Encoding Format
+
+`buildMemoryRecordEmbeddingDocument()` produces:
+
+```
+Text: <message content, whitespace-normalized, max 8000 chars>
+Time: <unix timestamp>
+Tier: <short | mid | long>
+Media: <media refs joined by ", " or "none">
+Dimensions: platform: <val>; channel: <val>; ...
+Metadata: <flattened key:value pairs, max 2 levels deep>
+```
+
+### Key Encoding Rules
+
+- **Whitespace**: Collapses `/\s+/g` to a single space
+- **Metadata flattening**: Max 2 levels deep, keys sorted alphabetically, keys starting with `__` excluded
+- **Truncation**: Smart boundary detection at `\n`, `. `, `; `, or space within 75% of maxLength (8000 chars)
+- **Content hashing**: FNV-64a hash with version prefix `memory-record-embedding-text-v1:` — used by the dream process to detect changed content that needs re-embedding
+
+The encoding is designed so that:
+1. The semantic core (message text) dominates the embedding
+2. Temporal and tier signals are present but secondary
+3. Metadata enables faceted filtering in vector search
+
+---
+
+## Vector Layer
+
+### Vector Storage
+
+Vector storage varies by platform:
+
+Desktop uses a dedicated vector engine. Web stores vectors directly in the `raw_messages.embedding` field.
+
+Cosine similarity is computed client-side:
+
+```typescript
+similarity = dot(vecA, vecB) / (norm(vecA) * norm(vecB))
+```
+
+Search scans up to `scanLimit = limit * 10` records, computes similarity against each, filters by threshold (default 0.7), and returns top `limit` sorted by similarity.
+
+### Hybrid Search
+
+Search uses both vector similarity and keyword matching:
+
+1. **Semantic path**: Embed query → vector search → similarity scores
+2. **Keyword path**: Query AAAK-encoded keyword field → exact matches
+3. **Merge**: Results combined and sorted by relevance
+
+The keyword index catches exact matches (specific names, IDs, dates) that semantic similarity might miss due to embedding variance.
+
+---
+
+## The Forgetting Engine
+
+The forgetting engine is a scheduled background process that manages the memory lifecycle. It promotes records between tiers and compresses groups into summaries.
+
+### Tier Lifecycle
+
+```
+short (minutes–7 days) → mid (7–90 days) → long (90+ days)
+```
+
+Age alone does not determine promotion — a **value score** does. Records are evaluated when they exceed the tier's maximum age.
+
+### Scoring Formula
+
+Records are scored on a 0–1 scale (higher = more worth keeping):
+
+```
+score = clamp01(
+  0.35 * recencyScore +
+  0.30 * accessScore +
+  0.25 * importanceScore +
+  0.10 * mediaScore +
+  pinnedBoost
+)
+
+recencyScore    = clamp01(1 - ageMs / (180 * DAY_MS))
+accessScore     = clamp01(log1p(accessCount) / log(10))
+importanceScore = max(providedImportance, inferredImportance)
+                   # inferredImportance = hits/4 from keyword scan
+                   # keywords: deadline, todo, urgent, risk, decision, blocker,
+                   #           meeting, action item, milestone, bug, incident, follow up
+mediaScore      = hasMediaRefs ? 0.7 : 0.25
+pinnedBoost     = isPinned ? 0.3 : 0
+```
+
+**Promotion thresholds:**
+
+| Transition | Threshold | Max Age |
+| ---------- | --------- | ------- |
+| short → mid | 0.65 | 7 days |
+| mid → long | 0.45 | 90 days |
+
+Records scoring **below** the threshold for their age boundary are archived. Their verbatim content is preserved (via `archivedAt`), but the in-memory representation is compressed.
+
+### Grouping and Summarization
+
+The engine does not evaluate records individually. It groups them first:
+
+- **Group window**: short tier uses 1-day buckets; mid tier uses 7-day buckets
+- **Dimension key**: Groups are further segmented by `platform`, `channel`, `person`, `botId` — so a single bucket contains only records sharing the same dimension values
+- **Minimum group size**: 3 records — smaller groups are skipped
+- **Maximum candidates**: 500 records per tier per run to avoid long-running transactions
+
+Within each group, `RuleBasedMemorySummarizer` produces a `MemorySummary` record with `keyPoints`, `keywords`, `summaryText`, and `qualityScore`. The raw records in that group are linked to the new summary via `summaryRefId`.
+
+### Lock Mechanism
+
+The engine uses a process-local lock to prevent concurrent runs:
+
+```
+Lock key: memory_forgetting:<userId>
+Lock TTL: 60,000ms
+Token format: <key>:<timestamp>:<random>
+```
+
+If a new cycle starts while one is running, the second cycle returns `status: "skipped_locked"` and exits early.
+
+### Tier-to-SummaryTier Mapping
+
+| Memory Tier | Summary Tier |
+| ---------- | ----------- |
+| short | L1 |
+| mid | L2 |
+| long | L3 |
+
+This L1/L2/L3 distinction in `memory_summaries.summaryTier` allows the query layer to know the provenance of each summary — what lifecycle stage the source material was in when summarized.
+
+---
+
+## Query Flow
+
+When you ask OpenLoomi about your memory, the query goes through several layers:
+
+### Semantic Search
+
+1. User query is embedded via `text-embedding-3-small` → 1536-dim vector
+2. Vector index is queried
+3. Top-k candidates retrieved, scored by `1 - distance`
+4. Filtered by threshold (default 0.7)
+5. Sorted by similarity score descending
+
+### Raw Message Fallback
+
+If semantic results are insufficient (`results < minRawResultsWithoutFallback`), the system also queries `memory_summaries`:
+
+1. Keyword search on `keywordsText` field
+2. Time-bounded query on `userId_endTimestamp`
+3. Results merged with semantic results and resort by timestamp
+
+### Access Tracking
+
+When a raw message record is retrieved (whether via semantic search or direct lookup), the system marks it:
+
+```
+accessCount += 1
+lastAccessAt = now
+```
+
+This access data feeds back into the scoring formula, so frequently accessed memories score higher and are less likely to be archived.
+
+---
+
+## Insights
+
+Insights are AI-extracted structured records derived from platform messages. Where Memory stores verbatim records and summaries for retrieval, Insights captures high-level facts, decisions, and events that the AI identifies as worth tracking separately.
+
+### Insights vs Memory
+
+These are completely separate systems:
+
+| | Memory | Insights |
+| -- | -- | -- |
+| **Location** | Local-first | Local |
+| **Content** | Messages and summaries | AI-extracted structured facts |
+| **Management** | Forgetting engine (tier transitions) | Weight adjustment (boost/decay) |
+| **Source** | Platform messages | AI subagent analysis of messages |
+
+Raw messages are the shared origin: platforms fetch messages and feed both the insight extraction pipeline and the memory storage pipeline. The two systems then diverge — memory stays close to the original text, while insights are structured abstractions.
+
+### Data Model
+
+Key insight fields:
+
+```
+insights
+├── id                     # UUID, deterministic from botId + dedupeKey
+├── title                  # Short identifying label
+├── description            # Natural language summary
+├── importance             # critical | high | medium | low
+├── urgency                # immediate | urgent | medium | low
+├── details[]              # Event-level data tracked over time
+├── timeline[]             # Chronological events
+├── taskLabel              # Category: bug_report, feature_request, etc.
+├── insightWeights         # Per-user tracking:
+│   ├── accessCount30d     #   Access count in last 30 days
+│   ├── accessCount7d      #   Access count in last 7 days
+│   ├── currentEventRank   #   Ranking position
+│   └── customWeightMultiplier  # User-adjusted multiplier
+```
+
+### Value Score
+
+Insights are ranked using a 4-signal formula:
+
+```
+valueScore = 0.45 * frequencyScore + 0.25 * freshnessScore + 0.20 * relevanceScore + 0.10 * favoriteScore
+```
+
+- **frequencyScore**: Log-scaled access count relative to a configured maximum
+- **freshnessScore**: `<1 day → 1.0`, `<7 days → 0.8`, `<30 days → 0.45`...
+- **relevanceScore**: `importance * 0.7 + urgency * 0.3`
+- **favoriteScore**: `1` if favorited, else `0`
+
+### Weight Adjustment System
+
+Insight weights change dynamically based on user interactions:
+
+**Favorite boost**: multiplier = `min(5.0, currentWeight * 1.5)`, 7-day duration
+
+**View boost**: multiplier = `min(5.0, currentWeight * 1.1)`, 24-hour duration, only applied after >1 day of inactivity
+
+**Decay**: Applied to insights not viewed in a while:
+- 7–14 days inactive → rate `0.95`
+- 14–30 days inactive → rate `0.85`
+- 30+ days inactive → rate `0.7` (floor at `0.3`)
+
+### Active / Dormant Classification
+
+- **Active**: `accessCount30d > 0`
+- **Dormant**: `accessCount30d == 0`
+
+### Trend
+
+The trend signal compares recent access against the prior period:
+
+- **Rising**: recent 7d accesses ≥ previous 7d accesses + 25%
+- **Falling**: previous 7d accesses ≥ recent 7d accesses + 25%
+- **Stable**: otherwise
+
+### Generation Pipeline
+
+Insights are generated server-side in a batch pipeline:
+
+1. Messages are grouped by `platform + channel`
+2. An AI subagent analyzes each group and extracts structured `InsightData` records
+3. Records are upserted with deduplication (same `botId + dedupeKey`)
+4. Embeddings are generated for each insight
+
+---
+
+## Knowledge Base
+
+The Knowledge Base is a user-uploaded document RAG system. Unlike memory (which is built from platform messages) and insights (which are AI-extracted), the Knowledge Base is explicitly populated by the user — they upload files they want the AI to be able to reason about.
+
+### Supported Formats
+
+PDF, DOCX, PPTX, XLSX, CSV, TXT, MD, Apple formats (Pages, Numbers, Keynote)
+
+### Data Model
+
+```
+rag_documents
+├── id            # Document identifier
+├── userId        # Owner
+├── fileName      # Original filename
+├── contentType   # MIME type
+├── sizeBytes     # File size
+├── totalChunks   # Number of chunks extracted
+├── blobPath      # Storage path for original file
+├── uploadedAt    # Timestamp
+└── metadata      # Extracted metadata (title, author, etc.)
+
+rag_chunks
+├── id            # Chunk identifier
+├── documentId    # Parent document reference
+├── userId        # Owner
+├── chunkIndex    # Position in document
+├── content       # Text content (1000 chars)
+├── embedding     # 1536-dim vector
+└── metadata      # Chunk-level metadata
+```
+
+Chunks are created using `RecursiveCharacterTextSplitter` with 1000-character target size and 200-character overlap.
+
+### RAG Pipeline
+
+1. **Parse**: `parseFile()` extracts text from the uploaded format using LangChain loaders
+2. **Split**: `splitDocuments()` produces overlapping chunks
+3. **Embed**: `embedDocuments()` generates 1536-dim `text-embedding-3-small` vectors (via OpenAI or OpenRouter)
+4. **Store**: Chunks inserted into `rag_documents` + `rag_chunks` in batches of 1000
+
+### Query
+
+Vector similarity search against `rag_chunks`, using cosine distance:
+
+- **Threshold**: 0.7 (70% similarity required)
+- **Default limit**: 5 results
+
+### Insight Settings as Knowledge Base
+
+When a user configures personalization in Insight Settings — focus people, topics, AI soul prompt — these preferences are converted into a `memory.txt` document and inserted into the Knowledge Base. This ensures the AI's personal context is always included in RAG retrieval.
+
+### MCP Tools
+
+| Tool | Description |
+| -- | -- |
+| `searchKnowledgeBase(query, limit, documentIds?)` | Semantic search across document chunks |
+| `getFullDocumentContent(documentId)` | Retrieve the complete text of a document |
+| `listKnowledgeBaseDocuments(limit)` | List recently uploaded documents |
+
+---
+
+## Key Design Decisions
+
+### Why Tiered Storage Instead of a Single Store?
+
+Raw messages are cheap to write but expensive to scan. As time passes, older messages are accessed less frequently but carry historical value. The tiered model lets the system keep raw records for recent periods (where access is common) and compress older material (where verbatim retrieval is rare) into summaries.
+
+### Why FNV-64a for Content Hashing?
+
+The dream process (re-embedding stale or changed content) needs to detect when `content` has changed without comparing the full text. FNV-64a is a fast, non-cryptographic hash suitable for content fingerprinting. The versioned prefix (`memory-record-embedding-text-v1:`) allows future encoding format changes to trigger re-embedding automatically.
+
+### Why Write-Ahead Logging Mode?
+
+The background indexing pipeline writes new vectors while the user may be simultaneously querying. WAL (Write-Ahead Logging) allows concurrent readers without blocking the writer, and without the writer blocking readers. This is critical for maintaining <500ms ingestion latency under read load.
+
+### Why Log-Scale Access Score?
+
+`accessScore = clamp01(log1p(accessCount) / log(10))` means the access score grows rapidly at low counts (1 access → ~0.46, 2 → ~0.56, 5 → ~0.78) but plateaus at high counts (10 → ~1.0). This reflects diminishing returns — a message accessed 100 times is not 10x more important than one accessed 10 times.
+
+### Why dimension-key Grouping?
+
+Grouping by `platform + channel + person + botId` ensures that summaries respect natural conversation boundaries. A week's worth of Slack messages in `#engineering` won't be compressed into the same summary as a week's Telegram messages from a different person. This preserves topical coherence in the summarization output.
+
+---
+
+## Memory as a Skill
+
+Memory is also available as a standalone **Skill** for integration with other Agent systems. This allows any AI agent to connect to OpenLoomi's memory capabilities and leverage the same tiered storage, vector search, and knowledge base features.
+
+### Skill Capabilities
+
+The Memory Skill exposes the following capabilities:
+
+| Feature | Description |
+| -- | -- |
+| **Memory Files Search** | Case-insensitive full-text search across local memory files (`~/.openloomi/data/memory/`) |
+| **Knowledge Base Search** | Semantic document search using RAG/embeddings on the OpenLoomi server |
+| **Insights** | Query AI-extracted structured records from chat history including decisions, action items, preferences, and relationships |
+
+### Three Memory Types
+
+- **Memory Files**: Personal markdown/JSON files stored locally at `~/.openloomi/data/memory/` with subdirectories for chats, channels, people, projects, notes, and strategy
+- **Knowledge Base**: Uploaded documents searchable via RAG/embeddings on the OpenLoomi server
+- **Insights**: Structured information extracted from chat history, including decisions, action items, preferences, and relationships
+
+### Agent Integrations
+
+The Memory Skill supports 10+ communication channels including Gmail, Slack, Discord, Telegram, WhatsApp, and more. This enables agents to:
+
+- Search across all connected platform histories
+- Extract and track key decisions and action items
+- Maintain context across conversations
+- Access uploaded documents and knowledge bases
+
+### API Endpoints
+
+The skill exposes REST endpoints at `http://localhost:3415/api/`:
+
+| Endpoint | Description |
+| -- | -- |
+| Document search | Semantic search across knowledge base |
+| Insight management | Query and manage extracted insights |
+| Usage analytics | Track access frequency and relevance |
+
+### Authentication
+
+The CLI automatically reads authentication tokens from `~/.openloomi/token` (base64 encoded JWT).
+
+For full integration details, visit the [openloomi-memory Skill](https://github.com/melandlabs/openloomi/blob/main/skills/openloomi-memory/SKILL.md).
