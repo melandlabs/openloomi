@@ -27,7 +27,7 @@ The memory system spans five distinct data layers, each serving a different purp
 All layers originate from platform messages (and broader context inputs such as local files, audio/video, screenshots, Browser Use / Computer Use operation traces, etc.), but diverge into different representations for different purposes. The full pipeline maps to the MelandOS architecture:
 
 ```
-接收 (Connectors) → 处理 (Processor) → 记忆 (Memory) → 理解 (Insights) → 服务 (Chat/Search) → 优化 (Weight Adjustment + Forgetting Engine) → 生态 (Knowledge Base + MCP Tools)
+Connectors → Processor → Memory → Insights → Chat/Search → Weight Adjustment + Forgetting Engine → Knowledge Base + MCP Tools
 ```
 
 When a message arrives from a connector, it flows through this pipeline:
