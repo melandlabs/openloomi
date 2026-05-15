@@ -332,7 +332,8 @@ export function AppSidebar() {
       currentPage === "openloomi-soul" ||
       currentPage === "account-settings" ||
       currentPage === "profile-edit" ||
-      pathname === "/inbox";
+      pathname === "/inbox" ||
+      pathname === "/skills";
     return isProfileSettingsPage;
   }, [pathname, searchParams]);
 
@@ -362,6 +363,13 @@ export function AppSidebar() {
         icon: "radar",
         type: "internal" as const,
         href: "/inbox",
+      },
+      {
+        key: "skills",
+        title: "settings.skillsNavTitle",
+        icon: "apps_2_ai",
+        type: "internal" as const,
+        href: "/skills",
       },
     ],
     [],

@@ -5185,6 +5185,7 @@ const enUS = {
     openloomiSettings: "Language",
     profileSoulPageTitle: "Personalization",
     profileSoulNavTitle: "Personalization",
+    skillsNavTitle: "Skills",
     profileDescription:
       "Update how your name and avatar appear across openloomi",
     accountOverviewTitle: "Account overview",

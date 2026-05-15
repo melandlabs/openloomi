@@ -4894,6 +4894,7 @@ const zhHans = {
     openloomiSettings: "语言",
     profileSoulPageTitle: "个性化",
     profileSoulNavTitle: "个性化",
+    skillsNavTitle: "技能",
     profileDescription: "更新在 openloomi 中展示的名称与头像",
     accountOverviewTitle: "账户概览",
     accountOverviewDescription: "查看身份、积分使用与最近活动。",
