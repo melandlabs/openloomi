@@ -146,12 +146,12 @@ export function Footer({
       items: [
         {
           name: "X",
-          href: "https://x.com/openloomiAI",
+          href: "https://x.com/AlloomiAI",
           icon: <RemixIcon name="twitter-x" variant="line" size="size-4" />,
         },
         {
           name: "LinkedIn",
-          href: "https://www.linkedin.com/company/openloomiai",
+          href: "https://www.linkedin.com/company/AlloomiAI",
           icon: <RemixIcon name="linkedin-box" variant="line" size="size-4" />,
         },
         {
