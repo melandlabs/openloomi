@@ -2,7 +2,7 @@ cask "openloomi" do
   if Hardware::CPU.intel?
     version "0.5.0"
     sha256 "placeholder"
-    url "https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_x64.dmg"
+    url "https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_amd64.dmg"
   else
     version "0.5.0"
     sha256 "placeholder"

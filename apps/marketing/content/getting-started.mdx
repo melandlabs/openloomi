@@ -34,8 +34,8 @@ Visit [https://openloomi.ai](https://openloomi.ai) to download, or use the direc
 
 | Option                                                                                                                                        | Notes                                                      |
 | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [Download .dmg installer (Apple Silicon)](https://github.com/melandlabs/openloomi/releases/download/v0.4.2/openloomi_0.4.2_macOS_aarch64.dmg) | Recommended for M1/M2/M3/M4 Macs — double-click to install |
-| [Download .dmg installer (Intel)](https://github.com/melandlabs/openloomi/releases/download/v0.4.2/openloomi_0.4.2_macOS_amd64.dmg)           | For Intel Macs                                             |
+| [Download .dmg installer (Apple Silicon)](https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_macOS_aarch64.dmg) | Recommended for M1/M2/M3/M4 Macs — double-click to install |
+| [Download .dmg installer (Intel)](https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_macOS_amd64.dmg)           | For Intel Macs                                             |
 | Homebrew                                                                                                                                      | For developers — see command below                         |
 
 ```bash
@@ -48,14 +48,14 @@ brew install --cask openloomi
 
 | Option                                                                                                                              | Notes                                               |
 | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| [Download .deb package (x86_64)](https://github.com/melandlabs/openloomi/releases/download/v0.4.2/openloomi_0.4.2_linux_amd64.deb)  | For x86_64 / AMD64 systems                          |
-| [Download .deb package (ARM64)](https://github.com/melandlabs/openloomi/releases/download/v0.4.2/openloomi_0.4.2_linux_aarch64.deb) | For ARM64 systems (e.g., Raspberry Pi, ARM servers) |
+| [Download .deb package (x86_64)](https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_linux_amd64.deb)  | For x86_64 / AMD64 systems                          |
+| [Download .deb package (ARM64)](https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_linux_aarch64.deb) | For ARM64 systems (e.g., Raspberry Pi, ARM servers) |
 
 ```bash
-sudo dpkg -i openloomi_0.4.2_linux_amd64.deb
+sudo dpkg -i openloomi_0.5.0_linux_amd64.deb
 sudo apt-get install -f
 
-# Fix resource path (required for v0.4.2 and earlier)
+# Fix resource path (required for v0.5.0 and earlier)
 sudo ln -sf /usr/lib/openloomi/_up_ /usr/bin/_up_
 
 # Start the application
@@ -68,7 +68,7 @@ openloomi
 
 | Option                                                                                                                        | Notes                                               |
 | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| [Download .exe installer](https://github.com/melandlabs/openloomi/releases/download/v0.4.2/openloomi_0.4.2_windows_amd64.exe) | Recommended — run the installer to set up OpenLoomi |
+| [Download .exe installer](https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_windows_amd64.exe) | Recommended — run the installer to set up OpenLoomi |
 | Winget                                                                                                                        | Coming Soon                                         |
 
 > **Windows SmartScreen:** If Windows shows a warning when running the installer, click **"More info"** then **"Run anyway"**. This is normal — OpenLoomi is open-source and the code is publicly verifiable. You only need to do this once per machine.

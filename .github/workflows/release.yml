@@ -2,8 +2,8 @@ name: Release CI
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -841,3 +841,53 @@ jobs:
         with:
           name: openloomi-linux-arm64
           path: ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/deb/*.deb
+
+  # ─── Create Release ─────────────────────────────────────────────────────────
+  create-release:
+    needs: [release-macos-arm64, release-macos-intel, release-linux-amd64, release-windows, release-linux-arm64]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Rename artifacts
+        run: |
+          cd artifacts
+          mv openloomi-dmg-aarch64/*.dmg "openloomi_${VERSION}_aarch64.dmg"
+          mv openloomi-dmg-x64/*.dmg "openloomi_${VERSION}_amd64.dmg"
+          mv openloomi-linux-amd64/*.deb "openloomi_${VERSION}_amd64.deb"
+          mv openloomi-linux-arm64/*.deb "openloomi_${VERSION}_arm64.deb"
+          mv openloomi-windows-nsis/*.exe "openloomi_${VERSION}_amd64.exe"
+          rm -rf openloomi-dmg-aarch64 openloomi-dmg-x64 openloomi-linux-amd64 openloomi-linux-arm64 openloomi-windows-nsis
+          ls -la
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          overwrite_files: true
+          files: |
+            artifacts/openloomi_${{ steps.version.outputs.version }}_aarch64.dmg
+            artifacts/openloomi_${{ steps.version.outputs.version }}_amd64.dmg
+            artifacts/openloomi_${{ steps.version.outputs.version }}_amd64.deb
+            artifacts/openloomi_${{ steps.version.outputs.version }}_arm64.deb
+            artifacts/openloomi_${{ steps.version.outputs.version }}_amd64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
