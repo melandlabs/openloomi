@@ -25,7 +25,7 @@ OpenLoomi is an open-source AI workspace that runs on your desktop. It connects 
 
 ### Download to Try
 
- <a href="https://github.com/melandlabs/release">
+ <a href="https://openloomi.ai/docs/getting-started">
     <img src="https://img.shields.io/github/v/tag/melandlabs/release?logo=github&label=Download&color=24C8D5" alt="Download" height="30" style="transform:scale(1);">
   </a>
 

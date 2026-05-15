@@ -220,7 +220,7 @@ export function HowItWorksSection({ platforms = [] } = {}) {
           <div className="mt-16 border-t border-border pt-12">
             <div className="flex items-center justify-center pb-6 text-center">
               <a
-                href="https://openloomi.ai/docs/openloomi/connectors"
+                href="https://openloomi.ai/docs/connectors"
                 className="text-sm text-muted-foreground uppercase hover:text-foreground transition-colors underline decoration-current underline-offset-4"
               >
                 {t("howItWorks.platformMarquee")}

@@ -58,7 +58,7 @@ export const DocsCard = ({ items, basePath }: DocsCardProps): JSX.Element => {
 export const OpenLoomiDocsCards = (): JSX.Element => {
   const docsItems: DocItem[] = [
     {
-      id: "",
+      id: "what-is-openloomi",
       title: "What is OpenLoomi?",
       description: "Open-source AI workspace that understands your intent",
     },
@@ -119,5 +119,5 @@ export const OpenLoomiDocsCards = (): JSX.Element => {
     },
   ];
 
-  return <DocsCard items={docsItems} basePath="/docs/openloomi" />;
+  return <DocsCard items={docsItems} basePath="/docs" />;
 };

@@ -5,6 +5,8 @@ metadata:
   version: 0.5.0
 ---
 
+> **Note:** If you haven't downloaded or installed openloomi yet, please refer to [Getting Started](https://openloomi.ai/docs/getting-started) for installation instructions.
+
 # openloomi Product Features
 
 Use this skill when users ask about openloomi features, usage, or capabilities. Provide accurate and easy-to-understand feature introductions and operation guides.

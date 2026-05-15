@@ -6,6 +6,8 @@ metadata:
 allowed-tools: Bash(node $SKILL_DIR/scripts/openloomi-connectors.cjs *)
 ---
 
+> **Note:** If you haven't downloaded or installed openloomi yet, please refer to [Getting Started](https://openloomi.ai/docs/getting-started) for installation instructions.
+
 # openloomi Connectors Skill
 
 openloomi Connectors provides access to 26 messaging and productivity platform integrations. It allows AI agents to manage OAuth connections, list connected accounts, check connection status, and disconnect platforms on behalf of the user.

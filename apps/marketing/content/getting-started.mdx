@@ -40,7 +40,7 @@ Visit [https://openloomi.ai](https://openloomi.ai) to download, or use the direc
 
 ```bash
 # Install via Homebrew
-brew tap melandlabs/openloomi https://github.com/melandlabs/release
+brew tap melandlabs/openloomi https://github.com/melandlabs/openloomi
 brew install --cask openloomi
 ```
 
@@ -110,3 +110,42 @@ Windows SmartScreen may also show a one-time warning when running the installer.
 ### Linux
 
 No special permissions are required on Linux. OpenLoomi uses the standard desktop notification system (libnotify) to send alerts if you have granted notification permissions to other apps, OpenLoomi will automatically use them too.
+
+---
+
+## AI Configuration
+
+OpenLoomi uses your existing AI agent configuration to work. To get started, set up your agent's environment variables in `~/.claude/settings.json`.
+
+**Default: Claude**
+
+OpenLoomi automatically detects your Claude configuration — no extra setup required if you're already using Claude Code or Claude for Desktop.
+
+**Supported Agents**
+
+| Agent    | Status         | Notes                                    |
+| -------- | -------------- | ---------------------------------------- |
+| Claude   | ✅ Supported   | Auto-detected by default                 |
+| Codex    | 🔜 Coming Soon | GitHub Copilot's CLI agent               |
+| Pi       | 🔜 Coming Soon | Anthropic's research assistant           |
+| OpenClaw | 🔜 Coming Soon | Open-source agent compatible with Claude |
+| Hermes   | 🔜 Coming Soon | Browser-use compatible agent             |
+
+> **Note:** OpenLoomi currently supports Claude. Additional agent support (Codex, Pi, OpenClaw, Hermes) is on the roadmap and will be available in a future release.
+
+**Configuring Your Agent**
+
+Edit `~/.claude/settings.json` to customize your environment:
+
+```json
+{
+  "skipWebFetchPreflight": true,
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "your-auth-token-here",
+    "ANTHROPIC_BASE_URL": "your-base-url-here",
+    "ANTHROPIC_MODEL": "your-model-here"
+  }
+}
+```
+
+> **Security:** Your API keys are stored locally in `~/.claude/settings.json`. Always keep your settings file private.

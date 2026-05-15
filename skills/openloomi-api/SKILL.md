@@ -5,6 +5,8 @@ metadata:
   version: 0.5.0
 ---
 
+> **Note:** If you haven't downloaded or installed openloomi yet, please refer to [Getting Started](https://openloomi.ai/docs/getting-started) for installation instructions.
+
 # openloomi API Documentation
 ## API Modules
 
