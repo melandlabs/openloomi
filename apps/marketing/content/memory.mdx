@@ -463,7 +463,7 @@ The dream process (re-embedding stale or changed content) needs to detect when `
 
 ### Why Write-Ahead Logging Mode?
 
-The background indexing pipeline writes new vectors while the user may be simultaneously querying. WAL (Write-Ahead Logging) allows concurrent readers without blocking the writer, and without the writer blocking readers. This is critical for maintaining <500ms ingestion latency under read load.
+The background indexing pipeline writes new vectors while the user may be simultaneously querying. WAL (Write-Ahead Logging) allows concurrent readers without blocking the writer, and without the writer blocking readers. This is critical for maintaining \<500ms ingestion latency under read load.
 
 ### Why Log-Scale Access Score?
 
