@@ -251,6 +251,9 @@ importers:
       '@openloomi/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@openloomi/sqlite':
+        specifier: workspace:*
+        version: link:../../packages/sqlite
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
@@ -1130,6 +1133,28 @@ importers:
       '@openloomi/config':
         specifier: workspace:*
         version: link:../config
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
+  packages/sqlite:
+    dependencies:
+      '@openloomi/indexeddb':
+        specifier: workspace:*
+        version: link:../indexeddb
+      better-sqlite3:
+        specifier: ^11.10.0
+        version: 11.10.0
+      sqlite-vec:
+        specifier: 0.1.7-alpha.2
+        version: 0.1.7-alpha.2
+    devDependencies:
+      '@openloomi/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
       typescript:
         specifier: ^5.6.3
         version: 5.9.3

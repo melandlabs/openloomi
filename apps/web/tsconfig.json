@@ -27,6 +27,8 @@
       "@openloomi/ui/*": ["./components/ui/*"],
       "@openloomi/shared": ["../../packages/shared/src/index.ts"],
       "@openloomi/indexeddb": ["../../packages/indexeddb/src/index.ts"],
+      "@openloomi/sqlite": ["../../packages/sqlite/src/index.ts"],
+      "@openloomi/sqlite/*": ["../../packages/sqlite/src/*"],
       "@openloomi/insights": ["../../packages/insights/src/index.ts"],
       "@openloomi/agent": ["../../packages/ai/src/agent/index.ts"],
       "@openloomi/agent/*": ["../../packages/ai/src/agent/*"],

@@ -24,7 +24,7 @@ import {
 import { getRecentInsights, type RecentInsight } from "@/lib/insights/recent";
 import { fetcher } from "@/lib/utils";
 import useSWR from "swr";
-import { getIndexedDBManager } from "@openloomi/indexeddb/manager";
+import { queryRawMessages } from "@openloomi/indexeddb/client";
 import { useSession } from "next-auth/react";
 
 /**
@@ -105,11 +105,11 @@ export function GlobalSearchDialog({
     };
   }, [searchQuery]);
 
-  // Fetch search results (excluding rawMessages as it's client-side search)
+  // Fetch search results (excluding rawMessages as local raw-message search)
   const searchUrl = useMemo(() => {
     if (!debouncedQuery.trim() || !open) return null;
 
-    // Exclude rawMessages as it's client-side IndexedDB search
+    // Exclude rawMessages because it is queried through the raw-message client API.
     const serverSearchTypes = SEARCH_TYPES.filter((t) => t !== "rawMessages");
     const typesArray =
       selectedType === "all" ? serverSearchTypes : [selectedType];
@@ -139,7 +139,8 @@ export function GlobalSearchDialog({
     }
   }, [open]);
 
-  // Search raw messages (IndexedDB client-side query)
+  // Search raw messages through the public client API, which uses SQLite in
+  // Tauri mode and IndexedDB as the browser fallback.
   useEffect(() => {
     const searchRawMessages = async () => {
       if (
@@ -153,14 +154,11 @@ export function GlobalSearchDialog({
       }
 
       try {
-        const manager = getIndexedDBManager();
-        await manager.init();
-
-        const messages = await manager.queryMessages({
+        const messages = await queryRawMessages({
           userId: session.user.id,
           keywords: [debouncedQuery],
           limit: 20,
-        });
+        }).then((items) => items.filter((item) => item.sourceType === "raw"));
 
         const results: SearchResultItem[] = messages.map((msg) => ({
           id: msg.messageId,

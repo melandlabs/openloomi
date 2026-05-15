@@ -1,4 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
+import {
+  getSQLiteRawMessageManager,
+  isSQLiteRawMessageStorageAvailable,
+} from "@/lib/memory/sqlite-raw-message-store";
 import { AppError } from "@openloomi/shared/errors";
 import type { NextRequest } from "next/server";
 
@@ -56,10 +60,21 @@ export async function POST(request: NextRequest) {
     const messagesWithUserId = messages.map((message) => ({
       ...message,
       userId: session.user.id,
+      createdAt: Math.floor(Date.now() / 1000),
     }));
 
-    // Return messages to client for IndexedDB storage
-    // Note: We're returning the data because IndexedDB operations must happen on the client side
+    if (isSQLiteRawMessageStorageAvailable()) {
+      const manager = await getSQLiteRawMessageManager();
+      const ids = await manager.storeMessages(messagesWithUserId as any);
+      return Response.json({
+        success: true,
+        message: "Messages stored in SQLite",
+        stored: ids.length,
+        count: ids.length,
+      });
+    }
+
+    // Return messages to the client for browser-side fallback storage.
     return Response.json({
       success: true,
       message: "Messages prepared for client-side storage",
@@ -86,12 +101,23 @@ export async function GET(request: NextRequest) {
   const botId = searchParams.get("botId");
   const platform = searchParams.get("platform");
 
+  if (isSQLiteRawMessageStorageAvailable()) {
+    const manager = await getSQLiteRawMessageManager();
+    return Response.json({
+      userId: session.user.id,
+      botId: botId || undefined,
+      platform: platform || undefined,
+      storage: "sqlite",
+      stats: await manager.getStats(),
+    });
+  }
+
   // This endpoint returns configuration for querying
   return Response.json({
     userId: session.user.id,
     botId: botId || undefined,
     platform: platform || undefined,
-    message:
-      "Use client-side IndexedDB to query raw messages. Check browser console for stats.",
+    storage: "browser",
+    message: "Use client-side raw message storage for queries.",
   });
 }

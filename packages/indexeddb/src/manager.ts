@@ -3,110 +3,37 @@
  * This allows AI tools to query original message content during insight generation
  */
 
+import type {
+  GroupByType,
+  MemoryStage,
+  MemorySummaryQuery,
+  MemorySummaryRecord,
+  RawMessage,
+  RawMessageEmbeddingUpdate,
+  RawMessageQuery,
+  RawMessageStorageManager,
+} from "./storage";
+
 const DB_NAME = "openloomi_messages_db";
 const DB_VERSION = 3; // Incremented to add memory stage fields and summaries store
 const STORE_NAME = "raw_messages";
 const SUMMARY_STORE_NAME = "memory_summaries";
 
-export type MemoryStage = "short" | "mid" | "long";
-export type MemorySummaryTier = "L1" | "L2" | "L3";
+export type {
+  GroupByType,
+  MemoryStage,
+  MemorySummaryQuery,
+  MemorySummaryRecord,
+  MemorySummaryTier,
+  RawMessage,
+  RawMessageEmbeddingUpdate,
+  RawMessageQuery,
+  RawMessageStats,
+  RawMessageStorage,
+  RawMessageStorageManager,
+} from "./storage";
 
-export interface RawMessage {
-  id?: number; // Auto-increment key
-  messageId: string; // Unique message ID from platform
-  platform: string; // slack, discord, telegram, etc.
-  botId: string; // Bot ID
-  userId: string; // User ID
-  channel?: string; // Channel or chat name
-  person?: string; // Sender name
-  timestamp: number; // Unix timestamp
-  content: string; // Message content
-  attachments?: Array<{
-    name: string;
-    url: string;
-    contentType?: string;
-    sizeBytes?: number;
-  }>;
-  embedding?: number[];
-  embeddingModel?: string;
-  embeddingContentHash?: string;
-  embeddingDimensions?: number;
-  embeddingUpdatedAt?: number;
-  metadata?: Record<string, any>; // Additional platform-specific data
-  createdAt: number; // When stored in IndexedDB
-  memoryStage?: MemoryStage;
-  accessCount?: number;
-  lastAccessAt?: number;
-  importanceScore?: number;
-  archivedAt?: number;
-  isPinned?: boolean;
-  summaryRefId?: string;
-}
-
-export type GroupByType = "none" | "day" | "week" | "month";
-
-export interface RawMessageQuery {
-  userId?: string; // User ID to filter messages
-  platform?: string;
-  botId?: string;
-  channel?: string;
-  person?: string;
-  startTime?: number;
-  endTime?: number;
-  keywords?: string[];
-  limit?: number; // Deprecated: Use offset + pageSize instead
-  offset?: number; // Number of messages to skip for pagination
-  pageSize?: number; // Number of messages per page
-  groupBy?: GroupByType; // Group results by time period
-  reverse?: boolean; // Return results in reverse order (newest first)
-  includeSummaryFallback?: boolean;
-  minRawResultsWithoutFallback?: number;
-  memoryStages?: MemoryStage[];
-  includeArchived?: boolean;
-}
-
-export interface MemorySummaryRecord {
-  summaryId: string;
-  userId: string;
-  summaryTier: MemorySummaryTier;
-  sourceTier: MemoryStage;
-  startTimestamp: number;
-  endTimestamp: number;
-  messageCount: number;
-  sourceRecordIds: string[];
-  keyPoints: string[];
-  keywords: string[];
-  keywordsText?: string;
-  summaryText: string;
-  dimensions?: Record<string, string | number | boolean | undefined>;
-  qualityScore?: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface MemorySummaryQuery {
-  userId: string;
-  keywords?: string[];
-  startTime?: number;
-  endTime?: number;
-  reverse?: boolean;
-  summaryTiers?: MemorySummaryTier[];
-  pageSize?: number;
-  limit?: number;
-  offset?: number;
-  dimensions?: Record<string, string | number | boolean | undefined>;
-}
-
-export interface RawMessageEmbeddingUpdate {
-  messageId: string;
-  embedding: number[];
-  embeddingModel: string;
-  embeddingContentHash: string;
-  embeddingDimensions?: number;
-  embeddingUpdatedAt?: number;
-}
-
-class IndexedDBManager {
+class IndexedDBManager implements RawMessageStorageManager {
   private db: IDBDatabase | null = null;
 
   /**

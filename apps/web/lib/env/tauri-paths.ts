@@ -45,6 +45,9 @@ export function getTauriDataDir(): string {
  * Get database path
  */
 export function getTauriDbPath(): string {
+  if (process.env.TAURI_DB_PATH) {
+    return process.env.TAURI_DB_PATH;
+  }
   return `${getTauriDataDir()}/data.db`;
 }
 

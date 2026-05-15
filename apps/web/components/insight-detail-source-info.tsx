@@ -32,17 +32,18 @@ import { coerceDate } from "@openloomi/shared";
 import { ReplyWorkspace } from "@/components/insight-detail-footer";
 
 /**
- * IndexedDB stores second-level timestamps, DetailData.time expects millisecond-level timestamps
+ * Raw messages store second-level timestamps, DetailData.time expects millisecond-level timestamps
  * Returns timestamp number after conversion using coerceDate
  */
-function convertIndexedDBTimestamp(secondsTimestamp: number): number {
+function convertRawMessageTimestamp(secondsTimestamp: number): number {
   return coerceDate(secondsTimestamp).getTime();
 }
 
 import { useIntegrations, type IntegrationId } from "@/hooks/use-integrations";
 import { useSendInsightReply } from "@/components/insight-detail-footer/hooks";
 import { cn, normalizeTimestamp } from "@/lib/utils";
-import { IndexedDBManager } from "@openloomi/indexeddb/manager";
+import { queryRawMessages } from "@openloomi/indexeddb/client";
+import type { RawMessage } from "@openloomi/indexeddb";
 import { toast } from "sonner";
 import { useInsightOptimisticUpdates } from "@/components/insight-optimistic-context";
 
@@ -191,7 +192,7 @@ export function InsightDetailSourceInfo({
   }, [mergedDetails]);
 
   /**
-   * Get channel messages (supports pagination, query from IndexedDB)
+   * Get channel messages (supports pagination through raw message storage)
    * First load gets latest messages (reverse order), load more gets older messages (forward order)
    * @param loadMore Whether it's load more mode (append data instead of replace)
    */
@@ -203,8 +204,6 @@ export function InsightDetailSourceInfo({
       if (isLoadingChannelMessages || isLoadingMore) return;
       loadingStateSetter(true);
       try {
-        const idbManager = new IndexedDBManager();
-
         // Get channel name - use insight.platform or insight.taskLabel as fallback when groups is empty
         const channelName =
           (insight.groups?.[0] as string | undefined) ||
@@ -232,22 +231,26 @@ export function InsightDetailSourceInfo({
           ? allChannelMessages.length + PAGE_SIZE
           : PAGE_SIZE;
 
-        const rawMessages = await idbManager.queryMessages({
+        const rawMessageItems = await queryRawMessages({
           userId: session?.user?.id,
           platform,
           channel: channelName,
           reverse: true, // Always fetch in reverse order, newest first
           limit: fetchLimit,
         });
+        const rawMessages = rawMessageItems.filter(
+          (item): item is RawMessage & { sourceType: "raw" } =>
+            item.sourceType === "raw",
+        );
 
         // Determine if there are more messages (if returned count equals loaded count, no more messages)
         const hasMore = rawMessages.length >= fetchLimit;
         setHasMoreMessages(hasMore);
 
         // Convert to DetailData format
-        // Note: msg.timestamp in IndexedDB is second-level timestamp, needs to be converted to millisecond-level
+        // Note: raw message timestamps are second-level and need conversion.
         const messages: DetailData[] = rawMessages.map((msg) => ({
-          time: convertIndexedDBTimestamp(msg.timestamp),
+          time: convertRawMessageTimestamp(msg.timestamp),
           person: msg.person,
           platform: msg.platform,
           channel: msg.channel,
@@ -300,10 +303,7 @@ export function InsightDetailSourceInfo({
           setLoadedTimestamps(timestampSet);
         }
       } catch (error) {
-        console.error(
-          "Failed to fetch channel messages from IndexedDB:",
-          error,
-        );
+        console.error("Failed to fetch channel messages:", error);
       } finally {
         loadingStateSetter(false);
       }

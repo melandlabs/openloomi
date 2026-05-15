@@ -1,4 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
+import {
+  getSQLiteRawMessageManager,
+  isSQLiteRawMessageStorageAvailable,
+} from "@/lib/memory/sqlite-raw-message-store";
 import { AppError } from "@openloomi/shared/errors";
 
 /**
@@ -12,13 +16,19 @@ export async function GET() {
   }
 
   try {
-    // This endpoint can be used to check if raw messages are available
-    // The actual messages are stored in IndexedDB on the client side
-    // This endpoint could potentially fetch from server-side storage if implemented
+    if (isSQLiteRawMessageStorageAvailable()) {
+      const manager = await getSQLiteRawMessageManager();
+      return Response.json({
+        success: true,
+        storage: "sqlite",
+        stats: await manager.getStats(),
+      });
+    }
 
     return Response.json({
       success: true,
-      message: "Raw messages are stored in client-side IndexedDB",
+      storage: "browser",
+      message: "Raw messages are stored in client-side browser storage",
       info: "Please refresh insights to sync latest raw messages",
     });
   } catch (error) {
