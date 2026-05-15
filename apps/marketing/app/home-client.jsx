@@ -8,7 +8,6 @@ import { Footer } from "@/components/footer";
 import { LandingFooterCtaSection } from "@/components/landing-footer-cta-section";
 import { Navbar } from "@/components/navbar";
 import { UseCaseCard } from "@/components/use-case-card";
-import TestimonialSection from "@/components/ui/testimonial-section";
 import {
   HowItWorksSection,
   ThenItActsSection,
@@ -580,9 +579,6 @@ const MarketingPage = () => {
             </div>
           </section>
         )}
-
-        {/* What People Trust OpenLoomi With Section */}
-        <TestimonialSection />
 
         {/* Sovereignty Section */}
         <section className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-20 pt-3 sm:pt-20 md:pt-32 pb-32 sm:pb-32 md:pb-32 mb-0">
