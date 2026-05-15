@@ -24,10 +24,10 @@ vi.mock("@/lib/memory/sqlite-raw-message-store", () => ({
 }));
 
 vi.mock("@openloomi/rag/universal-embeddings", () => ({
-  UniversalEmbeddings: vi.fn().mockImplementation(function () {
-    return {
-      embedQuery: universalEmbedQueryMock,
-    };
+  UniversalEmbeddings: vi.fn().mockImplementation(function (this: {
+    embedQuery: typeof universalEmbedQueryMock;
+  }) {
+    this.embedQuery = universalEmbedQueryMock;
   }),
 }));
 

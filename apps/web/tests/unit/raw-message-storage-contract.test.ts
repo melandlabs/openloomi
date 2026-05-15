@@ -68,10 +68,12 @@ class InMemoryRawMessageStorage implements RawMessageStorage {
       );
     }
     if (query.startTime !== undefined) {
-      items = items.filter((item) => item.timestamp >= query.startTime!);
+      const startTime = query.startTime;
+      items = items.filter((item) => item.timestamp >= startTime);
     }
     if (query.endTime !== undefined) {
-      items = items.filter((item) => item.timestamp < query.endTime!);
+      const endTime = query.endTime;
+      items = items.filter((item) => item.timestamp < endTime);
     }
     if (query.keywords?.length) {
       const keywords = query.keywords.map((item) => item.toLowerCase());
@@ -201,10 +203,12 @@ class InMemoryRawMessageStorage implements RawMessageStorage {
       items = items.filter((item) => tiers.has(item.summaryTier));
     }
     if (query.startTime !== undefined) {
-      items = items.filter((item) => item.endTimestamp >= query.startTime!);
+      const startTime = query.startTime;
+      items = items.filter((item) => item.endTimestamp >= startTime);
     }
     if (query.endTime !== undefined) {
-      items = items.filter((item) => item.startTimestamp < query.endTime!);
+      const endTime = query.endTime;
+      items = items.filter((item) => item.startTimestamp < endTime);
     }
     if (query.keywords?.length) {
       const keywords = query.keywords.map((item) => item.toLowerCase());

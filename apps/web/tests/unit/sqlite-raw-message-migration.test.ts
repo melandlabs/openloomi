@@ -79,8 +79,8 @@ describe("raw message SQLite migration", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    delete (globalThis as any).window;
-    delete (globalThis as any).fetch;
+    (globalThis as any).window = undefined;
+    (globalThis as any).fetch = undefined;
   });
 
   it("migrates IndexedDB records in batches and records completion", async () => {
