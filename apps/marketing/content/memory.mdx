@@ -16,13 +16,13 @@ This document covers the system architecture, data model, and the relationships 
 
 The memory system spans five distinct data layers, each serving a different purpose in the information architecture:
 
-| Layer | Storage | Purpose |
-| ----- | ------- | ------- |
-| **raw_messages** | Local | Verbatim message records — the ground truth |
-| **memory_summaries** | Local | Compressed summaries — derived from raw messages |
-| **Insights** | Local | AI-extracted structured records from platform messages |
-| **Knowledge Base** | Local | User-uploaded document chunks for RAG |
-| **Vector index** | Local | Semantic search across all layers |
+| Layer                | Storage | Purpose                                                |
+| -------------------- | ------- | ------------------------------------------------------ |
+| **raw_messages**     | Local   | Verbatim message records — the ground truth            |
+| **memory_summaries** | Local   | Compressed summaries — derived from raw messages       |
+| **Insights**         | Local   | AI-extracted structured records from platform messages |
+| **Knowledge Base**   | Local   | User-uploaded document chunks for RAG                  |
+| **Vector index**     | Local   | Semantic search across all layers                      |
 
 All layers originate from platform messages (and broader context inputs such as local files, audio/video, screenshots, Browser Use / Computer Use operation traces, etc.), but diverge into different representations for different purposes. The full pipeline maps to the MelandOS architecture:
 
@@ -155,6 +155,7 @@ Metadata: <flattened key:value pairs, max 2 levels deep>
 - **Content hashing**: FNV-64a hash with version prefix `memory-record-embedding-text-v1:` — used by the dream process to detect changed content that needs re-embedding
 
 The encoding is designed so that:
+
 1. The semantic core (message text) dominates the embedding
 2. Temporal and tier signals are present but secondary
 3. Metadata enables faceted filtering in vector search
@@ -172,7 +173,7 @@ Desktop uses a dedicated vector engine. Web stores vectors directly in the `raw_
 Cosine similarity is computed client-side:
 
 ```typescript
-similarity = dot(vecA, vecB) / (norm(vecA) * norm(vecB))
+similarity = dot(vecA, vecB) / (norm(vecA) * norm(vecB));
 ```
 
 Search scans up to `scanLimit = limit * 10` records, computes similarity against each, filters by threshold (default 0.7), and returns top `limit` sorted by similarity.
@@ -226,10 +227,10 @@ pinnedBoost     = isPinned ? 0.3 : 0
 
 **Promotion thresholds:**
 
-| Transition | Threshold | Max Age |
-| ---------- | --------- | ------- |
-| short → mid | 0.65 | 7 days |
-| mid → long | 0.45 | 90 days |
+| Transition  | Threshold | Max Age |
+| ----------- | --------- | ------- |
+| short → mid | 0.65      | 7 days  |
+| mid → long  | 0.45      | 90 days |
 
 Records scoring **below** the threshold for their age boundary are archived. Their verbatim content is preserved (via `archivedAt`), but the in-memory representation is compressed.
 
@@ -259,10 +260,10 @@ If a new cycle starts while one is running, the second cycle returns `status: "s
 ### Tier-to-SummaryTier Mapping
 
 | Memory Tier | Summary Tier |
-| ---------- | ----------- |
-| short | L1 |
-| mid | L2 |
-| long | L3 |
+| ----------- | ------------ |
+| short       | L1           |
+| mid         | L2           |
+| long        | L3           |
 
 This L1/L2/L3 distinction in `memory_summaries.summaryTier` allows the query layer to know the provenance of each summary — what lifecycle stage the source material was in when summarized.
 
@@ -309,12 +310,12 @@ Insights are AI-extracted structured records derived from platform messages. Whe
 
 These are completely separate systems:
 
-| | Memory | Insights |
-| -- | -- | -- |
-| **Location** | Local-first | Local |
-| **Content** | Messages and summaries | AI-extracted structured facts |
-| **Management** | Forgetting engine (tier transitions) | Weight adjustment (boost/decay) |
-| **Source** | Platform messages | AI subagent analysis of messages |
+|                | Memory                               | Insights                         |
+| -------------- | ------------------------------------ | -------------------------------- |
+| **Location**   | Local-first                          | Local                            |
+| **Content**    | Messages and summaries               | AI-extracted structured facts    |
+| **Management** | Forgetting engine (tier transitions) | Weight adjustment (boost/decay)  |
+| **Source**     | Platform messages                    | AI subagent analysis of messages |
 
 Raw messages are the shared origin: platforms fetch messages and feed both the insight extraction pipeline and the memory storage pipeline. The two systems then diverge — memory stays close to the original text, while insights are structured abstractions.
 
@@ -361,6 +362,7 @@ Insight weights change dynamically based on user interactions:
 **View boost**: multiplier = `min(5.0, currentWeight * 1.1)`, 24-hour duration, only applied after >1 day of inactivity
 
 **Decay**: Applied to insights not viewed in a while:
+
 - 7–14 days inactive → rate `0.95`
 - 14–30 days inactive → rate `0.85`
 - 30+ days inactive → rate `0.7` (floor at `0.3`)
@@ -443,11 +445,11 @@ When a user configures personalization in Insight Settings — focus people, top
 
 ### MCP Tools
 
-| Tool | Description |
-| -- | -- |
-| `searchKnowledgeBase(query, limit, documentIds?)` | Semantic search across document chunks |
-| `getFullDocumentContent(documentId)` | Retrieve the complete text of a document |
-| `listKnowledgeBaseDocuments(limit)` | List recently uploaded documents |
+| Tool                                              | Description                              |
+| ------------------------------------------------- | ---------------------------------------- |
+| `searchKnowledgeBase(query, limit, documentIds?)` | Semantic search across document chunks   |
+| `getFullDocumentContent(documentId)`              | Retrieve the complete text of a document |
+| `listKnowledgeBaseDocuments(limit)`               | List recently uploaded documents         |
 
 ---
 
@@ -483,11 +485,11 @@ Memory is also available as a standalone **Skill** for integration with other Ag
 
 The Memory Skill exposes the following capabilities:
 
-| Feature | Description |
-| -- | -- |
-| **Memory Files Search** | Case-insensitive full-text search across local memory files (`~/.openloomi/data/memory/`) |
-| **Knowledge Base Search** | Semantic document search using RAG/embeddings on the OpenLoomi server |
-| **Insights** | Query AI-extracted structured records from chat history including decisions, action items, preferences, and relationships |
+| Feature                   | Description                                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Memory Files Search**   | Case-insensitive full-text search across local memory files (`~/.openloomi/data/memory/`)                                 |
+| **Knowledge Base Search** | Semantic document search using RAG/embeddings on the OpenLoomi server                                                     |
+| **Insights**              | Query AI-extracted structured records from chat history including decisions, action items, preferences, and relationships |
 
 ### Three Memory Types
 
@@ -508,11 +510,11 @@ The Memory Skill supports 10+ communication channels including Gmail, Slack, Dis
 
 The skill exposes REST endpoints at `http://localhost:3415/api/`:
 
-| Endpoint | Description |
-| -- | -- |
-| Document search | Semantic search across knowledge base |
-| Insight management | Query and manage extracted insights |
-| Usage analytics | Track access frequency and relevance |
+| Endpoint           | Description                           |
+| ------------------ | ------------------------------------- |
+| Document search    | Semantic search across knowledge base |
+| Insight management | Query and manage extracted insights   |
+| Usage analytics    | Track access frequency and relevance  |
 
 ### Authentication
 
