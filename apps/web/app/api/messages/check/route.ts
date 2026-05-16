@@ -1,8 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
 import {
-  getSQLiteRawMessageManager,
-  isSQLiteRawMessageStorageAvailable,
-} from "@/lib/memory/sqlite-raw-message-store";
+  getRawMessageManager,
+  getRawMessageStorageBackend,
+} from "@/lib/memory/raw-message-store";
 import { AppError } from "@openloomi/shared/errors";
 
 /**
@@ -16,20 +16,11 @@ export async function GET() {
   }
 
   try {
-    if (isSQLiteRawMessageStorageAvailable()) {
-      const manager = await getSQLiteRawMessageManager();
-      return Response.json({
-        success: true,
-        storage: "sqlite",
-        stats: await manager.getStats(),
-      });
-    }
-
+    const manager = await getRawMessageManager();
     return Response.json({
       success: true,
-      storage: "browser",
-      message: "Raw messages are stored in client-side browser storage",
-      info: "Please refresh insights to sync latest raw messages",
+      storage: getRawMessageStorageBackend(),
+      stats: await manager.getStats(),
     });
   } catch (error) {
     console.error("[Raw Messages Check] Error:", error);

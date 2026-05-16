@@ -638,6 +638,13 @@
       "when": 1774500000000,
       "tag": "0101_persist_insight_embedding_dream_checkpoint",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1778847858000,
+      "tag": "0102_add_raw_message_storage",
+      "breakpoints": true
     }
   ]
 }

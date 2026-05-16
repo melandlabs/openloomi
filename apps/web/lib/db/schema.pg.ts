@@ -15,6 +15,8 @@ import {
   numeric,
   index,
   bigint,
+  bigserial,
+  real,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { DetailData, TimelineData } from "../ai/subagents/insights";
@@ -759,6 +761,108 @@ export const insightEmbeddings = pgTable(
 
 export type InsightEmbedding = InferSelectModel<typeof insightEmbeddings>;
 export type InsertInsightEmbedding = InferInsertModel<typeof insightEmbeddings>;
+
+export const rawMessages = pgTable(
+  "raw_messages",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    messageId: text("message_id").notNull(),
+    platform: text("platform").notNull(),
+    botId: uuid("bot_id")
+      .notNull()
+      .references(() => bot.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    channel: text("channel"),
+    person: text("person"),
+    timestamp: bigint("timestamp", { mode: "number" }).notNull(),
+    content: text("content").notNull(),
+    attachments: jsonb("attachments")
+      .$type<Array<{
+        name: string;
+        url: string;
+        contentType?: string;
+        sizeBytes?: number;
+      }> | null>()
+      .default(null),
+    embedding: text("embedding"),
+    embeddingModel: text("embedding_model"),
+    embeddingContentHash: text("embedding_content_hash"),
+    embeddingDimensions: integer("embedding_dimensions"),
+    embeddingUpdatedAt: bigint("embedding_updated_at", { mode: "number" }),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    memoryStage: varchar("memory_stage", { length: 16 }).default("short"),
+    accessCount: integer("access_count").default(0),
+    lastAccessAt: bigint("last_access_at", { mode: "number" }),
+    importanceScore: real("importance_score").default(0),
+    archivedAt: bigint("archived_at", { mode: "number" }),
+    isPinned: boolean("is_pinned").default(false),
+    summaryRefId: text("summary_ref_id"),
+  },
+  (table) => ({
+    messageIdUnique: uniqueIndex("raw_messages_message_id_idx").on(
+      table.messageId,
+    ),
+    userTimestampIdx: index("raw_messages_user_timestamp_idx").on(
+      table.userId,
+      table.timestamp,
+    ),
+    userMemoryStageIdx: index("raw_messages_user_memory_stage_idx").on(
+      table.userId,
+      table.memoryStage,
+    ),
+    platformIdx: index("raw_messages_platform_idx").on(table.platform),
+    botIdx: index("raw_messages_bot_id_idx").on(table.botId),
+    archivedAtIdx: index("raw_messages_archived_at_idx").on(table.archivedAt),
+    createdAtIdx: index("raw_messages_created_at_idx").on(table.createdAt),
+  }),
+);
+
+export type RawMessageRow = InferSelectModel<typeof rawMessages>;
+export type InsertRawMessageRow = InferInsertModel<typeof rawMessages>;
+
+export const memorySummaries = pgTable(
+  "memory_summaries",
+  {
+    summaryId: text("summary_id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    summaryTier: varchar("summary_tier", { length: 8 }).notNull(),
+    sourceTier: varchar("source_tier", { length: 16 }).notNull(),
+    startTimestamp: bigint("start_timestamp", { mode: "number" }).notNull(),
+    endTimestamp: bigint("end_timestamp", { mode: "number" }).notNull(),
+    messageCount: integer("message_count").notNull(),
+    sourceRecordIds: jsonb("source_record_ids")
+      .$type<string[] | null>()
+      .default(null),
+    keyPoints: jsonb("key_points").$type<string[] | null>().default(null),
+    keywords: jsonb("keywords").$type<string[] | null>().default(null),
+    keywordsText: text("keywords_text"),
+    summaryText: text("summary_text").notNull(),
+    dimensions: jsonb("dimensions")
+      .$type<Record<string, string | number | boolean | undefined> | null>()
+      .default(null),
+    qualityScore: real("quality_score"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+  },
+  (table) => ({
+    userTimeIdx: index("memory_summaries_user_time_idx").on(
+      table.userId,
+      table.endTimestamp,
+    ),
+    userTierIdx: index("memory_summaries_user_tier_idx").on(
+      table.userId,
+      table.summaryTier,
+    ),
+  }),
+);
+
+export type MemorySummaryRow = InferSelectModel<typeof memorySummaries>;
+export type InsertMemorySummaryRow = InferInsertModel<typeof memorySummaries>;
 
 export const insightCompactionLinks = pgTable(
   "insight_compaction_links",

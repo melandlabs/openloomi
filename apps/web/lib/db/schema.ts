@@ -30,6 +30,8 @@ export const stream = (currentSchema as any).stream;
 export const bot = (currentSchema as any).bot;
 export const insight = (currentSchema as any).insight;
 export const insightEmbeddings = (currentSchema as any).insightEmbeddings;
+export const rawMessages = (currentSchema as any).rawMessages;
+export const memorySummaries = (currentSchema as any).memorySummaries;
 export const userInsightSettings = (currentSchema as any).userInsightSettings;
 export const userContacts = (currentSchema as any).userContacts;
 export const dingtalkBotInsightMessages = (currentSchema as any)
@@ -131,6 +133,10 @@ export type {
   InsertInsight,
   InsightEmbedding,
   InsertInsightEmbedding,
+  RawMessageRow,
+  InsertRawMessageRow,
+  MemorySummaryRow,
+  InsertMemorySummaryRow,
   InsightSettings,
   DBInsightSettings,
   DBInsertInsightSettings,

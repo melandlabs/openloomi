@@ -1,8 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
 import {
-  getSQLiteRawMessageManager,
-  isSQLiteRawMessageStorageAvailable,
-} from "@/lib/memory/sqlite-raw-message-store";
+  getRawMessageManager,
+  getRawMessageStorageBackend,
+} from "@/lib/memory/raw-message-store";
 import { AppError } from "@openloomi/shared/errors";
 import type { NextRequest } from "next/server";
 
@@ -63,23 +63,15 @@ export async function POST(request: NextRequest) {
       createdAt: Math.floor(Date.now() / 1000),
     }));
 
-    if (isSQLiteRawMessageStorageAvailable()) {
-      const manager = await getSQLiteRawMessageManager();
-      const ids = await manager.storeMessages(messagesWithUserId as any);
-      return Response.json({
-        success: true,
-        message: "Messages stored in SQLite",
-        stored: ids.length,
-        count: ids.length,
-      });
-    }
-
-    // Return messages to the client for browser-side fallback storage.
+    const manager = await getRawMessageManager();
+    const storage = getRawMessageStorageBackend();
+    const ids = await manager.storeMessages(messagesWithUserId as any);
     return Response.json({
       success: true,
-      message: "Messages prepared for client-side storage",
-      data: messagesWithUserId,
-      count: messagesWithUserId.length,
+      message: `Messages stored in ${storage}`,
+      storage,
+      stored: ids.length,
+      count: ids.length,
     });
   } catch (error) {
     console.error("[Raw Messages API] Error:", error);
@@ -101,23 +93,13 @@ export async function GET(request: NextRequest) {
   const botId = searchParams.get("botId");
   const platform = searchParams.get("platform");
 
-  if (isSQLiteRawMessageStorageAvailable()) {
-    const manager = await getSQLiteRawMessageManager();
-    return Response.json({
-      userId: session.user.id,
-      botId: botId || undefined,
-      platform: platform || undefined,
-      storage: "sqlite",
-      stats: await manager.getStats(),
-    });
-  }
-
-  // This endpoint returns configuration for querying
+  const manager = await getRawMessageManager();
+  const storage = getRawMessageStorageBackend();
   return Response.json({
     userId: session.user.id,
     botId: botId || undefined,
     platform: platform || undefined,
-    storage: "browser",
-    message: "Use client-side raw message storage for queries.",
+    storage,
+    stats: await manager.getStats(),
   });
 }

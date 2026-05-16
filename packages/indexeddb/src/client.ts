@@ -12,6 +12,7 @@ import type {
 import {
   ensureRawMessagesSQLiteMigration,
   migrateIndexedDBRawMessagesToSQLite,
+  shouldUseRawMessageApiStorage,
   shouldUseSQLiteRawMessageStorage,
   sqliteClearOldRawMessages,
   sqliteGetRawMessagesStats,
@@ -28,6 +29,7 @@ export type { RawMessage, RawMessageQuery, GroupByType, MemorySummaryRecord };
 export {
   ensureRawMessagesSQLiteMigration,
   migrateIndexedDBRawMessagesToSQLite,
+  shouldUseRawMessageApiStorage,
   shouldUseSQLiteRawMessageStorage,
 };
 
@@ -112,12 +114,12 @@ export async function storeRawMessagesFromInsight(
     metadata?: Record<string, any>;
   }>,
 ): Promise<{ success: boolean; stored: number; errors: number }> {
-  if (shouldUseSQLiteRawMessageStorage()) {
+  if (shouldUseRawMessageApiStorage()) {
     try {
       return await sqliteStoreRawMessagesFromInsight(userId, messages);
     } catch (error) {
       console.warn(
-        "[Client SQLite] Failed to store messages, falling back to IndexedDB:",
+        "[Client Raw Messages API] Failed to store messages, falling back to IndexedDB:",
         error,
       );
     }
@@ -155,14 +157,14 @@ export async function storeRawMessagesFromInsight(
 export async function queryRawMessages(
   query: RawMessageQuery,
 ): Promise<RawMessageQueryResultItem[]> {
-  if (shouldUseSQLiteRawMessageStorage()) {
+  if (shouldUseRawMessageApiStorage()) {
     try {
       return (await sqliteQueryRawMessages(
         query,
       )) as RawMessageQueryResultItem[];
     } catch (error) {
       console.warn(
-        "[Client SQLite] Failed to query messages, falling back to IndexedDB:",
+        "[Client Raw Messages API] Failed to query messages, falling back to IndexedDB:",
         error,
       );
     }
@@ -316,12 +318,12 @@ export async function queryRawMessagesWithFallback(
 export async function queryRawMessagesGrouped(
   query: RawMessageQuery,
 ): Promise<Record<string, RawMessage[]>> {
-  if (shouldUseSQLiteRawMessageStorage()) {
+  if (shouldUseRawMessageApiStorage()) {
     try {
       return await sqliteQueryRawMessagesGrouped(query);
     } catch (error) {
       console.warn(
-        "[Client SQLite] Failed to query grouped messages, falling back to IndexedDB:",
+        "[Client Raw Messages API] Failed to query grouped messages, falling back to IndexedDB:",
         error,
       );
     }
@@ -350,12 +352,12 @@ export async function getRawMessagesStats(): Promise<{
   oldestMessage?: number;
   newestMessage?: number;
 }> {
-  if (shouldUseSQLiteRawMessageStorage()) {
+  if (shouldUseRawMessageApiStorage()) {
     try {
       return await sqliteGetRawMessagesStats();
     } catch (error) {
       console.warn(
-        "[Client SQLite] Failed to get stats, falling back to IndexedDB:",
+        "[Client Raw Messages API] Failed to get stats, falling back to IndexedDB:",
         error,
       );
     }
@@ -382,12 +384,12 @@ export async function clearOldRawMessages(
   olderThan: number,
   userId?: string,
 ): Promise<{ success: boolean; deleted: number }> {
-  if (shouldUseSQLiteRawMessageStorage()) {
+  if (shouldUseRawMessageApiStorage()) {
     try {
       return await sqliteClearOldRawMessages(olderThan, userId);
     } catch (error) {
       console.warn(
-        "[Client SQLite] Failed to clear old messages, falling back to IndexedDB:",
+        "[Client Raw Messages API] Failed to clear old messages, falling back to IndexedDB:",
         error,
       );
     }
@@ -424,12 +426,12 @@ export async function runMemoryForgettingCycleForUser(
   hardDeletedRecords?: number;
   error?: string;
 }> {
-  if (shouldUseSQLiteRawMessageStorage()) {
+  if (shouldUseRawMessageApiStorage()) {
     try {
       return await sqliteRunMemoryForgettingCycleForUser(userId, options);
     } catch (error) {
       console.warn(
-        "[Client SQLite] Failed to run forgetting cycle, falling back to IndexedDB:",
+        "[Client Raw Messages API] Failed to run forgetting cycle, falling back to IndexedDB:",
         error,
       );
     }
@@ -470,12 +472,12 @@ export async function runRawMessageEmbeddingDreamForUser(
     dryRun?: boolean;
   },
 ) {
-  if (shouldUseSQLiteRawMessageStorage()) {
+  if (shouldUseRawMessageApiStorage()) {
     try {
       return await sqliteRunRawMessageEmbeddingDreamForUser(userId, options);
     } catch (error) {
       console.warn(
-        "[Client SQLite] Failed to run embedding dream, falling back to IndexedDB:",
+        "[Client Raw Messages API] Failed to run embedding dream, falling back to IndexedDB:",
         error,
       );
     }
@@ -507,12 +509,12 @@ export async function searchRawMessagesSemanticallyForUser(
     endTime?: number;
   },
 ) {
-  if (shouldUseSQLiteRawMessageStorage()) {
+  if (shouldUseRawMessageApiStorage()) {
     try {
       return await sqliteSearchRawMessagesSemanticallyForUser(userId, options);
     } catch (error) {
       console.warn(
-        "[Client SQLite] Failed to search semantically, falling back to IndexedDB:",
+        "[Client Raw Messages API] Failed to search semantically, falling back to IndexedDB:",
         error,
       );
     }
@@ -746,12 +748,13 @@ export async function initializeRawMessagesStorage(userId?: string): Promise<{
       return { success: false };
     }
 
-    if (shouldUseSQLiteRawMessageStorage()) {
-      const migration = userId
-        ? await ensureRawMessagesSQLiteMigration({ userId })
-        : undefined;
+    if (shouldUseRawMessageApiStorage()) {
+      const migration =
+        shouldUseSQLiteRawMessageStorage() && userId
+          ? await ensureRawMessagesSQLiteMigration({ userId })
+          : undefined;
       const stats = await sqliteGetRawMessagesStats();
-      console.log("[Client SQLite] Initialized with stats:", stats);
+      console.log("[Client Raw Messages API] Initialized with stats:", stats);
       return {
         success: true,
         migration,

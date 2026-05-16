@@ -83,6 +83,10 @@ export function shouldUseSQLiteRawMessageStorage(): boolean {
   );
 }
 
+export function shouldUseRawMessageApiStorage(): boolean {
+  return typeof window !== "undefined";
+}
+
 export function getRawMessagesSQLiteMigrationStorageKey(
   userId: string,
 ): string {
@@ -205,7 +209,7 @@ async function requestSQLiteRawMessages<T>(
     throw new Error(
       typeof data?.message === "string"
         ? data.message
-        : `SQLite raw message API failed: ${response.status}`,
+        : `Raw message API failed: ${response.status}`,
     );
   }
   return data as T;

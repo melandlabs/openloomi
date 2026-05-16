@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  getSQLiteRawMessageManagerMock,
-  isSQLiteRawMessageStorageAvailableMock,
+  getRawMessageManagerMock,
+  isRawMessageStorageAvailableMock,
   queryMessagesMock,
   searchInsightsSemanticallyMock,
   searchMessagesSemanticallyMock,
   searchSimilarChunksMock,
   universalEmbedQueryMock,
 } = vi.hoisted(() => ({
-  getSQLiteRawMessageManagerMock: vi.fn(),
-  isSQLiteRawMessageStorageAvailableMock: vi.fn(),
+  getRawMessageManagerMock: vi.fn(),
+  isRawMessageStorageAvailableMock: vi.fn(),
   queryMessagesMock: vi.fn(),
   searchInsightsSemanticallyMock: vi.fn(),
   searchMessagesSemanticallyMock: vi.fn(),
@@ -18,9 +18,9 @@ const {
   universalEmbedQueryMock: vi.fn(),
 }));
 
-vi.mock("@/lib/memory/sqlite-raw-message-store", () => ({
-  getSQLiteRawMessageManager: getSQLiteRawMessageManagerMock,
-  isSQLiteRawMessageStorageAvailable: isSQLiteRawMessageStorageAvailableMock,
+vi.mock("@/lib/memory/raw-message-store", () => ({
+  getRawMessageManager: getRawMessageManagerMock,
+  isRawMessageStorageAvailable: isRawMessageStorageAvailableMock,
 }));
 
 vi.mock("@openloomi/rag/universal-embeddings", () => ({
@@ -50,16 +50,16 @@ import {
 
 describe("unified memory search", () => {
   beforeEach(() => {
-    getSQLiteRawMessageManagerMock.mockReset();
-    isSQLiteRawMessageStorageAvailableMock.mockReset();
+    getRawMessageManagerMock.mockReset();
+    isRawMessageStorageAvailableMock.mockReset();
     queryMessagesMock.mockReset();
     searchInsightsSemanticallyMock.mockReset();
     searchMessagesSemanticallyMock.mockReset();
     searchSimilarChunksMock.mockReset();
     universalEmbedQueryMock.mockReset();
 
-    isSQLiteRawMessageStorageAvailableMock.mockReturnValue(false);
-    getSQLiteRawMessageManagerMock.mockResolvedValue({
+    isRawMessageStorageAvailableMock.mockReturnValue(false);
+    getRawMessageManagerMock.mockResolvedValue({
       queryMessages: queryMessagesMock,
       searchMessagesSemantically: searchMessagesSemanticallyMock,
     });
@@ -182,15 +182,14 @@ describe("unified memory search", () => {
     expect(output.warnings).toEqual([
       {
         source: "memory",
-        code: "client_indexeddb_required",
-        message:
-          "Raw memory records are stored in client-side IndexedDB and cannot be searched from this server API.",
+        code: "raw_message_storage_unavailable",
+        message: "Raw memory storage is not available in this environment.",
       },
     ]);
   });
 
-  it("hybrid searches SQLite raw memory with FTS keywords and semantic vectors", async () => {
-    isSQLiteRawMessageStorageAvailableMock.mockReturnValue(true);
+  it("hybrid searches raw memory with FTS keywords and semantic vectors", async () => {
+    isRawMessageStorageAvailableMock.mockReturnValue(true);
     queryMessagesMock.mockResolvedValue([
       {
         messageId: "message-1",

@@ -1,9 +1,9 @@
 import { searchSimilarChunks } from "@/lib/ai/rag/langchain-service";
 import { searchInsightsSemantically } from "@/lib/insights/search";
 import {
-  getSQLiteRawMessageManager,
-  isSQLiteRawMessageStorageAvailable,
-} from "@/lib/memory/sqlite-raw-message-store";
+  getRawMessageManager,
+  isRawMessageStorageAvailable,
+} from "@/lib/memory/raw-message-store";
 import type { RawMessage } from "@openloomi/indexeddb";
 
 export type UnifiedMemorySearchSource = "memory" | "insights" | "knowledge";
@@ -167,6 +167,25 @@ function toMemoryResult(result: {
   };
 }
 
+function isRawMemorySemanticResult(result: unknown): result is {
+  id: string;
+  content: string;
+  similarity: number;
+  metadata: Record<string, unknown>;
+} {
+  if (!result || typeof result !== "object") {
+    return false;
+  }
+  const item = result as Record<string, unknown>;
+  return (
+    typeof item.id === "string" &&
+    typeof item.content === "string" &&
+    typeof item.similarity === "number" &&
+    Boolean(item.metadata) &&
+    typeof item.metadata === "object"
+  );
+}
+
 function extractRawMemoryKeywords(query: string): string[] {
   const normalized = query.trim().replace(/\s+/g, " ");
   if (!normalized) {
@@ -269,7 +288,7 @@ function mergeMemoryHybridResults(
   return mergeUnifiedMemorySearchResults(Array.from(byId.values()), limit);
 }
 
-async function searchSQLiteRawMemoryHybrid(input: {
+async function searchRawMemoryHybrid(input: {
   userId: string;
   query: string;
   authToken?: string;
@@ -277,7 +296,7 @@ async function searchSQLiteRawMemoryHybrid(input: {
   limit: number;
   threshold: number;
 }): Promise<UnifiedMemorySearchResult[]> {
-  const manager = await getSQLiteRawMessageManager();
+  const manager = await getRawMessageManager();
   const filters =
     input.botIds && input.botIds.length > 0
       ? input.botIds.map((botId) => ({ botId }))
@@ -310,7 +329,7 @@ async function searchSQLiteRawMemoryHybrid(input: {
 
   let semanticResults: UnifiedMemorySearchResult[] = [];
   if (
-    typeof (manager as any).searchMessagesSemantically === "function" &&
+    typeof manager.searchMessagesSemantically === "function" &&
     hasEmbeddingProviderConfig(input.authToken)
   ) {
     const queryEmbedding = await embedQuery(input.query, input.authToken);
@@ -318,7 +337,7 @@ async function searchSQLiteRawMemoryHybrid(input: {
       semanticResults = (
         await Promise.all(
           filters.map((filter) =>
-            (manager as any).searchMessagesSemantically({
+            manager.searchMessagesSemantically?.({
               userId: input.userId,
               queryEmbedding,
               limit: input.limit,
@@ -329,6 +348,7 @@ async function searchSQLiteRawMemoryHybrid(input: {
         )
       )
         .flat()
+        .filter(isRawMemorySemanticResult)
         .map(toMemoryResult);
     }
   }
@@ -357,8 +377,8 @@ export async function searchUnifiedMemory(
   }
 
   if (sources.includes("memory")) {
-    if (isSQLiteRawMessageStorageAvailable()) {
-      const memoryResults = await searchSQLiteRawMemoryHybrid({
+    if (isRawMessageStorageAvailable()) {
+      const memoryResults = await searchRawMemoryHybrid({
         userId: input.userId,
         query,
         authToken: input.authToken,
@@ -370,9 +390,8 @@ export async function searchUnifiedMemory(
     } else {
       warnings.push({
         source: "memory",
-        code: "client_indexeddb_required",
-        message:
-          "Raw memory records are stored in client-side IndexedDB and cannot be searched from this server API.",
+        code: "raw_message_storage_unavailable",
+        message: "Raw memory storage is not available in this environment.",
       });
     }
   }

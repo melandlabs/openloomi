@@ -1,8 +1,9 @@
 import { auth } from "@/app/(auth)/auth";
 import {
-  getSQLiteRawMessageManager,
-  isSQLiteRawMessageStorageAvailable,
-} from "@/lib/memory/sqlite-raw-message-store";
+  getRawMessageManager,
+  getRawMessageStorageBackend,
+  isRawMessageStorageAvailable,
+} from "@/lib/memory/raw-message-store";
 import { AppError } from "@openloomi/shared/errors";
 import {
   queryMemoryWithFallback,
@@ -58,7 +59,7 @@ async function queryRawMessagesWithFallback(
   query: RawMessageQuery,
   userId: string,
 ) {
-  const manager = await getSQLiteRawMessageManager();
+  const manager = await getRawMessageManager();
   const pageSize = query.pageSize ?? query.limit ?? 50;
   const minRaw =
     query.minRawResultsWithoutFallback ?? query.pageSize ?? query.limit ?? 50;
@@ -160,16 +161,17 @@ export async function GET() {
     return new AppError("unauthorized:api").toResponse();
   }
 
-  if (!isSQLiteRawMessageStorageAvailable()) {
+  if (!isRawMessageStorageAvailable()) {
     return Response.json({
       available: false,
-      reason: "not_tauri",
+      reason: "not_available",
     });
   }
 
-  const manager = await getSQLiteRawMessageManager();
+  const manager = await getRawMessageManager();
   return Response.json({
     available: true,
+    storage: getRawMessageStorageBackend(),
     stats: await manager.getStats(),
   });
 }
@@ -180,12 +182,12 @@ export async function POST(request: NextRequest) {
     return new AppError("unauthorized:api").toResponse();
   }
 
-  if (!isSQLiteRawMessageStorageAvailable()) {
+  if (!isRawMessageStorageAvailable()) {
     return Response.json(
       {
         success: false,
-        reason: "not_tauri",
-        message: "SQLite raw message storage is only available in Tauri mode.",
+        reason: "not_available",
+        message: "Raw message storage is not available in this environment.",
       },
       { status: 409 },
     );
@@ -195,7 +197,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const action = typeof body.action === "string" ? body.action : "";
     const userId = session.user.id;
-    const manager = await getSQLiteRawMessageManager();
+    const manager = await getRawMessageManager();
 
     switch (action) {
       case "store": {
@@ -278,8 +280,8 @@ export async function POST(request: NextRequest) {
         }
 
         const items =
-          typeof (manager as any).searchMessagesSemantically === "function"
-            ? await (manager as any).searchMessagesSemantically({
+          typeof manager.searchMessagesSemantically === "function"
+            ? await manager.searchMessagesSemantically({
                 ...(body.options ?? {}),
                 userId,
                 queryEmbedding,
@@ -317,7 +319,7 @@ export async function POST(request: NextRequest) {
         ).toResponse();
     }
   } catch (error) {
-    console.error("[SQLite Raw Messages API] Error:", error);
+    console.error("[Raw Messages API] Error:", error);
     return new AppError(
       "bad_request:database",
       error instanceof Error ? error.message : String(error),
