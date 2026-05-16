@@ -198,16 +198,15 @@ Channels → Gateway (single control plane)
 
 ### 7.2 Feature Matrix
 
-| Feature              | OpenLoomi | Hermes-Agent |     OpenClaw      |
-| -------------------- | :-------: | :----------: | :---------------: |
-| Desktop App          |    ✅     |      ❌      |        ✅         |
-| Mobile App           |    ❌     |      ❌      |        ✅         |
-| Web UI               |    ✅     |      ❌      |        ✅         |
-| CLI                  |    ❌     |      ✅      |        ✅         |
-| Message Aggregation  |    ✅     |      ✅      |        ✅         |
-| Self-Creating Skills |    ❌     |      ✅      |        ❌         |
-| RAG/Vector Search    |    ✅     |      ❌      |        ✅         |
-| IDE Integration      |    ❌     |   ✅ (Zed)   | ✅ (Zed, VS Code) |
+| Feature              |     OpenClaw      |   Hermes Agent    |                              OpenLoomi                              |
+| -------------------- | :---------------: | :---------------: | :-----------------------------------------------------------------: |
+| Open-source          |        ✅         |        ✅         |                                 ✅                                  |
+| Simple to start      | ⚠️ Terminal-first | ⚠️ Terminal-first |                        ✅ Clean UI, minutes                         |
+| Message Aggregation  |        ✅         |        ✅         |                                 ✅                                  |
+| Memory               | ⚠️ Plugin-reliant | ✅ Self-learning  | 🚀 Self-Evolving Memory + Background Context Agent sync into memory |
+| Self-Creating Skills |        ❌         |        ✅         |                                 ❌                                  |
+| RAG/Vector Search    |        ✅         |        ❌         |                                 ✅                                  |
+| IDE Integration      | ✅ (Zed, VS Code) |     ✅ (Zed)      |                                 ❌                                  |
 
 ### 7.3 Complexity Comparison
 
