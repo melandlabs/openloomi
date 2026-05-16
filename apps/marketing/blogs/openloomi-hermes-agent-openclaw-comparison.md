@@ -182,7 +182,6 @@ Channels → Gateway (single control plane)
 | **API Documentation** | 129+ API routes (skill format) | Slash command help | Plugin SDK (200+ modules) |
 | **Extension Method**  | Package + Skill                | Skill + Tool       | Plugin extension          |
 | **SDK**               | MCP, Agent SDK                 | No dedicated SDK   | Plugin SDK                |
-| **IDE Integration**   | ❌                             | ACP Adapter (Zed)  | ACP (Zed, VS Code)        |
 
 ---
 
