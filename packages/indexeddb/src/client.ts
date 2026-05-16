@@ -9,9 +9,29 @@ import type {
   GroupByType,
   MemorySummaryRecord,
 } from "./manager";
+import {
+  ensureRawMessagesSQLiteMigration,
+  migrateIndexedDBRawMessagesToSQLite,
+  shouldUseRawMessageApiStorage,
+  shouldUseSQLiteRawMessageStorage,
+  sqliteClearOldRawMessages,
+  sqliteGetRawMessagesStats,
+  sqliteQueryRawMessages,
+  sqliteQueryRawMessagesGrouped,
+  sqliteRunMemoryForgettingCycleForUser,
+  sqliteRunRawMessageEmbeddingDreamForUser,
+  sqliteSearchRawMessagesSemanticallyForUser,
+  sqliteStoreRawMessagesFromInsight,
+} from "./sqlite-client";
 
 // Re-export types for external use
 export type { RawMessage, RawMessageQuery, GroupByType, MemorySummaryRecord };
+export {
+  ensureRawMessagesSQLiteMigration,
+  migrateIndexedDBRawMessagesToSQLite,
+  shouldUseRawMessageApiStorage,
+  shouldUseSQLiteRawMessageStorage,
+};
 
 export type RawMessageSourceType = "raw" | "summary";
 
@@ -94,6 +114,17 @@ export async function storeRawMessagesFromInsight(
     metadata?: Record<string, any>;
   }>,
 ): Promise<{ success: boolean; stored: number; errors: number }> {
+  if (shouldUseRawMessageApiStorage()) {
+    try {
+      return await sqliteStoreRawMessagesFromInsight(userId, messages);
+    } catch (error) {
+      console.warn(
+        "[Client Raw Messages API] Failed to store messages, falling back to IndexedDB:",
+        error,
+      );
+    }
+  }
+
   try {
     const manager = await getManager();
 
@@ -126,6 +157,19 @@ export async function storeRawMessagesFromInsight(
 export async function queryRawMessages(
   query: RawMessageQuery,
 ): Promise<RawMessageQueryResultItem[]> {
+  if (shouldUseRawMessageApiStorage()) {
+    try {
+      return (await sqliteQueryRawMessages(
+        query,
+      )) as RawMessageQueryResultItem[];
+    } catch (error) {
+      console.warn(
+        "[Client Raw Messages API] Failed to query messages, falling back to IndexedDB:",
+        error,
+      );
+    }
+  }
+
   // Opt-in switch to keep old behavior stable unless caller requests fallback.
   if (query.includeSummaryFallback) {
     return queryRawMessagesWithFallback(query);
@@ -274,6 +318,17 @@ export async function queryRawMessagesWithFallback(
 export async function queryRawMessagesGrouped(
   query: RawMessageQuery,
 ): Promise<Record<string, RawMessage[]>> {
+  if (shouldUseRawMessageApiStorage()) {
+    try {
+      return await sqliteQueryRawMessagesGrouped(query);
+    } catch (error) {
+      console.warn(
+        "[Client Raw Messages API] Failed to query grouped messages, falling back to IndexedDB:",
+        error,
+      );
+    }
+  }
+
   // Normal IndexedDB query
   try {
     const manager = await getManager();
@@ -297,6 +352,17 @@ export async function getRawMessagesStats(): Promise<{
   oldestMessage?: number;
   newestMessage?: number;
 }> {
+  if (shouldUseRawMessageApiStorage()) {
+    try {
+      return await sqliteGetRawMessagesStats();
+    } catch (error) {
+      console.warn(
+        "[Client Raw Messages API] Failed to get stats, falling back to IndexedDB:",
+        error,
+      );
+    }
+  }
+
   // Normal IndexedDB query
   try {
     const manager = await getManager();
@@ -318,6 +384,17 @@ export async function clearOldRawMessages(
   olderThan: number,
   userId?: string,
 ): Promise<{ success: boolean; deleted: number }> {
+  if (shouldUseRawMessageApiStorage()) {
+    try {
+      return await sqliteClearOldRawMessages(olderThan, userId);
+    } catch (error) {
+      console.warn(
+        "[Client Raw Messages API] Failed to clear old messages, falling back to IndexedDB:",
+        error,
+      );
+    }
+  }
+
   try {
     const manager = await getManager();
     const deleted = await manager.deleteOldMessages(olderThan, userId);
@@ -349,6 +426,17 @@ export async function runMemoryForgettingCycleForUser(
   hardDeletedRecords?: number;
   error?: string;
 }> {
+  if (shouldUseRawMessageApiStorage()) {
+    try {
+      return await sqliteRunMemoryForgettingCycleForUser(userId, options);
+    } catch (error) {
+      console.warn(
+        "[Client Raw Messages API] Failed to run forgetting cycle, falling back to IndexedDB:",
+        error,
+      );
+    }
+  }
+
   try {
     const manager = await getManager();
     const { runMemoryForgettingCycle } = await import("./forgetting");
@@ -384,6 +472,17 @@ export async function runRawMessageEmbeddingDreamForUser(
     dryRun?: boolean;
   },
 ) {
+  if (shouldUseRawMessageApiStorage()) {
+    try {
+      return await sqliteRunRawMessageEmbeddingDreamForUser(userId, options);
+    } catch (error) {
+      console.warn(
+        "[Client Raw Messages API] Failed to run embedding dream, falling back to IndexedDB:",
+        error,
+      );
+    }
+  }
+
   const manager = await getManager();
   const { runRawMessageEmbeddingDream } = await import("./embedding");
   return await runRawMessageEmbeddingDream(manager, {
@@ -410,6 +509,17 @@ export async function searchRawMessagesSemanticallyForUser(
     endTime?: number;
   },
 ) {
+  if (shouldUseRawMessageApiStorage()) {
+    try {
+      return await sqliteSearchRawMessagesSemanticallyForUser(userId, options);
+    } catch (error) {
+      console.warn(
+        "[Client Raw Messages API] Failed to search semantically, falling back to IndexedDB:",
+        error,
+      );
+    }
+  }
+
   const manager = await getManager();
   const { searchRawMessagesSemantically } = await import("./embedding");
   return await searchRawMessagesSemantically(manager, {
@@ -472,16 +582,18 @@ export async function clearOldMessagesByUserEntitlements(
     const cutoffTimestamp =
       Math.floor(Date.now() / 1000) - historyDays * 24 * 60 * 60;
 
-    // Delete messages older than the cutoff (only for current user)
-    const manager = await getManager();
-    const deleted = await manager.deleteOldMessages(cutoffTimestamp, userId);
+    // Delete messages older than the cutoff (only for current user).
+    // Route through the public helper so Tauri/SQLite mode uses the server-side
+    // SQLite bridge while browser builds keep the IndexedDB path.
+    const cleanup = await clearOldRawMessages(cutoffTimestamp, userId);
+    const deleted = cleanup.deleted;
 
     console.log(
-      `[Client IndexedDB] Cleaned up ${deleted} messages older than ${historyDays} days (user type: ${entitlements.userType})`,
+      `[Client Raw Messages] Cleaned up ${deleted} messages older than ${historyDays} days (user type: ${entitlements.userType})`,
     );
 
     return {
-      success: true,
+      success: cleanup.success,
       deleted,
       historyDays,
       userType: entitlements.userType,
@@ -618,11 +730,13 @@ export async function sendRawMessagesToServer(
 }
 
 /**
- * Initialize IndexedDB and load initial data
- * Call this on app startup to prepare IndexedDB
+ * Initialize raw message storage and load initial data.
+ * Tauri builds use SQLite with a one-time IndexedDB migration; browser builds
+ * keep the IndexedDB backend.
  */
-export async function initializeRawMessagesStorage(): Promise<{
+export async function initializeRawMessagesStorage(userId?: string): Promise<{
   success: boolean;
+  migration?: Awaited<ReturnType<typeof ensureRawMessagesSQLiteMigration>>;
   stats?: {
     totalMessages: number;
     messagesByPlatform: Record<string, number>;
@@ -632,6 +746,24 @@ export async function initializeRawMessagesStorage(): Promise<{
   try {
     if (typeof window === "undefined") {
       return { success: false };
+    }
+
+    if (shouldUseRawMessageApiStorage()) {
+      const migration =
+        shouldUseSQLiteRawMessageStorage() && userId
+          ? await ensureRawMessagesSQLiteMigration({ userId })
+          : undefined;
+      const stats = await sqliteGetRawMessagesStats();
+      console.log("[Client Raw Messages API] Initialized with stats:", stats);
+      return {
+        success: true,
+        migration,
+        stats: {
+          totalMessages: stats.totalMessages,
+          messagesByPlatform: stats.messagesByPlatform,
+          messagesByBot: stats.messagesByBot,
+        },
+      };
     }
 
     const manager = await getManager();
@@ -684,8 +816,7 @@ export async function useRawMessages() {
   const loadStats = react.useCallback(async () => {
     setLoading(true);
     try {
-      const manager = await getManager();
-      const stats = await manager.getStats();
+      const stats = await getRawMessagesStats();
       setStats({
         totalMessages: stats.totalMessages,
         messagesByPlatform: stats.messagesByPlatform,

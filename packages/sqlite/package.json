@@ -1,0 +1,24 @@
+{
+  "name": "@openloomi/sqlite",
+  "version": "0.5.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./raw-message-manager": "./src/raw-message-manager.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "dependencies": {
+    "@openloomi/indexeddb": "workspace:*",
+    "better-sqlite3": "^11.10.0",
+    "sqlite-vec": "0.1.7-alpha.2"
+  },
+  "devDependencies": {
+    "@openloomi/config": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
+    "typescript": "^5.6.3"
+  },
+  "scripts": {
+    "build": "echo no build needed"
+  }
+}

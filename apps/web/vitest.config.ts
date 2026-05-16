@@ -199,6 +199,14 @@ export default defineConfig({
         replacement: alias("../../packages/indexeddb/src/index.ts"),
       },
       {
+        find: "@openloomi/sqlite/*",
+        replacement: alias("../../packages/sqlite/src/*"),
+      },
+      {
+        find: "@openloomi/sqlite",
+        replacement: alias("../../packages/sqlite/src/index.ts"),
+      },
+      {
         find: "@openloomi/integrations/imessage",
         replacement: alias("../../packages/integrations/imessage/src/index.ts"),
       },

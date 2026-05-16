@@ -4,7 +4,8 @@ import { AppError } from "@openloomi/shared/errors";
 
 /**
  * POST endpoint to fetch and return raw messages for all bots
- * This endpoint is called after insights are refreshed to sync raw messages to IndexedDB
+ * This endpoint is called after insights are refreshed to sync raw messages to
+ * the active local raw-message backend.
  */
 export async function POST() {
   const session = await auth();

@@ -965,12 +965,11 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               }, chatIdForMessages);
             } else if (data.type === "tool_result") {
               // Tool execution result - update corresponding tool use part
-              // Check if it is an indexeddb_query type tool result
+              // Check if it is a raw-message query tool result.
               if (data.output && typeof data.output === "string") {
                 try {
                   const outputObj = JSON.parse(data.output);
                   if (outputObj.method === "indexeddb_query") {
-                    // Import IndexedDB query function
                     const {
                       queryRawMessages,
                       queryRawMessagesGrouped,

@@ -21,6 +21,7 @@ const nextConfig = {
     "@tencent-weixin/openclaw-weixin",
     "@openloomi/shared",
     "@openloomi/indexeddb",
+    "@openloomi/sqlite",
     "@openloomi/insights",
     "@openloomi/ai",
     "@openloomi/integrations",

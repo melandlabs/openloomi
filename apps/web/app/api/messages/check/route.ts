@@ -1,4 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
+import {
+  getRawMessageManager,
+  getRawMessageStorageBackend,
+} from "@/lib/memory/raw-message-store";
 import { AppError } from "@openloomi/shared/errors";
 
 /**
@@ -12,14 +16,11 @@ export async function GET() {
   }
 
   try {
-    // This endpoint can be used to check if raw messages are available
-    // The actual messages are stored in IndexedDB on the client side
-    // This endpoint could potentially fetch from server-side storage if implemented
-
+    const manager = await getRawMessageManager();
     return Response.json({
       success: true,
-      message: "Raw messages are stored in client-side IndexedDB",
-      info: "Please refresh insights to sync latest raw messages",
+      storage: getRawMessageStorageBackend(),
+      stats: await manager.getStats(),
     });
   } catch (error) {
     console.error("[Raw Messages Check] Error:", error);

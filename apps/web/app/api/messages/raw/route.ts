@@ -1,4 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
+import {
+  getRawMessageManager,
+  getRawMessageStorageBackend,
+} from "@/lib/memory/raw-message-store";
 import { AppError } from "@openloomi/shared/errors";
 import type { NextRequest } from "next/server";
 
@@ -56,15 +60,18 @@ export async function POST(request: NextRequest) {
     const messagesWithUserId = messages.map((message) => ({
       ...message,
       userId: session.user.id,
+      createdAt: Math.floor(Date.now() / 1000),
     }));
 
-    // Return messages to client for IndexedDB storage
-    // Note: We're returning the data because IndexedDB operations must happen on the client side
+    const manager = await getRawMessageManager();
+    const storage = getRawMessageStorageBackend();
+    const ids = await manager.storeMessages(messagesWithUserId as any);
     return Response.json({
       success: true,
-      message: "Messages prepared for client-side storage",
-      data: messagesWithUserId,
-      count: messagesWithUserId.length,
+      message: `Messages stored in ${storage}`,
+      storage,
+      stored: ids.length,
+      count: ids.length,
     });
   } catch (error) {
     console.error("[Raw Messages API] Error:", error);
@@ -86,12 +93,13 @@ export async function GET(request: NextRequest) {
   const botId = searchParams.get("botId");
   const platform = searchParams.get("platform");
 
-  // This endpoint returns configuration for querying
+  const manager = await getRawMessageManager();
+  const storage = getRawMessageStorageBackend();
   return Response.json({
     userId: session.user.id,
     botId: botId || undefined,
     platform: platform || undefined,
-    message:
-      "Use client-side IndexedDB to query raw messages. Check browser console for stats.",
+    storage,
+    stats: await manager.getStats(),
   });
 }

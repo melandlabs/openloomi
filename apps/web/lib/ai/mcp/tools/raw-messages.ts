@@ -15,7 +15,7 @@ export function createRawMessagesTools(session: Session) {
     tool(
       "getRawMessages",
       [
-        "Search and retrieve ORIGINAL MESSAGE CONTENT stored in browser's IndexedDB.",
+        "Search and retrieve ORIGINAL MESSAGE CONTENT stored in local raw-message storage.",
         "",
         "**⭐ SEARCH STRATEGY - IMPORTANT:**",
         "- When searching, use MULTIPLE SEPARATE keywords instead of a single long phrase",
@@ -26,7 +26,7 @@ export function createRawMessagesTools(session: Session) {
         "",
         "**CRITICAL: Use this tool whenever the user asks to search, find, or query their STORED MESSAGES, CHAT HISTORY, or CONVERSATIONS.**",
         "",
-        "This tool searches through messages that were previously collected and stored in the browser's IndexedDB.",
+        "This tool searches through messages that were previously collected and stored locally.",
         "Users often refer to these as: 'my messages', 'chat history', 'conversations', 'stored information', etc.",
         "",
         "**PAGINATION:** To handle large result sets efficiently:",
@@ -195,7 +195,7 @@ export function createRawMessagesTools(session: Session) {
         "  ❌ BAD: keywords=['openloomi PR feature'] (too specific, won't match)",
         "  ✅ GOOD: Try keywords=['PR'], then keywords=['openloomi'], then keywords=['feature'] (multiple searches)",
         "",
-        "Search the user's raw messages data stored in browser's IndexedDB.",
+        "Search the user's locally stored raw messages data.",
         "This includes original message content from all platforms (Telegram, Slack, Discord, etc.).",
         "",
         "**CRITICAL: This tool provides ADDITIONAL search results to complement chatInsight results.**",

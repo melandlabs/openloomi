@@ -495,7 +495,7 @@ export function useInsightRefresh(
         }
       }
 
-      // Store raw messages to IndexedDB
+      // Store raw messages in the active local backend.
       if (
         refreshResult.rawMessages &&
         Array.isArray(refreshResult.rawMessages)
@@ -510,7 +510,7 @@ export function useInsightRefresh(
               refreshResult.rawMessages,
             );
             console.log(
-              `[Raw Messages] Stored ${result.stored} raw messages to IndexedDB for userId: ${userId}`,
+              `[Raw Messages] Stored ${result.stored} raw messages for userId: ${userId}`,
             );
             // Auto-cleanup old messages based on user entitlements
             await autoCleanupOldMessages(userId);
