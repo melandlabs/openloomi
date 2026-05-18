@@ -19,4 +19,4 @@ const servers = await loadMcpServers();
 
 ## Configuration
 
-By default, reads from `~/.openloomi/mcp.json`. Override with `openloomi_MCP_CONFIG_PATH` environment variable.
+By default, reads from `~/.openloomi/mcp.json`. Override with `OPENLOOMI_MCP_CONFIG_PATH` environment variable.

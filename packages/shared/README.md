@@ -1,6 +1,6 @@
 # @openloomi/shared
 
-Reusable utilities, types, and constants extracted from the openloomi web app.
+Reusable utilities, types, and constants extracted from the OpenLoomi web app.
 
 ## Installation
 

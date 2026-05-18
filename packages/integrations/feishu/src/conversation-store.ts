@@ -63,14 +63,14 @@ export type QuotedMessage = {
 };
 
 const MAX_MESSAGES_PER_SESSION = 5000;
-/** 群聊会话文件最多保留时长（与拉取窗口一致时可再裁剪） */
+/** Maximum retention duration for group chat session files (can be further trimmed when aligned with the pull window) */
 const RETENTION_MS = 4 * 24 * 60 * 60 * 1000;
 
 function charCountUnicode(s: string): number {
   return [...s].length;
 }
 
-/** 从时间正序的消息列表尾部取子串，使总字数（Unicode 码点）不超过 maxChars */
+/** Extract a substring from the end of a time-ordered message list, keeping total character count (Unicode code points) under maxChars */
 export function trimHistoryByCharBudget(
   messages: RuntimeConversationMessage[],
   maxChars: number,
@@ -110,7 +110,7 @@ class FeishuConversationStore {
     this.ensureSessionsDir();
   }
 
-  /** 本地已存消息的最新时间戳（秒），无则 null */
+  /** Latest timestamp (in seconds) of locally stored messages, null if none */
   getLatestStoredTimestampSec(
     userId: string,
     chatId: string,
@@ -126,7 +126,7 @@ class FeishuConversationStore {
   }
 
   /**
-   * 合并远端拉取的消息（按 messageId 去重），并裁剪早于 retainNotBeforeMs 的记录
+   * Merge remotely pulled messages (deduplicated by messageId), and prune records earlier than retainNotBeforeMs
    */
   async mergePulledMessages(params: {
     userId: string;
@@ -187,7 +187,7 @@ class FeishuConversationStore {
     );
   }
 
-  /** 用于模型上下文：时间正序，总字数不超过 maxChars（保留最近的一段） */
+  /** For model context: time-ordered, total character count not exceeding maxChars (keeps the most recent segment) */
   getHistoryForContext(
     userId: string,
     chatId: string,
@@ -275,7 +275,7 @@ class FeishuConversationStore {
     return out;
   }
 
-  /** @deprecated 兼容旧调用；等价于仅 p2p 的会话文件读取后按字数裁切 */
+  /** @deprecated For legacy calls; equivalent to reading p2p session file and trimming by character count */
   getConversationHistory(
     userId: string,
     accountId: string,
