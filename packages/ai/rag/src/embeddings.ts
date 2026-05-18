@@ -56,7 +56,7 @@ async function getOpenAIClient(): Promise<OpenAI> {
     baseURL: EMBEDDING_BASE_URL,
     defaultHeaders: {
       "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://openloomi.ai",
-      "X-Title": "openloomi AI",
+      "X-Title": "OpenLoomi AI",
     },
   });
 

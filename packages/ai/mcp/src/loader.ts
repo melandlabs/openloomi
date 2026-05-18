@@ -40,11 +40,11 @@ export type McpServerConfig =
 
 /**
  * Get the MCP config path (default: ~/.openloomi/mcp.json)
- * Override by setting openloomi_MCP_CONFIG_PATH environment variable.
+ * Override by setting OPENLOOMI_MCP_CONFIG_PATH environment variable.
  */
 export function getMcpConfigPath(): string {
-  if (process.env.openloomi_MCP_CONFIG_PATH) {
-    return process.env.openloomi_MCP_CONFIG_PATH;
+  if (process.env.OPENLOOMI_MCP_CONFIG_PATH) {
+    return process.env.OPENLOOMI_MCP_CONFIG_PATH;
   }
   return path.join(os.homedir(), ".openloomi", "mcp.json");
 }

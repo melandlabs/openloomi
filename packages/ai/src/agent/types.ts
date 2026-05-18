@@ -54,7 +54,8 @@ export type AgentMessageType =
   | "insightsRefresh"
   | "permission_request"
   | "password_input"
-  | "reasoning";
+  | "reasoning"
+  | "preferenceUpdate";
 
 export interface AgentMessage {
   type: AgentMessageType;
@@ -81,6 +82,12 @@ export interface AgentMessage {
   action?: "create" | "update" | "delete";
   insightId?: string;
   insight?: Record<string, unknown>;
+  /** Preference update fields (for explicit user preference changes) */
+  preferenceUpdate?: {
+    preferenceType: string;
+    value: string;
+    displayLabel: string;
+  };
   /** Permission request fields */
   permissionRequest?: {
     toolName: string;
@@ -294,6 +301,14 @@ export interface AgentOptions {
    * subagent, execute) should not pass it.
    */
   onAskUserQuestion?: (question: AgentQuestion) => void;
+  /** Callback invoked when the MCP Bash tool detects a sudo password prompt. */
+  onPasswordRequired?: (request: { id: string; command: string }) => void;
+  /** Callback for user preference updates from saveUserPreference tool */
+  onPreferenceUpdate?: (data: {
+    preferenceType: string;
+    value: string;
+    displayLabel: string;
+  }) => void;
   /** Callback for handling permission requests from SDK */
   onPermissionRequest?: (request: {
     toolName: string;

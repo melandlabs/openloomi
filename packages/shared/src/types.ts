@@ -66,6 +66,7 @@ export const messageMetadataSchema = z.object({
   // Task-layer context used by the chat-first task creation flow.
   activeTaskId: z.string().optional(),
   taskCreationMode: z.boolean().optional(),
+  bootstrapTaskConfig: z.boolean().optional(),
   taskTemplate: z
     .object({
       id: z.string().optional(),
@@ -336,6 +337,38 @@ export type CustomUIDataTypes = {
       id: string;
       title: string;
       url: string;
+    }>;
+  };
+  missingTaskIntegrations: {
+    source?: "create" | "execute";
+    taskId?: string;
+    missingPlatforms?: string[];
+    issues?: Array<{
+      category?: "notification_channel" | "source";
+      platform: string;
+      reason?: "not_connected" | "invalid_context_token";
+      sourceRef?: {
+        type: "file" | "channel" | "folder";
+        name: string;
+        id?: string;
+        path?: string;
+      };
+    }>;
+  };
+  missingNotificationIntegrations: {
+    source?: "create" | "execute";
+    taskId?: string;
+    missingPlatforms?: string[];
+    issues?: Array<{
+      category?: "notification_channel" | "source";
+      platform: string;
+      reason?: "not_connected" | "invalid_context_token";
+      sourceRef?: {
+        type: "file" | "channel" | "folder";
+        name: string;
+        id?: string;
+        path?: string;
+      };
     }>;
   };
 };

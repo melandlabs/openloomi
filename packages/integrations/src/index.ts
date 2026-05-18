@@ -1,5 +1,5 @@
 /**
- * @openloomi/integrations - Unified package for openloomi integration packages
+ * @openloomi/integrations - Unified package for alloomi integration packages
  *
  * This is the main entry point that re-exports core interfaces and types.
  * Individual platform adapters are available via subpaths:

@@ -213,7 +213,7 @@ function extractContentInfo(content: string | undefined | null): {
     const quoteIds = [...quoteIdSet];
     const imageKeys = [...imageKeySet];
     const quotePrefix =
-      quoteIds.length > 0 ? `[引用ID]: ${quoteIds.join(", ")}\n` : "";
+      quoteIds.length > 0 ? `[Quote ID]: ${quoteIds.join(", ")}\n` : "";
     return {
       text: `${quotePrefix}${normalized}`.trim().slice(0, 10_000),
       quoteIds,
@@ -567,7 +567,7 @@ export class FeishuAdapter extends MessagePlatformAdapter {
   }
 
   /**
-   * 当前应用机器人 open_id，用于判断群历史里哪条是机器人发言
+   * Current app bot open_id, used to identify which messages in group history were sent by the bot
    */
   async getBotOpenId(): Promise<string | null> {
     if (this.botOpenIdMemo !== undefined) {
@@ -655,15 +655,15 @@ export class FeishuAdapter extends MessagePlatformAdapter {
   }
 
   /**
-   * 分页拉取会话消息，起始时间 sinceSec（Unix 秒，含）；从新到旧翻页直到越过该时间或无更多页。
-   * 用于 @ 激活后补齐最多近 3 天的历史。
+   * Paginated fetch of conversation messages, starting from sinceSec (Unix seconds, inclusive); paginate from newest to oldest until past that time or no more pages.
+   * Used to backfill up to 3 days of history after @ activation.
    */
   async fetchChatMessagesSince(options: {
     chatId: string;
     chatType: "p2p" | "group";
     /** Inclusive lower bound */
     sinceSec: number;
-    /** 防止异常死循环 */
+    /** Prevent infinite loop on errors */
     maxPages?: number;
   }): Promise<
     Array<
