@@ -9,6 +9,7 @@
 
 import { type NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
+import { withRateLimit, RateLimitPresets } from "@/lib/rate-limit/middleware";
 
 // Discord OAuth configuration (consistent with web client)
 const DISCORD_OAUTH_SCOPES = ["identify", "email", "guilds", "bot"];
@@ -26,6 +27,26 @@ function generateState(userId: string): string {
  * GET /api/integrations/discord/oauth/start?userId=local
  */
 export async function GET(request: NextRequest) {
+  // Rate limiting: OAuth preset (20 requests/minute)
+  const rateLimitResult = await withRateLimit(request, RateLimitPresets.oauth);
+
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      {
+        error: "Too many requests",
+        message: "Please try again later",
+      },
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
+          "X-RateLimit-Reset": rateLimitResult.resetTime.toString(),
+        },
+      },
+    );
+  }
+
   // Get user ID (from query parameters)
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");

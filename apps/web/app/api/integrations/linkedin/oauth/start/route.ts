@@ -1,5 +1,5 @@
 /**
- * X (Twitter) OAuth start endpoint (public API, no authentication required)
+ * LinkedIn OAuth start endpoint (public API, no authentication required)
  *
  * Used for local version integration OAuth:
  * - No user login required
@@ -9,46 +9,26 @@
 
 import { type NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { encryptToken } from "@openloomi/security/token-encryption";
-import { createHash } from "node:crypto";
-import { ensureRedis, setLoginSession } from "@/lib/session/context";
 import { withRateLimit, RateLimitPresets } from "@/lib/rate-limit/middleware";
+import { encryptToken } from "@openloomi/security/token-encryption";
 
-const X_SCOPES = [
-  "tweet.read",
-  "tweet.write",
-  "users.read",
-  "dm.read",
-  "dm.write",
-  "like.write",
-  "media.write",
-  "offline.access",
-];
-
-function sha256(buffer: string) {
-  return createHash("sha256").update(buffer).digest("base64url");
-}
+const LINKEDIN_SCOPES = ["openid", "profile", "email", "w_member_social"];
 
 /**
- * Generate state containing user information
+ * Generate encrypted state containing user information
+ * Format: encrypted JSON { userId, ts, nonce }
  */
-function generateState(
-  userId: string,
-  loginSessionId: string,
-  codeVerifier: string,
-): string {
+function generateState(userId: string): string {
   const statePayload = {
     userId,
-    nonce: randomUUID(),
     ts: Date.now(),
-    loginSessionId,
-    codeVerifier,
+    nonce: randomUUID(),
   };
   return encryptToken(JSON.stringify(statePayload));
 }
 
 /**
- * GET /api/integrations/x/oauth/start?userId=local
+ * GET /api/integrations/linkedin/oauth/start?userId=xxx
  */
 export async function GET(request: NextRequest) {
   // Rate limiting: OAuth preset (20 requests/minute)
@@ -84,55 +64,41 @@ export async function GET(request: NextRequest) {
   }
 
   // Check configuration
-  const clientId = process.env.TWITTER_CLIENT_ID;
-  const clientSecret = process.env.TWITTER_CLIENT_SECRET;
+  const clientId = process.env.LINKEDIN_CLIENT_ID;
+  const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
     return NextResponse.json(
-      { error: "X OAuth is not configured" },
+      {
+        error:
+          "LinkedIn integration is not configured. Set LINKEDIN_CLIENT_ID/LINKEDIN_CLIENT_SECRET.",
+      },
       { status: 500 },
     );
   }
 
-  // Get callback URL
+  // Get callback URL (use frontend callback page)
   const cloudUrl =
     process.env.CLOUD_API_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://app.openloomi.ai";
 
-  const redirectUri =
-    process.env.TWITTER_REDIRECT_URI ?? `${cloudUrl}/api/x/callback`;
+  // Use frontend callback page and pass userId in state
+  const redirectUri = `${cloudUrl}/api/linkedin/callback`;
 
-  // Create login session for polling
-  const sessionId = randomUUID();
-  await ensureRedis();
-  await setLoginSession(sessionId, {
-    provider: "twitter",
-    phone: userId,
-    status: "pending",
-    createdAt: Date.now(),
-  });
+  // Generate OAuth state containing user information
+  const state = generateState(userId);
 
-  // PKCE
-  const codeVerifier = randomUUID().replace(/-/g, "");
-  const codeChallenge = sha256(codeVerifier);
-
-  // Generate OAuth state
-  const state = generateState(userId, sessionId, codeVerifier);
-
-  // Generate authorization URL
-  const url = new URL("https://twitter.com/i/oauth2/authorize");
+  // Build LinkedIn authorization URL
+  const url = new URL("https://www.linkedin.com/oauth/v2/authorization");
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("scope", X_SCOPES.join(" "));
+  url.searchParams.set("scope", LINKEDIN_SCOPES.join(" "));
   url.searchParams.set("state", state);
-  url.searchParams.set("code_challenge", codeChallenge);
-  url.searchParams.set("code_challenge_method", "S256");
 
   return NextResponse.json({
     authorizationUrl: url.toString(),
-    sessionId,
-    redirectUri,
+    state,
   });
 }

@@ -134,7 +134,7 @@ async function handleDirectly(payload: StartPayload, userId: string) {
   const baseUrl = getApplicationBaseUrl();
   const redirectUri = resolveRedirectUri(
     payload.redirectUri,
-    payload.redirectPath ?? "/notion-authorized",
+    payload.redirectPath ?? "/api/notion/callback",
     process.env.NOTION_REDIRECT_URI,
   );
 
@@ -191,14 +191,14 @@ function resolveRedirectUri(
     return sanitizeAbsoluteUri(explicit);
   }
 
-  const path = ensureLeadingSlash(redirectPath || "/notion-authorized");
+  const path = ensureLeadingSlash(redirectPath || "/api/notion/callback");
   return `${getApplicationBaseUrl()}${path}`.replace(/\/$/, "");
 }
 
 function ensureLeadingSlash(path: string) {
   const trimmed = path.trim();
   if (!trimmed) {
-    return "/notion-authorized";
+    return "/api/notion/callback";
   }
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }

@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { APP_DIR_NAME } from "@/lib/env/config/constants";
 
 /** Skill metadata file path (only under ~/.openloomi) */
 function getSkillMetadataPath(): string {
   const homeDir = homedir();
-  return join(homeDir, ".openloomi", "skill-metadata.json");
+  return join(homeDir, APP_DIR_NAME, "skill-metadata.json");
 }
 
 /** Read skill metadata: Record<skillId, { avatar?: string }> */
@@ -28,7 +29,7 @@ function getAllSkillsDirs(): string[] {
   const homeDir = homedir();
   // Priority: openloomi > claude > agents (first wins in dedup)
   return [
-    join(homeDir, ".openloomi", "skills"),
+    join(homeDir, APP_DIR_NAME, "skills"),
     join(homeDir, ".claude", "skills"),
     join(homeDir, ".agents", "skills"),
   ];

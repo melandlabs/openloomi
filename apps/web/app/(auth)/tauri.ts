@@ -9,6 +9,7 @@ import os from "node:os";
 import { getDataDirectory } from "@/lib/tauri";
 import { isTauriMode } from "@/lib/env";
 import { getOrCreateShadowUser } from "@/lib/db/remote-user-queries";
+import { APP_DIR_NAME } from "@/lib/env/config/constants";
 
 // ========== Core environment detection (distinguish client/server/Tauri) ==========
 /**
@@ -68,15 +69,17 @@ export interface AuthModuleLike {
 }
 
 // ========== Core utility functions ==========
+//
+// Priority follows the original design (cloud user.id is the identity key,
+// email-hash is best-effort fallback when cloud id is missing). The prefix
+// logic strips any leading `cloud_` chain before reapplying a single prefix,
+// so that legacy or stale inputs like `cloud_cloud_xxx` cannot survive into
+// the local DB id.
 function generateShadowUserId(cloudUserId?: string, email?: string): string {
-  // 1. Prefer cloudUserId (with prefix check)
   if (cloudUserId) {
-    return cloudUserId.startsWith("cloud_")
-      ? cloudUserId
-      : `cloud_${cloudUserId}`;
+    return `cloud_${cloudUserId.replace(/^(cloud_)+/, "")}`;
   }
 
-  // 2. Next, use email to generate (with prefix check)
   if (email) {
     const emailHash = createHash("sha256")
       .update(email.toLowerCase().trim())
@@ -91,17 +94,10 @@ function generateShadowUserId(cloudUserId?: string, email?: string): string {
       emailHash.substring(20, 32),
     ].join("-");
 
-    const emailBasedId = `cloud_${fixedUuid}`;
-    return emailBasedId.startsWith("cloud_")
-      ? emailBasedId
-      : `cloud_${emailBasedId}`;
+    return `cloud_${fixedUuid}`;
   }
 
-  // 3. Fallback to UUID generation (with prefix check)
-  const uuidBasedId = `cloud_${uuidv4()}`;
-  return uuidBasedId.startsWith("cloud_")
-    ? uuidBasedId
-    : `cloud_${uuidBasedId}`;
+  return `cloud_${uuidv4()}`;
 }
 
 // ========== Cross-environment file path retrieval (unified client/server path) ==========
@@ -119,7 +115,7 @@ const getSessionFilePath = async (): Promise<string> => {
   // Server Node environment: use system temp directory + app-specific directory (avoid permission issues)
   if (isServerEnv()) {
     const homeDir = os.homedir();
-    const appDataDir = path.join(homeDir, ".openloomi");
+    const appDataDir = path.join(homeDir, APP_DIR_NAME);
 
     await fs.mkdir(appDataDir, { recursive: true });
     const sessionPath = path.join(appDataDir, "openloomi_session.json");

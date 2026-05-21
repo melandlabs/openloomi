@@ -105,7 +105,7 @@ export async function POST() {
       appSecret: step.appSecret,
       displayName,
       botName: displayName,
-      botDescription: "Chat with openloomi via Lark/Feishu",
+      botDescription: "Lark/Feishu bot",
       apiDomain: step.domain,
       metadata: {
         feishuRegistrationAt: new Date().toISOString(),

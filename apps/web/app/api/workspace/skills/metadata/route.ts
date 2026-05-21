@@ -8,9 +8,10 @@ import { type NextRequest, NextResponse } from "next/server";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { APP_DIR_NAME } from "@/lib/env/config/constants";
 
 function getopenloomiDir(): string {
-  return join(homedir(), ".openloomi");
+  return join(homedir(), APP_DIR_NAME);
 }
 
 function getSkillMetadataPath(): string {

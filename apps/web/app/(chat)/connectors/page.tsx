@@ -19,6 +19,7 @@ export default function ConnectorsPage() {
     useState(false);
   const [pendingLinkingPlatform, setPendingLinkingPlatform] =
     useState<IntegrationId | null>(null);
+  const [returnTo, setReturnTo] = useState<string | null>(null);
   const addPanelTab = useMemo<"apps" | "rss">(() => {
     return searchParams.get("addPanelTab") === "rss" ? "rss" : "apps";
   }, [searchParams]);
@@ -31,9 +32,26 @@ export default function ConnectorsPage() {
     setPendingLinkingPlatform(
       normalizeIntegrationPlatform(searchParams.get("platform")),
     );
+    setReturnTo(searchParams.get("returnTo"));
     setIsAddConnectorDialogOpen(true);
     router.replace("/connectors", { scroll: false });
   }, [router, searchParams]);
+
+  useEffect(() => {
+    if (!returnTo) return;
+
+    const handleAuthorized = () => {
+      router.push(returnTo);
+    };
+
+    window.addEventListener("integration:accountAuthorized", handleAuthorized);
+    return () => {
+      window.removeEventListener(
+        "integration:accountAuthorized",
+        handleAuthorized,
+      );
+    };
+  }, [returnTo, router]);
 
   const handleAddConnectorDialogOpenChange = (open: boolean) => {
     setIsAddConnectorDialogOpen(open);

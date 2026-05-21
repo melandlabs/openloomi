@@ -9,11 +9,12 @@ import { existsSync, mkdirSync, writeFileSync, copyFileSync, readdirSync, } from
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
 import AdmZip from "adm-zip";
+import { APP_DIR_NAME } from "@/lib/env/config/constants";
 
 // Get openloomi skills directory path
 function getopenloomiSkillsDir(): string {
   const homeDir = homedir();
-  const skillsDir = join(homeDir, ".openloomi", "skills");
+  const skillsDir = join(homeDir, APP_DIR_NAME, "skills");
   if (!existsSync(skillsDir)) {
     mkdirSync(skillsDir, { recursive: true });
   }

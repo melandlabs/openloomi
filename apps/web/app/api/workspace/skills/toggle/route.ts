@@ -8,11 +8,12 @@ import { type NextRequest, NextResponse } from "next/server";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { APP_DIR_NAME } from "@/lib/env/config/constants";
 
 // Get openloomi skills directory path
 function getopenloomiSkillsDir(): string {
   const homeDir = homedir();
-  return join(homeDir, ".openloomi", "skills");
+  return join(homeDir, APP_DIR_NAME, "skills");
 }
 
 // Parse and update SKILL.md

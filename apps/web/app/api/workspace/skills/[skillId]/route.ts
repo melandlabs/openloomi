@@ -7,13 +7,14 @@ import { type NextRequest, NextResponse } from "next/server";
 import { existsSync, rmSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, normalize, sep } from "node:path";
 import { homedir } from "node:os";
+import { APP_DIR_NAME } from "@/lib/env/config/constants";
 
 function getopenloomiSkillsDir(): string {
-  return join(homedir(), ".openloomi", "skills");
+  return join(homedir(), APP_DIR_NAME, "skills");
 }
 
 function getSkillMetadataPath(): string {
-  return join(homedir(), ".openloomi", "skill-metadata.json");
+  return join(homedir(), APP_DIR_NAME, "skill-metadata.json");
 }
 
 /** Ensure path is under base (normalized prefix matches), prevent directory traversal */
@@ -37,7 +38,7 @@ function readSkillMetadata(): Record<string, { avatar?: string }> {
 }
 
 function writeSkillMetadata(data: Record<string, { avatar?: string }>): void {
-  const dir = join(homedir(), ".openloomi");
+  const dir = join(homedir(), APP_DIR_NAME);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(getSkillMetadataPath(), JSON.stringify(data, null, 2), "utf-8");
 }

@@ -20,8 +20,7 @@ export async function GET() {
   if (!clientId || !clientSecret) {
     return NextResponse.json(
       {
-        error:
-          "Gmail integration is not configured. Contact the openloomi team to enable it.",
+        error: "Gmail integration is not configured.",
       },
       { status: 500 },
     );

@@ -334,7 +334,7 @@ export async function POST(request: Request) {
 
   if (!resolvedBlobPath) {
     return NextResponse.json(
-      { error: "Attachment is not stored in openloomi." },
+      { error: "Attachment is not stored." },
       { status: 400 },
     );
   }

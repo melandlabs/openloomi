@@ -1,6 +1,14 @@
+@import "katex/dist/katex.min.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* KaTeX dark mode: inherit text color so formulas render correctly in dark theme */
+.dark .katex,
+.dark .katex-display {
+  color: inherit;
+}
 
 @layer components {
   /**
@@ -28,6 +36,13 @@
 
   .markdown-wrapper * {
     @apply max-w-full break-words;
+  }
+
+  /* KaTeX uses precise pixel sizing internally; undo the wildcard constraints */
+  .markdown-wrapper .katex,
+  .markdown-wrapper .katex * {
+    max-width: unset;
+    word-break: normal;
   }
 
   .markdown-wrapper th,

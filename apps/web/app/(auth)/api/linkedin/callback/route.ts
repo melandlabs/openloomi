@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { auth } from "@/app/(auth)/auth";
 import { decryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
 import {
@@ -34,21 +33,38 @@ type LinkedInUserInfo = {
   picture?: string;
 };
 
-function buildRedirectUrl(
-  baseHref: string,
-  status: "success" | "cancelled" | "error",
-  message?: string,
+export const runtime = "nodejs";
+
+function buildHtmlPage(
+  title: string,
+  heading: string,
+  message: string,
+  headingColor = "#e74c3c",
 ) {
-  const url = new URL(baseHref);
-  url.searchParams.set("linkedin", status);
-  if (message) {
-    url.searchParams.set("linkedinMessage", message);
-  }
-  return url;
+  return `
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>${title}</title>
+    <style>
+      body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+      .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+      h1 { color: ${headingColor}; margin-bottom: 20px; }
+      p { color: #616061; line-height: 1.6; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>${heading}</h1>
+      <p>${message}</p>
+    </div>
+  </body>
+</html>
+`.trim();
 }
 
 export async function GET(request: Request) {
-  const session = await auth();
+  console.log("[linkedin] Callback received");
 
   const baseUrl = getApplicationBaseUrl();
   const defaultRedirect = `${baseUrl}/?page=profile`;
@@ -59,18 +75,31 @@ export async function GET(request: Request) {
   const errorParam = url.searchParams.get("error");
 
   if (errorParam) {
+    console.log("[linkedin] Callback cancelled:", errorParam);
     const message =
       errorParam === "user_cancelled_login"
         ? "Access was cancelled."
         : "Authorization failed.";
-    return NextResponse.redirect(
-      buildRedirectUrl(defaultRedirect, "cancelled", message),
+    return new NextResponse(
+      buildHtmlPage(
+        "Authorization Cancelled",
+        "Authorization Cancelled",
+        message,
+        "#f59e0b",
+      ),
+      { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   }
 
   if (!stateParam) {
-    return NextResponse.redirect(
-      buildRedirectUrl(defaultRedirect, "error", "Missing state parameter."),
+    console.log("[linkedin] Missing state parameter");
+    return new NextResponse(
+      buildHtmlPage(
+        "Invalid Callback",
+        "Invalid Callback",
+        "Missing authorization state. Please try again.",
+      ),
+      { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   }
 
@@ -81,12 +110,13 @@ export async function GET(request: Request) {
     statePayload = JSON.parse(decoded) as LinkedInStatePayload;
   } catch (error) {
     console.error("[linkedin] Failed to decode state", error);
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        defaultRedirect,
-        "error",
-        "Invalid authorization state.",
+    return new NextResponse(
+      buildHtmlPage(
+        "Invalid State",
+        "Invalid Authorization State",
+        "Please try again.",
       ),
+      { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   }
 
@@ -94,34 +124,32 @@ export async function GET(request: Request) {
     ? statePayload.returnTo
     : defaultRedirect;
 
-  if (!session?.user) {
-    return NextResponse.redirect(
-      buildRedirectUrl(redirectTarget, "error", "Sign in to connect LinkedIn."),
-    );
-  }
-
   if (!code) {
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        redirectTarget,
-        "error",
+    console.log("[linkedin] Missing authorization code");
+    return new NextResponse(
+      buildHtmlPage(
+        "Invalid Callback",
+        "Invalid Callback",
         "Missing authorization code from LinkedIn.",
       ),
+      { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   }
 
   const maxStateAgeMs = 10 * 60 * 1000;
   if (
     !statePayload ||
-    statePayload.userId !== session.user.id ||
+    !statePayload.userId ||
     Date.now() - statePayload.ts > maxStateAgeMs
   ) {
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        redirectTarget,
-        "error",
-        "Authorization state expired. Try again.",
+    console.log("[linkedin] State expired or invalid");
+    return new NextResponse(
+      buildHtmlPage(
+        "Authorization Expired",
+        "Authorization Expired",
+        "Please try again.",
       ),
+      { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   }
 
@@ -129,14 +157,20 @@ export async function GET(request: Request) {
   const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        redirectTarget,
-        "error",
+    console.log("[linkedin] LinkedIn credentials not configured");
+    return new NextResponse(
+      buildHtmlPage(
+        "Configuration Error",
+        "Configuration Error",
         "LinkedIn integration is not configured.",
       ),
+      { status: 500, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   }
+
+  console.log(
+    "[linkedin] All validations passed, exchanging code for token...",
+  );
 
   try {
     const redirectUri =
@@ -192,7 +226,7 @@ export async function GET(request: Request) {
     const userInfo = (await userInfoResponse.json()) as LinkedInUserInfo;
 
     const existingAccount = await getIntegrationAccountByPlatform({
-      userId: session.user.id,
+      userId: statePayload.userId,
       platform: "linkedin",
     });
 
@@ -207,7 +241,7 @@ export async function GET(request: Request) {
     };
 
     const externalId =
-      userInfo.sub ?? existingAccount?.externalId ?? session.user.id;
+      userInfo.sub ?? existingAccount?.externalId ?? statePayload.userId;
 
     const displayName =
       userInfo.name ?? existingAccount?.displayName ?? "LinkedIn";
@@ -219,7 +253,7 @@ export async function GET(request: Request) {
     };
 
     const account = await upsertIntegrationAccount({
-      userId: session.user.id,
+      userId: statePayload.userId,
       platform: "linkedin",
       externalId,
       displayName,
@@ -228,9 +262,8 @@ export async function GET(request: Request) {
       status: "active",
     });
 
-    // Attach or create bot for insights ingestion
     const existingAccounts = await getIntegrationAccountsByUserId({
-      userId: session.user.id,
+      userId: statePayload.userId,
     });
     const associatedBot = existingAccounts.find(
       (item) => item.id === account.id,
@@ -253,22 +286,34 @@ export async function GET(request: Request) {
         adapter: "linkedin",
         adapterConfig: {},
         enable: true,
-        userId: session.user.id,
+        userId: statePayload.userId,
         platformAccountId: account.id,
       });
     }
 
-    return NextResponse.redirect(buildRedirectUrl(redirectTarget, "success"));
+    console.log(
+      "[linkedin] Successfully stored account for user:",
+      statePayload.userId,
+    );
+
+    return new NextResponse(
+      buildHtmlPage(
+        "Authorization Successful",
+        "Authorization Successful!",
+        "Your LinkedIn account has been connected.",
+        "#10b981",
+      ),
+      { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
+    );
   } catch (error) {
     console.error("[linkedin] Callback handling failed", error);
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        redirectTarget,
-        "error",
-        error instanceof AppError
-          ? error.message
-          : "LinkedIn authorization failed.",
-      ),
+    const message =
+      error instanceof AppError
+        ? error.message
+        : "Failed to complete the authorization. Please try again.";
+    return new NextResponse(
+      buildHtmlPage("Authorization Failed", "Authorization Failed", message),
+      { status: 500, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   }
 }

@@ -14,8 +14,6 @@ import { setCloudAuthToken } from "@/lib/auth/token-manager";
 import { isTauriMode } from "@/lib/env";
 import { auth } from "@/app/(auth)/auth";
 
-let schedulerStarted = false;
-
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
@@ -59,13 +57,24 @@ export async function GET(request: Request) {
     }
 
     // Always refresh the active desktop auth/user context before reporting scheduler state.
-    setCloudAuthToken(cloudAuthToken);
     setSchedulerUserId(userId);
 
-    // Start the scheduler once; subsequent GETs just refresh runtime context.
-    if (!schedulerStarted) {
+    if (!cloudAuthToken) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "cloud_auth_token_missing",
+          scheduler: getSchedulerStatus(),
+        },
+        { status: 400 },
+      );
+    }
+
+    setCloudAuthToken(cloudAuthToken);
+
+    // Start the scheduler if it is not running; subsequent GETs refresh runtime context.
+    if (!getSchedulerStatus().isRunning) {
       await startLocalScheduler();
-      schedulerStarted = true;
     }
 
     const status = getSchedulerStatus();
@@ -104,7 +113,7 @@ export async function POST() {
 
     // Stop the scheduler
     await stopLocalScheduler();
-    schedulerStarted = false;
+    setCloudAuthToken(undefined);
     console.log("[SchedulerAPI] Scheduler stopped");
 
     return NextResponse.json({

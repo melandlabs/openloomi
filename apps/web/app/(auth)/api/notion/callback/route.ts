@@ -2,7 +2,6 @@ import { Buffer } from "node:buffer";
 
 import { NextResponse } from "next/server";
 
-import { auth } from "@/app/(auth)/auth";
 import {
   getIntegrationAccountByPlatform,
   upsertIntegrationAccount,
@@ -14,6 +13,8 @@ import {
 } from "@/lib/files/notion";
 import { decryptToken } from "@openloomi/security/token-encryption";
 import { getApplicationBaseUrl } from "@/lib/env";
+import { isTauriMode } from "@/lib/env/constants";
+import { getCloudUrl } from "@/lib/auth/cloud-proxy";
 
 type NotionTokenResponse = {
   access_token?: string;
@@ -30,19 +31,59 @@ type NotionTokenResponse = {
 
 export const runtime = "nodejs";
 
-function buildRedirectUrl(baseHref: string, status: string, message?: string) {
-  const url = new URL(baseHref);
-  url.searchParams.set("notion", status);
-  if (message) {
-    url.searchParams.set("notionMessage", message);
-  }
-  return url;
-}
-
 export async function GET(request: Request) {
-  const session = await auth();
+  console.log("[notion] Callback received");
   const baseUrl = getApplicationBaseUrl();
-  const defaultRedirect = `${baseUrl}/?page=profile`;
+
+  // Tauri desktop: forward to cloud
+  if (isTauriMode()) {
+    try {
+      const cloudUrl = getCloudUrl();
+      const url = new URL(request.url);
+      const redirectUrl = `${cloudUrl}/api/notion/callback?${url.searchParams.toString()}`;
+
+      console.log(
+        "[notion] Tauri mode detected, forwarding to cloud:",
+        redirectUrl,
+      );
+
+      const response = await fetch(redirectUrl);
+      const html = await response.text();
+
+      return new NextResponse(html, {
+        status: response.status,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    } catch (error) {
+      console.error("[notion] Failed to forward to cloud:", error);
+      return new NextResponse(
+        `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Authorization Failed</title>
+            <style>
+              body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+              .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+              h1 { color: #e74c3c; margin-bottom: 20px; }
+              p { color: #616061; line-height: 1.6; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>Authorization Failed</h1>
+              <p>Failed to connect to cloud service. Please try again.</p>
+            </div>
+          </body>
+        </html>
+      `,
+        {
+          status: 503,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        },
+      );
+    }
+  }
 
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -50,72 +91,166 @@ export async function GET(request: Request) {
   const errorParam = url.searchParams.get("error");
 
   if (errorParam) {
-    return NextResponse.redirect(
-      buildRedirectUrl(defaultRedirect, "cancelled", errorParam),
+    console.log("[notion] Callback cancelled:", errorParam);
+    return new NextResponse(
+      `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Authorization Cancelled</title>
+          <style>
+            body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+            .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+            h1 { color: #f59e0b; margin-bottom: 20px; }
+            p { color: #616061; line-height: 1.6; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Authorization Cancelled</h1>
+            <p>${errorParam || "Authorization was cancelled."}</p>
+            <p>You can close this window and try again.</p>
+          </div>
+        </body>
+      </html>
+    `,
+      {
+        status: 400,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      },
     );
   }
 
   if (!stateParam) {
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        defaultRedirect,
-        "error",
-        "Missing authorization state.",
-      ),
+    console.log("[notion] Missing state parameter");
+    return new NextResponse(
+      `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invalid Callback</title>
+          <style>
+            body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+            .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+            h1 { color: #e74c3c; margin-bottom: 20px; }
+            p { color: #616061; line-height: 1.6; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Invalid Callback</h1>
+            <p>Missing authorization state. Please try again.</p>
+          </div>
+        </body>
+      </html>
+    `,
+      {
+        status: 400,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      },
     );
   }
 
-  let statePayload: { userId: string; ts: number; returnTo?: string } | null =
-    null;
+  let statePayload: {
+    userId: string;
+    ts: number;
+    returnTo?: string;
+    nonce?: string;
+  } | null = null;
   try {
     statePayload = JSON.parse(decryptToken(stateParam));
   } catch (error) {
     console.error("[notion] Failed to decode state", error);
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        defaultRedirect,
-        "error",
-        "Invalid authorization state.",
-      ),
-    );
-  }
-
-  const redirectTarget = statePayload?.returnTo?.startsWith("http")
-    ? statePayload.returnTo
-    : defaultRedirect;
-
-  if (!session?.user) {
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        redirectTarget,
-        "error",
-        "Sign in to connect your Notion workspace.",
-      ),
+    return new NextResponse(
+      `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invalid State</title>
+          <style>
+            body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+            .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+            h1 { color: #e74c3c; margin-bottom: 20px; }
+            p { color: #616061; line-height: 1.6; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Invalid Authorization State</h1>
+            <p>Please try again.</p>
+          </div>
+        </body>
+      </html>
+    `,
+      {
+        status: 400,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      },
     );
   }
 
   if (!code) {
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        redirectTarget,
-        "error",
-        "Missing authorization code from Notion.",
-      ),
+    console.log("[notion] Missing authorization code");
+    return new NextResponse(
+      `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invalid Callback</title>
+          <style>
+            body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+            .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+            h1 { color: #e74c3c; margin-bottom: 20px; }
+            p { color: #616061; line-height: 1.6; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Invalid Callback</h1>
+            <p>Missing authorization code from Notion.</p>
+          </div>
+        </body>
+      </html>
+    `,
+      {
+        status: 400,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      },
     );
   }
 
   const maxStateAgeMs = 10 * 60 * 1000;
   if (
     !statePayload ||
-    statePayload.userId !== session.user.id ||
+    !statePayload.userId ||
     Date.now() - statePayload.ts > maxStateAgeMs
   ) {
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        redirectTarget,
-        "error",
-        "Authorization state expired. Try again.",
-      ),
+    console.log("[notion] State expired or invalid");
+    return new NextResponse(
+      `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Authorization Expired</title>
+          <style>
+            body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+            .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+            h1 { color: #e74c3c; margin-bottom: 20px; }
+            p { color: #616061; line-height: 1.6; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Authorization Expired</h1>
+            <p>Please try again.</p>
+          </div>
+        </body>
+      </html>
+    `,
+      {
+        status: 400,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      },
     );
   }
 
@@ -123,14 +258,36 @@ export async function GET(request: Request) {
   const clientSecret = process.env.NOTION_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(
-      buildRedirectUrl(
-        redirectTarget,
-        "error",
-        "Notion integration is not configured. Contact support.",
-      ),
+    console.log("[notion] Notion credentials not configured");
+    return new NextResponse(
+      `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Configuration Error</title>
+          <style>
+            body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+            .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+            h1 { color: #e74c3c; margin-bottom: 20px; }
+            p { color: #616061; line-height: 1.6; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Configuration Error</h1>
+            <p>Notion integration is not configured.</p>
+          </div>
+        </body>
+      </html>
+    `,
+      {
+        status: 500,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      },
     );
   }
+
+  console.log("[notion] All validations passed, exchanging code for token...");
 
   try {
     const redirectUri =
@@ -156,19 +313,65 @@ export async function GET(request: Request) {
       };
       const reason =
         body.error_description ?? body.error ?? "OAuth exchange failed.";
-      return NextResponse.redirect(
-        buildRedirectUrl(redirectTarget, "error", reason),
+      console.log("[notion] Token exchange failed:", reason);
+      return new NextResponse(
+        `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Authorization Failed</title>
+            <style>
+              body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+              .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+              h1 { color: #e74c3c; margin-bottom: 20px; }
+              p { color: #616061; line-height: 1.6; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>Authorization Failed</h1>
+              <p>${reason}</p>
+              <p>You can close this window and try again.</p>
+            </div>
+          </body>
+        </html>
+      `,
+        {
+          status: 400,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        },
       );
     }
 
     const data = (await tokenResponse.json()) as NotionTokenResponse;
     if (!data.access_token) {
-      return NextResponse.redirect(
-        buildRedirectUrl(
-          redirectTarget,
-          "error",
-          "Notion did not return an access token.",
-        ),
+      console.log("[notion] No access token returned");
+      return new NextResponse(
+        `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Authorization Failed</title>
+            <style>
+              body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+              .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+              h1 { color: #e74c3c; margin-bottom: 20px; }
+              p { color: #616061; line-height: 1.6; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>Authorization Failed</h1>
+              <p>Notion did not return an access token.</p>
+              <p>You can close this window and try again.</p>
+            </div>
+          </body>
+        </html>
+      `,
+        {
+          status: 400,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        },
       );
     }
 
@@ -186,7 +389,7 @@ export async function GET(request: Request) {
     };
 
     const existing = await getIntegrationAccountByPlatform({
-      userId: session.user.id,
+      userId: statePayload.userId,
       platform: "notion",
     });
 
@@ -197,23 +400,79 @@ export async function GET(request: Request) {
     });
 
     await upsertIntegrationAccount({
-      userId: session.user.id,
+      userId: statePayload.userId,
       platform: "notion",
-      externalId: data.workspace_id ?? data.bot_id ?? session.user.id,
+      externalId: data.workspace_id ?? data.bot_id ?? statePayload.userId,
       displayName: data.workspace_name ?? "Notion",
       credentials,
       metadata,
     });
 
-    return NextResponse.redirect(buildRedirectUrl(redirectTarget, "success"));
+    console.log(
+      "[notion] Successfully stored account for user:",
+      statePayload.userId,
+    );
+
+    return new NextResponse(
+      `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Authorization Successful</title>
+          <style>
+            body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+            .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+            h1 { color: #10b981; margin-bottom: 20px; }
+            p { color: #616061; line-height: 1.6; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Authorization Successful!</h1>
+            <p>Your Notion workspace has been connected.</p>
+            <p>You can close this window and return to the app.</p>
+          </div>
+        </body>
+      </html>
+    `,
+      {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      },
+    );
   } catch (error) {
     console.error("[notion] Callback handling failed", error);
     const message =
       error instanceof AppError
         ? error.message
-        : "Notion authorization failed.";
-    return NextResponse.redirect(
-      buildRedirectUrl(redirectTarget, "error", message),
+        : "Failed to complete the authorization. Please try again.";
+    return new NextResponse(
+      `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Authorization Failed</title>
+          <style>
+            body { font-family: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+            .container { text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; }
+            h1 { color: #e74c3c; margin-bottom: 20px; }
+            p { color: #616061; line-height: 1.6; }
+            .error-detail { font-size: 12px; color: #999; margin-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Authorization Failed</h1>
+            <p>Failed to complete the authorization. Please try again.</p>
+            <p class="error-detail">Error: ${message}</p>
+          </div>
+        </body>
+      </html>
+    `,
+      {
+        status: 500,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      },
     );
   }
 }

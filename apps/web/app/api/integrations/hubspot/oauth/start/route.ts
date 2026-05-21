@@ -1,54 +1,42 @@
 /**
- * X (Twitter) OAuth start endpoint (public API, no authentication required)
+ * HubSpot OAuth start endpoint (public API, no authentication required)
  *
  * Used for local version integration OAuth:
  * - No user login required
  * - Generate authorization URL and return
- * - Identify user through state during callback
+ * - Identify user through encrypted state during callback
  */
 
 import { type NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { encryptToken } from "@openloomi/security/token-encryption";
-import { createHash } from "node:crypto";
-import { ensureRedis, setLoginSession } from "@/lib/session/context";
 import { withRateLimit, RateLimitPresets } from "@/lib/rate-limit/middleware";
+import { encryptToken } from "@openloomi/security/token-encryption";
 
-const X_SCOPES = [
-  "tweet.read",
-  "tweet.write",
-  "users.read",
-  "dm.read",
-  "dm.write",
-  "like.write",
-  "media.write",
-  "offline.access",
+const HUBSPOT_AUTHORIZE_URL = "https://app.hubspot.com/oauth/authorize";
+const HUBSPOT_SCOPES = [
+  "crm.objects.deals.read",
+  "crm.objects.deals.write",
+  "crm.schemas.deals.read",
+  "crm.objects.contacts.read",
+  "crm.objects.contacts.write",
+  "oauth",
 ];
 
-function sha256(buffer: string) {
-  return createHash("sha256").update(buffer).digest("base64url");
-}
-
 /**
- * Generate state containing user information
+ * Generate encrypted state containing user information
+ * Format: encrypted JSON { userId, ts, nonce }
  */
-function generateState(
-  userId: string,
-  loginSessionId: string,
-  codeVerifier: string,
-): string {
+function generateState(userId: string): string {
   const statePayload = {
     userId,
-    nonce: randomUUID(),
     ts: Date.now(),
-    loginSessionId,
-    codeVerifier,
+    nonce: randomUUID(),
   };
   return encryptToken(JSON.stringify(statePayload));
 }
 
 /**
- * GET /api/integrations/x/oauth/start?userId=local
+ * GET /api/integrations/hubspot/oauth/start?userId=xxx
  */
 export async function GET(request: NextRequest) {
   // Rate limiting: OAuth preset (20 requests/minute)
@@ -75,7 +63,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
 
-  // Validate userId - must be provided and a valid UUID
+  // Validate userId - must be provided
   if (!userId || userId === "local") {
     return NextResponse.json(
       { error: "Invalid or missing userId. Please log in again." },
@@ -84,12 +72,15 @@ export async function GET(request: NextRequest) {
   }
 
   // Check configuration
-  const clientId = process.env.TWITTER_CLIENT_ID;
-  const clientSecret = process.env.TWITTER_CLIENT_SECRET;
+  const clientId = process.env.HUBSPOT_CLIENT_ID;
+  const clientSecret = process.env.HUBSPOT_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
     return NextResponse.json(
-      { error: "X OAuth is not configured" },
+      {
+        error:
+          "HubSpot integration is not configured. Set HUBSPOT_CLIENT_ID/HUBSPOT_CLIENT_SECRET.",
+      },
       { status: 500 },
     );
   }
@@ -101,38 +92,20 @@ export async function GET(request: NextRequest) {
     "https://app.openloomi.ai";
 
   const redirectUri =
-    process.env.TWITTER_REDIRECT_URI ?? `${cloudUrl}/api/x/callback`;
+    process.env.HUBSPOT_REDIRECT_URI || `${cloudUrl}/api/hubspot/callback`;
 
-  // Create login session for polling
-  const sessionId = randomUUID();
-  await ensureRedis();
-  await setLoginSession(sessionId, {
-    provider: "twitter",
-    phone: userId,
-    status: "pending",
-    createdAt: Date.now(),
-  });
+  // Generate encrypted state containing userId
+  const state = generateState(userId);
 
-  // PKCE
-  const codeVerifier = randomUUID().replace(/-/g, "");
-  const codeChallenge = sha256(codeVerifier);
-
-  // Generate OAuth state
-  const state = generateState(userId, sessionId, codeVerifier);
-
-  // Generate authorization URL
-  const url = new URL("https://twitter.com/i/oauth2/authorize");
-  url.searchParams.set("response_type", "code");
+  // Build HubSpot authorization URL
+  const url = new URL(HUBSPOT_AUTHORIZE_URL);
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("scope", X_SCOPES.join(" "));
+  url.searchParams.set("scope", HUBSPOT_SCOPES.join(" "));
   url.searchParams.set("state", state);
-  url.searchParams.set("code_challenge", codeChallenge);
-  url.searchParams.set("code_challenge_method", "S256");
 
   return NextResponse.json({
     authorizationUrl: url.toString(),
-    sessionId,
-    redirectUri,
+    state,
   });
 }

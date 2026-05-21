@@ -78,8 +78,7 @@ export async function POST(request: Request) {
   if (!resolvedBlobPath) {
     return NextResponse.json(
       {
-        error:
-          "Saving is unavailable for this attachment because it is not stored in openloomi.",
+        error: "Saving is unavailable for this attachment.",
       },
       { status: 400 },
     );

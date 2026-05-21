@@ -96,6 +96,7 @@ async function ensureBotForAccount(
     rss: "rss",
     manual: "manual",
     twitter: "twitter",
+    linkedin: "linkedin",
   };
 
   const adapter = platformToAdapter[cloudAccount.platform];

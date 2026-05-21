@@ -25,8 +25,7 @@ export async function GET() {
   if (!clientId || !clientSecret) {
     return NextResponse.json(
       {
-        error:
-          "Google Docs integration is not configured. Contact the openloomi team to enable it.",
+        error: "Google Docs integration is not configured.",
       },
       { status: 500 },
     );
