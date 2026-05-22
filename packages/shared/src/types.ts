@@ -371,6 +371,23 @@ export type CustomUIDataTypes = {
       };
     }>;
   };
+  taskExecutionStep: {
+    stepId: string;
+    title: string;
+    status:
+      | "started"
+      | "running"
+      | "completed"
+      | "reused"
+      | "skipped"
+      | "blocked"
+      | "error";
+    detail?: string;
+    characterId?: string;
+    characterName?: string;
+    childExecutionId?: string;
+    timestamp?: string;
+  };
 };
 
 export type ChatMessage = UIMessage<MessageMetadata, CustomUIDataTypes>;

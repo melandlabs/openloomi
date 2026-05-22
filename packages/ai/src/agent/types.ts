@@ -55,7 +55,8 @@ export type AgentMessageType =
   | "permission_request"
   | "password_input"
   | "reasoning"
-  | "preferenceUpdate";
+  | "preferenceUpdate"
+  | "memoryUpdate";
 
 export interface AgentMessage {
   type: AgentMessageType;
@@ -87,6 +88,20 @@ export interface AgentMessage {
     preferenceType: string;
     value: string;
     displayLabel: string;
+  };
+  /**
+   * Memory update fields — fired when the agent writes a user-fact markdown
+   * file under the memory directory (people / projects / notes / strategy).
+   * The UI surfaces this as a notification card so the user can see which
+   * pieces of their information the agent just updated.
+   */
+  memoryUpdate?: {
+    category: string;
+    fileName: string;
+    displayLabel: string;
+    action: "create" | "update";
+    description?: string;
+    filePath?: string;
   };
   /** Permission request fields */
   permissionRequest?: {
@@ -309,6 +324,31 @@ export interface AgentOptions {
     value: string;
     displayLabel: string;
   }) => void;
+  /**
+   * Called when the agent SDK has fully resolved a tool call's input — i.e.
+   * after streaming `input_json_delta` finishes and the assistant message
+   * is materialized. Hosts use this to inspect tool inputs that aren't
+   * available at the initial `tool_use` emission (which fires at
+   * `content_block_start` with empty/partial input under Anthropic's
+   * streaming protocol). Fires at most once per `toolUseId`.
+   */
+  onToolUseSeen?: (data: {
+    toolUseId: string;
+    toolName: string;
+    input: unknown;
+  }) => void;
+  /**
+   * Called after a first-party memory tool successfully persists a durable
+   * user fact. The host surfaces this as a chat notification card.
+   */
+  onMemoryUpdate?: (data: {
+    category: string;
+    fileName: string;
+    displayLabel: string;
+    action: "create" | "update";
+    description?: string;
+    filePath?: string;
+  }) => void;
   /** Callback for handling permission requests from SDK */
   onPermissionRequest?: (request: {
     toolName: string;
@@ -329,11 +369,6 @@ export interface AgentOptions {
   language?: string | null;
   /** User timezone for date/time operations */
   timezone?: string | null;
-  /** Internal scheduled-job execution report submission hook */
-  executionReport?: {
-    enabled: boolean;
-    onSubmit: (report: unknown) => void;
-  };
 }
 
 export interface PlanOptions extends AgentOptions {

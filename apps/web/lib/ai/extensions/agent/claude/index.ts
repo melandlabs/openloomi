@@ -2178,9 +2178,6 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
           "listKnowledgeBaseDocuments",
           "downloadInsightAttachment",
           "time",
-          ...(options?.executionReport?.enabled
-            ? ["submitExecutionReport"]
-            : []),
         ];
       } catch (error) {
         logger.error(
@@ -3157,9 +3154,6 @@ If you need to create any files during planning, use this directory.
           "listKnowledgeBaseDocuments",
           "downloadInsightAttachment",
           "time",
-          ...(options.executionReport?.enabled
-            ? ["submitExecutionReport"]
-            : []),
         ];
         logger.info(
           `[Claude ${session.id}] Execute: Business tools MCP server loaded with user session`,

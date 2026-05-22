@@ -37,7 +37,14 @@ export type ModelType =
   | "qwen/qwen3.6-flash"
   | "xiaomi/mimo-v2.5"
   | "xiaomi/mimo-v2.5-pro"
-  | "stepfun/step-3.5-flash";
+  | "stepfun/step-3.5-flash"
+  | "openrouter/auto"
+  | "openrouter/fusion";
+
+/**
+ * Routing mode type for OpenRouter Auto Route and Fusion
+ */
+export type RoutingMode = "direct" | "auto-route" | "fusion";
 
 export interface ModelPricing {
   inputPricePerMillion: number;
@@ -209,6 +216,16 @@ export const MODEL_PRICING: Record<ModelType, ModelPricing> = {
   "qwen/qwen3.6-plus": {
     inputPricePerMillion: 0.3,
     outputPricePerMillion: 1,
+    supportsVision: true,
+  },
+  "openrouter/auto": {
+    inputPricePerMillion: 2.5, // Weighted average for auto-selected models
+    outputPricePerMillion: 10,
+    supportsVision: true,
+  },
+  "openrouter/fusion": {
+    inputPricePerMillion: 8, // 2-3x due to multi-model calls
+    outputPricePerMillion: 30,
     supportsVision: true,
   },
 };

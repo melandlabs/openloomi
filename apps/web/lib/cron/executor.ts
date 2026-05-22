@@ -51,7 +51,6 @@ import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 
 const MAX_JOB_HISTORY_TOKENS = 20_000;
 const JOB_HISTORY_LIMIT = 100;
-const SUBMIT_EXECUTION_REPORT_TOOL = "submitExecutionReport";
 
 // Reason passed to AbortController.abort() to distinguish between user stop and client disconnect
 export const REASON_USER_STOPPED = "user_stopped";
@@ -859,12 +858,6 @@ ${characterContextSection}`,
           : (userSettings?.aiSoulPrompt ?? null),
         language: userSettings?.language ?? null,
         timezone: context.timezone ?? null,
-        executionReport: {
-          enabled: true,
-          onSubmit: (report) => {
-            submittedStructuredData = report as StructuredExecutionOutput;
-          },
-        },
         abortController: options?.abortController,
       });
 
