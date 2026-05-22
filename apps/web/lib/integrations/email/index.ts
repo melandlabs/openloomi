@@ -160,6 +160,8 @@ export interface BaseEmailInfo {
   labelIds?: string[];
   gmailCategory?: string;
   priority?: string;
+  /** Indicates if email is from SENT folder (IMAP adapter) */
+  isSent?: boolean;
 }
 
 /**
@@ -329,46 +331,81 @@ export class EmailAdapter extends MessagePlatformAdapter {
       // Ensure IMAP is connected
       await this.client.connect();
 
-      // Open inbox
-      const mailbox = await this.client.mailboxOpen("INBOX");
-      if (!mailbox) throw new Error("Cannot open INBOX");
+      // Fetch emails from INBOX
+      const inboxResults = await this.fetchEmailsFromFolder(
+        "INBOX",
+        false,
+        since,
+      );
 
-      const emailUids = await this.client.search({ since });
-      const results: ExtractEmailInfo[] = [];
-      if (emailUids) {
-        for (const uid of emailUids) {
-          const msg = await this.client.fetchOne(uid, {
-            envelope: true,
-            bodyStructure: true,
-            source: true,
-          });
-          if (msg) {
-            if (msg.source) {
-              const parsed = await this.parseEmailFn(msg.source);
-              if (parsed.date && parsed.date >= since) {
-                if (isPromotionalEmail(parsed)) {
-                  continue;
-                }
-                const email = this.formatEmail(parsed, uid);
-                const attachments = await this.ingestEmailAttachments(email);
-                results.push({
-                  ...email,
-                  attachments,
-                });
-              }
-            }
-          }
-        }
+      // Fetch emails from SENT folder (try different folder names for compatibility)
+      const sentFolders = ["SENT", "[Gmail]/Sent"];
+      let sentResults: ExtractEmailInfo[] = [];
+      for (const folder of sentFolders) {
+        try {
+          sentResults = await this.fetchEmailsFromFolder(folder, true, since);
+          if (sentResults.length > 0) break;
+        } catch {}
       }
-      await this.client.mailboxClose();
-      return results;
+
+      return [...inboxResults, ...sentResults];
     } catch (error) {
       console.error(`[Bot ${this.botId}] [gmail] failed:`, error);
       throw new Error(`Get email failed: ${(error as Error).message}`);
     }
   }
 
-  private formatEmail(parsed: ParsedMail, uid: number): FormattedEmail {
+  /**
+   * Fetch emails from a specific folder
+   * @param folder - Folder name (e.g., "INBOX", "SENT", "[Gmail]/Sent")
+   * @param isSent - Whether this is the sent folder
+   * @param since - Start time filter
+   */
+  private async fetchEmailsFromFolder(
+    folder: string,
+    isSent: boolean,
+    since: Date,
+  ): Promise<ExtractEmailInfo[]> {
+    // Open mailbox
+    const mailbox = await this.client.mailboxOpen(folder);
+    if (!mailbox) throw new Error(`Cannot open ${folder}`);
+
+    const emailUids = await this.client.search({ since });
+    const results: ExtractEmailInfo[] = [];
+    if (emailUids) {
+      for (const uid of emailUids) {
+        const msg = await this.client.fetchOne(uid, {
+          envelope: true,
+          bodyStructure: true,
+          source: true,
+        });
+        if (msg) {
+          if (msg.source) {
+            const parsed = await this.parseEmailFn(msg.source);
+            if (parsed.date && parsed.date >= since) {
+              if (isPromotionalEmail(parsed)) {
+                continue;
+              }
+              const email = this.formatEmail(parsed, uid, isSent);
+              const attachments = await this.ingestEmailAttachments(email);
+              results.push({
+                ...email,
+                attachments,
+              });
+            }
+          }
+        }
+      }
+    }
+    await this.client.mailboxClose();
+    return results;
+  }
+
+  private formatEmail(
+    parsed: ParsedMail,
+    uid: number,
+    isSent = false,
+  ): FormattedEmail {
     const fromAddress = Array.isArray(parsed.from?.value)
       ? parsed.from.value[0]
       : parsed.from?.value;
@@ -410,6 +447,7 @@ export class EmailAdapter extends MessagePlatformAdapter {
         })) || [],
       priority,
       gmailCategory: isPromo ? "promotions" : undefined,
+      isSent,
     };
   }
 
@@ -598,7 +636,7 @@ export class EmailAdapter extends MessagePlatformAdapter {
     }
 
     const fallbackBody =
-      body.length > 0 ? body : "Image(s) attached via openloomi.";
+      body.length > 0 ? body : "Image(s) attached via Alloomi.";
 
     await this.smtpTransport.sendMail({
       from: this.gmailAddress,

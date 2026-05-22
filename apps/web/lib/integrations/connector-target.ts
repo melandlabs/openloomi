@@ -1,4 +1,5 @@
 import type { IntegrationId } from "@/hooks/use-integrations";
+import { isIntegrationPlatformConnectable } from "@/lib/integrations/platform-connectability";
 
 type ConnectorActionLike = {
   type?: string;
@@ -65,7 +66,7 @@ const PLATFORM_ALIASES: Record<string, IntegrationId> = {
   xtwitter: "twitter",
   tweet: "twitter",
   tweets: "twitter",
-  推特: "twitter",
+  "x twitter": "twitter",
   google_calendar: "google_calendar",
   gcal: "google_calendar",
   outlook_calendar: "outlook_calendar",
@@ -94,23 +95,13 @@ const PLATFORM_ALIASES: Record<string, IntegrationId> = {
   weixin: "weixin",
   wechat_work: "weixin",
   wecom: "weixin",
-  微信: "weixin",
-  企业微信: "weixin",
-  飞书: "feishu",
-  钉钉: "dingtalk",
+  "enterprise wechat": "weixin",
+  feishu_alias: "feishu",
+  dingtalk_alias: "dingtalk",
 };
 
 const CONNECTOR_INTENT_PATTERN = new RegExp(
   [
-    "连接",
-    "链接",
-    "接入",
-    "授权",
-    "绑定",
-    "添加平台",
-    "新增平台",
-    "添加连接器",
-    "新增连接器",
     "\\b(?:connect|link|authorize|authorise|auth|bind|integration|connector|platform)\\b",
   ].join("|"),
   "i",
@@ -118,33 +109,14 @@ const CONNECTOR_INTENT_PATTERN = new RegExp(
 
 const DISCONNECTED_INTEGRATION_PATTERN = new RegExp(
   [
-    "未连接",
-    "未链接",
-    "未授权",
-    "未绑定",
-    "未接入",
-    "未集成",
-    "尚未连接",
-    "尚未链接",
-    "尚未授权",
-    "尚未绑定",
-    "尚未接入",
-    "尚未集成",
-    "没有连接",
-    "没有授权",
-    "无法连接",
-    "无法执行",
-    "请连接",
-    "请授权",
-    "connect",
-    "authorize",
-    "authorise",
     "not connected",
     "not authorized",
     "not authorised",
     "not integrated",
     "missing integration",
     "integration required",
+    "connect",
+    "authorize",
   ].join("|"),
   "i",
 );
@@ -171,7 +143,7 @@ export function normalizeIntegrationPlatform(
   const normalized = normalizePlatformText(value);
   if (!normalized) return null;
 
-  if (/\bx\b/i.test(value) && /twitter|tweet|推特/i.test(value)) {
+  if (/\bx\b/i.test(value) && /twitter|tweet|x twitter/i.test(value)) {
     return "twitter";
   }
 
@@ -182,7 +154,7 @@ export function normalizeIntegrationPlatform(
   const exact = PLATFORM_ALIASES[normalized];
   if (exact) return exact;
 
-  if (value.includes("推特")) return "twitter";
+  if (value.includes("x twitter")) return "twitter";
 
   const compact = compactPlatformText(value);
   const aliasEntries = Object.entries(PLATFORM_ALIASES).sort(
@@ -226,11 +198,22 @@ export function isIntegrationConnectAction(action: ConnectorActionLike) {
 
 export function shouldHideConnectedIntegrationAction(
   action: ConnectorActionLike,
-  connectedPlatforms: ReadonlySet<IntegrationId>,
+  connectedPlatforms: ReadonlySet<string>,
 ) {
+  if (!isIntegrationConnectAction(action)) return false;
+
   const platform = resolveSuggestedActionIntegrationPlatform(action);
   if (!platform) return false;
   return connectedPlatforms.has(platform);
+}
+
+export function filterConnectedIntegrationActions<
+  T extends ConnectorActionLike,
+>(actions: T[], connectedPlatforms: ReadonlySet<string>): T[] {
+  return actions.filter(
+    (action) =>
+      !shouldHideConnectedIntegrationAction(action, connectedPlatforms),
+  );
 }
 
 function hasDisconnectedIntegrationSignal(text: string) {
@@ -241,7 +224,7 @@ function isEnglishLanguage(language?: string | null): boolean {
   return language?.toLowerCase().startsWith("en") ?? false;
 }
 
-function getPlatformLabel(
+export function getIntegrationPlatformLabel(
   platform: IntegrationId | null,
   language?: string | null,
 ) {
@@ -254,12 +237,12 @@ function getPlatformLabel(
   if (platform === "imessage") return "iMessage";
   if (platform === "qqbot") return "QQ";
   if (platform === "weixin")
-    return isEnglishLanguage(language) ? "WeChat" : "微信";
+    return isEnglishLanguage(language) ? "WeChat" : "WeChat";
   if (platform === "feishu")
-    return isEnglishLanguage(language) ? "Lark/Feishu" : "Lark/飞书";
+    return isEnglishLanguage(language) ? "Lark/Feishu" : "Lark/Feishu";
   if (platform === "dingtalk")
-    return isEnglishLanguage(language) ? "DingTalk" : "钉钉";
-  if (!platform) return isEnglishLanguage(language) ? "platform" : "平台";
+    return isEnglishLanguage(language) ? "DingTalk" : "DingTalk";
+  if (!platform) return isEnglishLanguage(language) ? "platform" : "platform";
   return platform
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -270,10 +253,10 @@ function getConnectActionLabel(
   platform: IntegrationId | null,
   language?: string | null,
 ) {
-  const platformLabel = getPlatformLabel(platform, language);
+  const platformLabel = getIntegrationPlatformLabel(platform, language);
   return isEnglishLanguage(language)
     ? `Connect ${platformLabel}`
-    : `连接${platformLabel}`;
+    : `Connect ${platformLabel}`;
 }
 
 export function resolveDisconnectedIntegrationPlatformFromText(
@@ -289,6 +272,7 @@ export function buildMissingIntegrationActionFromText(
 ): ConnectorTargetAction | null {
   if (!hasDisconnectedIntegrationSignal(text)) return null;
   const platform = normalizeIntegrationPlatform(text);
+  if (platform && !isIntegrationPlatformConnectable(platform)) return null;
   const label = getConnectActionLabel(platform, options?.language);
   return {
     type: "add_integration",
@@ -299,8 +283,12 @@ export function buildMissingIntegrationActionFromText(
   };
 }
 
-export function buildConnectorUrl(platform?: IntegrationId | null) {
+export function buildConnectorUrl(
+  platform?: IntegrationId | null,
+  options?: { returnTo?: string | null },
+) {
   const params = new URLSearchParams({ addPlatform: "true" });
   if (platform) params.set("platform", platform);
+  if (options?.returnTo) params.set("returnTo", options.returnTo);
   return `/connectors?${params.toString()}`;
 }

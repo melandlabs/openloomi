@@ -24,8 +24,8 @@ type FeishuCredentials = {
 };
 
 /**
- * Get the open_id of the current app's bot (used for group chat @ mention detection).
- * Note: feishuOpenId in integration metadata comes from registration flow user_info, which is the scanned user rather than the bot, and cannot be used for this purpose.
+ * Get the current app bot's open_id (used for group chat @ mention detection).
+ * Note: feishuOpenId in integration metadata comes from user_info during registration, which is the scanned user rather than the bot, and cannot be used for this purpose.
  */
 async function fetchFeishuBotOpenId(params: {
   appId: string;
@@ -86,7 +86,7 @@ async function fetchFeishuBotOpenId(params: {
     const id = String(infoJson.bot.open_id).trim();
     return id.length > 0 ? id : null;
   } catch (e) {
-    console.warn("[Feishu] Failed to pull bot open_id:", e);
+    console.warn("[Feishu] Error fetching bot open_id:", e);
     return null;
   }
 }
@@ -381,12 +381,12 @@ export async function startFeishuConnection(
   });
   if (resolvedBotOpenId) {
     console.log(
-      "[Feishu] Resolved app bot open_id prefix=%s (used for group @ mention matching)",
+      "[Feishu] Resolved app bot open_id prefix=%s (used for group @ matching)",
       resolvedBotOpenId.slice(0, 12),
     );
   } else {
     console.warn(
-      "[Feishu] Failed to get bot open_id, group messages with @ mentions will not be processed (to avoid incorrectly responding to other @ mentions)",
+      "[Feishu] Could not obtain bot open_id, group messages with @ will not be processed (to avoid mistakenly responding to other @ mentions)",
     );
   }
 
@@ -595,7 +595,7 @@ export async function startFeishuConnection(
         }
         if (botOpenId.length === 0) {
           console.warn(
-            "[Feishu] Filtered: group message contains @ but bot open_id not yet obtained, ignoring message_id=%s (please ensure bot/v3/info is available)",
+            "[Feishu] Filtered: group message has @ but bot open_id not yet obtained, ignoring message_id=%s (ensure bot/v3/info is available)",
             messageId,
           );
           return;
@@ -770,8 +770,11 @@ export async function startFeishuListenersForUser(
 
 /**
  * Start connections for all existing Feishu accounts (called during service startup)
+ * @param authToken Cloud auth token for AI calls
  */
-export async function startAllFeishuListeners(): Promise<void> {
+export async function startAllFeishuListeners(
+  authToken?: string,
+): Promise<void> {
   const { db } = await import("@/lib/db");
   const { integrationAccounts } = await import("@/lib/db/schema");
   const { eq } = await import("drizzle-orm");
@@ -790,7 +793,7 @@ export async function startAllFeishuListeners(): Promise<void> {
   const uniqueUserIds: string[] = Array.from(new Set<string>(userIdList));
   let total = 0;
   for (const userId of uniqueUserIds) {
-    await startFeishuListenersForUser(userId);
+    await startFeishuListenersForUser(userId, authToken);
     const accounts = await getIntegrationAccountsByUserId({ userId });
     total += accounts.filter((a) => a.platform === "feishu").length;
   }

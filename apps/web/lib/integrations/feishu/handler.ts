@@ -3,8 +3,8 @@
  *
  * Unlike Telegram/iMessage self mode: this is "user → bot → openloomi replies on behalf".
  * - One im.message.receive_v1 contains one user message.
- * - Group chat @ activation: incrementally pull Feishu session history based on local latest message time (window up to 3 days), write to session file,
- *   then combine with locally built model context (historical text total limit approximately 20,000 Unicode characters).
+ * - Group @ mention activation: incrementally pull Feishu conversation history based on local latest message time (window up to 3 days), write to session file,
+ *   then combine with locally built model context (total history text limit ~20,000 Unicode characters).
  * - Tauri: uses modelConfig to request /api/ai; Non-Tauri: direct LLM.
  */
 import { sendReplyByBotId } from "@/lib/bots/send-reply";
@@ -25,6 +25,9 @@ import {
   type RuntimeConversationMessage,
 } from "@openloomi/integrations/feishu/conversation-store";
 import { FeishuAdapter } from "@openloomi/integrations/feishu";
+import { createTaskSession } from "@/lib/files/workspace/sessions";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 type FeishuCredentials = {
   appId?: string;
@@ -32,10 +35,10 @@ type FeishuCredentials = {
   domain?: "feishu" | "lark";
 };
 
-/** Aligned with history pull window: includes session file records up to 3 days */
+/** Aligned with history pull window: include at most 3 days of session file records */
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 const THREE_DAYS_SEC = Math.floor(THREE_DAYS_MS / 1000);
-/** Model context: historical conversation text total character limit (Unicode code point approximation) */
+/** Model context: total history text character limit (Unicode codepoint approximation) */
 const CONTEXT_HISTORY_MAX_CHARS = 20_000;
 
 /** Matches Insight settings language, used for Feishu-side visible text */
@@ -104,6 +107,61 @@ function formatEntryForModel(entry: QuotedMessage): RuntimeConversationMessage {
 }
 
 /**
+ * Scan workDir and send generated images/files to Feishu user
+ * Images use IMAGE message, other files use FILE message
+ */
+async function sendWorkDirFilesToFeishu(
+  workDir: string,
+  botId: string,
+  userId: string,
+  chatId: string,
+): Promise<void> {
+  try {
+    const files = readdirSync(workDir);
+    if (files.length === 0) return;
+
+    const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
+    const validFiles = files.filter((f) => {
+      const ext = f.toLowerCase().slice(f.lastIndexOf("."));
+      return imageExtensions.includes(ext) || f.includes(".");
+    });
+
+    if (validFiles.length === 0) return;
+
+    const attachments = validFiles.map((fileName) => {
+      const filePath = join(workDir, fileName);
+      const stats = statSync(filePath);
+      const ext = fileName.toLowerCase().slice(fileName.lastIndexOf("."));
+      const isImage = imageExtensions.includes(ext);
+      return {
+        url: `file://${filePath}`,
+        name: fileName,
+        sizeBytes: stats.size,
+        contentType: isImage
+          ? `image/${ext.slice(1)}`
+          : "application/octet-stream",
+        source: "local" as const,
+      };
+    });
+
+    console.log(
+      `[Feishu] Sending ${attachments.length} generated file(s) from workDir=${workDir}`,
+    );
+
+    await sendReplyByBotId({
+      id: botId,
+      userId,
+      recipients: [chatId],
+      message: "",
+      attachments,
+      withAppSuffix: false,
+    });
+  } catch (err) {
+    console.warn("[Feishu] Failed to send workDir files:", err);
+  }
+}
+
+/**
  * Process single user message received by Feishu bot: use account owner's insight context + this message content to generate reply, sent as bot
  * @param options.authToken Cloud token for bot to call AI in Tauri mode
  */
@@ -145,6 +203,13 @@ export async function handleFeishuInboundMessage(
   }
 
   const LOG_FEISHU = process.env.DEBUG_FEISHU === "true";
+
+  // Create workDir for AI to save generated files (images, etc.)
+  const taskId = `feishu-${account.id}-${Date.now()}`;
+  const workDir = createTaskSession(taskId);
+  if (LOG_FEISHU) {
+    console.log(`[Feishu] Created workDir: ${workDir} for task ${taskId}`);
+  }
   const logMsg = (label: string, ...args: unknown[]) => {
     if (LOG_FEISHU) console.log("[Feishu]", label, ...args);
   };
@@ -234,7 +299,7 @@ export async function handleFeishuInboundMessage(
           });
 
           console.log(
-            "[Feishu] Incremental session history pull chat_id=%s sinceSec=%s merged=%d latestLocalWas=%s",
+            "[Feishu] Incremental conversation history pull chat_id=%s sinceSec=%s merged=%d latestLocalWas=%s",
             chatId,
             sinceForPull,
             mergeItems.length,
@@ -243,7 +308,7 @@ export async function handleFeishuInboundMessage(
         }
       } catch (historyErr) {
         console.warn(
-          "[Feishu] Failed to pull and merge session history, will use local file only:",
+          "[Feishu] Failed to pull and merge conversation history, will use local file only:",
           historyErr,
         );
       }
@@ -539,6 +604,7 @@ export async function handleFeishuInboundMessage(
           silentTools: true,
           language: insightSettings?.language ?? null,
           abortController,
+          workDir,
           ...(token && {
             modelConfig: {
               apiKey: token,
@@ -556,6 +622,9 @@ export async function handleFeishuInboundMessage(
       clearTimeout(deadline);
       await adapter?.kill().catch(() => {});
     }
+
+    // After AI processing, scan workDir and send generated files (images, etc.) to user
+    await sendWorkDirFilesToFeishu(workDir, bot.id, userId, chatId);
 
     const answer = replyParts.join("").trim();
 
@@ -589,7 +658,7 @@ export async function handleFeishuInboundMessage(
       s.includes("new_api_error") ||
       /Failed to authenticate/i.test(s) ||
       (/\b401\b/.test(s) &&
-        /token|authenticate|unauthorized|API Error/i.test(s));
+        /token|authenticate|authorization|Unauthorized|API Error/i.test(s));
 
     const looksLikeInternalPlaceholder = (s: string) =>
       s.includes("__INTERNAL_ERROR__") ||

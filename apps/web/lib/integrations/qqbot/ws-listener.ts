@@ -445,7 +445,7 @@ export async function startQQListenersForUser(
   }
 }
 
-export async function startAllQQListeners(): Promise<void> {
+export async function startAllQQListeners(authToken?: string): Promise<void> {
   const { db } = await import("@/lib/db");
   const { integrationAccounts } = await import("@/lib/db/schema");
   const { eq } = await import("drizzle-orm");
@@ -463,7 +463,7 @@ export async function startAllQQListeners(): Promise<void> {
     );
   const uniqueIds = Array.from(new Set<string>(userIdList));
   for (const userId of uniqueIds) {
-    await startQQListenersForUser(userId);
+    await startQQListenersForUser(userId, authToken);
   }
   if (DEBUG)
     console.log("[QQBot] Started %s QQ WebSocket connections", rows.length);

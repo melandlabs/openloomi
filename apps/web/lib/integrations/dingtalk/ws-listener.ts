@@ -583,7 +583,9 @@ export async function startDingTalkListenersForUser(
   }
 }
 
-export async function startAllDingTalkListeners(): Promise<void> {
+export async function startAllDingTalkListeners(
+  authToken?: string,
+): Promise<void> {
   const { db } = await import("@/lib/db");
   const { integrationAccounts } = await import("@/lib/db/schema");
   const { eq } = await import("drizzle-orm");
@@ -602,7 +604,7 @@ export async function startAllDingTalkListeners(): Promise<void> {
   const uniqueUserIds = Array.from(new Set(userIdList));
   let total = 0;
   for (const uid of uniqueUserIds) {
-    await startDingTalkListenersForUser(uid);
+    await startDingTalkListenersForUser(uid, authToken);
     const accounts = await getIntegrationAccountsByUserId({ userId: uid });
     total += accounts.filter((a) => a.platform === "dingtalk").length;
   }

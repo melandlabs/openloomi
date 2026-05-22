@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/queries";
 import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 import { handleAgentRuntime } from "@/lib/ai/runtime/shared";
+import { DingTalkConversationStore } from "@openloomi/integrations/dingtalk";
 import { mkdir, readdir, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -195,11 +196,18 @@ export async function handleDingTalkInboundMessage(
     const replyParts: string[] = [];
     const workDir = join(tmpdir(), "openloomi-dingtalk-out", userId, msgId);
     await mkdir(workDir, { recursive: true });
+
+    const dingtalkStore = new DingTalkConversationStore();
+    const conversationHistory = dingtalkStore.getConversationHistory(
+      params.senderId,
+      params.chatId,
+    );
+
     await handleAgentRuntime(
       prompt,
       {
         userId,
-        conversation: [],
+        conversation: conversationHistory,
         stream: false,
         silentTools: true,
         workDir,
@@ -219,6 +227,21 @@ export async function handleDingTalkInboundMessage(
       "dingtalk",
     );
     const answer = replyParts.join("").trim();
+
+    // Save conversation history
+    dingtalkStore.addMessage(
+      params.senderId,
+      params.chatId,
+      "user",
+      userContent,
+    );
+    dingtalkStore.addMessage(
+      params.senderId,
+      params.chatId,
+      "assistant",
+      answer,
+    );
+
     generatedAttachments = await collectWorkDirAttachments(workDir);
     if (generatedAttachments.length > 0) {
       dingTalkLogger.debug(

@@ -12,8 +12,52 @@ export function register() {
     const isTauri =
       process.env.TAURI_MODE === "1" || process.env.IS_TAURI === "true";
     if (isTauri) {
+      // Load token from ~/.openloomi/token and pass it to listeners
+      let token: string | undefined;
+      try {
+        const { homedir } = require("node:os");
+        const { join } = require("node:path");
+        const { existsSync, readFileSync } = require("node:fs");
+
+        const tokenPath = join(homedir(), ".openloomi", "token");
+        if (existsSync(tokenPath)) {
+          const encoded = readFileSync(tokenPath, "utf-8").trim();
+          if (encoded) {
+            try {
+              token =
+                Buffer.from(encoded, "base64").toString("utf-8") || undefined;
+              console.log(
+                `[Instrumentation] Loaded auth token from ${tokenPath}, ` +
+                  `length=${token?.length ?? 0}, valid=${token ? "yes" : "no"}`,
+              );
+            } catch {
+              console.warn(
+                "[Instrumentation] Failed to decode auth token from base64",
+              );
+            }
+          } else {
+            console.warn(
+              "[Instrumentation] Auth token file exists but is empty",
+            );
+          }
+        } else {
+          console.warn(
+            "[Instrumentation] Auth token file does not exist at",
+            tokenPath,
+          );
+        }
+      } catch (e) {
+        console.warn("[Instrumentation] Failed to load auth token:", e);
+      }
+
       import("./lib/integrations/feishu/ws-listener")
-        .then(({ startAllFeishuListeners }) => startAllFeishuListeners())
+        .then(({ startAllFeishuListeners }) => {
+          console.log(
+            "[Instrumentation] Starting Feishu listeners with token:",
+            token ? "yes" : "no",
+          );
+          startAllFeishuListeners(token);
+        })
         .catch((e) => console.warn("[Feishu] Failed to start listener:", e));
       import("./lib/integrations/dingtalk/ws-listener")
         .then(({ startAllDingTalkListeners }) => startAllDingTalkListeners())

@@ -95,7 +95,8 @@ function applyGmailLabels(email: ExtractEmailInfo): EmailClassification {
     labelIds.includes("IMPORTANT") || labelIds.includes("STARRED");
   const isInbox = labelIds.includes("INBOX");
   const isSpam = labelIds.includes("SPAM");
-  const isSent = labelIds.includes("SENT");
+  // Support both Gmail OAuth (labelIds) and IMAP adapter (isSent field)
+  const isSent = labelIds.includes("SENT") || email.isSent === true;
   const isTrash = labelIds.includes("TRASH");
 
   // If spam or trash, mark as low importance

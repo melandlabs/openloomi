@@ -942,6 +942,7 @@ const ActionRequirementSchema = z.object({
   who: z.string().nullable().optional(),
   what: z.string().nullable().optional(),
   when: z.string().nullable().optional(),
+  sourceDetailIds: z.array(z.string()).nullable().optional(),
 });
 
 const TaskItemSchema = z.object({
@@ -1005,6 +1006,7 @@ const InsightActionSchema = z.object({
   reason: z.string().nullable().optional(),
   confidence: z.number().nullable().optional(),
   byRole: z.string().nullable().optional(),
+  sourceDetailIds: z.array(z.string()).nullable().optional(),
 });
 
 const HistoryInsightsSchema = z.object({

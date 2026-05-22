@@ -5,6 +5,12 @@ import { isTauri } from "@/lib/tauri";
 type StartRequest = {
   redirectPath?: string | null;
   token?: string; // Bearer token (Tauri mode)
+  pendingId?: string;
+};
+
+type AuthorizationUrlOptions = {
+  token?: string;
+  pendingId?: string;
 };
 
 type StartResponse = {
@@ -91,7 +97,7 @@ type LinearExchangeResponse = {
 async function requestAuthorizationUrl(
   endpoint: string,
   redirectPath: string,
-  token?: string,
+  options: AuthorizationUrlOptions = {},
 ): Promise<string> {
   if (typeof window === "undefined") {
     throw new Error("OAuth flow is only available in the browser");
@@ -103,7 +109,11 @@ async function requestAuthorizationUrl(
       "Content-Type": "application/json",
     },
     credentials: "include",
-    body: JSON.stringify({ redirectPath, token } satisfies StartRequest),
+    body: JSON.stringify({
+      redirectPath,
+      token: options.token,
+      pendingId: options.pendingId,
+    } satisfies StartRequest),
   });
 
   if (!response.ok) {
@@ -165,30 +175,33 @@ async function exchangeAuthorizationCode<T>(
 
 export async function getSlackAuthorizationUrl(
   token?: string,
+  options: { pendingId?: string } = {},
 ): Promise<string> {
   // Always use local API, server decides whether to forward to cloud
   // In Tauri mode, pass Bearer token
   return requestAuthorizationUrl(
     "/api/slack/oauth/start",
     "/slack-authorized",
-    token,
+    { token, pendingId: options.pendingId },
   );
 }
 
 export async function getDiscordAuthorizationUrl(
   token?: string,
+  options: { pendingId?: string } = {},
 ): Promise<string> {
   // Always use local API, server decides whether to forward to cloud
   // In Tauri mode, pass Bearer token
   return requestAuthorizationUrl(
     "/api/discord/oauth/start",
     "/discord-authorized",
-    token,
+    { token, pendingId: options.pendingId },
   );
 }
 
 export async function getXAuthorizationUrl(
   token?: string,
+  options: { pendingId?: string } = {},
 ): Promise<{ authorizationUrl: string; sessionId: string }> {
   // Always use local API, server decides whether to forward to cloud
   // In Tauri mode, pass Bearer token
@@ -201,6 +214,7 @@ export async function getXAuthorizationUrl(
     body: JSON.stringify({
       redirectPath: "/x-authorized",
       token,
+      pendingId: options.pendingId,
     } satisfies StartRequest),
   });
 
@@ -231,21 +245,46 @@ export async function getXAuthorizationUrl(
   };
 }
 
-export async function getTeamsAuthorizationUrl(): Promise<string> {
-  return requestAuthorizationUrl("/api/teams/oauth/start", "/teams-authorized");
-}
-
-export async function getHubspotAuthorizationUrl(): Promise<string> {
+export async function getTeamsAuthorizationUrl(
+  options: { pendingId?: string } = {},
+): Promise<string> {
   return requestAuthorizationUrl(
-    "/api/hubspot/oauth/start",
-    "/hubspot-authorized",
+    "/api/teams/oauth/start",
+    "/teams-authorized",
+    {
+      pendingId: options.pendingId,
+    },
   );
 }
 
-export async function getGoogleDocsAuthorizationUrl(): Promise<string> {
+export async function getHubspotAuthorizationUrl(
+  token?: string,
+  options: { pendingId?: string } = {},
+): Promise<string> {
+  return requestAuthorizationUrl(
+    "/api/hubspot/oauth/start",
+    "/api/hubspot/callback",
+    { token, pendingId: options.pendingId },
+  );
+}
+
+export async function getGoogleDocsAuthorizationUrl(
+  options: { pendingId?: string } = {},
+): Promise<string> {
   return requestAuthorizationUrl(
     "/api/google-docs/oauth",
     "/google-docs-authorized",
+    { pendingId: options.pendingId },
+  );
+}
+
+export async function getOutlookCalendarAuthorizationUrl(
+  options: { pendingId?: string } = {},
+): Promise<string> {
+  return requestAuthorizationUrl(
+    "/api/outlook-calendar/oauth",
+    "/outlook-calendar-authorized",
+    { pendingId: options.pendingId },
   );
 }
 
@@ -351,9 +390,40 @@ export async function exchangeHubspotAuthorizationCode(
   code: string,
   state: string,
 ): Promise<HubspotExchangeResponse> {
+  if (isTauri()) {
+    // Tauri local version: call cloud public exchange API (no auth required)
+    const cloudUrl =
+      (typeof process !== "undefined" &&
+        process.env?.NEXT_PUBLIC_CLOUD_API_URL) ||
+      "https://app.openloomi.ai";
+
+    const response = await fetch(
+      `${cloudUrl}/api/integrations/hubspot/oauth/exchange`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ code, state }),
+      },
+    );
+
+    if (!response.ok) {
+      const error = (await response
+        .json()
+        .catch(() => ({ error: "Failed to exchange code" }))) as {
+        error?: string;
+      };
+      throw new Error(error.error || "Failed to exchange authorization code");
+    }
+
+    return (await response.json()) as HubspotExchangeResponse;
+  }
+
+  // Web version: keep original logic
   return exchangeAuthorizationCode<HubspotExchangeResponse>(
     "/api/hubspot/oauth/exchange",
-    "/hubspot-authorized",
+    "/api/hubspot/callback",
     code,
     state,
   );
@@ -371,24 +441,43 @@ export async function exchangeGoogleDocsAuthorizationCode(
   );
 }
 
-export async function getJiraAuthorizationUrl(): Promise<string> {
-  return requestAuthorizationUrl("/api/jira/oauth/start", "/jira-authorized");
+export async function getJiraAuthorizationUrl(
+  options: { pendingId?: string } = {},
+): Promise<string> {
+  return requestAuthorizationUrl("/api/jira/oauth/start", "/jira-authorized", {
+    pendingId: options.pendingId,
+  });
 }
 
-export async function getLinearAuthorizationUrl(): Promise<string> {
+export async function getLinearAuthorizationUrl(
+  options: { pendingId?: string } = {},
+): Promise<string> {
   return requestAuthorizationUrl(
     "/api/linear/oauth/start",
     "/linear-authorized",
+    { pendingId: options.pendingId },
   );
 }
 
 export async function getNotionAuthorizationUrl(
   token?: string,
+  options: { pendingId?: string } = {},
 ): Promise<string> {
   return requestAuthorizationUrl(
     "/api/notion/oauth/start",
     "/notion-authorized",
-    token,
+    { token, pendingId: options.pendingId },
+  );
+}
+
+export async function getLinkedinAuthorizationUrl(
+  token?: string,
+  options: { pendingId?: string } = {},
+): Promise<string> {
+  return requestAuthorizationUrl(
+    "/api/linkedin/oauth",
+    "/api/linkedin/callback",
+    { token, pendingId: options.pendingId },
   );
 }
 

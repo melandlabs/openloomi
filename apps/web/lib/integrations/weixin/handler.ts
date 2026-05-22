@@ -25,6 +25,7 @@ import type { WeixinIlinkCredentials } from "@openloomi/integrations/weixin/ilin
 import { WeixinConversationStore } from "@openloomi/integrations/weixin/conversation-store";
 import { getAppMemoryDir } from "@/lib/utils/path";
 import { weixinLogger } from "@/lib/utils/logger";
+import { APP_DIR_NAME } from "@/lib/env/config/constants";
 
 // Singleton instance for WeChat conversation history
 const weixinConversationStore = new WeixinConversationStore(getAppMemoryDir());
@@ -266,7 +267,7 @@ async function processWeixinInboundMessage(
     }
 
     // Allocate independent workDir for this message to ensure precise scanning after Agent completes
-    const workDir = `${process.env.HOME ?? "~"}/.openloomi/sessions/weixin-${params.messageId}`;
+    const workDir = `${process.env.HOME ?? "~"}/${APP_DIR_NAME}/sessions/weixin-${params.messageId}`;
 
     // Agent callback is "🤖" + optional variant selector + space + incremental body; do not use fixed slice(2), do not join multiple 🤖 segments
     const assembled = { value: "" };

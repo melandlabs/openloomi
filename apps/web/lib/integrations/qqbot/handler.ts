@@ -6,6 +6,7 @@ import { sendReplyByBotId } from "@/lib/bots/send-reply";
 import type { IntegrationAccountWithBot } from "@/lib/db/queries";
 import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 import { handleAgentRuntime } from "@/lib/ai/runtime/shared";
+import { QQBotConversationStore } from "@openloomi/integrations/qqbot";
 
 /** Reply target: openid for DM, group_openid for group chat */
 function getReplyRecipient(params: {
@@ -82,11 +83,18 @@ export async function handleQQInboundMessage(
       );
     }
     const replyParts: string[] = [];
+
+    const qqbotStore = new QQBotConversationStore();
+    const conversationHistory = qqbotStore.getConversationHistory(
+      params.senderId ?? "",
+      recipient,
+    );
+
     await handleAgentRuntime(
       prompt,
       {
         userId,
-        conversation: [],
+        conversation: conversationHistory,
         stream: false,
         ...(token && {
           modelConfig: {
@@ -102,6 +110,15 @@ export async function handleQQInboundMessage(
       "qqbot",
     );
     const answer = replyParts.join("").trim();
+
+    // Save conversation history
+    qqbotStore.addMessage(params.senderId ?? "", recipient, "user", text);
+    qqbotStore.addMessage(
+      params.senderId ?? "",
+      recipient,
+      "assistant",
+      answer,
+    );
 
     const toSend =
       answer || "Insufficient information to answer, please try again later.";
