@@ -5,7 +5,7 @@
  */
 
 import OpenAI from "openai";
-import { estimateTokens } from "@openloomi/agent/ai/tokens";
+import { estimateTokens } from "@openloomi/shared";
 
 const OPENROUTER_API_KEY =
   process.env.OPENROUTER_API_KEY || process.env.LLM_API_KEY;
