@@ -13,6 +13,8 @@ out/
 build/
 dist/
 .turbo/
+.source/
+apps/*/.source/
 
 # misc
 .DS_Store
