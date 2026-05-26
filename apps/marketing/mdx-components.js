@@ -1,6 +1,4 @@
-import { useMDXComponents as getDocsMDXComponents } from "nextra-theme-docs";
-
-const docsComponents = getDocsMDXComponents();
+import defaultMdxComponents from "fumadocs-ui/mdx";
 
 /**
  * Image caption component
@@ -31,11 +29,13 @@ function Badge({ children, style }) {
 
 /**
  * MDX component config
- * Merges nextra-theme-docs default components with custom components
+ * Merges Fumadocs UI defaults with OpenLoomi-specific components.
  */
-export const useMDXComponents = (components) => ({
-  ...docsComponents,
+export const getMDXComponents = (components = {}) => ({
+  ...defaultMdxComponents,
   ImageCaption,
   Badge,
   ...components,
 });
+
+export const useMDXComponents = getMDXComponents;

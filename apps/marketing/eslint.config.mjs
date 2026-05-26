@@ -13,6 +13,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     // Third-party generated files
+    ".source/**",
     "public/_pagefind/**",
     "old/**",
   ]),

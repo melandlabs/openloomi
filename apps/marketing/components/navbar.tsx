@@ -32,7 +32,7 @@ export function Navbar({
   links = [
     { name: "Home", href: "/" },
     { name: "Docs", href: "/docs" },
-    { name: "Blogs", href: "/blogs" },
+    { name: "Blog", href: "/blogs" },
   ],
   showAuthButtons = false,
   onSignInClick,
@@ -123,7 +123,7 @@ export function Navbar({
             // Desktop shows full logo; mobile uses monochrome logo for visibility.
             src="/img/logo-full-light.png"
             alt="OpenLoomi"
-            className="hidden md:block h-7 w-auto object-contain"
+            className="hidden md:block object-contain"
             width={127}
             height={28}
             priority
@@ -131,7 +131,7 @@ export function Navbar({
           <Image
             src="/img/logo-full-light.png"
             alt="OpenLoomi"
-            className="block md:hidden h-6 w-auto object-contain"
+            className="block md:hidden object-contain"
             width={109}
             height={24}
             priority

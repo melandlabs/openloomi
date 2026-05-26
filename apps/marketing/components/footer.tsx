@@ -246,7 +246,7 @@ export function Footer({
                   <Image
                     src="/img/logo-full-dark.png"
                     alt="OpenLoomi"
-                    className="hidden md:block h-7 w-auto object-contain"
+                    className="hidden md:block object-contain"
                     width={127}
                     height={28}
                     priority

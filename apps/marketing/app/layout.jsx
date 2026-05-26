@@ -2,6 +2,7 @@ import "./globals.css";
 import "../styles/animations.css";
 import { Suspense } from "react";
 import Script from "next/script";
+import { RootProvider } from "fumadocs-ui/provider/next";
 import { PosthogProvider } from "@/components/posthog-provider";
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { I18nProvider } from "@/components/i18n-provider";
@@ -145,12 +146,14 @@ export default function RootLayout({ children }) {
         </Script>
       </head>
       <body className="font-sans">
-        <Suspense fallback={null}>
-          <GoogleAnalytics />
-        </Suspense>
-        <PosthogProvider>
-          <I18nProvider>{children}</I18nProvider>
-        </PosthogProvider>
+        <RootProvider theme={{ enabled: false }}>
+          <Suspense fallback={null}>
+            <GoogleAnalytics />
+          </Suspense>
+          <PosthogProvider>
+            <I18nProvider>{children}</I18nProvider>
+          </PosthogProvider>
+        </RootProvider>
       </body>
     </html>
   );

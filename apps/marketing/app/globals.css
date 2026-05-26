@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
 
 @theme {
   /* Primary colors - blue palette (aligned with apps/web) */
@@ -95,7 +97,7 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Override nextra-theme-docs font-feature-settings to prevent single quotes
+/* Override docs font-feature-settings to prevent single quotes
    from being rendered as full-width characters by 'ss01' stylistic set */
 html {
   font-feature-settings:
@@ -176,11 +178,6 @@ html {
 /* Muted background color */
 .bg-muted {
   background-color: var(--color-muted);
-}
-
-/* Ensures docs page content is not blocked by navbar */
-.nextra-container {
-  padding-top: 5rem !important;
 }
 
 /* Testimonial card scroll animation */
@@ -342,6 +339,134 @@ html {
 /* Docs tables - horizontal scroll on small screens */
 article div[class*="table"] {
   overflow-x: auto;
+}
+
+.openloomi-docs-shell {
+  --color-fd-card: transparent;
+  --fd-sidebar-width: 18.5rem;
+  --fd-primary: var(--color-primary);
+  --fd-accent: var(--color-surfaceBlue);
+  --fd-accent-foreground: var(--color-primary-800);
+  --openloomi-fox-yellow: #f5b64a;
+  --openloomi-fox-yellow-strong: #d99018;
+  --fd-muted-foreground: var(--color-foreground-muted);
+  background: var(--color-background-card);
+}
+
+.openloomi-docs-shell [data-sidebar-placeholder] {
+  top: 6rem !important;
+  height: calc(100vh - 6rem) !important;
+  max-height: calc(100vh - 6rem) !important;
+}
+
+.openloomi-docs-shell #nd-sidebar,
+.openloomi-docs-shell aside#nd-sidebar {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-right: 1px solid var(--color-border-primary) !important;
+  box-shadow: none !important;
+}
+
+.openloomi-docs-shell #nd-sidebar > div:first-child {
+  display: none !important;
+}
+
+.openloomi-docs-shell #nd-sidebar [data-radix-scroll-area-viewport] {
+  height: calc(100vh - 6rem) !important;
+  max-height: calc(100vh - 6rem) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}
+
+.openloomi-docs-shell #nd-sidebar [data-radix-scroll-area-viewport] > div {
+  padding: 1rem 0.875rem 1.5rem !important;
+}
+
+.openloomi-docs-shell #nd-sidebar a[href="/"]:empty {
+  display: none !important;
+}
+
+.openloomi-docs-shell #nd-sidebar a,
+.openloomi-docs-shell #nd-sidebar button {
+  min-height: 2.375rem;
+  border: 1px solid transparent;
+  border-radius: 8px !important;
+  color: var(--color-foreground-muted) !important;
+  font-weight: 500;
+  line-height: 1.25;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease !important;
+}
+
+.openloomi-docs-shell #nd-sidebar a:hover,
+.openloomi-docs-shell #nd-sidebar button:hover {
+  background: #eef4fb !important;
+  border-color: #d9e5f4;
+  color: var(--color-primary-800) !important;
+}
+
+.openloomi-docs-shell #nd-sidebar a:focus-visible,
+.openloomi-docs-shell #nd-sidebar button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.openloomi-docs-shell #nd-sidebar a[data-active="true"] {
+  background: linear-gradient(90deg, #e8f0fa 0%, #f4f8fd 100%) !important;
+  border-color: #cddff4;
+  color: var(--color-primary-800) !important;
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+.openloomi-docs-shell #nd-sidebar a[data-active="true"]::before {
+  display: none !important;
+}
+
+.openloomi-docs-shell #nd-sidebar button[aria-expanded] {
+  color: var(--color-foreground-secondary) !important;
+}
+
+.openloomi-docs-shell #nd-sidebar [role="group"] {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+}
+
+.openloomi-docs-shell #nd-sidebar .openloomi-doc-icon {
+  color: var(--openloomi-fox-yellow);
+  opacity: 1;
+}
+
+.openloomi-docs-shell #nd-sidebar a[data-active="true"] .openloomi-doc-icon,
+.openloomi-docs-shell #nd-sidebar a:hover .openloomi-doc-icon,
+.openloomi-docs-shell #nd-sidebar button:hover .openloomi-doc-icon {
+  color: var(--openloomi-fox-yellow-strong) !important;
+  opacity: 1;
+}
+
+.openloomi-docs-shell article {
+  padding-top: 2.25rem;
+}
+
+@media (max-width: 767px) {
+  .openloomi-docs-shell {
+    background: var(--color-background-card);
+  }
+
+  .openloomi-docs-shell #nd-sidebar,
+  .openloomi-docs-shell aside#nd-sidebar {
+    background: var(--color-background-card) !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }
+
+  .openloomi-docs-shell #nd-sidebar [data-radix-scroll-area-viewport] {
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }
 }
 body.mobile-menu-open
   section[aria-label="openloomi Affiliate Program Promotion"],

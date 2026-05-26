@@ -2,7 +2,7 @@ export const en = {
   nav: {
     home: "Home",
     docs: "Docs",
-    blogs: "Blogs",
+    blogs: "Blog",
     developers: "Developers",
     signIn: "GitHub",
     getStarted: "Get Started",
@@ -236,7 +236,7 @@ export const en = {
     legal: "Legal",
     connect: "Connect",
     docs: "Docs",
-    blogs: "Blogs",
+    blogs: "Blog",
     changelog: "Changelog",
     support: "Support",
     contactUs: "Contact Us",

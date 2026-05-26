@@ -1,0 +1,18 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "what-is-openloomi",
+    "getting-started",
+    "chat",
+    "connectors",
+    "messaging-apps",
+    "automation",
+    "skills",
+    "library",
+    "memory",
+    "privacy-security",
+    "glossary",
+    "changelog"
+  ]
+}
