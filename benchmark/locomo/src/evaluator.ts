@@ -162,7 +162,12 @@ function createMemoryRecordsFromObservation(
     if (Array.isArray(dialogContent)) {
       obsParts.push("# Original Dialog (for date/time reasoning):");
       for (const turn of dialogContent) {
-        if (typeof turn === "object" && turn !== null && "speaker" in turn && "text" in turn) {
+        if (
+          typeof turn === "object" &&
+          turn !== null &&
+          "speaker" in turn &&
+          "text" in turn
+        ) {
           obsParts.push(`${turn.speaker}: ${turn.text}`);
         } else if (typeof turn === "string") {
           obsParts.push(turn);
@@ -449,7 +454,9 @@ export class LoCoMoEvaluator {
       ? sample.qa_pairs.slice(0, this.quickLimit)
       : sample.qa_pairs;
 
-    console.log(`[LoCoMo] Evaluating ${questionsToEvaluate.length} questions (quick limit: ${this.quickLimit || 'none'})`);
+    console.log(
+      `[LoCoMo] Evaluating ${questionsToEvaluate.length} questions (quick limit: ${this.quickLimit || "none"})`,
+    );
 
     for (const qa of questionsToEvaluate) {
       try {
@@ -459,14 +466,24 @@ export class LoCoMoEvaluator {
         // Evaluate answer correctness using LLM judge
         let isCorrect = false;
         try {
-          isCorrect = (await evaluateLLMJudge(qa.question, qa.answer, response)) === 1;
-          console.log(`[Q${predictions.length + 1}] ${isCorrect ? "✓" : "✗"} Q: "${qa.question.substring(0, 60)}..." GT: "${qa.answer}"`);
+          isCorrect =
+            (await evaluateLLMJudge(qa.question, qa.answer, response)) === 1;
+          console.log(
+            `[Q${predictions.length + 1}] ${isCorrect ? "✓" : "✗"} Q: "${qa.question.substring(0, 60)}..." GT: "${qa.answer}"`,
+          );
           if (!isCorrect) {
-            console.log(`    Agent response: "${response.substring(0, 300)}..."`);
+            console.log(
+              `    Agent response: "${response.substring(0, 300)}..."`,
+            );
           }
         } catch (judgeError) {
-          const errMsg = judgeError instanceof Error ? judgeError.message : String(judgeError);
-          console.log(`[Q${predictions.length + 1}] ✗ Judge failed: ${errMsg.substring(0, 100)}`);
+          const errMsg =
+            judgeError instanceof Error
+              ? judgeError.message
+              : String(judgeError);
+          console.log(
+            `[Q${predictions.length + 1}] ✗ Judge failed: ${errMsg.substring(0, 100)}`,
+          );
         }
 
         if (isCorrect) {
@@ -496,8 +513,11 @@ export class LoCoMoEvaluator {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        const errorCause = error instanceof Error && error.cause ? String(error.cause) : "";
-        console.error(`Error evaluating question: ${errorMessage}${errorCause ? ` (cause: ${errorCause})` : ""}`);
+        const errorCause =
+          error instanceof Error && error.cause ? String(error.cause) : "";
+        console.error(
+          `Error evaluating question: ${errorMessage}${errorCause ? ` (cause: ${errorCause})` : ""}`,
+        );
 
         predictions.push({
           question: qa.question,

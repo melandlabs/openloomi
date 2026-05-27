@@ -30,7 +30,10 @@ interface CliArgs {
 function parseCliArgs(): CliArgs {
   // Simple manual argument parsing for flexibility
   const args = process.argv.slice(2);
-  const values: Record<string, string | boolean | number | string[] | undefined> = { mode: "observation", quick: false };
+  const values: Record<
+    string,
+    string | boolean | number | string[] | undefined
+  > = { mode: "observation", quick: false };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -184,7 +187,12 @@ async function main() {
   const allPredictionsByCategory: Record<string, Prediction[]> = {};
 
   for (const sample of filteredSamples) {
-    const evaluator = new LoCoMoEvaluator(args.mode, port, args.tokenPath, args.quick ? 5 : undefined);
+    const evaluator = new LoCoMoEvaluator(
+      args.mode,
+      port,
+      args.tokenPath,
+      args.quick ? 5 : undefined,
+    );
 
     try {
       // Load sample into storage
