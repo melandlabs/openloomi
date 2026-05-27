@@ -4,13 +4,18 @@
  * Run via: pnpm benchmark:locomo -- --dataset path/to/locomo10.json --mode observation --quick
  */
 
-import { parseArgs } from "util";
-import { writeFile } from "fs/promises";
-import { LoCoMoDataset } from "./dataset.js";
-import { LoCoMoEvaluator } from "./evaluator.js";
+import "dotenv/config";
+import { writeFile } from "node:fs/promises";
+import { loadLoCoMoDatasetFromJson } from "./dataset.js";
+import {
+  LoCoMoEvaluator,
+  findAvailablePort,
+  DEFAULT_PORTS,
+} from "./evaluator.js";
 import { RetrievalMode } from "./types.js";
-import { calculateCategoryMetrics, calculateMetrics } from "./metrics.js";
-import { CATEGORY_NAMES, CATEGORIES } from "./scorer.js";
+import type { EvaluationResult, Prediction } from "./types.js";
+import { calculateCategoryMetrics } from "./metrics.js";
+import { CATEGORY_NAMES } from "./scorer.js";
 
 interface CliArgs {
   dataset: string;
@@ -18,12 +23,14 @@ interface CliArgs {
   samples?: string[];
   quick?: boolean;
   output?: string;
+  port?: number;
+  tokenPath?: string;
 }
 
 function parseCliArgs(): CliArgs {
   // Simple manual argument parsing for flexibility
   const args = process.argv.slice(2);
-  const values: Record<string, any> = { mode: "observation", quick: false };
+  const values: Record<string, string | boolean | number | string[] | undefined> = { mode: "observation", quick: false };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -37,6 +44,10 @@ function parseCliArgs(): CliArgs {
       values.quick = true;
     } else if (arg === "--output" || arg === "-o") {
       values.output = args[++i];
+    } else if (arg === "--port" || arg === "-p") {
+      values.port = Number.parseInt(args[++i], 10);
+    } else if (arg === "--token" || arg === "-t") {
+      values.tokenPath = args[++i];
     }
   }
 
@@ -67,18 +78,20 @@ function parseCliArgs(): CliArgs {
     samples,
     quick: values.quick,
     output: values.output,
+    port: values.port,
+    tokenPath: values.tokenPath,
   };
 }
 
 async function printEvaluationSummary(
-  resultsByCategory: Record<string, any[]>,
+  resultsByCategory: Record<string, Prediction[]>,
 ): Promise<void> {
   console.log("=".repeat(80));
   console.log("LoCoMo Evaluation Results Summary");
   console.log("=".repeat(80));
 
   // Calculate overall metrics
-  const allResults: any[] = [];
+  const allResults: Prediction[] = [];
   for (const [category, results] of Object.entries(resultsByCategory)) {
     // Skip category 5 (adversarial questions)
     if (category === "5") {
@@ -98,7 +111,7 @@ async function printEvaluationSummary(
   console.log(`  BLEU-1 (Mean): ${overallMetrics.bleu1_mean.toFixed(4)}`);
   console.log(`  BLEU-4 (Mean): ${overallMetrics.bleu4_mean.toFixed(4)}`);
 
-  console.log("\n" + "=".repeat(80));
+  console.log(`\n${"=".repeat(80)}`);
   console.log("Results by Category");
   console.log("=".repeat(80));
 
@@ -122,20 +135,36 @@ async function printEvaluationSummary(
     console.log(`  BLEU-4: ${metrics.bleu4_mean.toFixed(4)}`);
   }
 
-  console.log("\n" + "=".repeat(80));
+  console.log(`\n${"=".repeat(80)}`);
 }
 
 async function main() {
   const args = parseCliArgs();
 
+  // Discover API port if not specified
+  let port = args.port;
+  if (!port) {
+    try {
+      port = await findAvailablePort();
+      console.log(`🔌 Auto-discovered API port: ${port}`);
+    } catch (error) {
+      console.error(`Failed to discover API port: ${error}`);
+      console.log(`Available ports: ${DEFAULT_PORTS.join(", ")}`);
+      console.log("Specify port with --port flag");
+      process.exit(1);
+    }
+  } else {
+    console.log(`🔌 Using specified API port: ${port}`);
+  }
+
   console.log(`\n📁 Loading dataset from: ${args.dataset}`);
-  const samples = await LoCoMoDataset.loadFromJson(args.dataset);
+  const samples = await loadLoCoMoDatasetFromJson(args.dataset);
 
   // Filter samples if sample_ids provided
   let filteredSamples = samples;
   if (args.samples && args.samples.length > 0) {
     filteredSamples = samples.filter((s) =>
-      args.samples!.includes(s.sample_id),
+      args.samples?.includes(s.sample_id),
     );
     console.log(`🔍 Filtered to ${filteredSamples.length} samples by ID`);
   }
@@ -151,11 +180,11 @@ async function main() {
   console.log(`🔧 Retrieval mode: ${args.mode}\n`);
 
   // Run evaluation
-  const resultsBySample: any[] = [];
-  const allPredictionsByCategory: Record<string, any[]> = {};
+  const resultsBySample: EvaluationResult[] = [];
+  const allPredictionsByCategory: Record<string, Prediction[]> = {};
 
   for (const sample of filteredSamples) {
-    const evaluator = new LoCoMoEvaluator(args.mode);
+    const evaluator = new LoCoMoEvaluator(args.mode, port, args.tokenPath, args.quick ? 5 : undefined);
 
     try {
       // Load sample into storage
@@ -165,13 +194,8 @@ async function main() {
       const result = await evaluator.evaluateQA(sample);
       resultsBySample.push(result);
 
-      // Limit to first 5 questions in quick mode
-      const predictions = args.quick
-        ? result.predictions.slice(0, 5)
-        : result.predictions;
-
       // Organize predictions by category
-      for (const pred of predictions) {
+      for (const pred of result.predictions) {
         const category = pred.category;
         if (!allPredictionsByCategory[category]) {
           allPredictionsByCategory[category] = [];
@@ -191,9 +215,16 @@ async function main() {
 
       resultsBySample.push({
         sample_id: sample.sample_id,
+        retrieval_mode: args.mode,
+        total_questions: sample.qa_pairs.length,
+        correct_answers: 0,
         accuracy: 0,
-        correct: 0,
-        total: sample.qa_pairs.length,
+        token_usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        },
+        predictions: [],
         error: errorMessage,
       });
     }
@@ -201,11 +232,11 @@ async function main() {
 
   // Aggregate results
   const totalQuestions = resultsBySample.reduce(
-    (sum, r) => sum + (r.total_questions || r.total || 0),
+    (sum, r) => sum + (r.total_questions || 0),
     0,
   );
   const totalCorrect = resultsBySample.reduce(
-    (sum, r) => sum + (r.correct_answers || r.correct || 0),
+    (sum, r) => sum + (r.correct_answers || 0),
     0,
   );
   const overallAccuracy =
@@ -230,8 +261,8 @@ async function main() {
     results_by_sample: resultsBySample.map((r) => ({
       sample_id: r.sample_id,
       accuracy: r.accuracy,
-      correct: r.correct_answers || r.correct,
-      total: r.total_questions || r.total,
+      correct: r.correct_answers,
+      total: r.total_questions,
       token_usage: r.token_usage,
       error: r.error,
     })),

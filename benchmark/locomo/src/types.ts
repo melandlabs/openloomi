@@ -17,10 +17,10 @@ export interface QAPair {
 
 export interface LoCoMoSample {
   sample_id: string;
-  conversation: Record<string, any>;
-  observation: Record<string, any>;
-  session_summary: Record<string, any>;
-  event_summary: Record<string, any>;
+  conversation: Record<string, unknown>;
+  observation: Record<string, unknown>;
+  session_summary: Record<string, unknown>;
+  event_summary: Record<string, unknown>;
   qa_pairs: QAPair[];
 }
 

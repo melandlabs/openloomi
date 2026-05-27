@@ -3,147 +3,58 @@
  *
  * Uses OpenLoomi's MemoryStorageAdapter interface with in-memory implementation
  * for benchmarking the memory system.
+ * Now uses /api/native/agent for answering questions.
  */
 
-import { generateText } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-
-const openrouter = createOpenAICompatible({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
-  name: "openrouter",
-});
-import type { MemoryRecord, MemorySearchHit } from "./contracts.js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import type { MemoryRecord } from "./contracts.js";
 
 import { RetrievalMode } from "./types.js";
 import type { LoCoMoSample, EvaluationResult, Prediction } from "./types.js";
-import { InMemoryStorageAdapter } from "./memory-adapter.js";
-import { ANSWER_PROMPT } from "./prompts.js";
+import {
+  InMemoryStorageAdapter,
+  callAgentApi,
+  readAuthToken,
+  findAvailablePort,
+  DEFAULT_PORTS,
+} from "./memory-adapter.js";
 import { calculateMetrics, evaluateLLMJudge } from "./metrics.js";
 
 /**
- * Calculate cosine similarity between two vectors.
+ * Write memory records to ~/.openloomi/data/memory/bench/ folder
  */
-function cosineSimilarity(vecA: number[], vecB: number[]): number {
-  if (vecA.length !== vecB.length) {
-    return NaN;
+async function writeMemoryFiles(
+  sample: LoCoMoSample,
+  records: MemoryRecord[],
+): Promise<void> {
+  const memoryDir = join(
+    homedir(),
+    ".openloomi",
+    "data",
+    "memory",
+    "bench",
+    sample.sample_id,
+  );
+
+  await mkdir(memoryDir, { recursive: true });
+
+  for (const record of records) {
+    const filename = `${record.id}.md`;
+    const filepath = join(memoryDir, filename);
+
+    const content = `# ${record.dimensions?.type || "memory"} - ${sample.sample_id}\n\n${record.text}`;
+    await writeFile(filepath, content, "utf-8");
   }
 
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let i = 0; i < vecA.length; i++) {
-    dot += vecA[i] * vecB[i];
-    normA += vecA[i] * vecA[i];
-    normB += vecB[i] * vecB[i];
-  }
-
-  if (normA === 0 || normB === 0) {
-    return NaN;
-  }
-
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-
-/**
- * Universal embeddings class for text embedding using OpenRouter.
- */
-class UniversalEmbeddings {
-  private apiKey: string;
-  private modelName: string;
-  private baseURL: string;
-
-  constructor() {
-    this.apiKey =
-      process.env.OPENAI_EMBEDDINGS_API_KEY ||
-      process.env.OPENROUTER_API_KEY ||
-      process.env.LLM_API_KEY ||
-      "";
-
-    this.modelName =
-      process.env.LLM_EMBEDDING_MODEL || "text-embedding-3-small";
-    this.baseURL =
-      process.env.LLM_EMBEDDING_BASE_URL || "https://openrouter.ai/api/v1";
-  }
-
-  async embedDocuments(texts: string[]): Promise<number[][]> {
-    if (texts.length === 0) {
-      throw new Error("No texts provided for embedding");
-    }
-
-    const batchSize = 100;
-    const results: number[][] = [];
-
-    for (let i = 0; i < texts.length; i += batchSize) {
-      const batch = texts.slice(i, i + batchSize);
-      const batchEmbeddings = await this.callEmbeddingAPI(batch);
-      results.push(...batchEmbeddings);
-    }
-
-    return results;
-  }
-
-  async embedQuery(text: string): Promise<number[]> {
-    const embeddings = await this.callEmbeddingAPI([text]);
-    return embeddings[0];
-  }
-
-  private async callEmbeddingAPI(texts: string[]): Promise<number[][]> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-
-    if (this.apiKey) {
-      headers.Authorization = `Bearer ${this.apiKey}`;
-
-      if (this.baseURL.includes("openrouter.ai")) {
-        headers["HTTP-Referer"] =
-          process.env.NEXT_PUBLIC_APP_URL || "https://openloomi.ai";
-        headers["X-Title"] = "openloomi AI";
-      }
-    }
-
-    const response = await fetch(`${this.baseURL}/embeddings`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: this.modelName,
-        input: texts,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Embeddings API error (${response.status}): ${errorText}`,
-      );
-    }
-
-    const data = await response.json();
-
-    if (!data.data || !Array.isArray(data.data)) {
-      throw new Error("Invalid response format from embeddings API");
-    }
-
-    const sortedData = data.data.sort((a: any, b: any) => a.index - b.index);
-
-    return sortedData.map((item: any) => {
-      if (!item.embedding || !Array.isArray(item.embedding)) {
-        throw new Error("Invalid embedding format in response");
-      }
-      return item.embedding;
-    });
-  }
+  console.log(`[LoCoMo] Wrote ${records.length} memory files to ${memoryDir}`);
 }
 
 /**
  * Format conversation data into memory records.
  */
-function createMemoryRecordsFromDialog(
-  sample: LoCoMoSample,
-  embeddings: UniversalEmbeddings,
-): MemoryRecord[] {
+function createMemoryRecordsFromDialog(sample: LoCoMoSample): MemoryRecord[] {
   const records: MemoryRecord[] = [];
   const speakerA = sample.conversation.speaker_a ?? "Speaker A";
   const speakerB = sample.conversation.speaker_b ?? "Speaker B";
@@ -220,16 +131,43 @@ function createMemoryRecordsFromObservation(
     const obsParts: string[] = [];
     obsParts.push(`# Observation Summary ${sessionNum}`);
     if (sessionTimestamp) {
-      obsParts.push(`# Timestamp: ${sessionTimestamp}`);
+      obsParts.push(`# Session Date: ${sessionTimestamp}`);
     }
     obsParts.push("");
 
+    // Add observation summary with dialog references
     if (typeof obsContent === "object" && obsContent !== null) {
-      for (const [speaker, text] of Object.entries(obsContent)) {
-        obsParts.push(`${speaker}: ${text}`);
+      for (const [speaker, utterances] of Object.entries(obsContent)) {
+        if (Array.isArray(utterances)) {
+          for (const item of utterances) {
+            if (Array.isArray(item) && item.length >= 2) {
+              const [text, diaId] = item;
+              // Include text and its dialog reference
+              obsParts.push(`${speaker}: ${text} [Ref: ${diaId}]`);
+            } else {
+              obsParts.push(`${speaker}: ${item}`);
+            }
+          }
+        }
       }
     } else {
       obsParts.push(String(obsContent));
+    }
+
+    obsParts.push("");
+
+    // Add original dialog for this session to enable temporal reasoning
+    const sessionKey = `session_${sessionNum}`;
+    const dialogContent = sample.conversation[sessionKey];
+    if (Array.isArray(dialogContent)) {
+      obsParts.push("# Original Dialog (for date/time reasoning):");
+      for (const turn of dialogContent) {
+        if (typeof turn === "object" && turn !== null && "speaker" in turn && "text" in turn) {
+          obsParts.push(`${turn.speaker}: ${turn.text}`);
+        } else if (typeof turn === "string") {
+          obsParts.push(turn);
+        }
+      }
     }
 
     const content = obsParts.join("\n");
@@ -320,51 +258,93 @@ function parseTimestamp(ts: string): number | undefined {
   if (!ts) return undefined;
   try {
     const date = new Date(ts);
-    if (!isNaN(date.getTime())) {
+    if (!Number.isNaN(date.getTime())) {
       return date.getTime();
     }
     const parsed = Date.parse(ts);
-    return isNaN(parsed) ? undefined : parsed;
+    return Number.isNaN(parsed) ? undefined : parsed;
   } catch {
     return undefined;
   }
 }
 
 /**
- * Search memory using semantic similarity.
- * Falls back to simple keyword matching if no embeddings available.
+ * Build prompt for agent API with question and conversation context.
  */
-function searchMemorySemantically(
-  queryEmbedding: number[],
-  records: MemoryRecord[],
-  topK: number = 5,
-): MemorySearchHit[] {
-  // If we have embeddings, use cosine similarity
-  const recordsWithEmbeddings = records.filter(
-    (r) => r.embedding && r.embedding.length > 0,
-  );
+function buildAgentPrompt(question: string, sample: LoCoMoSample): string {
+  const parts: string[] = [];
 
-  if (recordsWithEmbeddings.length > 0 && queryEmbedding.length > 0) {
-    const scored = recordsWithEmbeddings
-      .map((record) => ({
-        sourceType: "raw" as const,
-        timestamp: record.timestamp,
-        record,
-        score: cosineSimilarity(queryEmbedding, record.embedding!),
-      }))
-      .filter((hit) => Number.isFinite(hit.score))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, topK);
+  // Add conversation context based on retrieval mode
+  if (sample.conversation) {
+    parts.push("# Conversation History\n");
+    const speakerA = sample.conversation.speaker_a ?? "Speaker A";
+    const speakerB = sample.conversation.speaker_b ?? "Speaker B";
+    parts.push(`# Speakers: ${speakerA}, ${speakerB}\n`);
 
-    return scored;
+    for (const key of Object.keys(sample.conversation).sort()) {
+      if (key.endsWith("_date_time")) {
+        const sessionNum = key.replace("_date_time", "");
+        const datetimeKey = `session_${sessionNum}_date_time`;
+        const sessionKey = `session_${sessionNum}`;
+        const session = sample.conversation[sessionKey];
+        const timestamp = sample.conversation[datetimeKey];
+
+        if (Array.isArray(session)) {
+          parts.push(
+            `\n## Session ${sessionNum} (${timestamp || "unknown"})\n`,
+          );
+          for (const turn of session) {
+            parts.push(turn);
+          }
+        }
+      }
+    }
   }
 
-  // Fallback: simple keyword matching
-  return records.slice(0, topK).map((record) => ({
-    sourceType: "raw" as const,
-    timestamp: record.timestamp,
-    record,
-  }));
+  // Add observation context
+  if (sample.observation) {
+    parts.push("\n# Observations\n");
+    for (const key of Object.keys(sample.observation).sort()) {
+      if (key.endsWith("_observation")) {
+        parts.push(`\n## ${key}\n`);
+        parts.push(String(sample.observation[key]));
+      }
+    }
+  }
+
+  // Add session summary context
+  if (sample.session_summary) {
+    parts.push("\n# Session Summaries\n");
+    for (const key of Object.keys(sample.session_summary).sort()) {
+      if (key.endsWith("_summary")) {
+        parts.push(`\n## ${key}\n`);
+        parts.push(String(sample.session_summary[key]));
+      }
+    }
+  }
+
+  const context = parts.join("\n");
+
+  return `You are a helpful assistant answering questions based on the conversation history provided below.
+
+# INSTRUCTIONS:
+1. Carefully analyze all provided conversation history and summaries
+2. Pay special attention to timestamps to determine the answer
+3. If the question asks about a specific event or fact, look for direct evidence in the memories
+4. If the memories contain contradictory information, prioritize the most recent memory
+5. If there is a question about time references (like "last year", "two months ago", etc.),
+   calculate the actual date based on the memory timestamp. For example, if a memory from
+   4 May 2022 mentions "went to India last year," then the trip occurred in 2021.
+6. Always convert relative time references to specific dates, months, or years.
+7. Focus only on the content of the memories. Do not confuse character names mentioned in memories with the speakers.
+
+${context}
+
+---
+
+Question: ${question}
+
+Answer based on the conversation history above:`;
 }
 
 /**
@@ -372,13 +352,16 @@ function searchMemorySemantically(
  */
 export class LoCoMoEvaluator {
   private retrievalMode: RetrievalMode;
-  private embeddings: UniversalEmbeddings;
   private storage: InMemoryStorageAdapter;
-  private apiKey?: string;
+  private port: number;
+  private authToken?: string;
+  private quickLimit?: number;
 
   constructor(
     retrievalMode: RetrievalMode | string = RetrievalMode.OBSERVATION,
-    apiKey?: string,
+    port?: number,
+    tokenPath?: string,
+    quickLimit?: number,
   ) {
     // Convert string to enum if needed
     if (typeof retrievalMode === "string") {
@@ -391,13 +374,22 @@ export class LoCoMoEvaluator {
     } else {
       this.retrievalMode = retrievalMode;
     }
-    this.apiKey = apiKey;
-    this.embeddings = new UniversalEmbeddings();
     this.storage = new InMemoryStorageAdapter();
+    this.port = port || DEFAULT_PORTS[0];
+    this.authToken = readAuthToken(tokenPath);
+    this.quickLimit = quickLimit;
+  }
+
+  /**
+   * Set API port (for auto-discovery)
+   */
+  setPort(port: number): void {
+    this.port = port;
   }
 
   /**
    * Load a LoCoMo sample into the memory system.
+   * Writes memory records to ~/.openloomi/data/memory/bench/ for the agent to search.
    */
   async loadSample(sample: LoCoMoSample): Promise<void> {
     this.storage.clear();
@@ -406,7 +398,7 @@ export class LoCoMoEvaluator {
     let records: MemoryRecord[];
 
     if (this.retrievalMode === RetrievalMode.DIALOG) {
-      records = createMemoryRecordsFromDialog(sample, this.embeddings);
+      records = createMemoryRecordsFromDialog(sample);
     } else if (this.retrievalMode === RetrievalMode.OBSERVATION) {
       records = createMemoryRecordsFromObservation(sample);
     } else if (this.retrievalMode === RetrievalMode.SESSION_SUMMARY) {
@@ -415,37 +407,16 @@ export class LoCoMoEvaluator {
       records = [];
     }
 
-    // Generate embeddings for all records (skip if embedding API fails)
-    const texts = records.map((r) => r.text || "").filter(Boolean);
-    try {
-      if (texts.length > 0) {
-        const vectors = await this.embeddings.embedDocuments(texts);
-
-        for (let i = 0; i < records.length; i++) {
-          if (texts[i]) {
-            records[i].embedding = vectors[i];
-            records[i].embeddingModel = "text-embedding-3-small";
-            records[i].embeddingDimensions = vectors[i].length;
-            records[i].embeddingUpdatedAt = Date.now();
-          }
-        }
-        console.log(
-          `[LoCoMo] Generated embeddings for ${texts.length} records`,
-        );
-      }
-    } catch (error) {
-      console.log(
-        `[LoCoMo] Skipping embeddings (OpenRouter doesn't support embedding API)`,
-      );
-    }
-
-    // Store in memory adapter
+    // Store in memory adapter (for record count check)
     for (const record of records) {
       this.storage.addRecord(record);
     }
 
+    // Write to memory files for agent to search
+    await writeMemoryFiles(sample, records);
+
     console.log(
-      `[LoCoMo] Loaded ${records.length} records into memory (mode: ${this.retrievalMode})`,
+      `[LoCoMo] Loaded ${records.length} records (mode: ${this.retrievalMode})`,
     );
   }
 
@@ -472,21 +443,31 @@ export class LoCoMoEvaluator {
 
     const predictions: Prediction[] = [];
     let correct = 0;
-    let totalPromptTokens = 0;
-    let totalCompletionTokens = 0;
 
-    for (const qa of sample.qa_pairs) {
+    // Limit questions if quick mode is enabled
+    const questionsToEvaluate = this.quickLimit
+      ? sample.qa_pairs.slice(0, this.quickLimit)
+      : sample.qa_pairs;
+
+    console.log(`[LoCoMo] Evaluating ${questionsToEvaluate.length} questions (quick limit: ${this.quickLimit || 'none'})`);
+
+    for (const qa of questionsToEvaluate) {
       try {
-        // Query memory using semantic search
-        const { response, promptTokens, completionTokens } =
-          await this.queryMemory(qa.question);
-
-        totalPromptTokens += promptTokens;
-        totalCompletionTokens += completionTokens;
+        // Query memory using agent API (which has memory search tools built in)
+        const response = await this.queryMemory(qa.question, sample);
 
         // Evaluate answer correctness using LLM judge
-        const isCorrect =
-          (await evaluateLLMJudge(qa.question, qa.answer, response)) === 1;
+        let isCorrect = false;
+        try {
+          isCorrect = (await evaluateLLMJudge(qa.question, qa.answer, response)) === 1;
+          console.log(`[Q${predictions.length + 1}] ${isCorrect ? "✓" : "✗"} Q: "${qa.question.substring(0, 60)}..." GT: "${qa.answer}"`);
+          if (!isCorrect) {
+            console.log(`    Agent response: "${response.substring(0, 300)}..."`);
+          }
+        } catch (judgeError) {
+          const errMsg = judgeError instanceof Error ? judgeError.message : String(judgeError);
+          console.log(`[Q${predictions.length + 1}] ✗ Judge failed: ${errMsg.substring(0, 100)}`);
+        }
 
         if (isCorrect) {
           correct++;
@@ -515,7 +496,8 @@ export class LoCoMoEvaluator {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        console.error(`Error evaluating question: ${errorMessage}`);
+        const errorCause = error instanceof Error && error.cause ? String(error.cause) : "";
+        console.error(`Error evaluating question: ${errorMessage}${errorCause ? ` (cause: ${errorCause})` : ""}`);
 
         predictions.push({
           question: qa.question,
@@ -546,65 +528,41 @@ export class LoCoMoEvaluator {
       correct_answers: correct,
       accuracy: total > 0 ? correct / total : 0,
       token_usage: {
-        prompt_tokens: totalPromptTokens,
-        completion_tokens: totalCompletionTokens,
-        total_tokens: totalPromptTokens + totalCompletionTokens,
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
       },
       predictions,
     };
   }
 
   /**
-   * Query memory using LoCoMo's specialized answer prompt.
+   * Query memory using the agent API.
+   * The agent will search through ~/.openloomi/data/memory/bench/ for relevant information.
    */
-  private async queryMemory(question: string): Promise<{
-    response: string;
-    promptTokens: number;
-    completionTokens: number;
-  }> {
-    // Try to generate query embedding, fallback to empty if fails
-    let queryEmbedding: number[] = [];
-    try {
-      queryEmbedding = await this.embeddings.embedQuery(question);
-    } catch {
-      console.log(
-        "[LoCoMo] Query embedding skipped (OpenRouter doesn't support embedding API)",
-      );
-    }
+  private async queryMemory(
+    question: string,
+    sample: LoCoMoSample,
+  ): Promise<string> {
+    const memoryPath = `~/.openloomi/data/memory/bench/${sample.sample_id}/`;
+    const prompt = `Please answer the following question based on the information in your memory files.
 
-    // Get all records from storage
-    const result = await this.storage.queryRaw({
-      userId: "benchmark_user",
-      limit: 100,
-    });
+Question: ${question}
 
-    // Search for relevant records using semantic similarity
-    const hits = searchMemorySemantically(queryEmbedding, result.items, 5);
+IMPORTANT INSTRUCTIONS:
+1. Search your memory files in the directory: ${memoryPath}
+2. Read ALL .md files in this directory and its subdirectories to find the answer
+3. When answering, you MUST perform TEMPORAL REASONING:
+   - If a memory mentions relative time like "yesterday", "last week", "two months ago", etc.
+   - Find the session date/time in the same memory file
+   - Calculate the actual date by combining the relative reference with the session date
+   - For example: if a session is dated "8 May, 2023" and someone says "I went yesterday", the actual date is "7 May 2023"
+   - Another example: if a session is dated "4 May 2022" and someone says "went to India last year", the trip occurred in 2021
+4. Always provide SPECIFIC DATES (like "7 May 2023") not vague terms like "recently" or "before"
+5. If you see references like [Ref: D1:3], these refer to specific dialog turns - use them to find more context`;
 
-    // Build context from hits
-    const context = hits
-      .map((hit) => ("record" in hit ? hit.record.text : ""))
-      .filter(Boolean)
-      .join("\n\n---\n\n");
-
-    // Format prompt with context
-    const prompt = ANSWER_PROMPT.replace("{question}", question).replace(
-      "{context}",
-      context || "No relevant memories found.",
-    );
-
-    // Generate answer using LLM (use Qwen3.7-Max)
-    const { usage, text } = await generateText({
-      model: openrouter("qwen/qwen3.7-max"),
-      prompt,
-    });
-
-    return {
-      response: text,
-      promptTokens:
-        (usage as any).promptTokens ?? (usage as any).inputTokens ?? 0,
-      completionTokens:
-        (usage as any).completionTokens ?? (usage as any).outputTokens ?? 0,
-    };
+    return await callAgentApi(prompt, this.port, this.authToken);
   }
 }
+
+export { findAvailablePort, DEFAULT_PORTS };

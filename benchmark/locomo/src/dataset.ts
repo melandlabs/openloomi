@@ -2,7 +2,7 @@
  * LoCoMo dataset loader.
  */
 
-import { readFile } from "fs/promises";
+import { readFile } from "node:fs/promises";
 import type { LoCoMoSample, QAPair } from "./types.js";
 
 interface RawQAPair {
@@ -14,10 +14,10 @@ interface RawQAPair {
 
 interface RawSample {
   sample_id: string;
-  conversation: Record<string, any>;
-  observation?: Record<string, any>;
-  session_summary?: Record<string, any>;
-  event_summary?: Record<string, any>;
+  conversation: Record<string, unknown>;
+  observation?: Record<string, unknown>;
+  session_summary?: Record<string, unknown>;
+  event_summary?: Record<string, unknown>;
   qa?: RawQAPair[];
 }
 
@@ -32,7 +32,7 @@ function createQAPair(qa: RawQAPair): QAPair | null {
 
   return {
     question: qa.question,
-    answer: qa.answer,
+    answer: String(qa.answer),
     category:
       typeof qa.category === "string"
         ? Number.parseInt(qa.category, 10)
@@ -67,20 +67,17 @@ export function createLoCoMoSample(data: RawSample): LoCoMoSample {
 }
 
 /**
- * LoCoMo dataset loader.
+ * Load LoCoMo dataset from JSON file.
  */
-export class LoCoMoDataset {
-  /**
-   * Load LoCoMo dataset from JSON file.
-   */
-  static async loadFromJson(jsonPath: string): Promise<LoCoMoSample[]> {
-    const content = await readFile(jsonPath, "utf-8");
-    const data = JSON.parse(content);
+export async function loadLoCoMoDatasetFromJson(
+  jsonPath: string,
+): Promise<LoCoMoSample[]> {
+  const content = await readFile(jsonPath, "utf-8");
+  const data = JSON.parse(content);
 
-    // Handle both single sample and list of samples
-    if (Array.isArray(data)) {
-      return data.map((sample) => createLoCoMoSample(sample));
-    }
-    return [createLoCoMoSample(data)];
+  // Handle both single sample and list of samples
+  if (Array.isArray(data)) {
+    return data.map((sample) => createLoCoMoSample(sample as RawSample));
   }
+  return [createLoCoMoSample(data as RawSample)];
 }

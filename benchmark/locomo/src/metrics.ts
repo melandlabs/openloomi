@@ -153,6 +153,7 @@ interface LLMJudgeResult {
 
 /**
  * Evaluate the generated answer against the gold answer using an LLM judge.
+ * Includes retry logic for handling unstable API connections.
  *
  * Returns 1 for CORRECT, 0 for WRONG.
  */
@@ -160,42 +161,54 @@ export async function evaluateLLMJudge(
   question: string,
   goldAnswer: string,
   generatedAnswer: string,
+  maxRetries = 3,
 ): Promise<number> {
-  try {
-    const prompt = LLM_JUDGE_PROMPT.replace("{question}", question)
-      .replace("{gold_answer}", goldAnswer)
-      .replace("{generated_answer}", generatedAnswer);
+  const prompt = LLM_JUDGE_PROMPT.replace("{question}", question)
+    .replace("{gold_answer}", goldAnswer)
+    .replace("{generated_answer}", generatedAnswer);
 
-    const { text } = await generateText({
-      model: openrouter("qwen/qwen3.7-max"),
-      system:
-        "You are an impartial judge evaluating answers to questions. Always respond with valid JSON.",
-      prompt,
-    });
+  let lastError: Error | undefined;
 
-    // Parse JSON response
-    let result: LLMJudgeResult;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      result = JSON.parse(text);
-    } catch {
-      // Try to extract label from non-JSON response
-      if (
-        text.toUpperCase().includes("CORRECT") &&
-        !text.toUpperCase().includes("WRONG")
-      ) {
-        return 1;
+      const { text } = await generateText({
+        model: openrouter("qwen/qwen3.7-max"),
+        system:
+          "You are an impartial judge evaluating answers to questions. Always respond with valid JSON.",
+        prompt,
+      });
+
+      // Parse JSON response
+      let result: LLMJudgeResult;
+      try {
+        result = JSON.parse(text);
+      } catch {
+        // Try to extract label from non-JSON response
+        if (
+          text.toUpperCase().includes("CORRECT") &&
+          !text.toUpperCase().includes("WRONG")
+        ) {
+          return 1;
+        }
+        return 0;
       }
-      return 0;
+
+      const label = result.label ?? "WRONG";
+      const score = label === "CORRECT" ? 1 : 0;
+
+      return score;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.log(`[Judge] Attempt ${attempt}/${maxRetries} failed: ${lastError.message.substring(0, 80)}`);
+      if (attempt < maxRetries) {
+        // Wait before retry (exponential backoff)
+        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+      }
     }
-
-    const label = result.label ?? "WRONG";
-    const score = label === "CORRECT" ? 1 : 0;
-
-    return score;
-  } catch (error) {
-    console.error("Error in LLM judge evaluation:", error);
-    return 0;
   }
+
+  console.error(`[Judge] All ${maxRetries} attempts failed. Last error: ${lastError?.message}`);
+  return 0;
 }
 
 /**
