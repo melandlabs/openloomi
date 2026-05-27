@@ -87,11 +87,7 @@ export interface MemorySummarySearchQuery {
 }
 
 export interface MemoryStorageAdapter {
-  acquireLock(input: {
-    key: string;
-    ttlMs: number;
-    now: number;
-  }): Promise<{
+  acquireLock(input: { key: string; ttlMs: number; now: number }): Promise<{
     key: string;
     token: string;
     acquiredAt: number;
