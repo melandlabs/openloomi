@@ -36,16 +36,17 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
       return null; // Lock is held
     }
 
+    const expiresAt = input.now + input.ttlMs;
     const handle: MemoryLockHandle = {
       key: input.key,
       token: `lock_${input.now}_${Math.random()}`,
       acquiredAt: input.now,
-      expiresAt: input.now + input.ttlMs,
+      expiresAt,
     };
 
     this.locks.set(input.key, {
       token: handle.token,
-      expiresAt: handle.expiresAt!,
+      expiresAt,
     });
 
     return handle;
@@ -107,13 +108,15 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
     );
 
     if (query.startTime !== undefined) {
-      items = items.filter((r) => r.timestamp >= query.startTime!);
+      const startTime = query.startTime;
+      items = items.filter((r) => r.timestamp >= startTime);
     }
     if (query.endTime !== undefined) {
-      items = items.filter((r) => r.timestamp <= query.endTime!);
+      const endTime = query.endTime;
+      items = items.filter((r) => r.timestamp <= endTime);
     }
     if (query.tiers && query.tiers.length > 0) {
-      items = items.filter((r) => query.tiers!.includes(r.tier));
+      items = items.filter((r) => query.tiers?.includes(r.tier));
     }
 
     items.sort((a, b) =>
@@ -141,13 +144,15 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
     );
 
     if (query.startTime !== undefined) {
-      items = items.filter((s) => s.endTimestamp >= query.startTime!);
+      const startTime = query.startTime;
+      items = items.filter((s) => s.endTimestamp >= startTime);
     }
     if (query.endTime !== undefined) {
-      items = items.filter((s) => s.startTimestamp <= query.endTime!);
+      const endTime = query.endTime;
+      items = items.filter((s) => s.startTimestamp <= endTime);
     }
     if (query.summaryTiers && query.summaryTiers.length > 0) {
-      items = items.filter((s) => query.summaryTiers!.includes(s.summaryTier));
+      items = items.filter((s) => query.summaryTiers?.includes(s.summaryTier));
     }
 
     items.sort((a, b) =>
