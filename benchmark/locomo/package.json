@@ -1,0 +1,16 @@
+{
+  "name": "@openloomi/benchmark-locomo",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "benchmark": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^1.0.0",
+    "ai": "^5.0.0-beta.6"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5.6.3"
+  }
+}
