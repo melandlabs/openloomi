@@ -33,7 +33,10 @@ function createQAPair(qa: RawQAPair): QAPair | null {
   return {
     question: qa.question,
     answer: qa.answer,
-    category: typeof qa.category === "string" ? Number.parseInt(qa.category, 10) : (qa.category ?? 0),
+    category:
+      typeof qa.category === "string"
+        ? Number.parseInt(qa.category, 10)
+        : (qa.category ?? 0),
     evidence: qa.evidence ?? [],
   };
 }
@@ -78,6 +81,6 @@ export class LoCoMoDataset {
     if (Array.isArray(data)) {
       return data.map((sample) => createLoCoMoSample(sample));
     }
-      return [createLoCoMoSample(data)];
+    return [createLoCoMoSample(data)];
   }
 }

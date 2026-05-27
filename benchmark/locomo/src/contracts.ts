@@ -91,8 +91,18 @@ export interface MemoryStorageAdapter {
     key: string;
     ttlMs: number;
     now: number;
-  }): Promise<{ key: string; token: string; acquiredAt: number; expiresAt?: number } | null>;
-  releaseLock(handle: { key: string; token: string; acquiredAt: number; expiresAt?: number }): Promise<void>;
+  }): Promise<{
+    key: string;
+    token: string;
+    acquiredAt: number;
+    expiresAt?: number;
+  } | null>;
+  releaseLock(handle: {
+    key: string;
+    token: string;
+    acquiredAt: number;
+    expiresAt?: number;
+  }): Promise<void>;
 
   listCandidates(input: {
     userId: string;
@@ -116,7 +126,9 @@ export interface MemoryStorageAdapter {
   }): Promise<void>;
 
   queryRaw(query: MemorySearchQuery): Promise<MemoryPageResult<MemoryRecord>>;
-  querySummaries(query: MemorySummarySearchQuery): Promise<MemoryPageResult<MemorySummary>>;
+  querySummaries(
+    query: MemorySummarySearchQuery,
+  ): Promise<MemoryPageResult<MemorySummary>>;
   markRecordsAccessed?(input: {
     userId: string;
     ids: string[];

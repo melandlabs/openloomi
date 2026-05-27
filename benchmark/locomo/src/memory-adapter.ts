@@ -58,7 +58,9 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
     }
   }
 
-  async listCandidates(input: MemoryListCandidatesInput): Promise<MemoryRecord[]> {
+  async listCandidates(
+    input: MemoryListCandidatesInput,
+  ): Promise<MemoryRecord[]> {
     const cutoff = input.olderThan;
     return Array.from(this.records.values())
       .filter(
@@ -139,20 +141,13 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
     );
 
     if (query.startTime !== undefined) {
-      items = items.filter(
-        (s) => s.endTimestamp >= query.startTime!,
-      );
+      items = items.filter((s) => s.endTimestamp >= query.startTime!);
     }
     if (query.endTime !== undefined) {
       items = items.filter((s) => s.startTimestamp <= query.endTime!);
     }
-    if (
-      query.summaryTiers &&
-      query.summaryTiers.length > 0
-    ) {
-      items = items.filter((s) =>
-        query.summaryTiers!.includes(s.summaryTier),
-      );
+    if (query.summaryTiers && query.summaryTiers.length > 0) {
+      items = items.filter((s) => query.summaryTiers!.includes(s.summaryTier));
     }
 
     items.sort((a, b) =>
@@ -174,9 +169,7 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
     };
   }
 
-  async markRecordsAccessed(
-    input: MemoryMarkAccessedInput,
-  ): Promise<void> {
+  async markRecordsAccessed(input: MemoryMarkAccessedInput): Promise<void> {
     const now = Date.now();
     for (const id of input.ids) {
       const record = this.records.get(id);

@@ -13,17 +13,10 @@ const openrouter = createOpenAICompatible({
   apiKey: process.env.OPENROUTER_API_KEY,
   name: "openrouter",
 });
-import type {
-  MemoryRecord,
-  MemorySearchHit,
-} from "./contracts.js";
+import type { MemoryRecord, MemorySearchHit } from "./contracts.js";
 
 import { RetrievalMode } from "./types.js";
-import type {
-  LoCoMoSample,
-  EvaluationResult,
-  Prediction,
-} from "./types.js";
+import type { LoCoMoSample, EvaluationResult, Prediction } from "./types.js";
 import { InMemoryStorageAdapter } from "./memory-adapter.js";
 import { ANSWER_PROMPT } from "./prompts.js";
 import { calculateMetrics, evaluateLLMJudge } from "./metrics.js";
@@ -133,9 +126,7 @@ class UniversalEmbeddings {
       throw new Error("Invalid response format from embeddings API");
     }
 
-    const sortedData = data.data.sort(
-      (a: any, b: any) => a.index - b.index,
-    );
+    const sortedData = data.data.sort((a: any, b: any) => a.index - b.index);
 
     return sortedData.map((item: any) => {
       if (!item.embedding || !Array.isArray(item.embedding)) {
@@ -269,9 +260,7 @@ function createMemoryRecordsFromObservation(
 /**
  * Format session summary data into memory records.
  */
-function createMemoryRecordsFromSummary(
-  sample: LoCoMoSample,
-): MemoryRecord[] {
+function createMemoryRecordsFromSummary(sample: LoCoMoSample): MemoryRecord[] {
   const records: MemoryRecord[] = [];
 
   for (const key of Object.keys(sample.session_summary).sort()) {
@@ -351,7 +340,9 @@ function searchMemorySemantically(
   topK: number = 5,
 ): MemorySearchHit[] {
   // If we have embeddings, use cosine similarity
-  const recordsWithEmbeddings = records.filter((r) => r.embedding && r.embedding.length > 0);
+  const recordsWithEmbeddings = records.filter(
+    (r) => r.embedding && r.embedding.length > 0,
+  );
 
   if (recordsWithEmbeddings.length > 0 && queryEmbedding.length > 0) {
     const scored = recordsWithEmbeddings
@@ -438,10 +429,14 @@ export class LoCoMoEvaluator {
             records[i].embeddingUpdatedAt = Date.now();
           }
         }
-        console.log(`[LoCoMo] Generated embeddings for ${texts.length} records`);
+        console.log(
+          `[LoCoMo] Generated embeddings for ${texts.length} records`,
+        );
       }
     } catch (error) {
-      console.log(`[LoCoMo] Skipping embeddings (OpenRouter doesn't support embedding API)`);
+      console.log(
+        `[LoCoMo] Skipping embeddings (OpenRouter doesn't support embedding API)`,
+      );
     }
 
     // Store in memory adapter
@@ -491,11 +486,7 @@ export class LoCoMoEvaluator {
 
         // Evaluate answer correctness using LLM judge
         const isCorrect =
-          (await evaluateLLMJudge(
-            qa.question,
-            qa.answer,
-            response,
-          )) === 1;
+          (await evaluateLLMJudge(qa.question, qa.answer, response)) === 1;
 
         if (isCorrect) {
           correct++;
@@ -566,9 +557,7 @@ export class LoCoMoEvaluator {
   /**
    * Query memory using LoCoMo's specialized answer prompt.
    */
-  private async queryMemory(
-    question: string,
-  ): Promise<{
+  private async queryMemory(question: string): Promise<{
     response: string;
     promptTokens: number;
     completionTokens: number;
@@ -578,7 +567,9 @@ export class LoCoMoEvaluator {
     try {
       queryEmbedding = await this.embeddings.embedQuery(question);
     } catch {
-      console.log("[LoCoMo] Query embedding skipped (OpenRouter doesn't support embedding API)");
+      console.log(
+        "[LoCoMo] Query embedding skipped (OpenRouter doesn't support embedding API)",
+      );
     }
 
     // Get all records from storage
@@ -588,11 +579,7 @@ export class LoCoMoEvaluator {
     });
 
     // Search for relevant records using semantic similarity
-    const hits = searchMemorySemantically(
-      queryEmbedding,
-      result.items,
-      5,
-    );
+    const hits = searchMemorySemantically(queryEmbedding, result.items, 5);
 
     // Build context from hits
     const context = hits
@@ -614,8 +601,10 @@ export class LoCoMoEvaluator {
 
     return {
       response: text,
-      promptTokens: (usage as any).promptTokens ?? (usage as any).inputTokens ?? 0,
-      completionTokens: (usage as any).completionTokens ?? (usage as any).outputTokens ?? 0,
+      promptTokens:
+        (usage as any).promptTokens ?? (usage as any).inputTokens ?? 0,
+      completionTokens:
+        (usage as any).completionTokens ?? (usage as any).outputTokens ?? 0,
     };
   }
 }

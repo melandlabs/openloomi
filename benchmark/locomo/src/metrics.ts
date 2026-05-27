@@ -17,7 +17,10 @@ import { LLM_JUDGE_PROMPT } from "./prompts.js";
 /**
  * Calculate F1 score between prediction and ground truth.
  */
-export function calculateF1Score(prediction: string, groundTruth: string): number {
+export function calculateF1Score(
+  prediction: string,
+  groundTruth: string,
+): number {
   if (!prediction || !groundTruth) {
     return 0.0;
   }
@@ -56,8 +59,14 @@ export function calculateBLEUScores(
   }
 
   // Tokenize by whitespace
-  const predTokens = prediction.toLowerCase().split(/\s+/).filter((t) => t.length > 0);
-  const gtTokens = groundTruth.toLowerCase().split(/\s+/).filter((t) => t.length > 0);
+  const predTokens = prediction
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 0);
+  const gtTokens = groundTruth
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 0);
 
   if (predTokens.length === 0 || gtTokens.length === 0) {
     return { bleu1: 0.0, bleu2: 0.0, bleu3: 0.0, bleu4: 0.0 };
@@ -73,7 +82,11 @@ export function calculateBLEUScores(
   };
 
   // Calculate n-gram precisions
-  const getPrecision = (predTokens: string[], gtTokens: string[], n: number): number => {
+  const getPrecision = (
+    predTokens: string[],
+    gtTokens: string[],
+    n: number,
+  ): number => {
     if (predTokens.length < n) return 0;
 
     const predNgrams = getNgrams(predTokens, n);
@@ -97,7 +110,10 @@ export function calculateBLEUScores(
   const bleu4 = getPrecision(predTokens, gtTokens, 4);
 
   // Apply brevity penalty (simplified)
-  const brevityPenalty = Math.min(1.0, Math.exp(1 - gtTokens.length / Math.max(predTokens.length, 1)));
+  const brevityPenalty = Math.min(
+    1.0,
+    Math.exp(1 - gtTokens.length / Math.max(predTokens.length, 1)),
+  );
 
   return {
     bleu1: bleu1 * brevityPenalty,
@@ -110,7 +126,10 @@ export function calculateBLEUScores(
 /**
  * Calculate all metrics between prediction and ground truth.
  */
-export function calculateMetrics(prediction: string, groundTruth: string): {
+export function calculateMetrics(
+  prediction: string,
+  groundTruth: string,
+): {
   f1: number;
   bleu1: number;
   bleu2: number;
@@ -149,7 +168,8 @@ export async function evaluateLLMJudge(
 
     const { text } = await generateText({
       model: openrouter("qwen/qwen3.7-max"),
-      system: "You are an impartial judge evaluating answers to questions. Always respond with valid JSON.",
+      system:
+        "You are an impartial judge evaluating answers to questions. Always respond with valid JSON.",
       prompt,
     });
 
@@ -159,7 +179,10 @@ export async function evaluateLLMJudge(
       result = JSON.parse(text);
     } catch {
       // Try to extract label from non-JSON response
-      if (text.toUpperCase().includes("CORRECT") && !text.toUpperCase().includes("WRONG")) {
+      if (
+        text.toUpperCase().includes("CORRECT") &&
+        !text.toUpperCase().includes("WRONG")
+      ) {
         return 1;
       }
       return 0;
@@ -179,7 +202,12 @@ export async function evaluateLLMJudge(
  * Calculate metrics for a category of results.
  */
 export function calculateCategoryMetrics(
-  results: Array<{ llm_score?: number; f1_score?: number; bleu_score?: number; bleu4?: number }>,
+  results: Array<{
+    llm_score?: number;
+    f1_score?: number;
+    bleu_score?: number;
+    bleu4?: number;
+  }>,
 ): {
   count: number;
   llm_judge_accuracy: number;

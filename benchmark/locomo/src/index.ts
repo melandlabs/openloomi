@@ -42,13 +42,17 @@ function parseCliArgs(): CliArgs {
 
   if (!values.dataset) {
     console.error("Error: --dataset is required");
-    console.error("Usage: pnpm benchmark:locomo -- --dataset path/to/locomo10.json --mode observation");
+    console.error(
+      "Usage: pnpm benchmark:locomo -- --dataset path/to/locomo10.json --mode observation",
+    );
     process.exit(1);
   }
 
   const mode = values.mode as RetrievalMode;
   if (!Object.values(RetrievalMode).includes(mode)) {
-    console.error(`Error: Invalid mode '${mode}'. Must be one of: ${Object.values(RetrievalMode).join(", ")}`);
+    console.error(
+      `Error: Invalid mode '${mode}'. Must be one of: ${Object.values(RetrievalMode).join(", ")}`,
+    );
     process.exit(1);
   }
 
@@ -130,7 +134,9 @@ async function main() {
   // Filter samples if sample_ids provided
   let filteredSamples = samples;
   if (args.samples && args.samples.length > 0) {
-    filteredSamples = samples.filter((s) => args.samples!.includes(s.sample_id));
+    filteredSamples = samples.filter((s) =>
+      args.samples!.includes(s.sample_id),
+    );
     console.log(`🔍 Filtered to ${filteredSamples.length} samples by ID`);
   }
 
@@ -139,7 +145,9 @@ async function main() {
     console.log("⚡ Quick mode: limiting to first 5 questions per sample");
   }
 
-  console.log(`📊 Loaded ${filteredSamples.length} LoCoMo samples for evaluation`);
+  console.log(
+    `📊 Loaded ${filteredSamples.length} LoCoMo samples for evaluation`,
+  );
   console.log(`🔧 Retrieval mode: ${args.mode}\n`);
 
   // Run evaluation
@@ -175,8 +183,11 @@ async function main() {
         `Sample ${sample.sample_id}: ${result.correct_answers}/${result.total_questions} correct (${(result.accuracy * 100).toFixed(2)}%)`,
       );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Error evaluating sample ${sample.sample_id}: ${errorMessage}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error(
+        `Error evaluating sample ${sample.sample_id}: ${errorMessage}`,
+      );
 
       resultsBySample.push({
         sample_id: sample.sample_id,
@@ -197,7 +208,8 @@ async function main() {
     (sum, r) => sum + (r.correct_answers || r.correct || 0),
     0,
   );
-  const overallAccuracy = totalQuestions > 0 ? totalCorrect / totalQuestions : 0;
+  const overallAccuracy =
+    totalQuestions > 0 ? totalCorrect / totalQuestions : 0;
 
   const totalTokens = resultsBySample.reduce(
     (sum, r) => sum + (r.token_usage?.total_tokens || 0),
