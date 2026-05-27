@@ -3,6 +3,9 @@
  * This implements the same interface as the production storage adapters.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type {
   MemoryStorageAdapter,
   MemoryRecord,
@@ -17,9 +20,162 @@ import type {
   MemoryMarkAccessedInput,
 } from "./contracts.js";
 
+// Default API ports (dev → local → prod)
+export const DEFAULT_PORTS = [3515, 3415, 3414];
+
 /**
- * Simple in-memory storage adapter for benchmarking.
- * Implements the MemoryStorageAdapter interface.
+ * Find available API port by checking the agent endpoint
+ */
+export async function findAvailablePort(
+  ports: number[] = DEFAULT_PORTS,
+): Promise<number> {
+  for (const port of ports) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      // Use a minimal agent API call to check if the server is responding
+      const response = await fetch(
+        `http://localhost:${port}/api/native/agent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: "ping",
+            provider: "claude",
+            permissionMode: "bypassPermissions",
+            skillsConfig: {
+              enabled: false,
+              userDirEnabled: false,
+              appDirEnabled: false,
+            },
+            mcpConfig: {
+              enabled: false,
+              userDirEnabled: false,
+              appDirEnabled: false,
+            },
+          }),
+          signal: controller.signal,
+        },
+      );
+      clearTimeout(timeout);
+      if (response.ok || response.status === 400) {
+        // 400 means the server responded (bad request is expected for our minimal ping)
+        return port;
+      }
+    } catch {
+      // Port not available, try next
+    }
+  }
+  throw new Error(`No available API port found from [${ports.join(", ")}]`);
+}
+
+/**
+ * Read auth token from ~/.openloomi/token
+ */
+export function readAuthToken(tokenPath?: string): string | undefined {
+  try {
+    const path = tokenPath || join(homedir(), ".openloomi", "token");
+    return readFileSync(path, "utf-8").trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Call Agent API with SSE stream and return full text response.
+ * The agent API internally has memory search tools built in.
+ */
+export async function callAgentApi(
+  prompt: string,
+  port: number,
+  authToken?: string,
+): Promise<string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  console.log("[Agent] Calling agent API...");
+  let response: Response;
+  try {
+    response = await fetch(`http://localhost:${port}/api/native/agent`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        prompt,
+        provider: "claude",
+        permissionMode: "bypassPermissions",
+        skillsConfig: {
+          enabled: true,
+          userDirEnabled: true,
+          appDirEnabled: false,
+        },
+        mcpConfig: {
+          enabled: true,
+          userDirEnabled: true,
+          appDirEnabled: false,
+        },
+      }),
+    });
+  } catch (fetchError) {
+    const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+    const errorCause = fetchError instanceof Error && fetchError.cause ? String(fetchError.cause) : "";
+    console.error(`[Agent] Fetch failed: ${errorMessage}${errorCause ? ` (cause: ${errorCause})` : ""}`);
+    throw new Error(`Agent API fetch failed: ${errorMessage}${errorCause ? ` (cause: ${errorCause})` : ""}`);
+  }
+  console.log("[Agent] Response received, status:", response.status);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Agent API error (${response.status}): ${errorText}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Response body is null");
+  }
+
+  const decoder = new TextDecoder();
+  let fullText = "";
+  let messageCount = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value);
+    messageCount++;
+    // Parse SSE format: "data: {...}\n\n"
+    for (const line of chunk.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("data: ")) {
+        try {
+          const jsonStr = trimmed.slice(6);
+          const msg = JSON.parse(jsonStr);
+          if (msg.type === "text" || msg.type === "message") {
+            fullText += msg.content || "";
+          }
+          // Check for final message
+          if (msg.type === "done" || msg.done) {
+            console.log("[Agent] Done message received");
+            break;
+          }
+        } catch {
+          // Skip invalid JSON lines
+        }
+      }
+    }
+  }
+
+  console.log("[Agent] Stream complete, messages:", messageCount, "text length:", fullText.length);
+  return fullText;
+}
+
+/**
+ * In-memory storage adapter for memory records (embedding storage).
  */
 export class InMemoryStorageAdapter implements MemoryStorageAdapter {
   private records: Map<string, MemoryRecord> = new Map();
@@ -36,16 +192,17 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
       return null; // Lock is held
     }
 
+    const expiresAt = input.now + input.ttlMs;
     const handle: MemoryLockHandle = {
       key: input.key,
       token: `lock_${input.now}_${Math.random()}`,
       acquiredAt: input.now,
-      expiresAt: input.now + input.ttlMs,
+      expiresAt,
     };
 
     this.locks.set(input.key, {
       token: handle.token,
-      expiresAt: handle.expiresAt!,
+      expiresAt,
     });
 
     return handle;
@@ -107,13 +264,15 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
     );
 
     if (query.startTime !== undefined) {
-      items = items.filter((r) => r.timestamp >= query.startTime!);
+      const startTime = query.startTime;
+      items = items.filter((r) => r.timestamp >= startTime);
     }
     if (query.endTime !== undefined) {
-      items = items.filter((r) => r.timestamp <= query.endTime!);
+      const endTime = query.endTime;
+      items = items.filter((r) => r.timestamp <= endTime);
     }
     if (query.tiers && query.tiers.length > 0) {
-      items = items.filter((r) => query.tiers!.includes(r.tier));
+      items = items.filter((r) => query.tiers?.includes(r.tier));
     }
 
     items.sort((a, b) =>
@@ -141,13 +300,15 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
     );
 
     if (query.startTime !== undefined) {
-      items = items.filter((s) => s.endTimestamp >= query.startTime!);
+      const startTime = query.startTime;
+      items = items.filter((s) => s.endTimestamp >= startTime);
     }
     if (query.endTime !== undefined) {
-      items = items.filter((s) => s.startTimestamp <= query.endTime!);
+      const endTime = query.endTime;
+      items = items.filter((s) => s.startTimestamp <= endTime);
     }
     if (query.summaryTiers && query.summaryTiers.length > 0) {
-      items = items.filter((s) => query.summaryTiers!.includes(s.summaryTier));
+      items = items.filter((s) => query.summaryTiers?.includes(s.summaryTier));
     }
 
     items.sort((a, b) =>
@@ -170,7 +331,6 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
   }
 
   async markRecordsAccessed(input: MemoryMarkAccessedInput): Promise<void> {
-    const now = Date.now();
     for (const id of input.ids) {
       const record = this.records.get(id);
       if (record) {
