@@ -330,6 +330,7 @@ export function AppSidebar() {
       currentPage === "profile" ||
       currentPage === "profile-soul" ||
       currentPage === "openloomi-soul" ||
+      currentPage === "ai-api-settings" ||
       currentPage === "account-settings" ||
       currentPage === "profile-edit" ||
       pathname === "/inbox" ||
@@ -356,6 +357,13 @@ export function AppSidebar() {
         icon: "brain_ai_3",
         type: "internal" as const,
         href: "/?page=profile-soul",
+      },
+      {
+        key: "ai-api-settings",
+        title: "settings.aiSettingsTitle",
+        icon: "key_2",
+        type: "internal" as const,
+        href: "/?page=ai-api-settings",
       },
       {
         key: "insight-tracking",
@@ -674,6 +682,8 @@ export function AppSidebar() {
                           searchParams?.get("page") === "profile") ||
                         (item.href === "/?page=profile-soul" &&
                           searchParams?.get("page") === "profile-soul") ||
+                        (item.href === "/?page=ai-api-settings" &&
+                          searchParams?.get("page") === "ai-api-settings") ||
                         (item.href === "/?page=account-settings" &&
                           (searchParams?.get("page") === "account-settings" ||
                             searchParams?.get("page") === "profile-edit")) ||

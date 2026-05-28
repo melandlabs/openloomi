@@ -13,6 +13,43 @@ const en = {
     inbox: "Insight",
     termsAndPolicies: "Terms & Policies",
   },
+  settings: {
+    ...baseEn.settings,
+    aiSettingsTitle: "API Settings",
+    aiSettingsDescription:
+      "Configure per-user API settings for compatible AI providers.",
+    aiSettingsOpenAiTitle: "OpenAI compatible",
+    aiSettingsOpenAiDescription:
+      "OpenAI, OpenRouter, Groq, Perplexity, or custom compatible endpoints",
+    aiSettingsAnthropicTitle: "Anthropic compatible",
+    aiSettingsAnthropicDescription:
+      "Anthropic Claude or compatible provider endpoints",
+    aiSettingsOverride: "User override",
+    aiSettingsSystem: "System default",
+    aiSettingsEnabled: "Enabled",
+    aiSettingsApiKey: "API Key",
+    aiSettingsBaseUrl: "Base URL",
+    aiSettingsModel: "Model",
+    aiSettingsOpenAiApiKeyPlaceholder: "For example: sk-...",
+    aiSettingsAnthropicApiKeyPlaceholder: "For example: sk-ant-...",
+    aiSettingsSavedApiKeyPlaceholder:
+      "API key saved. Enter a new one here to update it.",
+    aiSettingsUserApiKeyConfigured: "User API key configured",
+    aiSettingsSystemApiKeyConfigured: "Using system API key",
+    aiSettingsApiKeyNotConfigured: "No API key configured",
+    aiSettingsDefaultBaseUrl: "Default URL",
+    aiSettingsDefaultModel: "Default model",
+    aiSettingsTestButton: "Test",
+    aiSettingsTestSuccess: "Connection successful.",
+    aiSettingsTestError:
+      "Connection failed. Check the API key, base URL, and model.",
+    aiSettingsResetButton: "Reset",
+    aiSettingsSaved: "API settings saved.",
+    aiSettingsSaveError: "Failed to save API settings.",
+    aiSettingsReset: "User override reset to system defaults.",
+    aiSettingsResetError: "Failed to reset API settings.",
+    aiSettingsLoadError: "Failed to load API settings.",
+  },
   insight: {
     ...(baseEn.insight ?? {}),
     tabs: {

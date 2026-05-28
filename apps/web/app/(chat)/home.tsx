@@ -30,6 +30,7 @@ import dynamic from "next/dynamic";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { buildNavigationUrl, cn, generateUUID, fetcher } from "@/lib/utils";
 import { UserProfileSettings } from "@/components/user-profile-settings";
+import { AiApiSettings } from "@/components/ai-api-settings";
 import { ProfileOverview } from "@/components/profile-overview";
 import { StorageManagementPanel } from "@/components/storage-management-panel";
 import { PersonalizationProfileSoulPanel } from "@/components/personalization/personalization-profile-soul-panel";
@@ -591,6 +592,8 @@ export function Home() {
         return t("settings.general", "General");
       case "profile-soul":
         return t("settings.profileSoulPageTitle", "About me");
+      case "ai-api-settings":
+        return t("settings.aiSettingsTitle", "AI Settings");
       case "openloomi-soul":
         return t("settings.general", "General");
       case "storage-management":
@@ -611,6 +614,7 @@ export function Home() {
       "account-settings",
       "profile-edit",
       "profile-soul",
+      "ai-api-settings",
       "openloomi-soul",
       "storage-management",
     ].includes(pageParam ?? "");
@@ -666,6 +670,10 @@ export function Home() {
         undefined,
         t("insightPreferences.identity.introDescription"),
       );
+    }
+
+    if (page === "ai-api-settings") {
+      return renderUtilityPanel(<AiApiSettings />, "ai-api-settings");
     }
 
     if (page === "openloomi-soul") {
