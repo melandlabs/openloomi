@@ -1,3 +1,10 @@
+---
+title: "Memory Capabilities Comparison: OpenClaw vs. Hermes Agent vs. Claude Code vs. OpenLoomi"
+date: 2026-05-28
+description: A focused comparison of memory and knowledge retrieval across OpenClaw, Hermes Agent, Claude Code, and OpenLoomi Memory.
+image: /img/blogs/19.png
+---
+
 # Memory Capabilities Comparison
 
 This document compares memory and knowledge-management behavior across
@@ -62,19 +69,19 @@ and merges raw memory, insights, and knowledge into one ranked result list.
 
 ## Comparison Matrix
 
-| Capability | OpenClaw | Hermes Agent | Claude Code | OpenLoomi Memory |
-| --- | --- | --- | --- | --- |
-| Primary architecture | File-first agent memory with plugin-backed search. | Self-improving agent with curated memory, session search, and optional providers. | Terminal coding agent with hierarchical instruction files, rule files, and file-based auto memory. | Proactive knowledge workspace with raw memory lifecycle, insights, and RAG. |
-| Durable memory source | Markdown files in the workspace. | `$HERMES_HOME/memories/MEMORY.md` and `USER.md`; session DB for transcripts. | Managed/user/project/local `CLAUDE.md` files, `.claude/rules/*.md`, and auto-memory Markdown under `~/.claude/projects/<project>/memory/` unless overridden. | Databases for raw messages, summaries, insights, and RAG documents; optional local files. |
-| Search/index storage | Builtin SQLite index; optional QMD backend; memory files remain source of truth. | SQLite `state.db` with FTS5 for session search; curated memory is file-backed. | Markdown files plus frontmatter/header scanning; no native FTS/vector memory index found in inspected memory code. | IndexedDB, SQLite, or Postgres for raw memory; RAG vector/full-text stores for knowledge. |
-| Retrieval mode | `memory_search` hybrid vector/BM25 plus `memory_get` safe reads. | System-prompt injection, `session_search`, and external provider prefetch. | Startup context injection, nested instruction attachments, auto-memory `MEMORY.md`, optional LLM-selected relevant memory attachments, and normal file reads. | `/api/memory/search` unified search plus raw-message query fallback. |
-| RAG support | Not the core memory model; vector search over memory chunks exists, and companion corpora can supplement. | Not native in built-in memory; external providers may add semantic/graph memory. | Not native in inspected code; relevant auto-memory selection uses an LLM over a manifest, not vector RAG. | Yes: RAG document chunks via `searchSimilarChunks()`. |
-| Full-text search | Yes, through memory index / FTS path. | Yes, SQLite FTS5 for session messages. | No native FTS memory path found for memory; prompt guidance can tell the model to grep memory/transcript files. | Yes for raw/query paths and RAG/DB implementations; also semantic search. |
-| Vector search | Yes, via embeddings and sqlite-vec/fallback scan in memory-core. | Provider-dependent; built-in session search is FTS5, not vector. | No vector memory path found in inspected memory code. | Yes for raw semantic search when embeddings exist and for RAG knowledge chunks. |
-| Context retention | Long-term files plus optional session transcript indexing. | Curated long-term memory, full transcript recall, and agent-created skills. | Cross-session instruction and auto-memory files; optional team/agent memory features behind gates. | Persistent cross-session raw memory, insight history, summaries, and knowledge documents. |
-| Learning/adaptation | Optional dreaming and promotion; memory still file-first. | Strongest self-improvement story: background review can save memories and skills. | Auto-memory prompt, background extraction, auto-dream, and `/remember` can create/review/promote Markdown memories when enabled. | Insight refresh and lifecycle scoring; limited autonomous skill-style learning in inspected memory code. |
-| Noise filtering | Search ranking, corpus filters, optional active memory; no single native "95%" filter in code inspected. | Search modes and provider filters; no native global noise filter. | Strong save rules, type taxonomy, duplicate checks, LLM selection of up to five relevant memory files, and session byte limits; no native global noise filter. | Proactive insight/RAG pipeline and source filtering; the issue's "95%" claim is not a hard-coded constant in inspected code. |
-| Privacy posture | Local Markdown and local index by default; plugins/backends can change this. | Built-in memory and session DB are local; external providers can send data out. | Memory source files are local by default, but injected instruction/auto-memory content and relevant-memory attachments enter Claude Code model context. | Tauri can use local SQLite; server mode uses Postgres/API routes. E2EE claim not verified in inspected memory files. |
+| Capability            | OpenClaw                                                                                                  | Hermes Agent                                                                      | Claude Code                                                                                                                                                    | OpenLoomi Memory                                                                                                             |
+| --------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Primary architecture  | File-first agent memory with plugin-backed search.                                                        | Self-improving agent with curated memory, session search, and optional providers. | Terminal coding agent with hierarchical instruction files, rule files, and file-based auto memory.                                                             | Proactive knowledge workspace with raw memory lifecycle, insights, and RAG.                                                  |
+| Durable memory source | Markdown files in the workspace.                                                                          | `$HERMES_HOME/memories/MEMORY.md` and `USER.md`; session DB for transcripts.      | Managed/user/project/local `CLAUDE.md` files, `.claude/rules/*.md`, and auto-memory Markdown under `~/.claude/projects/<project>/memory/` unless overridden.   | Databases for raw messages, summaries, insights, and RAG documents; optional local files.                                    |
+| Search/index storage  | Builtin SQLite index; optional QMD backend; memory files remain source of truth.                          | SQLite `state.db` with FTS5 for session search; curated memory is file-backed.    | Markdown files plus frontmatter/header scanning; no native FTS/vector memory index found in inspected memory code.                                             | IndexedDB, SQLite, or Postgres for raw memory; RAG vector/full-text stores for knowledge.                                    |
+| Retrieval mode        | `memory_search` hybrid vector/BM25 plus `memory_get` safe reads.                                          | System-prompt injection, `session_search`, and external provider prefetch.        | Startup context injection, nested instruction attachments, auto-memory `MEMORY.md`, optional LLM-selected relevant memory attachments, and normal file reads.  | `/api/memory/search` unified search plus raw-message query fallback.                                                         |
+| RAG support           | Not the core memory model; vector search over memory chunks exists, and companion corpora can supplement. | Not native in built-in memory; external providers may add semantic/graph memory.  | Not native in inspected code; relevant auto-memory selection uses an LLM over a manifest, not vector RAG.                                                      | Yes: RAG document chunks via `searchSimilarChunks()`.                                                                        |
+| Full-text search      | Yes, through memory index / FTS path.                                                                     | Yes, SQLite FTS5 for session messages.                                            | No native FTS memory path found for memory; prompt guidance can tell the model to grep memory/transcript files.                                                | Yes for raw/query paths and RAG/DB implementations; also semantic search.                                                    |
+| Vector search         | Yes, via embeddings and sqlite-vec/fallback scan in memory-core.                                          | Provider-dependent; built-in session search is FTS5, not vector.                  | No vector memory path found in inspected memory code.                                                                                                          | Yes for raw semantic search when embeddings exist and for RAG knowledge chunks.                                              |
+| Context retention     | Long-term files plus optional session transcript indexing.                                                | Curated long-term memory, full transcript recall, and agent-created skills.       | Cross-session instruction and auto-memory files; optional team/agent memory features behind gates.                                                             | Persistent cross-session raw memory, insight history, summaries, and knowledge documents.                                    |
+| Learning/adaptation   | Optional dreaming and promotion; memory still file-first.                                                 | Strongest self-improvement story: background review can save memories and skills. | Auto-memory prompt, background extraction, auto-dream, and `/remember` can create/review/promote Markdown memories when enabled.                               | Insight refresh and lifecycle scoring; limited autonomous skill-style learning in inspected memory code.                     |
+| Noise filtering       | Search ranking, corpus filters, optional active memory; no single native "95%" filter in code inspected.  | Search modes and provider filters; no native global noise filter.                 | Strong save rules, type taxonomy, duplicate checks, LLM selection of up to five relevant memory files, and session byte limits; no native global noise filter. | Proactive insight/RAG pipeline and source filtering; the issue's "95%" claim is not a hard-coded constant in inspected code. |
+| Privacy posture       | Local Markdown and local index by default; plugins/backends can change this.                              | Built-in memory and session DB are local; external providers can send data out.   | Memory source files are local by default, but injected instruction/auto-memory content and relevant-memory attachments enter Claude Code model context.        | Tauri can use local SQLite; server mode uses Postgres/API routes. E2EE claim not verified in inspected memory files.         |
 
 ## OpenClaw
 
@@ -84,13 +91,13 @@ be rebuilt without changing the canonical memory files.
 
 Main durable files:
 
-| File or directory | Purpose |
-| --- | --- |
-| `MEMORY.md` | Canonical long-term memory. |
-| `memory/YYYY-MM-DD.md` | Daily working memory and notes. |
+| File or directory             | Purpose                                 |
+| ----------------------------- | --------------------------------------- |
+| `MEMORY.md`                   | Canonical long-term memory.             |
+| `memory/YYYY-MM-DD.md`        | Daily working memory and notes.         |
 | `memory/YYYY-MM-DD-<slug>.md` | Topic or session-specific daily memory. |
-| `DREAMS.md` | Human-readable dreaming/review output. |
-| `memory/dreaming/**` | Dreaming phase reports. |
+| `DREAMS.md`                   | Human-readable dreaming/review output.  |
+| `memory/dreaming/**`          | Dreaming phase reports.                 |
 
 The default memory-slot plugin is `memory-core`. It registers:
 
@@ -141,11 +148,11 @@ product layer; it is plugin-backed and file/index oriented.
 
 Hermes Agent has three memory surfaces:
 
-| Surface | Storage | Purpose |
-| --- | --- | --- |
-| Built-in curated memory | `$HERMES_HOME/memories/MEMORY.md`, `$HERMES_HOME/memories/USER.md` | Compact durable facts injected into every session. |
-| Session search | `$HERMES_HOME/state.db` | On-demand recall over full past conversations. |
-| External provider | Provider-specific local/cloud backend | Optional semantic, graph, profile, or provider-managed memory. |
+| Surface                 | Storage                                                            | Purpose                                                        |
+| ----------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------- |
+| Built-in curated memory | `$HERMES_HOME/memories/MEMORY.md`, `$HERMES_HOME/memories/USER.md` | Compact durable facts injected into every session.             |
+| Session search          | `$HERMES_HOME/state.db`                                            | On-demand recall over full past conversations.                 |
+| External provider       | Provider-specific local/cloud backend                              | Optional semantic, graph, profile, or provider-managed memory. |
 
 Built-in memory is intentionally small. `MemoryStore` in `tools/memory_tool.py`
 loads files at startup, stores a frozen prompt snapshot, and persists mid-session
@@ -229,12 +236,12 @@ moustaches.
 `src/utils/claudemd.ts` is the center of instruction-memory discovery. Its header
 documents the load order:
 
-| Type | Files | Purpose |
-| --- | --- | --- |
-| Managed | managed install path such as `/etc/claude-code/CLAUDE.md`, plus managed rules | Global instructions for all users. |
-| User | `~/.claude/CLAUDE.md`, plus user rules | Private global instructions across projects. |
-| Project | `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/rules/*.md` while walking from CWD upward | Checked-in project/team instructions. |
-| Local | `CLAUDE.local.md` | Private project-specific instructions. |
+| Type    | Files                                                                                | Purpose                                      |
+| ------- | ------------------------------------------------------------------------------------ | -------------------------------------------- |
+| Managed | managed install path such as `/etc/claude-code/CLAUDE.md`, plus managed rules        | Global instructions for all users.           |
+| User    | `~/.claude/CLAUDE.md`, plus user rules                                               | Private global instructions across projects. |
+| Project | `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/rules/*.md` while walking from CWD upward | Checked-in project/team instructions.        |
+| Local   | `CLAUDE.local.md`                                                                    | Private project-specific instructions.       |
 
 Files are loaded in reverse priority order so later entries carry higher
 priority. Project discovery walks from the current directory toward the root;
@@ -381,13 +388,13 @@ be described as RAG in the same sense as OpenLoomi.
 
 OpenLoomi has several memory-like stores:
 
-| Store | Purpose |
-| --- | --- |
-| `raw_messages` | Original or near-original messages. |
-| `memory_summaries` | Rule-based lifecycle compaction summaries. |
-| insights tables | LLM-derived insight records. |
-| RAG document/chunk tables | Uploaded/generated knowledge documents. |
-| filesystem memory | Local Markdown/JSON files in Tauri workflows. |
+| Store                     | Purpose                                       |
+| ------------------------- | --------------------------------------------- |
+| `raw_messages`            | Original or near-original messages.           |
+| `memory_summaries`        | Rule-based lifecycle compaction summaries.    |
+| insights tables           | LLM-derived insight records.                  |
+| RAG document/chunk tables | Uploaded/generated knowledge documents.       |
+| filesystem memory         | Local Markdown/JSON files in Tauri workflows. |
 
 The raw memory lifecycle is implemented in `packages/ai/src/memory/`:
 
@@ -426,11 +433,11 @@ POST /api/memory/search
 
 Supported sources:
 
-| Source | Implementation | Result type |
-| --- | --- | --- |
-| `memory` | Raw messages through keyword search plus optional `searchMessagesSemantically()`. | `memory` |
-| `insights` | `searchInsightsSemantically()`. | `insight` |
-| `knowledge` | `searchSimilarChunks()` over RAG chunks. | `knowledge` |
+| Source      | Implementation                                                                    | Result type |
+| ----------- | --------------------------------------------------------------------------------- | ----------- |
+| `memory`    | Raw messages through keyword search plus optional `searchMessagesSemantically()`. | `memory`    |
+| `insights`  | `searchInsightsSemantically()`.                                                   | `insight`   |
+| `knowledge` | `searchSimilarChunks()` over RAG chunks.                                          | `knowledge` |
 
 The raw memory branch uses hybrid scoring:
 
@@ -454,12 +461,12 @@ adapters, and more ways to ask "which memory are we talking about?"
 
 ## Final Recall Stage Comparison
 
-| System | Final recall entry point | What is returned to the model/user | Ranking/selection |
-| --- | --- | --- | --- |
-| OpenClaw | `memory_search` tool, followed by optional `memory_get`. | Ranked snippets from indexed memory files, optional session transcript chunks and companion corpora. | Hybrid vector/BM25 merge, optional temporal decay and MMR, then injected-character clamping. |
-| Hermes Agent | Prompt-injected curated memory, `session_search`, and optional provider prefetch. | Frozen `MEMORY.md`/`USER.md` prompt snapshot; real session messages; external recall inside `<memory-context>`. | FTS5 for session discovery; provider-defined ranking for external memory; curated memory is not ranked because it is prompt-injected. |
-| Claude Code | `getMemoryFiles()`/`getClaudeMds()` startup context, nested `CLAUDE.md`/rules attachments, and optional relevant-memory prefetch. | Instruction file content, auto-memory entrypoint or selected topic files, and hidden `nested_memory` / `relevant_memories` system reminders. | File priority and `@include` order for instructions; glob matching for rules; side LLM selection over memory manifests for up to five auto-memory files; no native FTS/vector index found. |
-| OpenLoomi | `/api/memory/search` through `searchUnifiedMemory()`. | Unified `memory`, `insight`, and `knowledge` results with source metadata. | Similarity sort across sources; raw memory branch merges keyword and semantic hits with hybrid bonus. |
+| System       | Final recall entry point                                                                                                          | What is returned to the model/user                                                                                                           | Ranking/selection                                                                                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| OpenClaw     | `memory_search` tool, followed by optional `memory_get`.                                                                          | Ranked snippets from indexed memory files, optional session transcript chunks and companion corpora.                                         | Hybrid vector/BM25 merge, optional temporal decay and MMR, then injected-character clamping.                                                                                               |
+| Hermes Agent | Prompt-injected curated memory, `session_search`, and optional provider prefetch.                                                 | Frozen `MEMORY.md`/`USER.md` prompt snapshot; real session messages; external recall inside `<memory-context>`.                              | FTS5 for session discovery; provider-defined ranking for external memory; curated memory is not ranked because it is prompt-injected.                                                      |
+| Claude Code  | `getMemoryFiles()`/`getClaudeMds()` startup context, nested `CLAUDE.md`/rules attachments, and optional relevant-memory prefetch. | Instruction file content, auto-memory entrypoint or selected topic files, and hidden `nested_memory` / `relevant_memories` system reminders. | File priority and `@include` order for instructions; glob matching for rules; side LLM selection over memory manifests for up to five auto-memory files; no native FTS/vector index found. |
+| OpenLoomi    | `/api/memory/search` through `searchUnifiedMemory()`.                                                                             | Unified `memory`, `insight`, and `knowledge` results with source metadata.                                                                   | Similarity sort across sources; raw memory branch merges keyword and semantic hits with hybrid bonus.                                                                                      |
 
 ## Key Differences
 
@@ -539,21 +546,21 @@ single end-to-end encryption implementation for all memory stores.
 
 ## Implementation References
 
-| System | File / doc | Purpose |
-| --- | --- | --- |
-| OpenClaw | `D:\openclaw-main\extensions\memory-core\src\tools.ts` | `memory_search` and `memory_get` tool entry points. |
-| OpenClaw | `D:\openclaw-main\extensions\memory-core\src\memory\manager-search.ts` | Vector, FTS, LIKE, and fallback memory search. |
-| OpenClaw | `D:\openclaw-main\extensions\memory-core\src\memory\hybrid.ts` | Hybrid vector/text score merge. |
-| OpenClaw | `D:\openclaw-main\docs\concepts\memory-search.md` | Public explanation of memory search, embeddings, hybrid retrieval, temporal decay, and MMR. |
-| Hermes | `D:\hermes-agent-main\tools\memory_tool.py` | Built-in curated memory store and tool. |
-| Hermes | `D:\hermes-agent-main\tools\session_search_tool.py` | Session browse/search/scroll recall tool. |
-| Hermes | `D:\hermes-agent-main\hermes_state.py` | SQLite session DB and FTS5 tables. |
-| Hermes | `D:\hermes-agent-main\agent\memory_manager.py` | External provider orchestration and `<memory-context>` fencing. |
-| Claude Code | `D:\claude-code-rev-main\src\utils\claudemd.ts` | Instruction memory discovery, `@include`, rules, auto-memory entrypoint loading, and `getClaudeMds()`. |
-| Claude Code | `D:\claude-code-rev-main\src\memdir\*.ts` | Auto-memory path resolution, prompt construction, entrypoint truncation, memory taxonomy, and LLM-based relevant-memory selection. |
-| Claude Code | `D:\claude-code-rev-main\src\utils\attachments.ts` | Nested memory attachments and relevant-memory prefetch/injection. |
-| Claude Code | `D:\claude-code-rev-main\src\services\extractMemories\*.ts` | Background memory extraction agent and write constraints. |
-| Claude Code | `D:\claude-code-rev-main\src\commands\memory\memory.tsx`, `D:\claude-code-rev-main\src\components\memory\MemoryFileSelector.tsx` | `/memory` command, editor flow, toggles, and memory folder access. |
-| OpenLoomi | `docs/internal/memory-system.md` | Internal memory implementation mechanism. |
-| OpenLoomi | `apps/web/lib/memory/unified-search.ts` | Final unified search merger. |
-| OpenLoomi | `packages/ai/src/memory/*` | Raw memory lifecycle contracts, policy, scoring, summarization, engine, and query API. |
+| System      | File / doc                                                                                                                       | Purpose                                                                                                                            |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| OpenClaw    | `D:\openclaw-main\extensions\memory-core\src\tools.ts`                                                                           | `memory_search` and `memory_get` tool entry points.                                                                                |
+| OpenClaw    | `D:\openclaw-main\extensions\memory-core\src\memory\manager-search.ts`                                                           | Vector, FTS, LIKE, and fallback memory search.                                                                                     |
+| OpenClaw    | `D:\openclaw-main\extensions\memory-core\src\memory\hybrid.ts`                                                                   | Hybrid vector/text score merge.                                                                                                    |
+| OpenClaw    | `D:\openclaw-main\docs\concepts\memory-search.md`                                                                                | Public explanation of memory search, embeddings, hybrid retrieval, temporal decay, and MMR.                                        |
+| Hermes      | `D:\hermes-agent-main\tools\memory_tool.py`                                                                                      | Built-in curated memory store and tool.                                                                                            |
+| Hermes      | `D:\hermes-agent-main\tools\session_search_tool.py`                                                                              | Session browse/search/scroll recall tool.                                                                                          |
+| Hermes      | `D:\hermes-agent-main\hermes_state.py`                                                                                           | SQLite session DB and FTS5 tables.                                                                                                 |
+| Hermes      | `D:\hermes-agent-main\agent\memory_manager.py`                                                                                   | External provider orchestration and `<memory-context>` fencing.                                                                    |
+| Claude Code | `D:\claude-code-rev-main\src\utils\claudemd.ts`                                                                                  | Instruction memory discovery, `@include`, rules, auto-memory entrypoint loading, and `getClaudeMds()`.                             |
+| Claude Code | `D:\claude-code-rev-main\src\memdir\*.ts`                                                                                        | Auto-memory path resolution, prompt construction, entrypoint truncation, memory taxonomy, and LLM-based relevant-memory selection. |
+| Claude Code | `D:\claude-code-rev-main\src\utils\attachments.ts`                                                                               | Nested memory attachments and relevant-memory prefetch/injection.                                                                  |
+| Claude Code | `D:\claude-code-rev-main\src\services\extractMemories\*.ts`                                                                      | Background memory extraction agent and write constraints.                                                                          |
+| Claude Code | `D:\claude-code-rev-main\src\commands\memory\memory.tsx`, `D:\claude-code-rev-main\src\components\memory\MemoryFileSelector.tsx` | `/memory` command, editor flow, toggles, and memory folder access.                                                                 |
+| OpenLoomi   | `docs/internal/memory-system.md`                                                                                                 | Internal memory implementation mechanism.                                                                                          |
+| OpenLoomi   | `apps/web/lib/memory/unified-search.ts`                                                                                          | Final unified search merger.                                                                                                       |
+| OpenLoomi   | `packages/ai/src/memory/*`                                                                                                       | Raw memory lifecycle contracts, policy, scoring, summarization, engine, and query API.                                             |
