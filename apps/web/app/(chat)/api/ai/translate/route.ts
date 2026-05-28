@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     // Set AI user context with cloud auth token for proper billing in proxy mode
-    setAIUserContextFromRequest({
+    await setAIUserContextFromRequest({
       userId: session.user.id,
       email: session.user.email || "",
       name: session.user.name || null,

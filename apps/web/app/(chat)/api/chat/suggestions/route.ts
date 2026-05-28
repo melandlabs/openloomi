@@ -315,7 +315,7 @@ export async function GET(request: Request) {
 
   try {
     // Set AI user context for proper billing in proxy mode
-    setAIUserContextFromRequest({
+    await setAIUserContextFromRequest({
       userId: session.user.id,
       email: session.user.email || "",
       name: session.user.name || null,

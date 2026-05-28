@@ -28,6 +28,13 @@ export interface AIUserContext {
   name: string | null | undefined;
   type: string; // User type string - any value is accepted
   token?: string; // Optional: use existing cloud auth token instead of generating new one
+  llmApiSettings?: {
+    openaiCompatible?: {
+      apiKey: string;
+      baseUrl: string;
+      model: string;
+    };
+  };
 }
 
 /**
@@ -75,7 +82,13 @@ export function setAIUserContext(context: AIUserContext | null) {
     const contextChanged =
       !previousContext ||
       previousContext.id !== context.id ||
-      previousContext.token !== context.token;
+      previousContext.token !== context.token ||
+      previousContext.llmApiSettings?.openaiCompatible?.apiKey !==
+        context.llmApiSettings?.openaiCompatible?.apiKey ||
+      previousContext.llmApiSettings?.openaiCompatible?.baseUrl !==
+        context.llmApiSettings?.openaiCompatible?.baseUrl ||
+      previousContext.llmApiSettings?.openaiCompatible?.model !==
+        context.llmApiSettings?.openaiCompatible?.model;
 
     if (_initialized && contextChanged) {
       console.log(
@@ -92,6 +105,7 @@ export function setAIUserContext(context: AIUserContext | null) {
  */
 export function clearAIUserContext() {
   globalUserContext = null;
+  _initialized = false;
 }
 
 /**
@@ -144,11 +158,29 @@ function createFetchWithContext(
 function getLLMBaseUrl(isNativeMode: boolean): string {
   if (isNativeMode) {
     const isDev = process.env.NODE_ENV !== "production";
-    const localUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      (isDev
-        ? `http://localhost:${DEV_PORT}`
-        : `http://localhost:${PROD_PORT}`);
+    const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const fallbackAppUrl = isDev
+      ? `http://localhost:${DEV_PORT}`
+      : `http://localhost:${PROD_PORT}`;
+    let localUrl = fallbackAppUrl;
+
+    if (configuredAppUrl) {
+      try {
+        const parsedUrl = new URL(configuredAppUrl);
+        if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+          localUrl = configuredAppUrl;
+        } else {
+          console.warn(
+            `[LLM Provider] Ignoring NEXT_PUBLIC_APP_URL with unsupported protocol: ${configuredAppUrl}`,
+          );
+        }
+      } catch {
+        console.warn(
+          `[LLM Provider] Ignoring invalid NEXT_PUBLIC_APP_URL: ${configuredAppUrl}`,
+        );
+      }
+    }
+
     const proxyPath = "/api/ai/v1";
     const fullLocalUrl = `${localUrl}${proxyPath}`;
     return fullLocalUrl;
@@ -171,17 +203,18 @@ function getLLMBaseUrl(isNativeMode: boolean): string {
  * @throws Error if any required environment variable is missing
  */
 function getValidatedEnv(isNativeMode: boolean) {
-  const baseUrl = getLLMBaseUrl(isNativeMode);
+  const userOpenAISettings = globalUserContext?.llmApiSettings?.openaiCompatible;
+  const baseUrl = userOpenAISettings?.baseUrl ?? getLLMBaseUrl(isNativeMode);
 
-  const apiKey = isNativeMode
-    ? "local-auth-via-jwt-token"
-    : process.env.LLM_API_KEY;
+  const apiKey =
+    userOpenAISettings?.apiKey ??
+    (isNativeMode ? "local-auth-via-jwt-token" : process.env.LLM_API_KEY);
 
   if (!isNativeMode && !apiKey) {
     throw new Error("LLM_API_KEY environment variable is not set (web mode)");
   }
 
-  const modelName = process.env.LLM_MODEL;
+  const modelName = userOpenAISettings?.model ?? process.env.LLM_MODEL;
 
   if (!modelName) {
     throw new Error("LLM_MODEL environment variable is not set");
@@ -202,7 +235,7 @@ function getValidatedEnv(isNativeMode: boolean) {
  */
 let _model: LanguageModel | null = null;
 let _vlmModel: LanguageModel | null = null;
-let _modelProvider: any = null;
+let _modelProvider: ReturnType<typeof customProvider> | null = null;
 let _initialized = false;
 
 function initializeModels(isNativeMode: boolean) {
@@ -334,14 +367,21 @@ export function createDynamicModel(
                 ? init.body
                 : JSON.stringify(init.body);
             try {
-              const bodyObj = JSON.parse(bodyStr);
+              const bodyObj = JSON.parse(bodyStr) as {
+                model?: unknown;
+                tools?: unknown;
+              };
               console.log(`[OpenRouter Request Debug] Model: ${bodyObj.model}`);
-              if (bodyObj.tools) {
+              if (Array.isArray(bodyObj.tools)) {
                 console.log(
                   `[OpenRouter Request Debug] Tools count: ${bodyObj.tools.length}`,
                 );
-                bodyObj.tools.forEach((tool: any, idx: number) => {
-                  const toolName = tool.function?.name || tool.name;
+                bodyObj.tools.forEach((tool: unknown, idx: number) => {
+                  const maybeTool = tool as {
+                    function?: { name?: string };
+                    name?: string;
+                  };
+                  const toolName = maybeTool.function?.name || maybeTool.name;
                   console.log(
                     `[OpenRouter Request Debug] Tool[${idx}] name: "${toolName}"`,
                   );
@@ -375,7 +415,9 @@ export function createDynamicModel(
  * Get the model provider
  * Lazily initializes models on first access
  */
-export function getModelProvider(isNativeMode: boolean): any {
+export function getModelProvider(
+  isNativeMode: boolean,
+): ReturnType<typeof customProvider> {
   if (!_initialized) {
     initializeModels(isNativeMode);
   }

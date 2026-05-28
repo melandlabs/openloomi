@@ -6,7 +6,7 @@ import { getInsightByIdForUser, updateInsightById } from "@/lib/db/queries";
 import { AppError } from "@openloomi/shared/errors";
 import { generateInsightPayload } from "@/lib/insights/transform";
 import type { GeneratedInsightPayload } from "@/lib/insights/types";
-import { setAIUserContext } from "@/lib/ai";
+import { setAIUserContextFromRequest } from "@/lib/ai/request-context";
 
 type UnderstandSource = "gmail" | "rss";
 
@@ -30,12 +30,13 @@ export async function POST(
   }
 
   // Set AI user context with cloud auth token for proper authentication in local mode
-  setAIUserContext({
-    id: session.user.id,
+  await setAIUserContextFromRequest({
+    userId: session.user.id,
     email: session.user.email || "",
     name: session.user.name || null,
-    type: session.user.type,
-    token: body.cloudAuthToken,
+    userType: session.user.type,
+    request,
+    body,
   });
   try {
     const record = await getInsightByIdForUser({

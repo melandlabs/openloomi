@@ -10,6 +10,7 @@
 import type { UserType } from "@/app/(auth)/auth";
 import { NextRequest } from "next/server";
 import { setAIUserContext } from "@openloomi/ai/agent/model";
+import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 
 export {
   setAIUserContext,
@@ -50,7 +51,7 @@ export function extractCloudAuthToken(
 /**
  * Set AI user context (extract token from request)
  */
-export function setAIUserContextFromRequest({
+export async function setAIUserContextFromRequest({
   userId,
   email,
   name,
@@ -64,8 +65,12 @@ export function setAIUserContextFromRequest({
   userType: UserType;
   request: NextRequest | Request;
   body?: any;
-}): void {
+}): Promise<void> {
   const token = extractCloudAuthToken(request, body);
+  const openaiCompatible = await getUserLlmProviderConfig({
+    userId,
+    providerType: "openai_compatible",
+  });
 
   setAIUserContext({
     id: userId,
@@ -73,5 +78,10 @@ export function setAIUserContextFromRequest({
     name: name || null,
     type: userType,
     token,
+    llmApiSettings: openaiCompatible
+      ? {
+          openaiCompatible,
+        }
+      : undefined,
   });
 }

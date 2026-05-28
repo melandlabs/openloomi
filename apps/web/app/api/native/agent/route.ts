@@ -28,6 +28,7 @@ import { existsSync } from "node:fs";
 import os from "node:os";
 import { getDocument, getDocumentChunks } from "@/lib/ai/rag/langchain-service";
 import { readFile } from "@/lib/storage";
+import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { permissionResponses } from "./permission/route";
 import { detectSudoPasswordPrompt } from "./password/route";
 
@@ -636,12 +637,23 @@ ${insightsContent}
       finalPrompt = savedFilesContext + finalPrompt;
     }
 
-    // Build agent config
+    const userAnthropicConfig = await getUserLlmProviderConfig({
+      userId: session.user.id,
+      providerType: "anthropic_compatible",
+    });
+
+    const effectiveModelConfig = {
+      ...body.modelConfig,
+      ...userAnthropicConfig,
+    };
+
+    // User-saved Anthropic settings win over request defaults such as the
+    // frontend's selectedModel fallback to claude-sonnet-4.6.
     const config: AgentConfig = {
       provider: body.provider || "claude",
-      apiKey: body.modelConfig?.apiKey,
-      baseUrl: body.modelConfig?.baseUrl,
-      model: body.modelConfig?.model,
+      apiKey: effectiveModelConfig.apiKey,
+      baseUrl: effectiveModelConfig.baseUrl,
+      model: effectiveModelConfig.model,
       thinkingLevel: body.modelConfig?.thinkingLevel,
       workDir: body.workDir,
     };

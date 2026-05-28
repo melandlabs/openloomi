@@ -20,6 +20,7 @@ import {
 import { sanitizeCompactionMessages } from "@openloomi/ai/agent";
 import { saveCompactionSummary } from "@openloomi/ai/store";
 import { getAppMemoryDir } from "@/lib/utils/path";
+import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { stripMalformedToolCalls } from "@/lib/utils/tool-names";
 import { formatAgentStreamErrorForUser } from "./format-error";
 
@@ -203,19 +204,33 @@ export async function handleAgentRuntime(
         provider: "claude",
         ...(options.workDir && { workDir: options.workDir }), // Pass workDir for file generation
       };
+      const userAnthropicConfig = await getUserLlmProviderConfig({
+        userId: options.userId,
+        providerType: "anthropic_compatible",
+      });
 
-      // Add model config if provided
-      if (options.modelConfig) {
-        if (options.modelConfig.apiKey) {
-          agentConfig.apiKey = options.modelConfig.apiKey;
-        }
-        if (options.modelConfig.baseUrl) {
-          agentConfig.baseUrl = options.modelConfig.baseUrl;
-        }
-        if (options.modelConfig.model) {
-          agentConfig.model = options.modelConfig.model;
-        }
+      // User-saved Anthropic settings win over runtime defaults such as the
+      // frontend's selectedModel fallback to claude-sonnet-4.6.
+      const effectiveModelConfig = {
+        ...options.modelConfig,
+        ...userAnthropicConfig,
+      };
+
+      if (effectiveModelConfig.apiKey) {
+        agentConfig.apiKey = effectiveModelConfig.apiKey;
       }
+      if (effectiveModelConfig.baseUrl) {
+        agentConfig.baseUrl = effectiveModelConfig.baseUrl;
+      }
+      if (effectiveModelConfig.model) {
+        agentConfig.model = effectiveModelConfig.model;
+      }
+      console.log(`[${platform}] LLM provider config resolved`, {
+        hasUserAnthropicConfig: Boolean(userAnthropicConfig),
+        hasApiKey: Boolean(agentConfig.apiKey),
+        baseUrl: agentConfig.baseUrl || "(default)",
+        model: agentConfig.model || "(default)",
+      });
 
       if (options.workDir) {
         console.log(
