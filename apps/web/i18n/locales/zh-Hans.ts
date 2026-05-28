@@ -31,7 +31,8 @@ const zh = {
     aiSettingsModel: "模型",
     aiSettingsOpenAiApiKeyPlaceholder: "例如：sk-...",
     aiSettingsAnthropicApiKeyPlaceholder: "例如：sk-ant-...",
-    aiSettingsSavedApiKeyPlaceholder: "API 密钥已保存，想要修改可在此处重新输入",
+    aiSettingsSavedApiKeyPlaceholder:
+      "API 密钥已保存，想要修改可在此处重新输入",
     aiSettingsUserApiKeyConfigured: "已配置用户 API 密钥",
     aiSettingsSystemApiKeyConfigured: "正在使用系统 API 密钥",
     aiSettingsApiKeyNotConfigured: "未配置 API 密钥",

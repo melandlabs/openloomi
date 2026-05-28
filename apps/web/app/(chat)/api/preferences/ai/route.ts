@@ -73,20 +73,23 @@ async function testOpenAiCompatibleProvider({
   apiKey: string;
   model: string;
 }) {
-  const response = await fetch(buildVersionedUrl(baseUrl, "/chat/completions"), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+  const response = await fetch(
+    buildVersionedUrl(baseUrl, "/chat/completions"),
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 1,
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(15_000),
     },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "user", content: "ping" }],
-      max_tokens: 1,
-      stream: false,
-    }),
-    signal: AbortSignal.timeout(15_000),
-  });
+  );
 
   if (!response.ok) {
     const detail = await readProviderError(response);
@@ -229,8 +232,7 @@ export async function POST(request: Request) {
       userId: session.user.id,
       providerType,
     });
-    const apiKey =
-      normalizeOptionalString(parsed.data.apiKey) ?? saved?.apiKey;
+    const apiKey = normalizeOptionalString(parsed.data.apiKey) ?? saved?.apiKey;
     const baseUrl =
       normalizeOptionalString(parsed.data.baseUrl) ?? saved?.baseUrl;
     const model = normalizeOptionalString(parsed.data.model) ?? saved?.model;
@@ -257,8 +259,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error:
-          error instanceof Error ? error.message : "Provider test failed.",
+        error: error instanceof Error ? error.message : "Provider test failed.",
       },
       { status: 400 },
     );

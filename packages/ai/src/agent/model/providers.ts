@@ -203,7 +203,8 @@ function getLLMBaseUrl(isNativeMode: boolean): string {
  * @throws Error if any required environment variable is missing
  */
 function getValidatedEnv(isNativeMode: boolean) {
-  const userOpenAISettings = globalUserContext?.llmApiSettings?.openaiCompatible;
+  const userOpenAISettings =
+    globalUserContext?.llmApiSettings?.openaiCompatible;
   const baseUrl = userOpenAISettings?.baseUrl ?? getLLMBaseUrl(isNativeMode);
 
   const apiKey =
