@@ -1,21 +1,14 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
-import {
-  Badge,
-  Button,
-  Input,
-  Label,
-  Separator,
-  Switch,
-} from "@openloomi/ui";
-import { RemixIcon } from "@/components/remix-icon";
-import { toast } from "@/components/toast";
-import { fetchWithAuth } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Badge, Button, Input, Label, Separator, Switch } from '@openloomi/ui';
+import { RemixIcon } from '@/components/remix-icon';
+import { toast } from '@/components/toast';
+import { fetchWithAuth } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
-type ProviderType = "openai_compatible" | "anthropic_compatible";
+type ProviderType = 'openai_compatible' | 'anthropic_compatible';
 
 type AiSetting = {
   id: string;
@@ -59,42 +52,42 @@ const providers: Array<{
   modelPlaceholder: string;
 }> = [
   {
-    type: "openai_compatible",
-    titleKey: "settings.aiSettingsOpenAiTitle",
-    titleFallback: "OpenAI compatible",
-    descriptionKey: "settings.aiSettingsOpenAiDescription",
+    type: 'openai_compatible',
+    titleKey: 'settings.aiSettingsOpenAiTitle',
+    titleFallback: 'OpenAI compatible',
+    descriptionKey: 'settings.aiSettingsOpenAiDescription',
     descriptionFallback:
-      "OpenAI, OpenRouter, Groq, Perplexity, or custom endpoints",
-    apiKeyPlaceholderKey: "settings.aiSettingsOpenAiApiKeyPlaceholder",
-    apiKeyPlaceholderFallback: "sk-...",
-    baseUrlPlaceholder: "https://openrouter.ai/api/v1",
-    modelPlaceholder: "openai/gpt-4o-mini",
+      'OpenAI, OpenRouter, Groq, Perplexity, or custom endpoints',
+    apiKeyPlaceholderKey: 'settings.aiSettingsOpenAiApiKeyPlaceholder',
+    apiKeyPlaceholderFallback: 'sk-...',
+    baseUrlPlaceholder: 'https://openrouter.ai/api/v1',
+    modelPlaceholder: 'openai/gpt-4o-mini',
   },
   {
-    type: "anthropic_compatible",
-    titleKey: "settings.aiSettingsAnthropicTitle",
-    titleFallback: "Anthropic compatible",
-    descriptionKey: "settings.aiSettingsAnthropicDescription",
-    descriptionFallback: "Anthropic Claude or compatible provider endpoints",
-    apiKeyPlaceholderKey: "settings.aiSettingsAnthropicApiKeyPlaceholder",
-    apiKeyPlaceholderFallback: "sk-ant-...",
-    baseUrlPlaceholder: "https://api.anthropic.com",
-    modelPlaceholder: "claude-sonnet-4-6",
+    type: 'anthropic_compatible',
+    titleKey: 'settings.aiSettingsAnthropicTitle',
+    titleFallback: 'Anthropic compatible',
+    descriptionKey: 'settings.aiSettingsAnthropicDescription',
+    descriptionFallback: 'Anthropic Claude or compatible provider endpoints',
+    apiKeyPlaceholderKey: 'settings.aiSettingsAnthropicApiKeyPlaceholder',
+    apiKeyPlaceholderFallback: 'sk-ant-...',
+    baseUrlPlaceholder: 'https://api.anthropic.com',
+    modelPlaceholder: 'claude-sonnet-4-6',
   },
 ];
 
 const emptyDraft: ProviderDraft = {
-  apiKey: "",
-  baseUrl: "",
-  model: "",
+  apiKey: '',
+  baseUrl: '',
+  model: '',
   enabled: false,
 };
 
 function createDraft(setting?: AiSetting): ProviderDraft {
   return {
-    apiKey: "",
-    baseUrl: setting?.baseUrl ?? "",
-    model: setting?.model ?? "",
+    apiKey: '',
+    baseUrl: setting?.baseUrl ?? '',
+    model: setting?.model ?? '',
     enabled: setting?.enabled ?? false,
   };
 }
@@ -133,11 +126,11 @@ export function AiApiSettings() {
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchWithAuth("/api/preferences/ai");
+      const response = await fetchWithAuth('/api/preferences/ai');
       const data = (await response.json()) as AiSettingsResponse;
 
       if (!response.ok) {
-        throw new Error("load_failed");
+        throw new Error('load_failed');
       }
 
       setSettings(data.settings);
@@ -145,22 +138,22 @@ export function AiApiSettings() {
       setDrafts({
         openai_compatible: createDraft(
           data.settings.find(
-            (setting) => setting.providerType === "openai_compatible",
+            (setting) => setting.providerType === 'openai_compatible',
           ),
         ),
         anthropic_compatible: createDraft(
           data.settings.find(
-            (setting) => setting.providerType === "anthropic_compatible",
+            (setting) => setting.providerType === 'anthropic_compatible',
           ),
         ),
       });
     } catch (error) {
-      console.error("[AI Settings] Failed to load settings", error);
+      console.error('[AI Settings] Failed to load settings', error);
       toast({
-        type: "error",
+        type: 'error',
         description: t(
-          "settings.aiSettingsLoadError",
-          "Failed to load AI settings.",
+          'settings.aiSettingsLoadError',
+          'Failed to load AI settings.',
         ),
       });
     } finally {
@@ -185,8 +178,16 @@ export function AiApiSettings() {
     }));
   };
 
-  const saveProvider = async (providerType: ProviderType) => {
+  const saveProvider = async (
+    providerType: ProviderType,
+    options: { enabled?: boolean; showToast?: boolean } = {},
+  ) => {
     const draft = drafts[providerType];
+    const previousDraft = draft;
+    const nextEnabled = options.enabled ?? draft.enabled;
+    if (typeof options.enabled === 'boolean') {
+      updateDraft(providerType, { enabled: options.enabled });
+    }
     setSavingProvider(providerType);
     try {
       const payload: {
@@ -199,21 +200,21 @@ export function AiApiSettings() {
         providerType,
         baseUrl: draft.baseUrl.trim() || null,
         model: draft.model.trim() || null,
-        enabled: draft.enabled,
+        enabled: nextEnabled,
       };
 
       if (draft.apiKey.trim()) {
         payload.apiKey = draft.apiKey.trim();
       }
 
-      const response = await fetchWithAuth("/api/preferences/ai", {
-        method: "PUT",
+      const response = await fetchWithAuth('/api/preferences/ai', {
+        method: 'PUT',
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as { setting?: AiSetting };
 
       if (!response.ok || !data.setting) {
-        throw new Error("save_failed");
+        throw new Error('save_failed');
       }
 
       const savedSetting = data.setting;
@@ -221,18 +222,26 @@ export function AiApiSettings() {
         ...current.filter((setting) => setting.providerType !== providerType),
         savedSetting,
       ]);
-      updateDraft(providerType, { apiKey: "" });
-      toast({
-        type: "success",
-        description: t("settings.aiSettingsSaved", "AI settings saved."),
+      updateDraft(providerType, {
+        apiKey: '',
+        enabled: savedSetting.enabled,
       });
+      if (options.showToast !== false) {
+        toast({
+          type: 'success',
+          description: t('settings.aiSettingsSaved', 'AI settings saved.'),
+        });
+      }
     } catch (error) {
-      console.error("[AI Settings] Failed to save settings", error);
+      console.error('[AI Settings] Failed to save settings', error);
+      if (typeof options.enabled === 'boolean') {
+        updateDraft(providerType, { enabled: previousDraft.enabled });
+      }
       toast({
-        type: "error",
+        type: 'error',
         description: t(
-          "settings.aiSettingsSaveError",
-          "Failed to save AI settings.",
+          'settings.aiSettingsSaveError',
+          'Failed to save AI settings.',
         ),
       });
     } finally {
@@ -240,16 +249,21 @@ export function AiApiSettings() {
     }
   };
 
+  const updateProviderEnabled = (
+    providerType: ProviderType,
+    enabled: boolean,
+  ) => saveProvider(providerType, { enabled, showToast: false });
+
   const resetProvider = async (providerType: ProviderType) => {
     setResettingProvider(providerType);
     try {
       const response = await fetchWithAuth(
         `/api/preferences/ai?providerType=${providerType}`,
-        { method: "DELETE" },
+        { method: 'DELETE' },
       );
 
       if (!response.ok) {
-        throw new Error("reset_failed");
+        throw new Error('reset_failed');
       }
 
       setSettings((current) =>
@@ -257,19 +271,19 @@ export function AiApiSettings() {
       );
       updateDraft(providerType, createDraft());
       toast({
-        type: "success",
+        type: 'success',
         description: t(
-          "settings.aiSettingsReset",
-          "User override reset to system defaults.",
+          'settings.aiSettingsReset',
+          'User override reset to system defaults.',
         ),
       });
     } catch (error) {
-      console.error("[AI Settings] Failed to reset settings", error);
+      console.error('[AI Settings] Failed to reset settings', error);
       toast({
-        type: "error",
+        type: 'error',
         description: t(
-          "settings.aiSettingsResetError",
-          "Failed to reset AI settings.",
+          'settings.aiSettingsResetError',
+          'Failed to reset AI settings.',
         ),
       });
     } finally {
@@ -296,32 +310,33 @@ export function AiApiSettings() {
         payload.apiKey = draft.apiKey.trim();
       }
 
-      const response = await fetchWithAuth("/api/preferences/ai", {
-        method: "POST",
+      const response = await fetchWithAuth('/api/preferences/ai', {
+        method: 'POST',
         body: JSON.stringify(payload),
       });
-      const data = (await response.json().catch(() => null)) as
-        | { ok?: boolean; error?: string }
-        | null;
+      const data = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
 
       if (!response.ok || !data?.ok) {
-        throw new Error(data?.error ?? "test_failed");
+        throw new Error(data?.error ?? 'test_failed');
       }
 
       toast({
-        type: "success",
+        type: 'success',
         description: t(
-          "settings.aiSettingsTestSuccess",
-          "Provider test succeeded.",
+          'settings.aiSettingsTestSuccess',
+          'Provider test succeeded.',
         ),
       });
     } catch (error) {
-      console.error("[AI Settings] Provider test failed", error);
+      console.error('[AI Settings] Provider test failed', error);
       toast({
-        type: "error",
+        type: 'error',
         description: t(
-          "settings.aiSettingsTestError",
-          "Provider test failed. Check the API key, base URL, and model.",
+          'settings.aiSettingsTestError',
+          'Provider test failed. Check the API key, base URL, and model.',
         ),
       });
     } finally {
@@ -334,12 +349,12 @@ export function AiApiSettings() {
       <div className="w-full px-1 sm:px-0 space-y-8">
         <div className="flex flex-col gap-2">
           <p className="text-base font-semibold text-foreground-secondary">
-            {t("settings.aiSettingsTitle", "API Settings")}
+            {t('settings.aiSettingsTitle', 'API Settings')}
           </p>
           <p className="max-w-3xl text-sm text-muted-foreground">
             {t(
-              "settings.aiSettingsDescription",
-              "Configure per-user API settings for compatible AI providers.",
+              'settings.aiSettingsDescription',
+              'Configure per-user API settings for compatible AI providers.',
             )}
           </p>
         </div>
@@ -349,7 +364,8 @@ export function AiApiSettings() {
             const setting = settingsByProvider.get(provider.type);
             const draft = drafts[provider.type];
             const defaults = systemDefaults[provider.type];
-            const hasOverride = Boolean(setting);
+            const hasSavedSetting = Boolean(setting);
+            const hasOverride = draft.enabled;
             const isSaving = savingProvider === provider.type;
             const isTesting = testingProvider === provider.type;
             const isResetting = resettingProvider === provider.type;
@@ -372,12 +388,12 @@ export function AiApiSettings() {
                           {t(provider.titleKey, provider.titleFallback)}
                         </p>
                         <Badge
-                          variant={hasOverride ? "default" : "secondary"}
+                          variant={hasOverride ? 'default' : 'secondary'}
                           className="h-5 rounded-md px-2 text-[11px] font-medium"
                         >
                           {hasOverride
-                            ? t("settings.aiSettingsOverride", "User override")
-                            : t("settings.aiSettingsSystem", "System default")}
+                            ? t('settings.aiSettingsOverride', 'User override')
+                            : t('settings.aiSettingsSystem', 'System default')}
                         </Badge>
                       </div>
                       <p className="mt-1 text-sm text-muted-foreground">
@@ -392,14 +408,14 @@ export function AiApiSettings() {
                         htmlFor={`${provider.type}-enabled`}
                         className="text-sm font-normal text-muted-foreground"
                       >
-                        {t("settings.aiSettingsEnabled", "Enabled")}
+                        {t('settings.aiSettingsEnabled', 'Enabled')}
                       </Label>
                       <Switch
                         id={`${provider.type}-enabled`}
                         checked={draft.enabled}
                         disabled={disabled}
                         onCheckedChange={(enabled) =>
-                          updateDraft(provider.type, { enabled })
+                          updateProviderEnabled(provider.type, enabled)
                         }
                       />
                     </div>
@@ -408,7 +424,7 @@ export function AiApiSettings() {
                   <div className="grid gap-4 lg:grid-cols-3">
                     <div className="space-y-2">
                       <Label htmlFor={`${provider.type}-api-key`}>
-                        {t("settings.aiSettingsApiKey", "API Key")}
+                        {t('settings.aiSettingsApiKey', 'API Key')}
                       </Label>
                       <Input
                         id={`${provider.type}-api-key`}
@@ -418,8 +434,8 @@ export function AiApiSettings() {
                         placeholder={
                           setting?.hasApiKey
                             ? t(
-                                "settings.aiSettingsSavedApiKeyPlaceholder",
-                                "Saved. Leave blank to keep unchanged.",
+                                'settings.aiSettingsSavedApiKeyPlaceholder',
+                                'Saved. Leave blank to keep unchanged.',
                               )
                             : t(
                                 provider.apiKeyPlaceholderKey,
@@ -435,24 +451,24 @@ export function AiApiSettings() {
                       <p className="text-xs text-muted-foreground">
                         {setting?.hasApiKey
                           ? t(
-                              "settings.aiSettingsUserApiKeyConfigured",
-                              "User API key configured",
+                              'settings.aiSettingsUserApiKeyConfigured',
+                              'User API key configured',
                             )
                           : defaults.hasApiKey
                             ? t(
-                                "settings.aiSettingsSystemApiKeyConfigured",
-                                "Using system API key",
+                                'settings.aiSettingsSystemApiKeyConfigured',
+                                'Using system API key',
                               )
                             : t(
-                                "settings.aiSettingsApiKeyNotConfigured",
-                                "No API key configured",
+                                'settings.aiSettingsApiKeyNotConfigured',
+                                'No API key configured',
                               )}
                       </p>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor={`${provider.type}-base-url`}>
-                        {t("settings.aiSettingsBaseUrl", "Base URL")}
+                        {t('settings.aiSettingsBaseUrl', 'Base URL')}
                       </Label>
                       <Input
                         id={`${provider.type}-base-url`}
@@ -469,7 +485,7 @@ export function AiApiSettings() {
 
                     <div className="space-y-2">
                       <Label htmlFor={`${provider.type}-model`}>
-                        {t("settings.aiSettingsModel", "Model")}
+                        {t('settings.aiSettingsModel', 'Model')}
                       </Label>
                       <Input
                         id={`${provider.type}-model`}
@@ -488,17 +504,17 @@ export function AiApiSettings() {
                   <div className="flex flex-col gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                       <span>
-                        {t("settings.aiSettingsDefaultBaseUrl", "Default URL")}
-                        {": "}
+                        {t('settings.aiSettingsDefaultBaseUrl', 'Default URL')}
+                        {': '}
                         <span className="text-foreground">
-                          {defaults.baseUrl ?? "—"}
+                          {defaults.baseUrl ?? '—'}
                         </span>
                       </span>
                       <span>
-                        {t("settings.aiSettingsDefaultModel", "Default model")}
-                        {": "}
+                        {t('settings.aiSettingsDefaultModel', 'Default model')}
+                        {': '}
                         <span className="text-foreground">
-                          {defaults.model ?? "—"}
+                          {defaults.model ?? '—'}
                         </span>
                       </span>
                     </div>
@@ -517,13 +533,13 @@ export function AiApiSettings() {
                             className="animate-spin"
                           />
                         )}
-                        {t("settings.aiSettingsTestButton", "Test")}
+                        {t('settings.aiSettingsTestButton', 'Test')}
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={!hasOverride || disabled}
+                        disabled={!hasSavedSetting || disabled}
                         onClick={() => resetProvider(provider.type)}
                       >
                         {isResetting && (
@@ -533,14 +549,14 @@ export function AiApiSettings() {
                             className="animate-spin"
                           />
                         )}
-                        {t("settings.aiSettingsResetButton", "Reset")}
+                        {t('settings.aiSettingsResetButton', 'Reset')}
                       </Button>
                       <Button
                         type="button"
                         size="sm"
                         disabled={disabled}
                         onClick={() => saveProvider(provider.type)}
-                        className={cn("min-w-20", isSaving && "gap-2")}
+                        className={cn('min-w-20', isSaving && 'gap-2')}
                       >
                         {isSaving && (
                           <RemixIcon
@@ -549,7 +565,7 @@ export function AiApiSettings() {
                             className="animate-spin"
                           />
                         )}
-                        {t("common.save", "Save")}
+                        {t('common.save', 'Save')}
                       </Button>
                     </div>
                   </div>
