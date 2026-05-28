@@ -1051,6 +1051,41 @@ export type DBInsightSettings = InferSelectModel<typeof userInsightSettings>;
 export type DBInsertInsightSettings = InferInsertModel<
   typeof userInsightSettings
 >;
+
+export const userLlmApiSettings = pgTable(
+  "user_llm_api_settings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    providerType: varchar("provider_type", { length: 32 })
+      .$type<"openai_compatible" | "anthropic_compatible">()
+      .notNull(),
+    apiKeyEncrypted: text("api_key_encrypted"),
+    encryptionKeyId: text("encryption_key_id"),
+    baseUrl: text("base_url"),
+    model: text("model"),
+    enabled: boolean("enabled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    uniqueUserProvider: uniqueIndex(
+      "user_llm_api_settings_user_provider_idx",
+    ).on(table.userId, table.providerType),
+    userIdx: index("user_llm_api_settings_user_idx").on(table.userId),
+  }),
+);
+
+export type UserLlmApiSettings = InferSelectModel<typeof userLlmApiSettings>;
+export type InsertUserLlmApiSettings = InferInsertModel<
+  typeof userLlmApiSettings
+>;
 const KNOWN_ACTIVITY_TIERS = new Set(["high", "medium", "low", "dormant"]);
 
 export const personCustomFields = pgTable(

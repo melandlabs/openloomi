@@ -33,6 +33,7 @@ export const insightEmbeddings = (currentSchema as any).insightEmbeddings;
 export const rawMessages = (currentSchema as any).rawMessages;
 export const memorySummaries = (currentSchema as any).memorySummaries;
 export const userInsightSettings = (currentSchema as any).userInsightSettings;
+export const userLlmApiSettings = (currentSchema as any).userLlmApiSettings;
 export const userContacts = (currentSchema as any).userContacts;
 export const dingtalkBotInsightMessages = (currentSchema as any)
   .dingtalkBotInsightMessages;
@@ -140,6 +141,8 @@ export type {
   InsightSettings,
   DBInsightSettings,
   DBInsertInsightSettings,
+  UserLlmApiSettings,
+  InsertUserLlmApiSettings,
   DBPersonCustomFields,
   DBInsertPersonCustomFields,
   UserRole,

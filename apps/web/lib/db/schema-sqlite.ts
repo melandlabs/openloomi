@@ -897,6 +897,43 @@ export type DBInsertInsightSettings = InferInsertModel<
   typeof userInsightSettings
 >;
 
+export const userLlmApiSettings = sqliteTable(
+  "user_llm_api_settings",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    providerType: text("provider_type")
+      .$type<"openai_compatible" | "anthropic_compatible">()
+      .notNull(),
+    apiKeyEncrypted: text("api_key_encrypted"),
+    encryptionKeyId: text("encryption_key_id"),
+    baseUrl: text("base_url"),
+    model: text("model"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    uniqueUserProvider: uniqueIndex(
+      "user_llm_api_settings_user_provider_idx",
+    ).on(table.userId, table.providerType),
+    userIdx: index("user_llm_api_settings_user_idx").on(table.userId),
+  }),
+);
+
+export type UserLlmApiSettings = InferSelectModel<typeof userLlmApiSettings>;
+export type InsertUserLlmApiSettings = InferInsertModel<
+  typeof userLlmApiSettings
+>;
+
 const KNOWN_ACTIVITY_TIERS = new Set(["high", "medium", "low", "dormant"]);
 
 export const insightTimelineHistory = sqliteTable(
