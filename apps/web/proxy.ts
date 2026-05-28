@@ -22,6 +22,7 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith("/api/brave-search")) return NextResponse.next();
   if (pathname.startsWith("/api/password-reset")) return NextResponse.next();
   if (pathname.startsWith("/api/ai")) return NextResponse.next();
+  if (pathname.startsWith("/api/preferences")) return NextResponse.next();
   if (pathname.startsWith("/api/integrations")) return NextResponse.next();
   if (pathname.startsWith("/api/user") || pathname.startsWith("/api/quota"))
     return NextResponse.next();
