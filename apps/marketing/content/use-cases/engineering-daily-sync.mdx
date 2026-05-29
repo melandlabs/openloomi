@@ -16,7 +16,7 @@ Engineering teams waste hours every week pulling commit logs, writing status rep
 | -------------- | ----------------------------------------------------------- |
 | 🌙 Every 10 PM | Pull all commits from your GitHub repo                      |
 | 📝 Compile     | Generate a structured daily dev report                      |
-| 📧 Email       | Send the report to the engineering team                    |
+| 📧 Email       | Send the report to the engineering team                     |
 | 🐛 New Issues  | Fetch all issues created that day, rewrite with full detail |
 | 🔄 Linear Sync | Sync rewritten issues to Linear for prioritization          |
 
@@ -37,7 +37,7 @@ Two scheduled tasks handle the full workflow:
 | Task              | Schedule           | Purpose                                      |
 | ----------------- | ------------------ | -------------------------------------------- |
 | **PD Daily Sync** | Every day at 10 PM | Fetch commits, compile report, email to team |
-| **PD Issue Sync** | Every 1 hour       | Monitor new issues, rewrite, sync to Linear   |
+| **PD Issue Sync** | Every 1 hour       | Monitor new issues, rewrite, sync to Linear  |
 
 Both tasks are created with tracking enabled for full observability.
 
@@ -94,11 +94,11 @@ OpenLoomi will automatically create the scheduled tasks for you!
 1. Go to the **Agent** page, then select **Automation** → **New Task**
 2. Create the first task:
 
-| Field            | Input                                                                                                                                                                                                                                                                |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Task Name        | `PD Daily Sync`                                                                                                                                                                                                                                                      |
+| Field            | Input                                                                                                                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Task Name        | `PD Daily Sync`                                                                                                                                                                                                                            |
 | Task Description | `1. Fetch all commits from your GitHub repo\n2. Compile a structured daily dev report\n3. Email the report to your team\n4. Fetch all issues created that day\n5. Rewrite each issue with full detail\n6. Sync rewritten issues to Linear` |
-| Schedule         | `0 22 * * *` (every day at 10 PM)                                                                                                                                                                                                                                    |
+| Schedule         | `0 22 * * *` (every day at 10 PM)                                                                                                                                                                                                          |
 
 3. Create the second task:
 
