@@ -21,6 +21,7 @@ interface CliArgs {
   output?: string;
   port?: number;
   tokenPath?: string;
+  resume: boolean;
 }
 
 function parseCliArgs(): CliArgs {
@@ -29,7 +30,7 @@ function parseCliArgs(): CliArgs {
   const values: Record<
     string,
     string | boolean | number | string[] | undefined
-  > = { mode: "observation", quick: false };
+  > = { mode: "observation", quick: false, resume: true };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -47,6 +48,10 @@ function parseCliArgs(): CliArgs {
       values.port = Number.parseInt(args[++i], 10);
     } else if (arg === "--token" || arg === "-t") {
       values.tokenPath = args[++i];
+    } else if (arg === "--resume") {
+      values.resume = true;
+    } else if (arg === "--no-resume") {
+      values.resume = false;
     }
   }
 
@@ -79,6 +84,7 @@ function parseCliArgs(): CliArgs {
     output: values.output,
     port: values.port,
     tokenPath: values.tokenPath,
+    resume: values.resume !== false,
   };
 }
 
@@ -188,6 +194,7 @@ async function main() {
       port,
       args.tokenPath,
       args.quick ? 5 : undefined,
+      args.resume,
     );
 
     try {

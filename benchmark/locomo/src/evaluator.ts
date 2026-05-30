@@ -6,7 +6,7 @@
  * Now uses /api/native/agent for answering questions.
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { MemoryRecord } from "./contracts";
@@ -361,12 +361,15 @@ export class LoCoMoEvaluator {
   private port: number;
   private authToken?: string;
   private quickLimit?: number;
+  private checkpointDir: string;
+  private resume: boolean;
 
   constructor(
     retrievalMode: RetrievalMode | string = RetrievalMode.OBSERVATION,
     port?: number,
     tokenPath?: string,
     quickLimit?: number,
+    resume = true,
   ) {
     // Convert string to enum if needed
     if (typeof retrievalMode === "string") {
@@ -383,6 +386,16 @@ export class LoCoMoEvaluator {
     this.port = port || DEFAULT_PORTS[0];
     this.authToken = readAuthToken(tokenPath);
     this.quickLimit = quickLimit;
+    this.resume = resume;
+    this.checkpointDir = join(
+      homedir(),
+      ".openloomi",
+      "data",
+      "memory",
+      "bench",
+      "checkpoints",
+      String(this.retrievalMode),
+    );
   }
 
   /**
@@ -390,6 +403,47 @@ export class LoCoMoEvaluator {
    */
   setPort(port: number): void {
     this.port = port;
+  }
+
+  /**
+   * Get checkpoint file path for a sample
+   */
+  private getCheckpointPath(sampleId: string): string {
+    return join(this.checkpointDir, `${sampleId}.json`);
+  }
+
+  /**
+   * Load checkpoint for a sample if it exists
+   */
+  private async loadCheckpoint(
+    sampleId: string,
+  ): Promise<Record<number, Prediction> | null> {
+    if (!this.resume) return null;
+    try {
+      const path = this.getCheckpointPath(sampleId);
+      const data = await readFile(path, "utf-8");
+      const parsed = JSON.parse(data);
+      // Return predictions keyed by question index
+      return parsed as Record<number, Prediction>;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Save checkpoint for a sample after each question is evaluated
+   */
+  private async saveCheckpoint(
+    sampleId: string,
+    predictions: Record<number, Prediction>,
+  ): Promise<void> {
+    try {
+      await mkdir(this.checkpointDir, { recursive: true });
+      const path = this.getCheckpointPath(sampleId);
+      await writeFile(path, JSON.stringify(predictions, null, 2), "utf-8");
+    } catch (error) {
+      console.error(`Failed to save checkpoint: ${error}`);
+    }
   }
 
   /**
@@ -446,8 +500,24 @@ export class LoCoMoEvaluator {
       };
     }
 
+    // Load checkpoint for resume support
+    const checkpoint = (await this.loadCheckpoint(sample.sample_id)) || {};
+    const completedIndices = new Set(Object.keys(checkpoint).map(Number));
+    const skippedCount = completedIndices.size;
+
     const predictions: Prediction[] = [];
     let correct = 0;
+
+    // If we have checkpoint data, restore predictions
+    if (skippedCount > 0) {
+      for (const [idx, pred] of Object.entries(checkpoint)) {
+        predictions.push(pred);
+        if (pred.correct) correct++;
+      }
+      console.log(
+        `[LoCoMo] Resuming from checkpoint: ${skippedCount} questions already evaluated`,
+      );
+    }
 
     // Limit questions if quick mode is enabled
     const questionsToEvaluate = this.quickLimit
@@ -458,7 +528,14 @@ export class LoCoMoEvaluator {
       `[LoCoMo] Evaluating ${questionsToEvaluate.length} questions (quick limit: ${this.quickLimit || "none"})`,
     );
 
-    for (const qa of questionsToEvaluate) {
+    for (let i = 0; i < questionsToEvaluate.length; i++) {
+      const qa = questionsToEvaluate[i];
+
+      // Skip if already evaluated (from checkpoint)
+      if (completedIndices.has(i)) {
+        continue;
+      }
+
       try {
         // Query memory using agent API (which has memory search tools built in)
         const response = await this.queryMemory(qa.question, sample);
@@ -469,7 +546,7 @@ export class LoCoMoEvaluator {
           isCorrect =
             (await evaluateLLMJudge(qa.question, qa.answer, response)) === 1;
           console.log(
-            `[Q${predictions.length + 1}] ${isCorrect ? "✓" : "✗"} Q: "${qa.question.substring(0, 60)}..." GT: "${qa.answer}"`,
+            `[Q${i + 1}] ${isCorrect ? "✓" : "✗"} Q: "${qa.question.substring(0, 60)}..." GT: "${qa.answer}"`,
           );
           if (!isCorrect) {
             console.log(
@@ -482,7 +559,7 @@ export class LoCoMoEvaluator {
               ? judgeError.message
               : String(judgeError);
           console.log(
-            `[Q${predictions.length + 1}] ✗ Judge failed: ${errMsg.substring(0, 100)}`,
+            `[Q${i + 1}] ✗ Judge failed: ${errMsg.substring(0, 100)}`,
           );
         }
 
@@ -493,7 +570,7 @@ export class LoCoMoEvaluator {
         // Calculate additional metrics
         const metrics = calculateMetrics(response, qa.answer);
 
-        predictions.push({
+        const pred: Prediction = {
           question: qa.question,
           answer: qa.answer,
           response,
@@ -509,7 +586,13 @@ export class LoCoMoEvaluator {
           bleu3: metrics.bleu3,
           bleu4: metrics.bleu4,
           evidence: qa.evidence,
-        });
+        };
+
+        predictions.push(pred);
+
+        // Save checkpoint after each question
+        checkpoint[i] = pred;
+        await this.saveCheckpoint(sample.sample_id, checkpoint);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
@@ -519,7 +602,7 @@ export class LoCoMoEvaluator {
           `Error evaluating question: ${errorMessage}${errorCause ? ` (cause: ${errorCause})` : ""}`,
         );
 
-        predictions.push({
+        const pred: Prediction = {
           question: qa.question,
           answer: qa.answer,
           response: `Error: ${errorMessage}`,
@@ -535,7 +618,13 @@ export class LoCoMoEvaluator {
           bleu3: 0.0,
           bleu4: 0.0,
           evidence: qa.evidence,
-        });
+        };
+
+        predictions.push(pred);
+
+        // Save checkpoint after each question
+        checkpoint[i] = pred;
+        await this.saveCheckpoint(sample.sample_id, checkpoint);
       }
     }
 
