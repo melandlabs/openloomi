@@ -3,6 +3,11 @@
  * This implements the same interface as the production storage adapters.
  */
 
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import net from "node:net";
+
 import type {
   MemoryStorageAdapter,
   MemoryRecord,
@@ -15,7 +20,150 @@ import type {
   MemoryTransitionRecordsInput,
   MemoryArchiveRecordDetailsInput,
   MemoryMarkAccessedInput,
-} from "./contracts.js";
+} from "./contracts";
+
+/**
+ * Default ports to check for the OpenLoomi API server.
+ */
+export const DEFAULT_PORTS = [3515];
+
+/**
+ * Find an available port where the OpenLoomi API server is running.
+ */
+export async function findAvailablePort(): Promise<number> {
+  for (const port of DEFAULT_PORTS) {
+    const available = await checkPortAvailable(port);
+    if (!available) {
+      return port;
+    }
+  }
+  throw new Error(
+    `No OpenLoomi API server found on ports ${DEFAULT_PORTS.join(", ")}. Please start the server first.`,
+  );
+}
+
+/**
+ * Check if a port is in use (server is running).
+ */
+function checkPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(1000);
+    socket.on("connect", () => {
+      socket.destroy();
+      resolve(false); // port is in use (server running)
+    });
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve(true); // port is available
+    });
+    socket.on("error", () => {
+      resolve(true); // port is available
+    });
+    socket.connect(port, "127.0.0.1");
+  });
+}
+
+/**
+ * Read auth token from a file.
+ * Defaults to ~/.openloomi/token
+ */
+export function readAuthToken(tokenPath?: string): string | undefined {
+  const filePath = tokenPath ?? join(homedir(), ".openloomi", "token");
+  try {
+    const token = readFileSync(filePath, "utf-8").trim();
+    return token || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Call the OpenLoomi agent API with a prompt.
+ */
+export async function callAgentApi(
+  prompt: string,
+  port: number,
+  authToken?: string,
+): Promise<string> {
+  const url = `http://127.0.0.1:${port}/api/native/agent`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      prompt,
+      provider: "claude",
+    }),
+    signal: AbortSignal.timeout(120_000), // 2 min timeout
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Agent API error: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  // The agent API returns a streaming response, so we need to parse it
+  const text = await response.text();
+
+  // Try to extract text from SSE format or plain text
+  // The API may return JSON with a text field or SSE data
+  try {
+    // Check if it's JSON
+    const data = JSON.parse(text);
+    if (data.text) return data.text;
+    if (data.content) return data.content;
+    if (data.message) return data.message;
+    if (data.result) return data.result;
+    // If it has a response field with text
+    if (typeof data === "object") {
+      for (const [key, value] of Object.entries(data)) {
+        if (typeof value === "string" && value.length > 0) {
+          return value;
+        }
+      }
+    }
+  } catch {
+    // Not JSON, treat as plain text
+  }
+
+  // Try to extract SSE lines - collect text from type:text events
+  const lines = text.split("\n");
+  const textParts: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("data:") || trimmed.startsWith("0:")) {
+      try {
+        const jsonStr = trimmed.startsWith("data:")
+          ? trimmed.slice(5).trim()
+          : trimmed.slice(1).trim();
+        if (!jsonStr || jsonStr === "[DONE]") continue;
+        const parsed = JSON.parse(jsonStr);
+        // Only capture type:text events for the actual answer
+        if (parsed.type === "text" && parsed.content) {
+          textParts.push(parsed.content);
+        }
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  if (textParts.length > 0) {
+    return textParts.join("");
+  }
+
+  // Return as-is if nothing worked
+  return text || "(empty response)";
+}
 
 /**
  * Simple in-memory storage adapter for benchmarking.

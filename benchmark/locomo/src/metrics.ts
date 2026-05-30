@@ -12,7 +12,7 @@ const openrouter = createOpenAICompatible({
   apiKey: process.env.OPENROUTER_API_KEY,
   name: "openrouter",
 });
-import { LLM_JUDGE_PROMPT } from "./prompts.js";
+import { LLM_JUDGE_PROMPT } from "./prompts";
 
 /**
  * Calculate F1 score between prediction and ground truth.

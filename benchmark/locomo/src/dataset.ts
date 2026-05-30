@@ -3,7 +3,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import type { LoCoMoSample, QAPair } from "./types.js";
+import type { LoCoMoSample, QAPair } from "./types";
 
 interface RawQAPair {
   question: string;

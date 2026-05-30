@@ -9,18 +9,18 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import type { MemoryRecord } from "./contracts.js";
+import type { MemoryRecord } from "./contracts";
 
-import { RetrievalMode } from "./types.js";
-import type { LoCoMoSample, EvaluationResult, Prediction } from "./types.js";
+import { RetrievalMode } from "./types";
+import type { LoCoMoSample, EvaluationResult, Prediction } from "./types";
 import {
   InMemoryStorageAdapter,
   callAgentApi,
   readAuthToken,
   findAvailablePort,
   DEFAULT_PORTS,
-} from "./memory-adapter.js";
-import { calculateMetrics, evaluateLLMJudge } from "./metrics.js";
+} from "./memory-adapter";
+import { calculateMetrics, evaluateLLMJudge } from "./metrics";
 
 /**
  * Write memory records to ~/.openloomi/data/memory/bench/ folder

@@ -6,16 +6,12 @@
 
 import "dotenv/config";
 import { writeFile } from "node:fs/promises";
-import { loadLoCoMoDatasetFromJson } from "./dataset.js";
-import {
-  LoCoMoEvaluator,
-  findAvailablePort,
-  DEFAULT_PORTS,
-} from "./evaluator.js";
-import { RetrievalMode } from "./types.js";
-import type { EvaluationResult, Prediction } from "./types.js";
-import { calculateCategoryMetrics } from "./metrics.js";
-import { CATEGORY_NAMES } from "./scorer.js";
+import { loadLoCoMoDatasetFromJson } from "./dataset";
+import { LoCoMoEvaluator, findAvailablePort, DEFAULT_PORTS } from "./evaluator";
+import { RetrievalMode } from "./types";
+import type { EvaluationResult, Prediction } from "./types";
+import { calculateCategoryMetrics } from "./metrics";
+import { CATEGORY_NAMES } from "./scorer";
 
 interface CliArgs {
   dataset: string;
