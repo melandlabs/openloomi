@@ -78,10 +78,19 @@ function createMemoryRecordsFromDialog(sample: LoCoMoSample): MemoryRecord[] {
     dialogParts.push("");
 
     for (const turn of session) {
+      // Each turn is an object with speaker, dia_id, and text properties
+      const turnText =
+        typeof turn === "string"
+          ? turn
+          : (turn as { text?: string }).text || JSON.stringify(turn);
+      const speaker =
+        typeof turn === "string"
+          ? ""
+          : `[${(turn as { speaker?: string }).speaker || ""}]`;
       if (sessionTimestamp) {
-        dialogParts.push(`[${sessionTimestamp}] ${turn}`);
+        dialogParts.push(`[${sessionTimestamp}] ${speaker} ${turnText}`);
       } else {
-        dialogParts.push(turn);
+        dialogParts.push(`${speaker} ${turnText}`);
       }
     }
 
