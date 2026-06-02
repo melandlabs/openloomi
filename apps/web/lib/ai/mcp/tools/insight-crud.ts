@@ -32,6 +32,7 @@ export function createInsightCrudTools(
   session: Session,
   chatId: string | undefined,
   onInsightChange?: InsightChangeCallback,
+  embeddingsAuthToken?: string,
 ) {
   return [
     // createInsight tool
@@ -438,7 +439,9 @@ export function createInsightCrudTools(
             botId,
           } as any;
 
-          const result = await insertInsightRecords([insertPayload]);
+          const result = await insertInsightRecords([insertPayload], {
+            authToken: embeddingsAuthToken,
+          });
 
           if (!result || result.length === 0) {
             return {

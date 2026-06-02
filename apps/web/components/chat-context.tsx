@@ -939,16 +939,33 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 return updated;
               }, chatIdForMessages);
             } else if (data.type === "tool_use") {
-              // Tool call - add new part
+              // Tool call - add or update the existing part.
+              // Some providers stream the tool call before the full input is available,
+              // then send the same toolUseId again with parameters.
+              const toolUseId = data.toolUseId || data.id;
               const toolPart = {
                 type: "tool-native" as const,
                 toolName: data.name || "unknown",
                 toolInput: data.input,
                 status: "executing",
-                toolUseId: data.toolUseId || data.id,
+                toolUseId,
               };
 
-              parts.push(toolPart);
+              const existingIndex = parts.findIndex(
+                (part: any) =>
+                  part?.type === "tool-native" &&
+                  toolUseId &&
+                  part?.toolUseId === toolUseId,
+              );
+              if (existingIndex >= 0) {
+                parts[existingIndex] = {
+                  ...parts[existingIndex],
+                  ...toolPart,
+                  toolInput: data.input ?? parts[existingIndex].toolInput,
+                };
+              } else {
+                parts.push(toolPart);
+              }
               // Reset textContent so subsequent new text chunks start accumulating from empty
               textContent = "";
 

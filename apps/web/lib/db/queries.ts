@@ -5335,6 +5335,7 @@ function serializeField(
 
 export async function insertInsightRecords(
   entries: InsightInsertInput[],
+  options: { authToken?: string } = {},
 ): Promise<string[]> {
   if (entries.length === 0) {
     return [];
@@ -5428,6 +5429,29 @@ export async function insertInsightRecords(
         candidates,
       });
     }
+
+    const embeddingCandidates = results.reduce<InsightEmbeddingCandidate[]>(
+      (acc, insightId, index) => {
+        const entry = entries[index];
+        if (entry?.botId) {
+          acc.push({
+            insightId,
+            botId: entry.botId,
+            payload: entry as any,
+          });
+        }
+        return acc;
+      },
+      [],
+    );
+
+    await upsertInsightEmbeddingsForCandidates({
+      db,
+      candidates: embeddingCandidates,
+      options: {
+        authToken: options.authToken,
+      },
+    });
 
     return results;
   } catch (error) {

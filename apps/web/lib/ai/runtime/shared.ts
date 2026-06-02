@@ -92,6 +92,7 @@ function getToolDisplayName(
     getFullDocumentContent: "Get Document",
     listKnowledgeBaseDocuments: "List Knowledge Base",
     searchMemoryPath: "Search Memory",
+    searchUnifiedMemory: "Search Unified Memory",
     getRawMessages: "Get Raw Messages",
     searchRawMessages: "Search Messages",
   };
@@ -119,6 +120,7 @@ function getToolDisplayName(
     getFullDocumentContent: "读取文档",
     listKnowledgeBaseDocuments: "列出知识库文档",
     searchMemoryPath: "搜索记忆",
+    searchUnifiedMemory: "搜索统一记忆",
     getRawMessages: "搜索消息",
     searchRawMessages: "搜索原始消息",
   };

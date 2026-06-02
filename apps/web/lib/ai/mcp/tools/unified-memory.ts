@@ -93,6 +93,29 @@ function getHitSourceSummary(
   };
 }
 
+function previewLogContent(content: string, maxLength = 220): string {
+  const compact = content.replace(/\s+/g, " ").trim();
+  return compact.length > maxLength
+    ? `${compact.slice(0, maxLength)}...`
+    : compact;
+}
+
+function pickLogMetadata(metadata: Record<string, unknown>) {
+  const keys = [
+    "platform",
+    "channel",
+    "person",
+    "timestamp",
+    "title",
+    "documentName",
+  ];
+  return Object.fromEntries(
+    keys
+      .filter((key) => metadata[key] !== undefined)
+      .map((key) => [key, metadata[key]]),
+  );
+}
+
 /**
  * Create the unified memory search tool.
  */
@@ -198,6 +221,8 @@ export function createUnifiedMemorySearchTool(
             type: item.type,
             id: item.id,
             similarity: Number(item.similarity.toFixed(3)),
+            metadata: pickLogMetadata(item.metadata),
+            contentPreview: previewLogContent(item.content),
           })),
         });
 

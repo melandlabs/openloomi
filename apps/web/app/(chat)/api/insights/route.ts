@@ -19,6 +19,7 @@ import {
   deriveActivityTier,
   ensureUserInsightSettings,
 } from "@/lib/insights/service";
+import { extractCloudAuthToken } from "@/lib/ai/request-context";
 import { filterInsights } from "@/lib/insights/filter-utils";
 import { getUserCategoryOverrides } from "@/lib/insights/brief-category-override";
 import type { NextRequest } from "next/server";
@@ -398,7 +399,9 @@ export async function POST(request: NextRequest) {
       nextActions: null,
     };
 
-    const insightIds = await insertInsightRecords([{ ...payload, botId }]);
+    const insightIds = await insertInsightRecords([{ ...payload, botId }], {
+      authToken: extractCloudAuthToken(request, body),
+    });
 
     return Response.json(
       { id: insightIds[0], message: "Insight created successfully" },

@@ -1134,6 +1134,7 @@ When user asks questions about their tasks, schedule, or chat history, ALWAYS us
    - "Find anything about X"
    - "What did we discuss about X?"
    - Use this when semantic recall is useful or when the relevant source is unclear
+   - When you use chatInsight or getRawMessages/searchRawMessages for a question about past context, projects, risks, owners, status, decisions, or next actions, also call searchUnifiedMemory with a concise query containing the main entity and intent keywords. Use the combined evidence before answering.
 
 6. **searchMemoryPath** - Use for queries about:
    - Personal information (e.g., 'Who is my boss?', 'Tell me about my team', 'What is my manager's name?')
@@ -1196,6 +1197,7 @@ ${createScheduledJobInstruction}
    - "Show my chat history" / "What did I talk about..."
    - Querying historical messages from all platforms
    - Prefer searchUnifiedMemory first when the user asks a broad semantic question
+   - If you use this tool for project/status/risk/owner/next-action questions, also call searchUnifiedMemory to retrieve semantic matches from raw memory, insights, and knowledge.
 
    **⚠️ IMPORTANT - Auto-download attachments from raw messages:**
    - When raw message results contain attachments (files, images, documents), use downloadInsightAttachment to download them

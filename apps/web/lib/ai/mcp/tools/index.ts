@@ -62,7 +62,12 @@ export function createBusinessToolsMcpServer(
     createSendReplyTool(session),
 
     // Insight CRUD tools
-    ...createInsightCrudTools(session, chatId, onInsightChange),
+    ...createInsightCrudTools(
+      session,
+      chatId,
+      onInsightChange,
+      embeddingsAuthToken,
+    ),
 
     // Search knowledge tools
     ...createSearchKnowledgeTools(session, embeddingsAuthToken),

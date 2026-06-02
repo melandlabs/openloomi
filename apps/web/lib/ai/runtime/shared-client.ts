@@ -54,6 +54,7 @@ function getToolDisplayName(toolName: string): string {
     getFullDocumentContent: "Get Document",
     listKnowledgeBaseDocuments: "List Knowledge Base",
     searchMemoryPath: "Search Memory",
+    searchUnifiedMemory: "Search Unified Memory",
     getRawMessages: "Get Raw Messages",
     searchRawMessages: "Search Messages",
   };
