@@ -59,18 +59,13 @@ export async function GET(request: Request) {
     // Always refresh the active desktop auth/user context before reporting scheduler state.
     setSchedulerUserId(userId);
 
-    if (!cloudAuthToken) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "cloud_auth_token_missing",
-          scheduler: getSchedulerStatus(),
-        },
-        { status: 400 },
+    if (cloudAuthToken) {
+      setCloudAuthToken(cloudAuthToken);
+    } else {
+      console.warn(
+        "[SchedulerAPI] cloudAuthToken missing; starting scheduler with environment/default auth only",
       );
     }
-
-    setCloudAuthToken(cloudAuthToken);
 
     // Start the scheduler if it is not running; subsequent GETs refresh runtime context.
     if (!getSchedulerStatus().isRunning) {

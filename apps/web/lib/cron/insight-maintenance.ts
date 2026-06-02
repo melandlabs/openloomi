@@ -9,13 +9,22 @@ import {
 } from "../db/queries";
 import { runWeeklyInsightMaintenance } from "@/lib/insights/maintenance";
 import { runInsightEmbeddingDream } from "@/lib/insights/dream";
+import { getRawMessageManager } from "@/lib/memory/raw-message-store";
+import {
+  getInsightEmbeddingModelName,
+  hasInsightEmbeddingProviderConfig,
+} from "@/lib/insights/embedding-service";
+import { UniversalEmbeddings } from "@openloomi/rag/universal-embeddings";
+import { runRawMessageEmbeddingDream } from "@openloomi/indexeddb";
 
 const INSIGHT_EMBEDDING_DREAM_INTERVAL = 24 * 60 * 60 * 1000;
+const RAW_MESSAGE_EMBEDDING_DREAM_INTERVAL = 24 * 60 * 60 * 1000;
 const WEEKLY_MAINTENANCE_INTERVAL = 7 * 24 * 60 * 60 * 1000;
 
 // Desktop caches the last successful maintenance run in memory, but also mirrors it to insight settings so restarts keep the same weekly window.
 let lastInsightMaintenanceRunAt: Date | null = null;
 let lastInsightEmbeddingDreamRunAt: Date | null = null;
+let lastRawMessageEmbeddingDreamRunAt: Date | null = null;
 
 export function getLastInsightMaintenanceRunAt(): Date | null {
   return lastInsightMaintenanceRunAt;
@@ -25,12 +34,20 @@ export function getLastInsightEmbeddingDreamRunAt(): Date | null {
   return lastInsightEmbeddingDreamRunAt;
 }
 
+export function getLastRawMessageEmbeddingDreamRunAt(): Date | null {
+  return lastRawMessageEmbeddingDreamRunAt;
+}
+
 export function setLastInsightMaintenanceRunAt(date: Date | null) {
   lastInsightMaintenanceRunAt = date;
 }
 
 export function setLastInsightEmbeddingDreamRunAt(date: Date | null) {
   lastInsightEmbeddingDreamRunAt = date;
+}
+
+export function setLastRawMessageEmbeddingDreamRunAt(date: Date | null) {
+  lastRawMessageEmbeddingDreamRunAt = date;
 }
 
 async function loadPersistedInsightMaintenanceRunAt(userId: string) {
@@ -89,6 +106,52 @@ export async function runInsightEmbeddingDreamIfDue(
   }
   await persistInsightEmbeddingDreamRunAt(schedulerUserId, now);
   lastInsightEmbeddingDreamRunAt = now;
+}
+
+// Raw message dream keeps original message embeddings complete for semantic memory search.
+export async function runRawMessageEmbeddingDreamIfDue(
+  schedulerUserId: string | undefined,
+  authToken?: string,
+) {
+  if (!schedulerUserId) {
+    return;
+  }
+
+  const now = new Date();
+  if (
+    lastRawMessageEmbeddingDreamRunAt &&
+    now.getTime() - lastRawMessageEmbeddingDreamRunAt.getTime() <
+      RAW_MESSAGE_EMBEDDING_DREAM_INTERVAL
+  ) {
+    console.log("[LocalScheduler] Raw message embedding dream not due yet");
+    return;
+  }
+
+  if (!hasInsightEmbeddingProviderConfig(authToken)) {
+    console.warn(
+      "[LocalScheduler] Skipping raw message embedding dream: no embedding provider API key or cloud auth token configured",
+    );
+    return;
+  }
+
+  console.log("[LocalScheduler] Running raw message embedding dream");
+  const manager = await getRawMessageManager();
+  const embeddings = new UniversalEmbeddings(authToken);
+  const result = await runRawMessageEmbeddingDream(manager as any, {
+    userId: schedulerUserId,
+    embeddingModel: getInsightEmbeddingModelName(),
+    embedDocuments: (documents) => embeddings.embedDocuments(documents),
+    limit: 100,
+  });
+
+  console.log("[LocalScheduler] Raw message embedding dream completed", {
+    scanned: result.scanned,
+    selected: result.selected,
+    embedded: result.embedded,
+    reasons: result.reasons,
+  });
+
+  lastRawMessageEmbeddingDreamRunAt = now;
 }
 
 // Run insight maintenance on the same minute loop as scheduled jobs, but only once per persisted weekly window per user.

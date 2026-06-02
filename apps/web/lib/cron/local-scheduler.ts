@@ -24,6 +24,7 @@ import type { ScheduledJob } from "@/lib/db/schema";
 import {
   runInsightEmbeddingDreamIfDue,
   runInsightMaintenanceIfDue,
+  runRawMessageEmbeddingDreamIfDue,
 } from "./insight-maintenance";
 
 // Track running jobs to prevent duplicate executions within the same scheduler cycle
@@ -186,6 +187,10 @@ async function checkAndExecuteDueJobs() {
 
     const schedulerAuthToken = getCloudAuthToken();
     try {
+      await runRawMessageEmbeddingDreamIfDue(
+        schedulerUserId,
+        schedulerAuthToken,
+      );
       await runInsightEmbeddingDreamIfDue(schedulerUserId, schedulerAuthToken);
       await runInsightMaintenanceIfDue(schedulerUserId);
     } catch (error) {
