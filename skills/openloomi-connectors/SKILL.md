@@ -74,6 +74,10 @@ openloomi runs a background agent on a continuous sync loop, actively gathering 
 
 The CLI auto-reads your token from `~/.openloomi/token` (base64 encoded JWT).
 
+### Local API Access
+
+The local API server runs on port **3414** (fallback: **3515**). If 3414 is unavailable, try 3515.
+
 ---
 
 ## API Endpoints
@@ -85,7 +89,7 @@ The CLI auto-reads your token from `~/.openloomi/token` (base64 encoded JWT).
 Returns all connected platform accounts for the authenticated user.
 
 ```bash
-curl http://localhost:3415/api/integrations/accounts \
+curl http://localhost:3414/api/integrations/accounts \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -118,7 +122,7 @@ curl http://localhost:3415/api/integrations/accounts \
 Returns the Slack OAuth authorization URL. The CLI opens this URL in the browser for the user to complete authorization.
 
 ```bash
-curl "http://localhost:3415/api/integrations/slack/oauth/start?userId=<userId>"
+curl "http://localhost:3414/api/integrations/slack/oauth/start?userId=<userId>"
 ```
 
 **Response:**
@@ -172,7 +176,7 @@ Exchange OAuth code for Discord access.
 Delete a connected integration account.
 
 ```bash
-curl -X DELETE http://localhost:3415/api/integrations/int_xxx \
+curl -X DELETE http://localhost:3414/api/integrations/int_xxx \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -192,7 +196,7 @@ curl -X DELETE http://localhost:3415/api/integrations/int_xxx \
 Query user contacts with optional filtering and pagination.
 
 ```bash
-curl "http://localhost:3415/api/contacts?name=John&page=1&pageSize=10" \
+curl "http://localhost:3414/api/contacts?name=John&page=1&pageSize=10" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -232,7 +236,7 @@ curl "http://localhost:3415/api/contacts?name=John&page=1&pageSize=10" \
 Send a message via a connected platform bot.
 
 ```bash
-curl -X POST http://localhost:3415/api/messages \
+curl -X POST http://localhost:3414/api/messages \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

@@ -16,7 +16,7 @@ vi.mock("@/lib/env", () => ({
     }
     return process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`
-      : "http://localhost:3415";
+      : "http://localhost:3414";
   }),
   getAppUrl: vi.fn(() => {
     const envUrl =
@@ -29,7 +29,7 @@ vi.mock("@/lib/env", () => ({
     }
     return process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`
-      : "http://localhost:3415";
+      : "http://localhost:3414";
   }),
 }));
 

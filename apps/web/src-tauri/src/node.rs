@@ -1059,15 +1059,15 @@ pub fn try_start_nextjs(
         // Force single-worker mode so whatsappClientRegistry and activeAdapters are shared
         // across all API requests (module-level singletons are not shared across cluster workers).
         .env("WORKERS", "1")
-        .env("PORT", "3415")
+        .env("PORT", "3414")
         .env("IS_TAURI", "true")
         .env("TAURI_MODE", "1")
         .env("DEPLOYMENT_MODE", "tauri")
         .env("CLOUD_API_URL", "https://app.openloomi.ai")
         .env("NEXT_PUBLIC_CLOUD_API_URL", "https://app.openloomi.ai")
         .env("TAURI_DB_PATH", db_path)
-        .env("NEXTAUTH_URL", "http://localhost:3415")
-        .env("NEXT_PUBLIC_APP_URL", "http://localhost:3415")
+        .env("NEXTAUTH_URL", "http://localhost:3414")
+        .env("NEXT_PUBLIC_APP_URL", "http://localhost:3414")
         .env("LLM_BASE_URL", "https://openrouter.ai/api/v1")
         .env("LLM_MODEL", "google/gemini-3-flash-preview")
         .env("LLM_VISION_LANGUAGE_MODEL", "google/gemini-3-flash-preview")
@@ -1075,7 +1075,6 @@ pub fn try_start_nextjs(
         .env("LLM_EMBEDDING_MODEL", "qwen/qwen3-embedding-4b")
         .env("LLM_EMBEDDING_BASE_URL", "https://openrouter.ai/api/v1")
         .env("TELEGRAM_MODE", "pooling")
-        .env("ANTHROPIC_BASE_URL", "http://localhost:3415/api/ai")
         .env("API_TIMEOUT_MS", "3000000")
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
         .env("CLAUDE_CODE_TMPDIR", code_tmpdir)
@@ -1417,7 +1416,7 @@ pub fn start_nextjs_server() {
         for (node_type, node_path) in &node_candidates {
             println!("🔄 Trying {} Node.js at: {}", node_type, node_path);
 
-            cleanup_port(3415);
+            cleanup_port(3414);
 
             match try_start_nextjs(
                 node_path,
@@ -1467,8 +1466,8 @@ pub fn start_nextjs_server() {
                         }
 
                         use std::net::TcpStream;
-                        if TcpStream::connect("127.0.0.1:3415").is_ok() {
-                            println!("✅ Server is ready on port 3415!");
+                        if TcpStream::connect("127.0.0.1:3414").is_ok() {
+                            println!("✅ Server is ready on port 3414!");
                             server_ready = true;
                             break;
                         }
@@ -1507,20 +1506,20 @@ pub fn start_nextjs_server() {
                             }
                         );
                         eprintln!("⚠️  {}", last_error);
-                        cleanup_port(3415);
+                        cleanup_port(3414);
                         continue;
                     } else {
                         last_error =
                             format!("{} Node.js started but server not listening", node_type);
-                        eprintln!("⚠️  Server not responding on port 3415");
-                        cleanup_port(3415);
+                        eprintln!("⚠️  Server not responding on port 3414");
+                        cleanup_port(3414);
                         continue;
                     }
                 }
                 Err(e) => {
                     last_error = format!("{} Node.js failed: {}", node_type, e);
                     eprintln!("⚠️  {} Node.js failed to start: {}", node_type, e);
-                    cleanup_port(3415);
+                    cleanup_port(3414);
                     continue;
                 }
             }
@@ -1677,7 +1676,7 @@ pub fn cleanup_nodejs_process() {
         }
     }
 
-    cleanup_port(3415);
+    cleanup_port(3414);
 
     if let Ok(mut pid_guard) = NODEJS_PID.lock() {
         *pid_guard = None;
@@ -1689,8 +1688,8 @@ pub fn cleanup_nodejs_process() {
 
 /// Clean up any residual processes before starting
 pub fn cleanup_before_start() {
-    println!("🔍 Checking for existing processes on port 3415...");
-    cleanup_port(3415);
+    println!("🔍 Checking for existing processes on port 3414...");
+    cleanup_port(3414);
 }
 
 /// Server status returned to the frontend

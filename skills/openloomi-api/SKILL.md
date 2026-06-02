@@ -251,11 +251,12 @@ curl -X POST https://app.openloomi.ai/api/ai/chat \
 
 ### Local API Access
 
-When running openloomi desktop app, the local API server runs on port **3415**:
+When running openloomi desktop app, the local API server runs on port **3414** (fallback: **3515**):
 
 | Environment | Base URL |
 |-------------|----------|
-| User Local Desktop | `http://localhost:3415` |
+| User Local Desktop | `http://localhost:3414` |
+| User Local Desktop (fallback) | `http://localhost:3515` |
 
 ### Authentication Token
 
@@ -278,45 +279,45 @@ echo "$TOKEN" | cut -d'.' -f2 | base64 -d 2>/dev/null | python3 -m json.tool
 TOKEN=$(cat ~/.openloomi/token | base64 -d)
 
 # 1. Check AI API status (no auth required)
-curl http://localhost:3415/api/ai/chat
+curl http://localhost:3414/api/ai/chat
 
 # 2. Get current user info
 TOKEN=$(cat ~/.openloomi/token | base64 -d)
-curl http://localhost:3415/api/remote-auth/user \
+curl http://localhost:3414/api/remote-auth/user \
   -H "Authorization: Bearer $TOKEN"
 
 # 3. Get subscription info
 TOKEN=$(cat ~/.openloomi/token | base64 -d)
-curl http://localhost:3415/api/remote-auth/subscription \
+curl http://localhost:3414/api/remote-auth/subscription \
   -H "Authorization: Bearer $TOKEN"
 
 # 4. Chat with AI (streaming)
 TOKEN=$(cat ~/.openloomi/token | base64 -d)
-curl -X POST http://localhost:3415/api/ai/chat \
+curl -X POST http://localhost:3414/api/ai/chat \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"Hello!"}],"stream":true}'
 
 # 5. Get chat insights (requires chatId)
 TOKEN=$(cat ~/.openloomi/token | base64 -d)
-curl "http://localhost:3415/api/chat-insights?chatId=xxx" \
+curl "http://localhost:3414/api/chat-insights?chatId=xxx" \
   -H "Authorization: Bearer $TOKEN"
 
 # 6. Search RAG documents
 TOKEN=$(cat ~/.openloomi/token | base64 -d)
-curl -X POST http://localhost:3415/api/rag/search \
+curl -X POST http://localhost:3414/api/rag/search \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query":"search term","limit":5}'
 
 # 7. List workspace skills
 TOKEN=$(cat ~/.openloomi/token | base64 -d)
-curl http://localhost:3415/api/workspace/skills \
+curl http://localhost:3414/api/workspace/skills \
   -H "Authorization: Bearer $TOKEN"
 
 # 8. Submit feedback
 TOKEN=$(cat ~/.openloomi/token | base64 -d)
-curl -X POST http://localhost:3415/api/remote-feedback \
+curl -X POST http://localhost:3414/api/remote-feedback \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"content":"Feedback message","email":"user@example.com"}'

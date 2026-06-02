@@ -394,7 +394,7 @@ async function main() {
           const nameArg = args.find(a => a.startsWith('--name='));
 
           if (!clientIdArg || !clientSecretArg) {
-            throw new Error(`Missing credentials. For DingTalk, provide:\n  connect dingtalk --clientId=your_client_id --clientSecret=your_client_secret`);
+            throw new Error("Missing credentials. For DingTalk, provide:\n  connect dingtalk --clientId=your_client_id --clientSecret=your_client_secret");
           }
 
           const result = await connectAppCredentialsPlatform(platformId, {
@@ -412,7 +412,7 @@ async function main() {
           const nameArg = args.find(a => a.startsWith('--name='));
 
           if (!appIdArg || !appSecretArg) {
-            throw new Error(`Missing credentials. For QQ Bot, provide:\n  connect qq --appId=your_app_id --appSecret=your_app_secret`);
+            throw new Error("Missing credentials. For QQ Bot, provide:\n  connect qq --appId=your_app_id --appSecret=your_app_secret");
           }
 
           const result = await connectAppCredentialsPlatform(platformId, {
@@ -430,7 +430,7 @@ async function main() {
           const nameArg = args.find(a => a.startsWith('--name='));
 
           if (!appIdArg || !appSecretArg) {
-            throw new Error(`Missing credentials. For Feishu, provide:\n  connect feishu --appId=your_app_id --appSecret=your_app_secret`);
+            throw new Error("Missing credentials. For Feishu, provide:\n  connect feishu --appId=your_app_id --appSecret=your_app_secret");
           }
 
           const result = await connectAppCredentialsPlatform(platformId, {
@@ -446,7 +446,7 @@ async function main() {
           const tokenArg = args.find(a => a.startsWith('--token='));
 
           if (!tokenArg) {
-            throw new Error(`Missing iLink token. For WeChat, provide:\n  connect wechat --token=your_ilink_token`);
+            throw new Error("Missing iLink token. For WeChat, provide:\n  connect wechat --token=your_ilink_token");
           }
 
           const result = await connectWeChat(tokenArg.split('=')[1]);
@@ -467,7 +467,7 @@ async function main() {
         }
 
         // Platforms requiring browser (WhatsApp, etc)
-        throw new Error(`${platformId} requires browser interaction. Open in browser:\n  open "http://localhost:3415/connectors?addPlatform=true&platform=${platformId}"`);
+        throw new Error(`${platformId} requires browser interaction. Open in browser:\n  open "http://localhost:3414/connectors?addPlatform=true&platform=${platformId}"`);
       }
 
       case 'disconnect': {

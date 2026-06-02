@@ -126,7 +126,7 @@ node $SKILL_DIR/scripts/openloomi-memory.cjs delete-memory filename.md --directo
 Semantic search of uploaded documents using embeddings.
 
 ```bash
-curl -X POST http://localhost:3415/api/rag/search \
+curl -X POST http://localhost:3414/api/rag/search \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query": "project plan", "limit": 5}'
@@ -156,7 +156,7 @@ curl -X POST http://localhost:3415/api/rag/search \
 List all documents in the knowledge base.
 
 ```bash
-curl http://localhost:3415/api/rag/documents?limit=50 \
+curl http://localhost:3414/api/rag/documents?limit=50 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -185,7 +185,7 @@ curl http://localhost:3415/api/rag/documents?limit=50 \
 Get a single document by ID.
 
 ```bash
-curl http://localhost:3415/api/rag/documents/doc_xxx \
+curl http://localhost:3414/api/rag/documents/doc_xxx \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -212,7 +212,7 @@ Insights are structured information extracted from chat history, such as key dec
 List all insights from a time period.
 
 ```bash
-curl "http://localhost:3415/api/insights?days=7&limit=50" \
+curl "http://localhost:3414/api/insights?days=7&limit=50" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -266,7 +266,7 @@ Each insight contains a `groups` field—an array of channel identifiers indicat
 Create a new insight manually.
 
 ```bash
-curl -X POST http://localhost:3415/api/insights \
+curl -X POST http://localhost:3414/api/insights \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"type": "preference", "content": "I prefer Americano coffee", "groups": ["whatsapp"]}'
@@ -295,7 +295,7 @@ curl -X POST http://localhost:3415/api/insights \
 Partial update an existing insight. Arrays (details, timeline, insights) are appended to, not replaced.
 
 ```bash
-curl -X PUT http://localhost:3415/api/insights/insight_xxx \
+curl -X PUT http://localhost:3414/api/insights/insight_xxx \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -333,7 +333,7 @@ curl -X PUT http://localhost:3415/api/insights/insight_xxx \
 Get a single insight by ID, including associated chat.
 
 ```bash
-curl "http://localhost:3415/api/insights/insight_xxx?fetch=true" \
+curl "http://localhost:3414/api/insights/insight_xxx?fetch=true" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -359,7 +359,7 @@ curl "http://localhost:3415/api/insights/insight_xxx?fetch=true" \
 Delete a specific insight.
 
 ```bash
-curl -X DELETE http://localhost:3415/api/insights/insight_xxx \
+curl -X DELETE http://localhost:3414/api/insights/insight_xxx \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -376,7 +376,7 @@ curl -X DELETE http://localhost:3415/api/insights/insight_xxx \
 Get all insights for a specific chat.
 
 ```bash
-curl "http://localhost:3415/api/chat-insights?chatId=chat_xxx" \
+curl "http://localhost:3414/api/chat-insights?chatId=chat_xxx" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -431,7 +431,7 @@ System automatically runs two maintenance tasks:
 #### GET `/api/insights/analytics` - Get Insight Usage Analytics
 
 ```bash
-curl "http://localhost:3415/api/insights/analytics" \
+curl "http://localhost:3414/api/insights/analytics" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -489,7 +489,7 @@ curl "http://localhost:3415/api/insights/analytics" \
 #### POST `/api/insights/[id]/view` - Record Insight View
 
 ```bash
-curl -X POST "http://localhost:3415/api/insights/insight_xxx/view" \
+curl -X POST "http://localhost:3414/api/insights/insight_xxx/view" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"viewSource": "search"}'
