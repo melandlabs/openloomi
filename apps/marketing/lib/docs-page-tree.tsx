@@ -7,6 +7,7 @@ import {
   FaClock,
   FaCommentDots,
   FaComments,
+  FaLightbulb,
   FaPlug,
   FaRocket,
   FaShieldAlt,
@@ -27,6 +28,7 @@ const DOC_TITLES = new Map([
   ["/docs/memory", "Memory"],
   ["/docs/privacy-security", "Privacy & Security"],
   ["/docs/glossary", "Glossary"],
+  ["/docs/use-cases", "Use Cases"],
   ["/docs/changelog", "Changelog"],
   ["/docs/changelog/openloomi-0.5.0", "OpenLoomi 0.5.0"],
   ["/docs/changelog/openloomi-0.4.0", "OpenLoomi 0.4.0"],
@@ -47,6 +49,7 @@ const DOC_ICON_NAMES = new Map([
   ["/docs/memory", "FaBrain"],
   ["/docs/privacy-security", "FaShieldAlt"],
   ["/docs/glossary", "FaBook"],
+  ["/docs/use-cases", "FaLightbulb"],
   ["/docs/changelog", "FaBolt"],
 ]);
 
@@ -57,6 +60,7 @@ const DOC_ICONS: Record<string, IconType> = {
   FaClock,
   FaCommentDots,
   FaComments,
+  FaLightbulb,
   FaPlug,
   FaRocket,
   FaShieldAlt,
