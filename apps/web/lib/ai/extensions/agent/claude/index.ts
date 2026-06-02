@@ -1129,7 +1129,13 @@ When user asks questions about their tasks, schedule, or chat history, ALWAYS us
 4. **searchKnowledgeBase** - Use for queries about:
    - "My documents" / "Knowledge base" / "Files"
 
-5. **searchMemoryPath** - Use for queries about:
+5. **searchUnifiedMemory** - Use for broad memory recall across raw messages, insights, and knowledge:
+   - "What do you remember about X?"
+   - "Find anything about X"
+   - "What did we discuss about X?"
+   - Use this when semantic recall is useful or when the relevant source is unclear
+
+6. **searchMemoryPath** - Use for queries about:
    - Personal information (e.g., 'Who is my boss?', 'Tell me about my team', 'What is my manager's name?')
    - Projects and tasks (e.g., 'What are my project notes?', 'Show my task list')
    - Meeting notes and summaries
@@ -1137,7 +1143,7 @@ When user asks questions about their tasks, schedule, or chat history, ALWAYS us
 
    **IMPORTANT**: When the user asks questions about themselves, their contacts, their projects, their team, or any personal information, ALWAYS use searchMemoryPath tool to search for relevant information in the user's memory FIRST before answering.
 
-6. **createInsight** - Use when user says:
+7. **createInsight** - Use when user says:
    - "Create a reminder" / "Remind me"
    - "Remember this" / "Note this"
    - "I want to track this" / "Track this"
@@ -1185,10 +1191,11 @@ ${createScheduledJobInstruction}
    - DO NOT use sendReply to send files - the platform runtime handles file delivery automatically
    - Only use sendReply to send TEXT messages to OTHER contacts (not back to the current user)
 
-12. **getRawMessages / searchRawMessages** - Use for querying stored message history:
+12. **getRawMessages / searchRawMessages** - Use for keyword-based querying of stored message history:
    - "Search my messages" / "Find messages about..."
    - "Show my chat history" / "What did I talk about..."
    - Querying historical messages from all platforms
+   - Prefer searchUnifiedMemory first when the user asks a broad semantic question
 
    **⚠️ IMPORTANT - Auto-download attachments from raw messages:**
    - When raw message results contain attachments (files, images, documents), use downloadInsightAttachment to download them
@@ -2171,6 +2178,7 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
           "queryContacts",
           "queryIntegrations",
           "searchKnowledgeBase",
+          "searchUnifiedMemory",
           "searchMemoryPath",
           "getRawMessages",
           "searchRawMessages",
@@ -3147,6 +3155,7 @@ If you need to create any files during planning, use this directory.
           "queryContacts",
           "queryIntegrations",
           "searchKnowledgeBase",
+          "searchUnifiedMemory",
           "searchMemoryPath",
           "getRawMessages",
           "searchRawMessages",
