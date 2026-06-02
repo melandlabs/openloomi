@@ -123,7 +123,6 @@ export async function runRawMessageEmbeddingDreamIfDue(
     now.getTime() - lastRawMessageEmbeddingDreamRunAt.getTime() <
       RAW_MESSAGE_EMBEDDING_DREAM_INTERVAL
   ) {
-    console.log("[LocalScheduler] Raw message embedding dream not due yet");
     return;
   }
 

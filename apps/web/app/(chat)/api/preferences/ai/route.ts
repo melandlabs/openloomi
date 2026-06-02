@@ -59,6 +59,10 @@ function buildVersionedUrl(baseUrl: string, pathAfterV1: string) {
   return `${normalized}/v1${pathAfterV1}`;
 }
 
+function buildAnthropicRuntimeUrl(baseUrl: string) {
+  return `${baseUrl.replace(/\/+$/, "")}/v1/messages`;
+}
+
 async function readProviderError(response: Response) {
   const text = await response.text().catch(() => "");
   return text.trim().slice(0, 400);
@@ -108,7 +112,7 @@ async function testAnthropicCompatibleProvider({
   apiKey: string;
   model: string;
 }) {
-  const response = await fetch(buildVersionedUrl(baseUrl, "/messages"), {
+  const response = await fetch(buildAnthropicRuntimeUrl(baseUrl), {
     method: "POST",
     headers: {
       "x-api-key": apiKey,

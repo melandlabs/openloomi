@@ -18,6 +18,17 @@ import {
 import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 import { getCloudAuthToken } from "@/lib/auth/token-manager";
 import { handleAgentRuntime } from "@/lib/ai/runtime/shared";
+import { getRawMessageManager } from "@/lib/memory/raw-message-store";
+import {
+  getInsightEmbeddingModelName,
+  hasInsightEmbeddingProviderConfig,
+} from "@/lib/insights/embedding-service";
+import { buildMemoryRecordEmbeddingDocument } from "@openloomi/ai/memory";
+import {
+  rawMessageToMemoryRecord,
+  type RawMessage,
+} from "@openloomi/indexeddb";
+import { UniversalEmbeddings } from "@openloomi/rag/universal-embeddings";
 import {
   FeishuConversationStore,
   type ChatType,
@@ -104,6 +115,106 @@ function formatEntryForModel(entry: QuotedMessage): RuntimeConversationMessage {
     role: entry.role,
     content: `${prefix}${entry.content}`,
   };
+}
+
+async function storeFeishuRawMessage(input: {
+  userId: string;
+  botId: string;
+  accountId: string;
+  messageId: string;
+  chatId: string;
+  chatType: "p2p" | "group";
+  role: "user" | "assistant";
+  content: string;
+  person?: string;
+  senderId?: string;
+  metadata?: Record<string, unknown>;
+  authToken?: string;
+}) {
+  const content = input.content.trim();
+  if (!content) {
+    return;
+  }
+
+  try {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const manager = await getRawMessageManager();
+    const rawMessage: RawMessage = {
+      messageId: input.messageId,
+      platform: "feishu",
+      botId: input.botId,
+      userId: input.userId,
+      channel: input.chatId,
+      person: input.person,
+      timestamp: nowSec,
+      content,
+      attachments: [],
+      metadata: {
+        source: "feishu_ws_listener",
+        accountId: input.accountId,
+        chatType: input.chatType,
+        role: input.role,
+        senderId: input.senderId,
+        ...input.metadata,
+      },
+      createdAt: nowSec,
+    };
+    const messageWithEmbedding = await embedRawMessageOnWrite(
+      rawMessage,
+      input.authToken,
+    );
+    await manager.storeMessage(messageWithEmbedding);
+    console.log("[Feishu] Stored raw message", {
+      messageId: input.messageId,
+      role: input.role,
+      chatId: input.chatId,
+      embedded: Boolean(messageWithEmbedding.embedding?.length),
+    });
+  } catch (error) {
+    console.warn("[Feishu] Failed to store raw message:", error);
+  }
+}
+
+async function embedRawMessageOnWrite(
+  message: RawMessage,
+  authToken?: string,
+): Promise<RawMessage> {
+  if (!hasInsightEmbeddingProviderConfig(authToken)) {
+    return message;
+  }
+
+  try {
+    const document = buildMemoryRecordEmbeddingDocument(
+      rawMessageToMemoryRecord(message),
+    );
+    if (!document.content) {
+      return message;
+    }
+
+    const embeddings = new UniversalEmbeddings(authToken);
+    const [embedding] = await embeddings.embedDocuments([document.content]);
+    if (!embedding || embedding.length === 0) {
+      return message;
+    }
+
+    return {
+      ...message,
+      embedding,
+      embeddingModel: getInsightEmbeddingModelName(),
+      embeddingContentHash: document.contentHash,
+      embeddingDimensions: embedding.length,
+      embeddingUpdatedAt: Date.now(),
+    };
+  } catch (error) {
+    console.warn(
+      "[Feishu] Failed to embed raw message on write; dream will retry:",
+      {
+        messageId: message.messageId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    );
+    return message;
+  }
 }
 
 /**
@@ -214,9 +325,32 @@ export async function handleFeishuInboundMessage(
     if (LOG_FEISHU) console.log("[Feishu]", label, ...args);
   };
 
+  const token =
+    options?.authToken?.trim() || getCloudAuthToken()?.trim() || undefined;
+
   let zhUiForUserCopy = false;
 
   try {
+    await storeFeishuRawMessage({
+      userId,
+      botId: bot.id,
+      accountId: account.id,
+      messageId,
+      chatId,
+      chatType,
+      role: "user",
+      content:
+        normalizedInputText ||
+        "[The user sent an image. Please analyze the image.]",
+      person: senderName || senderId,
+      senderId,
+      metadata: {
+        quoteIds: quoteIds && quoteIds.length > 0 ? quoteIds : undefined,
+        imageKeys: imageKeys && imageKeys.length > 0 ? imageKeys : undefined,
+      },
+      authToken: token,
+    });
+
     const insightSettings = await getUserInsightSettings(userId);
     zhUiForUserCopy = userPrefersChinese(insightSettings?.language);
     await getUserTypeForService(userId);
@@ -490,8 +624,6 @@ export async function handleFeishuInboundMessage(
       CONTEXT_HISTORY_MAX_CHARS,
     );
 
-    const token =
-      options?.authToken?.trim() || getCloudAuthToken()?.trim() || undefined;
     if (!token) {
       console.warn(
         "[Feishu] No cloud auth token (connection + in-memory unset). Open the desktop app, sign in, wait for the Feishu listener to initialize, or re-save Feishu in Connectors.",
@@ -688,18 +820,51 @@ export async function handleFeishuInboundMessage(
       message: toSend,
       withAppSuffix: true,
     });
+
+    await storeFeishuRawMessage({
+      userId,
+      botId: bot.id,
+      accountId: account.id,
+      messageId: `${messageId}:bot-reply`,
+      chatId,
+      chatType,
+      role: "assistant",
+      content: toSend,
+      person: bot.name || "openloomi",
+      metadata: {
+        replyToMessageId: messageId,
+      },
+      authToken: token,
+    });
   } catch (error) {
     console.error("[Feishu] Failed to process inbound message:", error);
     try {
+      const fallbackMessage = pickUserLocale(
+        FEISHU_USER_COPY.processingError,
+        zhUiForUserCopy,
+      );
       await sendReplyByBotId({
         id: bot.id,
         userId,
         recipients: [chatId],
-        message: pickUserLocale(
-          FEISHU_USER_COPY.processingError,
-          zhUiForUserCopy,
-        ),
+        message: fallbackMessage,
         withAppSuffix: false,
+      });
+      await storeFeishuRawMessage({
+        userId,
+        botId: bot.id,
+        accountId: account.id,
+        messageId: `${messageId}:bot-error-reply`,
+        chatId,
+        chatType,
+        role: "assistant",
+        content: fallbackMessage,
+        person: bot.name || "openloomi",
+        metadata: {
+          replyToMessageId: messageId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        authToken: token,
       });
     } catch (e) {
       console.error("[Feishu] Failed to send error message:", e);
