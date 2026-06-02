@@ -141,9 +141,7 @@ export function createUnifiedMemorySearchTool(
       "- Use a concise natural-language query; semantic search works better than long prompt dumps",
     ].join("\n"),
     {
-      query: z
-        .string()
-        .describe("Natural-language memory search query."),
+      query: z.string().describe("Natural-language memory search query."),
       sources: z
         .array(memorySourceSchema)
         .optional()
