@@ -6,7 +6,7 @@
 
 import { insight } from "@/lib/db/schema";
 import { db } from "@/lib/db";
-import { eq, and, lte, gte, isNull, sql, desc, type SQL } from "drizzle-orm";
+import { eq, and, lte, gte, sql, desc, type SQL } from "drizzle-orm";
 import type { DrizzleDB } from "@/lib/db/types";
 
 /**
@@ -17,10 +17,12 @@ function buildWhereClause(conditions: (SQL | undefined)[]): SQL | undefined {
   if (defined.length === 0) return undefined;
   if (defined.length === 1) return defined[0];
   // Start with the first defined condition
-  let result: SQL = defined[0]!;
+  let result: SQL = defined[0];
   // AND it with the rest
   for (let i = 1; i < defined.length; i++) {
-    const combined = and(result, defined[i]!);
+    const item = defined[i];
+    if (item === undefined) continue;
+    const combined = and(result, item);
     if (combined !== undefined) {
       result = combined;
     }

@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   const endParam = searchParams.get("end");
 
   try {
-    let insights;
+    let insights: Awaited<ReturnType<typeof getCurrentInsights>>;
     let queryType: string;
 
     if (current) {
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     } else if (asOfParam) {
       // Time-travel query: get insights valid at a specific point in time
       const asOfDate = new Date(asOfParam);
-      if (isNaN(asOfDate.getTime())) {
+      if (Number.isNaN(asOfDate.getTime())) {
         return Response.json(
           {
             error:
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       // Get insights overlapping a time interval
       const startDate = new Date(startParam);
       const endDate = new Date(endParam);
-      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
         return Response.json(
           { error: "Invalid date format. Use ISO 8601 format" },
           { status: 400 },
