@@ -7,6 +7,8 @@
 const EMBEDDING_BASE_URL =
   process.env.LLM_EMBEDDING_BASE_URL || "https://openrouter.ai/api/v1";
 
+const DEFAULT_EMBEDDING_BATCH_SIZE = 10;
+
 /**
  * Custom embeddings implementation that can use OpenAI or OpenRouter API.
  * Auth strategy is determined by the base URL and env vars set by the caller.
@@ -38,7 +40,7 @@ export class UniversalEmbeddings {
       throw new Error("No texts provided for embedding");
     }
 
-    const batchSize = 100;
+    const batchSize = getEmbeddingBatchSize();
     const results: number[][] = [];
 
     for (let i = 0; i < texts.length; i += batchSize) {
@@ -122,4 +124,19 @@ export class UniversalEmbeddings {
       return item.embedding;
     });
   }
+}
+
+function getEmbeddingBatchSize(): number {
+  const rawBatchSize = process.env.LLM_EMBEDDING_BATCH_SIZE;
+  if (!rawBatchSize) return DEFAULT_EMBEDDING_BATCH_SIZE;
+
+  const parsedBatchSize = Number(rawBatchSize);
+  if (!Number.isFinite(parsedBatchSize) || parsedBatchSize < 1) {
+    console.warn(
+      `[RAG] Invalid LLM_EMBEDDING_BATCH_SIZE=${rawBatchSize}; using ${DEFAULT_EMBEDDING_BATCH_SIZE}`,
+    );
+    return DEFAULT_EMBEDDING_BATCH_SIZE;
+  }
+
+  return Math.floor(parsedBatchSize);
 }

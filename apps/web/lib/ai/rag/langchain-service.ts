@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import { isTauriMode } from "@/lib/env";
 import { estimateTokens } from "@/lib/ai";
 import { UniversalEmbeddings } from "@openloomi/rag/universal-embeddings";
+import type { DocumentChunk } from "@openloomi/rag/vector-service";
 
 // Re-export for consumers of langchain-service
 export { UniversalEmbeddings };
@@ -85,6 +86,44 @@ export interface SearchOptions {
   limit?: number;
   threshold?: number; // Minimum similarity score (0-1)
   documentIds?: string[]; // Optional: filter to specific document IDs
+}
+
+type StoredRAGChunk = InsertRAGChunk & {
+  id: string;
+  documentId: string;
+  userId: string;
+  chunkIndex: number;
+  content: string;
+};
+
+type RAGVectorStoreBackend = "sqlite-vec" | "chroma";
+
+export function getRAGVectorStoreBackend(): RAGVectorStoreBackend {
+  const backend = (
+    process.env.RAG_VECTOR_STORE_BACKEND ||
+    process.env.VECTOR_STORE_BACKEND ||
+    "sqlite-vec"
+  ).toLowerCase();
+
+  return backend === "chroma" ? "chroma" : "sqlite-vec";
+}
+
+export function shouldSkipRAGEmbeddings(explicitSkip = false): boolean {
+  if (explicitSkip) return true;
+  return isTauriMode() && getRAGVectorStoreBackend() !== "chroma";
+}
+
+async function getConfiguredVectorStore() {
+  if (getRAGVectorStoreBackend() !== "chroma") {
+    return null;
+  }
+
+  const { getChromaVectorStore } = await import("@openloomi/rag/chroma-store");
+  return getChromaVectorStore({
+    url: process.env.CHROMA_URL,
+    collectionName:
+      process.env.CHROMA_RAG_COLLECTION || process.env.CHROMA_COLLECTION,
+  });
 }
 
 /**
@@ -194,7 +233,7 @@ export async function processDocument(
   }
 
   // 7. Insert chunks with pgvector embeddings
-  const chunkData: InsertRAGChunk[] = chunks.map(
+  const chunkData: StoredRAGChunk[] = chunks.map(
     (chunk: any, index: number) => {
       if (embeddingVectors) {
         const embeddingArray = embeddingVectors[index];
@@ -225,6 +264,28 @@ export async function processDocument(
   for (let i = 0; i < chunkData.length; i += BATCH_SIZE) {
     const batch = chunkData.slice(i, i + BATCH_SIZE);
     await db.insert(ragChunks).values(batch);
+  }
+
+  const vectorStore = await getConfiguredVectorStore();
+  if (vectorStore && embeddingVectors) {
+    const vectorChunks: DocumentChunk[] = chunkData.map((chunk, index) => ({
+      id: chunk.id,
+      documentId: document.id,
+      content: chunk.content,
+      embedding: embeddingVectors[index],
+      metadata: {
+        userId,
+        fileName,
+        contentType,
+        chunkIndex: chunk.chunkIndex,
+      },
+    }));
+
+    await vectorStore.addChunks(vectorChunks);
+    console.log("[RAG] Added chunks to Chroma vector store", {
+      documentId: document.id,
+      chunks: vectorChunks.length,
+    });
   }
 
   return {
@@ -277,6 +338,46 @@ export async function searchSimilarChunks(
   // 1. Generate embedding for query
   const embeddings = getEmbeddings(authToken);
   const queryEmbedding = await embeddings.embedQuery(query);
+
+  const vectorStore = await getConfiguredVectorStore();
+  if (vectorStore) {
+    const searchLimit = documentIds?.length
+      ? Math.max(limit * 3, limit)
+      : limit;
+    const vectorResults = await vectorStore.similaritySearch(
+      queryEmbedding,
+      searchLimit,
+      userId,
+    );
+
+    const filteredResults = vectorResults
+      .filter((result) => {
+        if (!documentIds || documentIds.length === 0) return true;
+        return documentIds.includes(result.documentId);
+      })
+      .filter((result) => result.score >= threshold)
+      .slice(0, limit)
+      .map((result) => {
+        const metadata = result.metadata ?? {};
+        return {
+          chunkId: result.id,
+          documentId: result.documentId,
+          documentName: String(metadata.fileName ?? result.documentId),
+          content: result.content,
+          similarity: result.score,
+          chunkIndex:
+            typeof metadata.chunkIndex === "number" ? metadata.chunkIndex : 0,
+        };
+      });
+
+    console.log("[RAG] Chroma vector search completed", {
+      query,
+      count: filteredResults.length,
+      backend: getRAGVectorStoreBackend(),
+    });
+
+    return filteredResults;
+  }
 
   // Convert embedding to pgvector format string
   const embeddingString = `[${queryEmbedding.join(",")}]`;
@@ -435,6 +536,11 @@ export async function getDocumentFullContent(documentId: string): Promise<{
  * Delete a document and all its chunks
  */
 export async function deleteDocument(documentId: string): Promise<void> {
+  const vectorStore = await getConfiguredVectorStore();
+  if (vectorStore) {
+    await vectorStore.deleteDocument(documentId);
+  }
+
   await db.delete(ragChunks).where(eq(ragChunks.documentId, documentId));
   await db.delete(ragDocuments).where(eq(ragDocuments.id, documentId));
 }

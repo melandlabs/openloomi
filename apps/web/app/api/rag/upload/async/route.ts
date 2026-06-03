@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
 import { randomUUID } from "node:crypto";
 import { jobs } from "./job-store";
-import { isTauriMode } from "@/lib/env";
+import { shouldSkipRAGEmbeddings } from "@/lib/ai/rag/langchain-service";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -14,9 +14,9 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const uploadedFile = formData.get("file");
     const cloudAuthToken = formData.get("cloudAuthToken") as string | null;
-    // In Tauri mode, always skip embeddings (no external API available)
-    const skipEmbeddings =
-      formData.get("skipEmbeddings") === "true" || isTauriMode();
+    const skipEmbeddings = shouldSkipRAGEmbeddings(
+      formData.get("skipEmbeddings") === "true",
+    );
 
     if (!(uploadedFile instanceof File)) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });

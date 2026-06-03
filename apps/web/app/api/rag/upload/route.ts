@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import {
   processDocumentFromFile,
   getUserRAGStats,
+  shouldSkipRAGEmbeddings,
 } from "@/lib/ai/rag/langchain-service";
 import {
   SUPPORTED_RAG_MIME_TYPES,
@@ -16,7 +17,6 @@ import { unlink, readFile } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { isTauriMode } from "@/lib/env";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -31,11 +31,12 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const uploadedFile = formData.get("file");
 
-    // Extract cloudAuthToken and skipEmbeddings from formData if provided
-    // In Tauri mode, always skip embeddings (no external API available)
+    // Extract cloudAuthToken and skipEmbeddings from formData if provided.
+    // Tauri skips embeddings unless a local/vector backend such as Chroma is configured.
     const cloudAuthToken = formData.get("cloudAuthToken") as string | null;
-    const skipEmbeddings =
-      formData.get("skipEmbeddings") === "true" || isTauriMode();
+    const skipEmbeddings = shouldSkipRAGEmbeddings(
+      formData.get("skipEmbeddings") === "true",
+    );
 
     if (!(uploadedFile instanceof File)) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });

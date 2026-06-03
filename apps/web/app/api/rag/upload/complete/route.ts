@@ -9,8 +9,8 @@ import { randomUUID } from "node:crypto";
 import {
   processDocument,
   getUserRAGStats,
+  shouldSkipRAGEmbeddings,
 } from "@/lib/ai/rag/langchain-service";
-import { isTauriMode } from "@/lib/env";
 import {
   SUPPORTED_RAG_MIME_TYPES,
   getMimeTypeFromExtension,
@@ -181,7 +181,7 @@ export async function POST(request: Request) {
         chunkSize: 1000,
         chunkOverlap: 200,
         blobPath, // Pass original file path
-        skipEmbeddings: isTauriMode(),
+        skipEmbeddings: shouldSkipRAGEmbeddings(),
       },
       cloudAuthToken || undefined,
     );
