@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { entities, insightEntities } from "@/lib/db/schema";
+import { entities } from "@/lib/db/schema";
 import { db } from "@/lib/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { AppError } from "@openloomi/shared/errors";

@@ -16,7 +16,6 @@ import {
   insightConnections,
   insightViewHistory,
   type InsightConnection,
-  type InsertInsightConnection,
 } from "@/lib/db/schema";
 import { db } from "@/lib/db";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
@@ -545,7 +544,7 @@ export async function processCoAccessFromViewHistory(
  */
 export async function pruneWeakConnections(
   userId: string,
-  minStrength: number = 0.01,
+  minStrength = 0.01,
   dbInstance?: DrizzleDB,
 ): Promise<number> {
   const database = dbInstance ?? db;

@@ -57,7 +57,10 @@ export async function GET(request: NextRequest) {
       // Get insights overlapping a time interval
       const startDate = new Date(startParam);
       const endDate = new Date(endParam);
-      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      if (
+        Number.isNaN(startDate.getTime()) ||
+        Number.isNaN(endDate.getTime())
+      ) {
         return Response.json(
           { error: "Invalid date format. Use ISO 8601 format" },
           { status: 400 },

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { AppError } from "@openloomi/shared/errors";
 import type { NextRequest } from "next/server";
-import type { Insight, InsightEntity } from "@/lib/db/schema";
+import type { Insight } from "@/lib/db/schema";
 
 // GET /api/insights/entities/[entityId] - Get single entity
 // GET /api/insights/entities/[entityId]/insights - Get insights linked to this entity
