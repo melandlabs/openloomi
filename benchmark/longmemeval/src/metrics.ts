@@ -27,7 +27,7 @@ export function calculateF1Score(
 
   // Tokenize
   const predTokens = new Set(prediction.toLowerCase().split(/\s+/));
-  const gtTokens = new Set(groundTruth.toLowerCase().split(/\s+/));
+  const gtTokens = new Set(String(groundTruth).toLowerCase().split(/\s+/));
 
   if (predTokens.size === 0 || gtTokens.size === 0) {
     return 0.0;
@@ -63,7 +63,7 @@ export function calculateBLEUScores(
     .toLowerCase()
     .split(/\s+/)
     .filter((t) => t.length > 0);
-  const gtTokens = groundTruth
+  const gtTokens = String(groundTruth)
     .toLowerCase()
     .split(/\s+/)
     .filter((t) => t.length > 0);

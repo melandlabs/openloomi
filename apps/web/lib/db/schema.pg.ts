@@ -696,6 +696,9 @@ export const insight = pgTable(
     isFavorited: boolean("is_favorited").notNull().default(false),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     favoritedAt: timestamp("favorited_at", { withTimezone: true }),
+    // Temporal validity - enables time-travel queries
+    validFrom: timestamp("valid_from", { withTimezone: true }),
+    validTo: timestamp("valid_to", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -718,6 +721,14 @@ export const insight = pgTable(
     ),
     compactedIntoInsightIdx: index("insight_compacted_into_idx").on(
       table.compactedIntoInsightId,
+    ),
+    // Index for temporal/time-travel queries
+    validFromIdx: index("insight_valid_from_idx").on(table.validFrom),
+    validToIdx: index("insight_valid_to_idx").on(table.validTo),
+    // Composite index for as-of queries: find insights valid at a point in time
+    validTimeIdx: index("insight_valid_time_idx").on(
+      table.validFrom,
+      table.validTo,
     ),
   }),
 );
@@ -2515,6 +2526,190 @@ export type InsightWeightHistory = InferSelectModel<
 export type InsertInsightWeightHistory = InferInsertModel<
   typeof insightWeightHistory
 >;
+
+// Insight Connections Table
+// Tracks Hebbian potentiation - connections between insights that strengthen when co-accessed
+export const insightConnections = pgTable(
+  "insight_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    insightIdA: uuid("insight_id_a")
+      .notNull()
+      .references(() => insight.id, { onDelete: "cascade" }),
+    insightIdB: uuid("insight_id_b")
+      .notNull()
+      .references(() => insight.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // Hebbian potentiation: strength increases when co-accessed
+    // Formula: new_strength = old + increment (for co-access)
+    // And exponential decay: strength = strength * exp(-days/sqrt(stability))
+    strength: numeric("strength", { precision: 10, scale: 6 })
+      .$type<number>()
+      .notNull()
+      .default(0.1), // Start with small initial strength
+    // Number of times these insights were accessed together
+    coAccessCount: integer("co_access_count").notNull().default(0),
+    // When was the connection last strengthened (co-accessed together)
+    lastStrengthenedAt: timestamp("last_strengthened_at", {
+      withTimezone: true,
+    }),
+    // Stability affects decay rate - connections accessed frequently have higher stability
+    // and decay more slowly
+    stability: numeric("stability", { precision: 10, scale: 4 })
+      .$type<number>()
+      .notNull()
+      .default(1.0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    // Each pair of insights can only have one connection per user
+    uniqueConnection: uniqueIndex("insight_connection_unique_idx").on(
+      table.insightIdA,
+      table.insightIdB,
+      table.userId,
+    ),
+    // Indexes for efficient lookup
+    userIdx: index("insight_connection_user_idx").on(table.userId),
+    insightAIdx: index("insight_connection_insight_a_idx").on(table.insightIdA),
+    insightBIdx: index("insight_connection_insight_b_idx").on(table.insightIdB),
+    // Index for finding strong connections
+    strengthIdx: index("insight_connection_strength_idx").on(
+      table.userId,
+      table.strength,
+    ),
+    // Index for decay queries (find connections to decay)
+    lastStrengthenedIdx: index("insight_connection_last_strengthened_idx").on(
+      table.userId,
+      table.lastStrengthenedAt,
+    ),
+  }),
+);
+
+export type InsightConnection = InferSelectModel<typeof insightConnections>;
+export type InsertInsightConnection = InferInsertModel<
+  typeof insightConnections
+>;
+
+// Entity Registry Table
+// Tracks entities (people, groups, concepts) as first-class citizens with disambiguation
+export const entities = pgTable(
+  "entities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    entityType: varchar("entity_type", { length: 30 })
+      .notNull()
+      .$type<"person" | "group" | "concept" | "project" | "company">(),
+    // The canonical/primary name for this entity
+    canonicalName: text("canonical_name").notNull(),
+    // Additional names/aliases this entity is known by
+    aliases: text("aliases")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    // Context for disambiguation - helps distinguish from similar entities
+    // e.g., "CEO of Acme Corp", "works in the NYC office"
+    disambiguationContext: text("disambiguation_context"),
+    // Source bot IDs where this entity was first seen/learned
+    sourceBotIds: uuid("source_bot_ids")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::uuid[]`),
+    // How many insights reference this entity
+    insightCount: integer("insight_count").notNull().default(0),
+    // First and last seen timestamps
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // User-provided metadata
+    isPinned: boolean("is_pinned").notNull().default(false),
+    isIgnored: boolean("is_ignored").notNull().default(false),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    // Each user can only have one entity with a given canonical name per type
+    uniqueEntity: uniqueIndex("entity_unique_idx").on(
+      table.userId,
+      table.entityType,
+      table.canonicalName,
+    ),
+    userIdx: index("entity_user_idx").on(table.userId),
+    typeIdx: index("entity_type_idx").on(table.entityType),
+    nameSearchIdx: index("entity_name_search_idx").on(table.canonicalName),
+    lastSeenIdx: index("entity_last_seen_idx").on(
+      table.userId,
+      table.lastSeenAt,
+    ),
+  }),
+);
+
+export type Entity = InferSelectModel<typeof entities>;
+export type InsertEntity = InferInsertModel<typeof entities>;
+
+// Insight-Entity Junction Table
+// Links insights to entities with roles (subject, object, mentioned)
+// This enables "who is this insight about" vs "who is mentioned in this insight" distinction
+export const insightEntities = pgTable(
+  "insight_entities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    insightId: uuid("insight_id")
+      .notNull()
+      .references(() => insight.id, { onDelete: "cascade" }),
+    entityId: uuid("entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
+    // Role of this entity in the insight
+    // - "subject": the primary entity the insight is about (e.g., "John got promoted")
+    // - "object": an entity that is acted upon (e.g., "Mary hired John" - John is object)
+    // - "mentioned": simply referenced in the insight
+    role: varchar("role", { length: 20 })
+      .notNull()
+      .$type<"subject" | "object" | "mentioned">(),
+    // How strongly is this entity connected to the insight (0.0 - 1.0)
+    // Computed based on co-occurrence, prominence in text, etc.
+    confidence: numeric("confidence", { precision: 5, scale: 4 })
+      .$type<number>()
+      .notNull()
+      .default(0.5),
+    // The text span in the original insight that refers to this entity
+    textSpan: text("text_span"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    // An entity can have one role per insight
+    uniqueInsightEntity: uniqueIndex("insight_entity_unique_idx").on(
+      table.insightId,
+      table.entityId,
+    ),
+    insightIdx: index("insight_entity_insight_idx").on(table.insightId),
+    entityIdx: index("insight_entity_entity_idx").on(table.entityId),
+    roleIdx: index("insight_entity_role_idx").on(table.role),
+  }),
+);
+
+export type InsightEntity = InferSelectModel<typeof insightEntities>;
+export type InsertInsightEntity = InferInsertModel<typeof insightEntities>;
 
 // Insight View History Table
 // Tracks user views of insights

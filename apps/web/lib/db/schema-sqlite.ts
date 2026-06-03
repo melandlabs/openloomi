@@ -647,6 +647,9 @@ export const insight = sqliteTable("Insight", {
     .default(false),
   archivedAt: integer("archived_at", { mode: "timestamp" }),
   favoritedAt: integer("favorited_at", { mode: "timestamp" }),
+  // Temporal validity - enables time-travel queries
+  validFrom: integer("valid_from", { mode: "timestamp" }),
+  validTo: integer("valid_to", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2564,3 +2567,158 @@ export type InsightWeightConfig = InferSelectModel<typeof insightWeightConfig>;
 export type InsertInsightWeightConfig = InferInsertModel<
   typeof insightWeightConfig
 >;
+
+// ============================================================================
+// Living Connections Tables (Hebbian potentiation)
+// ============================================================================
+
+// Insight Connections Table (SQLite)
+// Tracks Hebbian potentiation - connections between insights that strengthen when co-accessed
+export const insightConnections = sqliteTable(
+  "insight_connections",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    insightIdA: text("insight_id_a")
+      .notNull()
+      .references(() => insight.id, { onDelete: "cascade" }),
+    insightIdB: text("insight_id_b")
+      .notNull()
+      .references(() => insight.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    strength: integer("strength").notNull().default(0.1), // Stored as integer (multiply by 1000000 for precision)
+    coAccessCount: integer("co_access_count").notNull().default(0),
+    lastStrengthenedAt: integer("last_strengthened_at", { mode: "timestamp" }),
+    stability: integer("stability").notNull().default(1.0), // Stored as integer (multiply by 10000 for precision)
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    uniqueConnection: uniqueIndex("insight_connection_unique_idx").on(
+      table.insightIdA,
+      table.insightIdB,
+      table.userId,
+    ),
+    userIdx: index("insight_connection_user_idx").on(table.userId),
+    insightAIdx: index("insight_connection_insight_a_idx").on(table.insightIdA),
+    insightBIdx: index("insight_connection_insight_b_idx").on(table.insightIdB),
+    strengthIdx: index("insight_connection_strength_idx").on(
+      table.userId,
+      table.strength,
+    ),
+    lastStrengthenedIdx: index("insight_connection_last_strengthened_idx").on(
+      table.userId,
+      table.lastStrengthenedAt,
+    ),
+  }),
+);
+
+export type InsightConnection = InferSelectModel<typeof insightConnections>;
+export type InsertInsightConnection = InferInsertModel<
+  typeof insightConnections
+>;
+
+// ============================================================================
+// Entity Registry Tables
+// ============================================================================
+
+// Entity Registry Table (SQLite)
+// Tracks entities (people, groups, concepts) as first-class citizens
+export const entities = sqliteTable(
+  "entities",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(), // "person" | "group" | "concept" | "project" | "company"
+    canonicalName: text("canonical_name").notNull(),
+    aliases: text("aliases").notNull().default("[]").$type<string[]>(), // JSON array
+    disambiguationContext: text("disambiguation_context"),
+    sourceBotIds: text("source_bot_ids")
+      .notNull()
+      .default("[]")
+      .$type<string[]>(), // JSON array
+    insightCount: integer("insight_count").notNull().default(0),
+    firstSeenAt: integer("first_seen_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    lastSeenAt: integer("last_seen_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    isPinned: integer("is_pinned", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    isIgnored: integer("is_ignored", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    notes: text("notes"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    uniqueEntity: uniqueIndex("entity_unique_idx").on(
+      table.userId,
+      table.entityType,
+      table.canonicalName,
+    ),
+    userIdx: index("entity_user_idx").on(table.userId),
+    typeIdx: index("entity_type_idx").on(table.entityType),
+    nameSearchIdx: index("entity_name_search_idx").on(table.canonicalName),
+    lastSeenIdx: index("entity_last_seen_idx").on(
+      table.userId,
+      table.lastSeenAt,
+    ),
+  }),
+);
+
+export type Entity = InferSelectModel<typeof entities>;
+export type InsertEntity = InferInsertModel<typeof entities>;
+
+// Insight-Entity Junction Table (SQLite)
+// Links insights to entities with roles
+export const insightEntities = sqliteTable(
+  "insight_entities",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    insightId: text("insight_id")
+      .notNull()
+      .references(() => insight.id, { onDelete: "cascade" }),
+    entityId: text("entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
+    role: text("role").notNull(), // "subject" | "object" | "mentioned"
+    confidence: integer("confidence").notNull().default(0.5), // Stored as integer (0-10000)
+    textSpan: text("text_span"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    uniqueInsightEntity: uniqueIndex("insight_entity_unique_idx").on(
+      table.insightId,
+      table.entityId,
+    ),
+    insightIdx: index("insight_entity_insight_idx").on(table.insightId),
+    entityIdx: index("insight_entity_entity_idx").on(table.entityId),
+    roleIdx: index("insight_entity_role_idx").on(table.role),
+  }),
+);
+
+export type InsightEntity = InferSelectModel<typeof insightEntities>;
+export type InsertInsightEntity = InferInsertModel<typeof insightEntities>;

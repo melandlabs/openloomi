@@ -92,6 +92,13 @@ export const insightWeightHistory = (currentSchema as any).insightWeightHistory;
 export const insightViewHistory = (currentSchema as any).insightViewHistory;
 export const insightWeightConfig = (currentSchema as any).insightWeightConfig;
 
+// Living Connections tables (Hebbian potentiation)
+export const insightConnections = (currentSchema as any).insightConnections;
+
+// Entity Registry tables
+export const entities = (currentSchema as any).entities;
+export const insightEntities = (currentSchema as any).insightEntities;
+
 // Credential security tables
 export const credentialRotationHistory = (currentSchema as any)
   .credentialRotationHistory;
@@ -208,6 +215,12 @@ export type {
   InsertInsightViewHistory,
   InsightWeightConfig,
   InsertInsightWeightConfig,
+  InsightConnection,
+  InsertInsightConnection,
+  Entity,
+  InsertEntity,
+  InsightEntity,
+  InsertInsightEntity,
   Character,
   InsertCharacter,
   CredentialRotationHistory,

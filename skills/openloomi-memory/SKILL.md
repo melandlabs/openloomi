@@ -633,3 +633,113 @@ node $SKILL_DIR/scripts/openloomi-memory.cjs list-insights --channel=telegram --
 # User asks "recent WhatsApp messages"?
 node $SKILL_DIR/scripts/openloomi-memory.cjs list-insights --channel=whatsapp
 ```
+
+---
+
+## Living Connections (Hebbian Potentiation)
+
+Living Connections track relationships between insights that strengthen when they're accessed together. This implements Hebbian learning: "insights that fire together, wire together."
+
+### Commands
+
+```bash
+# Get related insights - "users who viewed X also viewed Y"
+node $SKILL_DIR/scripts/openloomi-memory.cjs get-related-insights <insightId>
+
+# Get related insights with filters
+node $SKILL_DIR/scripts/openloomi-memory.cjs get-related-insights insight_xxx --limit=10 --minStrength=0.3
+
+# Get connection statistics
+node $SKILL_DIR/scripts/openloomi-memory.cjs get-connection-stats <insightId>
+```
+
+### How It Works
+
+1. When you view an insight, connections to other insights viewed within 5 minutes are strengthened
+2. Connection strength decays over time using Ebbinghaus-style forgetting curve
+3. Strong connections (strength > 0.5) are considered "living" - actively referenced
+
+### Response Format
+
+```json
+{
+  "insightId": "insight_xxx",
+  "connections": [...],
+  "relatedInsights": [
+    {
+      "insightId": "insight_yyy",
+      "strength": 0.72,
+      "coAccessCount": 5
+    }
+  ],
+  "total": 5
+}
+```
+
+---
+
+## Temporal Queries (Time-Travel)
+
+Temporal validity enables "time-travel" queries - seeing what insights were relevant at a specific point in time.
+
+### Commands
+
+```bash
+# Get insights valid at a specific point in time (time-travel query)
+node $SKILL_DIR/scripts/openloomi-memory.cjs get-insights-as-of 2026-01-01
+
+# Get currently valid insights (no expiration or future expiration)
+node $SKILL_DIR/scripts/openloomi-memory.cjs get-current-insights
+
+# Get insights overlapping a time interval
+node $SKILL_DIR/scripts/openloomi-memory.cjs get-insights-in-interval 2026-01-01 2026-06-01
+```
+
+### Use Cases
+
+- "What did I know about Project X on March 1st?"
+- "What insights were valid during my vacation last July?"
+- "Show me only currently relevant insights (hide expired ones)"
+
+---
+
+## Entity Registry
+
+Entity Registry tracks people, groups, concepts, projects, and companies as first-class entities with disambiguation support.
+
+### Commands
+
+```bash
+# List all entities of a specific type
+node $SKILL_DIR/scripts/openloomi-memory.cjs list-entities --type=person
+
+# Search entities by name
+node $SKILL_DIR/scripts/openloomi-memory.cjs list-entities --search=John
+
+# Get entity details with linked insights
+node $SKILL_DIR/scripts/openloomi-memory.cjs get-entity <entityId> --insights
+```
+
+### Entity Types
+
+| Type | Description |
+|------|-------------|
+| `person` | People (contacts, colleagues, friends) |
+| `group` | Groups (teams, organizations) |
+| `concept` | Abstract concepts (ideas, methodologies) |
+| `project` | Projects (initiatives, deliverables) |
+| `company` | Companies (clients, vendors, employers) |
+
+---
+
+## Search with Connections
+
+Combined search that returns matching insights along with their Living Connections, providing a richer context.
+
+```bash
+# Search insights and include related insights
+node $SKILL_DIR/scripts/openloomi-memory.cjs search-with-connections "project deadline"
+
+# With custom limit
+node $SKILL_DIR/scripts/openloomi-memory.cjs search-with-connections "project deadline" --limit=5
+```

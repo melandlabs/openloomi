@@ -635,8 +635,7 @@ export class EmailAdapter extends MessagePlatformAdapter {
       return;
     }
 
-    const fallbackBody =
-      body.length > 0 ? body : "Image(s) attached via Alloomi.";
+    const fallbackBody = body.length > 0 ? body : "Image(s) attached";
 
     await this.smtpTransport.sendMail({
       from: this.gmailAddress,

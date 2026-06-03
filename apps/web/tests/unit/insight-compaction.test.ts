@@ -171,6 +171,8 @@ function makeInsight(overrides: Partial<Insight> = {}): Insight {
     isFavorited: overrides.isFavorited ?? false,
     archivedAt: overrides.archivedAt ?? null,
     favoritedAt: overrides.favoritedAt ?? null,
+    validFrom: overrides.validFrom ?? null,
+    validTo: overrides.validTo ?? null,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
   };

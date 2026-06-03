@@ -269,6 +269,97 @@ async function searchAll(query) {
   };
 }
 
+// ============================================================================
+// Living Connections (Hebbian Potentiation)
+// ============================================================================
+
+async function getRelatedInsights(insightId, options = {}) {
+  const { limit = 20, minStrength = 0 } = options;
+  const params = new URLSearchParams({ limit: String(limit), minStrength: String(minStrength) });
+  return apiRequest(`/api/insights/connections/${insightId}?${params}`);
+}
+
+async function getConnectionStats(insightId) {
+  return apiRequest(`/api/insights/connections/${insightId}?stats=true`);
+}
+
+// ============================================================================
+// Temporal Queries (Time-Travel)
+// ============================================================================
+
+async function getInsightsAsOf(dateStr, options = {}) {
+  const { limit = 100 } = options;
+  const params = new URLSearchParams({ asOf: dateStr, limit: String(limit) });
+  return apiRequest(`/api/insights/temporal?${params}`);
+}
+
+async function getCurrentInsights(options = {}) {
+  const { limit = 100 } = options;
+  const params = new URLSearchParams({ current: 'true', limit: String(limit) });
+  return apiRequest(`/api/insights/temporal?${params}`);
+}
+
+async function getInsightsInInterval(startDate, endDate, options = {}) {
+  const { limit = 100 } = options;
+  const params = new URLSearchParams({ start: startDate, end: endDate, limit: String(limit) });
+  return apiRequest(`/api/insights/temporal?${params}`);
+}
+
+// ============================================================================
+// Entity Registry
+// ============================================================================
+
+async function listEntities(options = {}) {
+  const { type = null, search = null, limit = 50 } = options;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (type) params.set('type', type);
+  if (search) params.set('search', search);
+  return apiRequest(`/api/insights/entities?${params}`);
+}
+
+async function getEntity(entityId, options = {}) {
+  const { insights = false } = options;
+  const params = insights ? '?insights=true' : '';
+  return apiRequest(`/api/insights/entities/${entityId}${params}`);
+}
+
+// ============================================================================
+// Search with Living Connections
+// ============================================================================
+
+async function searchWithConnections(query, options = {}) {
+  const { limit = 10 } = options;
+  // First search insights
+  const insightsResult = await listInsights(30, limit * 2);
+  const matchingInsights = insightsResult.items?.filter(insight => {
+    const str = JSON.stringify(insight).toLowerCase();
+    return str.includes(query.toLowerCase());
+  }) || [];
+
+  // Get related insights for each matching insight
+  const insightsWithConnections = await Promise.allSettled(
+    matchingInsights.slice(0, limit).map(async (insight) => {
+      try {
+        const related = await getRelatedInsights(insight.id, { limit: 5 });
+        return {
+          ...insight,
+          relatedInsights: related.relatedInsights || [],
+        };
+      } catch {
+        return { ...insight, relatedInsights: [] };
+      }
+    })
+  );
+
+  return {
+    query,
+    matchedInsights: insightsWithConnections
+      .filter(r => r.status === 'fulfilled')
+      .map(r => r.value),
+    total: matchingInsights.length,
+  };
+}
+
 const command = process.argv[2];
 const args = process.argv.slice(3);
 
@@ -501,6 +592,121 @@ async function main() {
         break;
       }
 
+      // =========================================================================
+      // Living Connections (Hebbian Potentiation)
+      // =========================================================================
+
+      case 'get-related-insights': {
+        const insightId = args[0];
+        if (!insightId) throw new Error('Insight ID required: get-related-insights <id> [--limit=20] [--minStrength=0]');
+
+        let limit = 20;
+        let minStrength = 0;
+        for (const arg of args.slice(1)) {
+          if (arg.startsWith('--limit=')) limit = Number.parseInt(arg.split('=')[1]);
+          if (arg.startsWith('--minStrength=')) minStrength = Number.parseFloat(arg.split('=')[1]);
+        }
+
+        const result = await getRelatedInsights(insightId, { limit, minStrength });
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'get-connection-stats': {
+        const insightId = args[0];
+        if (!insightId) throw new Error('Insight ID required: get-connection-stats <id>');
+        const result = await getConnectionStats(insightId);
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      // =========================================================================
+      // Temporal Queries (Time-Travel)
+      // =========================================================================
+
+      case 'get-insights-as-of': {
+        const dateStr = args[0];
+        if (!dateStr) throw new Error('Date required: get-insights-as-of <YYYY-MM-DD> [--limit=100]');
+        let limit = 100;
+        const limitArg = args.find(a => a.startsWith('--limit='));
+        if (limitArg) limit = Number.parseInt(limitArg.split('=')[1]);
+
+        const result = await getInsightsAsOf(dateStr, { limit });
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'get-current-insights': {
+        let limit = 100;
+        const limitArg = args.find(a => a.startsWith('--limit='));
+        if (limitArg) limit = Number.parseInt(limitArg.split('=')[1]);
+
+        const result = await getCurrentInsights({ limit });
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'get-insights-in-interval': {
+        const startDate = args[0];
+        const endDate = args[1];
+        if (!startDate || !endDate) {
+          throw new Error('Start and end dates required: get-insights-in-interval <YYYY-MM-DD> <YYYY-MM-DD> [--limit=100]');
+        }
+        let limit = 100;
+        const limitArg = args.find(a => a.startsWith('--limit='));
+        if (limitArg) limit = Number.parseInt(limitArg.split('=')[1]);
+
+        const result = await getInsightsInInterval(startDate, endDate, { limit });
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      // =========================================================================
+      // Entity Registry
+      // =========================================================================
+
+      case 'list-entities': {
+        let type = null;
+        let search = null;
+        let limit = 50;
+
+        for (const arg of args) {
+          if (arg.startsWith('--type=')) type = arg.split('=')[1];
+          if (arg.startsWith('--search=')) search = arg.split('=')[1];
+          if (arg.startsWith('--limit=')) limit = Number.parseInt(arg.split('=')[1]);
+        }
+
+        const result = await listEntities({ type, search, limit });
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'get-entity': {
+        const entityId = args[0];
+        if (!entityId) throw new Error('Entity ID required: get-entity <id> [--insights]');
+
+        const withInsights = args.includes('--insights');
+        const result = await getEntity(entityId, { insights: withInsights });
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      // =========================================================================
+      // Search with Connections
+      // =========================================================================
+
+      case 'search-with-connections': {
+        const query = args[0];
+        if (!query) throw new Error('Query required: search-with-connections <query> [--limit=10]');
+        let limit = 10;
+        const limitArg = args.find(a => a.startsWith('--limit='));
+        if (limitArg) limit = Number.parseInt(limitArg.split('=')[1]);
+
+        const result = await searchWithConnections(query, { limit });
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
       default:
         console.log(JSON.stringify({
           error: 'Unknown command',
@@ -520,6 +726,22 @@ Commands:
   add-memory <content> [--file=<filename>] [--directory=<subdir>]   Add a memory file
   delete-memory <filename> [--directory=<subdir>]                    Delete a memory file
 
+# Living Connections (Hebbian Potentiation)
+  get-related-insights <insightId> [--limit=20] [--minStrength=0]  Get related insights via Living Connections
+  get-connection-stats <insightId>                                  Get connection statistics
+
+# Temporal Queries (Time-Travel)
+  get-insights-as-of <YYYY-MM-DD> [--limit=100]                    Get insights valid at a point in time
+  get-current-insights [--limit=100]                               Get currently valid insights
+  get-insights-in-interval <start> <end> [--limit=100]             Get insights in a time interval
+
+# Entity Registry
+  list-entities [--type=<type>] [--search=<name>] [--limit=50]       List entities (person, group, concept, project, company)
+  get-entity <entityId> [--insights]                                Get entity details, optionally with linked insights
+
+# Search with Connections
+  search-with-connections <query> [--limit=10]                     Search insights and include related insights
+
 Channels: gmail, outlook, telegram, whatsapp, slack, discord, linkedin, twitter, weixin, rss
 Insight importance: Important, General, Not Important
 Insight urgency: As soon as possible, Within 24 hours, Not urgent, General
@@ -532,6 +754,23 @@ Examples:
   list-insights --days=7 --limit=50                    # Get recent insights
   list-insights --channel=gmail --days=7               # Get Gmail insights from last 7 days
   list-insights --channel=telegram --days=30           # Get Telegram insights from last 30 days
+
+# Living Connections Examples
+  get-related-insights insight_xxx                       # Get related insights
+  get-related-insights insight_xxx --limit=5 --minStrength=0.3  # Filter by strength
+
+# Temporal Query Examples
+  get-insights-as-of 2026-01-01                        # What was valid on Jan 1, 2026?
+  get-current-insights                                 # Currently valid insights
+  get-insights-in-interval 2026-01-01 2026-06-01    # Insights overlapping Q1-Q2 2026
+
+# Entity Examples
+  list-entities --type=person                          # List all person entities
+  list-entities --search=John                         # Search for "John"
+  get-entity entity_xxx --insights                     # Get entity with linked insights
+
+# Search with Connections Examples
+  search-with-connections "project deadline"          # Search and show related insights
           `.trim()
         }, null, 2));
     }

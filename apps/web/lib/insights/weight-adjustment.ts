@@ -21,6 +21,9 @@ import {
 import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 import type { DrizzleDB } from "@/lib/db/types";
 
+// Import Hebbian potentiation for Living Connections
+import { strengthenConnection } from "./hebbian";
+
 // ============================================================================
 // Types and Interfaces
 // ============================================================================
@@ -612,6 +615,37 @@ export async function recordInsightView(
     }
 
     await refreshInsightAccessSummary(insightId, userId, now, db);
+
+    // Hebbian potentiation: strengthen connections with recently viewed insights
+    // This implements "Living Connections" - insights accessed together become connected
+    try {
+      // Get recently viewed insights (within last 5 minutes) to form co-access pairs
+      const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+      const recentViews = await db
+        .select({ insightId: insightViewHistory.insightId })
+        .from(insightViewHistory)
+        .where(
+          and(
+            eq(insightViewHistory.userId, userId),
+            gte(insightViewHistory.viewedAt, fiveMinutesAgo),
+          ),
+        )
+        .orderBy(desc(insightViewHistory.viewedAt))
+        .limit(10);
+
+      // Strengthen connections with recently viewed insights (excluding self)
+      for (const recent of recentViews) {
+        if (recent.insightId !== insightId) {
+          await strengthenConnection(insightId, recent.insightId, userId, db);
+        }
+      }
+    } catch (hebbianError) {
+      // Log but don't fail the main operation if Hebbian strengthening fails
+      console.warn(
+        "[WeightAdjustment] Hebbian potentiation failed:",
+        hebbianError,
+      );
+    }
   } catch (error) {
     console.error("[WeightAdjustment] Failed to record insight view:", error);
     throw error;

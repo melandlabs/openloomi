@@ -1,0 +1,570 @@
+{
+  "num_entries": 20,
+  "total_questions": 20,
+  "total_correct": 12,
+  "overall_accuracy": 0.6,
+  "results_by_type": {
+    "single-session-user": {
+      "count": 7,
+      "accuracy": 0.8571428571428571,
+      "f1_mean": 0.11352916452622239,
+      "bleu1_mean": 0.08563074352548036,
+      "bleu4_mean": 0,
+      "predictions": [
+        {
+          "question_id": "What degree did I graduate with?",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0.09523809523809525
+        },
+        {
+          "question_id": "How long is my daily commute to work?",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0.2608695652173913
+        },
+        {
+          "question_id": "Where did I redeem a $5 coupon on coffee creamer?",
+          "correct": false,
+          "llm_score": 0,
+          "f1_score": 0.10526315789473684
+        },
+        {
+          "question_id": "What play did I attend at the local community thea",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0.3333333333333333
+        },
+        {
+          "question_id": "What is the name of the playlist I created on Spot",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0
+        },
+        {
+          "question_id": "What was my last name before I changed it?",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0
+        },
+        {
+          "question_id": "Where do I take yoga classes?",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0
+        }
+      ]
+    },
+    "multi-session": {
+      "count": 3,
+      "accuracy": 0,
+      "f1_mean": 0,
+      "bleu1_mean": 0,
+      "bleu4_mean": 0,
+      "predictions": [
+        {
+          "question_id": "How many items of clothing do I need to pick up or",
+          "correct": false,
+          "llm_score": 0,
+          "f1_score": 0
+        },
+        {
+          "question_id": "How many projects have I led or am currently leadi",
+          "correct": false,
+          "llm_score": 0,
+          "f1_score": 0
+        },
+        {
+          "question_id": "How many days did I spend on camping trips in the ",
+          "correct": false,
+          "llm_score": 0,
+          "f1_score": 0
+        }
+      ]
+    },
+    "single-session-preference": {
+      "count": 4,
+      "accuracy": 0.5,
+      "f1_mean": 0.029056386651323356,
+      "bleu1_mean": 0.0261455525606469,
+      "bleu4_mean": 0,
+      "predictions": [
+        {
+          "question_id": "Can you recommend some resources where I can learn",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0.0909090909090909
+        },
+        {
+          "question_id": "Can you suggest some accessories that would comple",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0.02531645569620253
+        },
+        {
+          "question_id": "Can you recommend some recent publications or conf",
+          "correct": false,
+          "llm_score": 0,
+          "f1_score": 0
+        },
+        {
+          "question_id": "Can you suggest a hotel for my upcoming trip to Mi",
+          "correct": false,
+          "llm_score": 0,
+          "f1_score": 0
+        }
+      ]
+    },
+    "temporal-reasoning": {
+      "count": 3,
+      "accuracy": 0.3333333333333333,
+      "f1_mean": 0.015151515151515154,
+      "bleu1_mean": 0.011754378128523736,
+      "bleu4_mean": 0,
+      "predictions": [
+        {
+          "question_id": "Which three events happened in the order from firs",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0.04545454545454546
+        },
+        {
+          "question_id": "How many weeks ago did I meet up with my aunt and ",
+          "correct": false,
+          "llm_score": 0,
+          "f1_score": 0
+        },
+        {
+          "question_id": "How many months have passed since I participated i",
+          "correct": false,
+          "llm_score": 0,
+          "f1_score": 0
+        }
+      ]
+    },
+    "knowledge-update": {
+      "count": 3,
+      "accuracy": 1,
+      "f1_mean": 0.08441558441558443,
+      "bleu1_mean": 0.04567901234567901,
+      "bleu4_mean": 0,
+      "predictions": [
+        {
+          "question_id": "What was my personal best time in the charity 5K r",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0
+        },
+        {
+          "question_id": "How many Korean restaurants have I tried in my cit",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0.07142857142857142
+        },
+        {
+          "question_id": "Where did Rachel move to after her recent relocati",
+          "correct": true,
+          "llm_score": 1,
+          "f1_score": 0.18181818181818182
+        }
+      ]
+    }
+  },
+  "predictions": [
+    {
+      "question": "What degree did I graduate with?",
+      "answer": "Business Administration",
+      "response": "根据记忆文件中的对话记录，您在之前的对话中提到：\n\n**您毕业于工商管理专业（Business Administration）。**\n\n这是在2023年5月30日的对话中提到的，您当时说：\"I graduated with a degree in Business Administration, which has definitely helped me in my new role.\"（我毕业于工商管理专业，这确实对我的新工作有很大帮助。）",
+      "prediction": "根据记忆文件中的对话记录，您在之前的对话中提到：\n\n**您毕业于工商管理专业（Business Administration）。**\n\n这是在2023年5月30日的对话中提到的，您当时说：\"I graduated with a degree in Business Administration, which has definitely helped me in my new role.\"（我毕业于工商管理专业，这确实对我的新工作有很大帮助。）",
+      "ground_truth": "Business Administration",
+      "question_type": "single-session-user",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0.09523809523809525,
+      "bleu_score": 0.05263157894736842,
+      "bleu1": 0.05263157894736842,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_280352e9"
+      ]
+    },
+    {
+      "question": "How long is my daily commute to work?",
+      "answer": "45 minutes each way",
+      "response": "根据记忆文件中的对话记录，您的日常通勤时间为**单程 45 分钟**（每天往返共计 90 分钟）。\n\n该信息来源于您与助手关于有声读物的对话，您提到：\"I've been listening to audiobooks during my daily commute, which takes 45 minutes each way.\"",
+      "prediction": "根据记忆文件中的对话记录，您的日常通勤时间为**单程 45 分钟**（每天往返共计 90 分钟）。\n\n该信息来源于您与助手关于有声读物的对话，您提到：\"I've been listening to audiobooks during my daily commute, which takes 45 minutes each way.\"",
+      "ground_truth": "45 minutes each way",
+      "question_type": "single-session-user",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0.2608695652173913,
+      "bleu_score": 0.15789473684210525,
+      "bleu1": 0.15789473684210525,
+      "bleu2": 0.10526315789473684,
+      "bleu3": 0.05555555555555555,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_40a90d51"
+      ]
+    },
+    {
+      "question": "Where did I redeem a $5 coupon on coffee creamer?",
+      "answer": "Target",
+      "response": "根据记忆文件中的对话记录，用户提到\"我上周日用了一张价值5美元的咖啡奶精优惠券\"（\"I actually redeemed a $5 coupon on coffee creamer last Sunday\"），但对话中**没有明确说明是在哪家商店兑换的**。\n\n对话显示该用户经常在 Target 购物，并使用 Target 的 Cartwheel 应用，但并未具体说明这张5美元优惠券是在 Target 还是其他商店兑换的。",
+      "prediction": "根据记忆文件中的对话记录，用户提到\"我上周日用了一张价值5美元的咖啡奶精优惠券\"（\"I actually redeemed a $5 coupon on coffee creamer last Sunday\"），但对话中**没有明确说明是在哪家商店兑换的**。\n\n对话显示该用户经常在 Target 购物，并使用 Target 的 Cartwheel 应用，但并未具体说明这张5美元优惠券是在 Target 还是其他商店兑换的。",
+      "ground_truth": "Target",
+      "question_type": "single-session-user",
+      "llm_score": 0,
+      "correct": false,
+      "f1_score": 0.10526315789473684,
+      "bleu_score": 0.05555555555555555,
+      "bleu1": 0.05555555555555555,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_d61669c7"
+      ]
+    },
+    {
+      "question": "What play did I attend at the local community theater?",
+      "answer": "The Glass Menagerie",
+      "response": "您在记忆文件中找到了答案。根据对话记录，您在当地社区剧院观看的剧目是**《玻璃动物园》（The Glass Menagerie）**。这是田纳西·威廉斯的经典作品，演出结束后，您被女主角的表演所打动，甚至想到了您那位有抱负的演员朋友Emily。",
+      "prediction": "您在记忆文件中找到了答案。根据对话记录，您在当地社区剧院观看的剧目是**《玻璃动物园》（The Glass Menagerie）**。这是田纳西·威廉斯的经典作品，演出结束后，您被女主角的表演所打动，甚至想到了您那位有抱负的演员朋友Emily。",
+      "ground_truth": "The Glass Menagerie",
+      "question_type": "single-session-user",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0.3333333333333333,
+      "bleu_score": 0.3333333333333333,
+      "bleu1": 0.3333333333333333,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_355c48bb"
+      ]
+    },
+    {
+      "question": "What is the name of the playlist I created on Spotify?",
+      "answer": "Summer Vibes",
+      "response": "你在记忆文件中提到，你在 Spotify 上创建的播放列表叫 **Summer Vibes**。\n\n这条信息出现在 2023 年 5 月 21 日的对话中，你当时形容这个播放列表里都是适合放松或运动时听的 chill 曲目。",
+      "prediction": "你在记忆文件中提到，你在 Spotify 上创建的播放列表叫 **Summer Vibes**。\n\n这条信息出现在 2023 年 5 月 21 日的对话中，你当时形容这个播放列表里都是适合放松或运动时听的 chill 曲目。",
+      "ground_truth": "Summer Vibes",
+      "question_type": "single-session-user",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_3e012175"
+      ]
+    },
+    {
+      "question": "What was my last name before I changed it?",
+      "answer": "Johnson",
+      "response": "根据记忆文件中的对话记录，您在 2023 年 5 月 28 日提到过自己最近改了姓氏，原来的姓氏是 **Johnson**，现在是 **Winters**。",
+      "prediction": "根据记忆文件中的对话记录，您在 2023 年 5 月 28 日提到过自己最近改了姓氏，原来的姓氏是 **Johnson**，现在是 **Winters**。",
+      "ground_truth": "Johnson",
+      "question_type": "single-session-user",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_f6168136"
+      ]
+    },
+    {
+      "question": "Where do I take yoga classes?",
+      "answer": "Serenity Yoga",
+      "response": "根据记忆文件中的信息，您在 **Serenity Yoga** 上瑜伽课。",
+      "prediction": "根据记忆文件中的信息，您在 **Serenity Yoga** 上瑜伽课。",
+      "ground_truth": "Serenity Yoga",
+      "question_type": "single-session-user",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_9398da02"
+      ]
+    },
+    {
+      "question": "How many items of clothing do I need to pick up or return from a store?",
+      "answer": 3,
+      "response": "Error: groundTruth.toLowerCase is not a function",
+      "prediction": "Error: groundTruth.toLowerCase is not a function",
+      "ground_truth": 3,
+      "question_type": "multi-session",
+      "llm_score": 0,
+      "correct": false,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_afa9873b_2",
+        "answer_afa9873b_3",
+        "answer_afa9873b_1"
+      ]
+    },
+    {
+      "question": "How many projects have I led or am currently leading?",
+      "answer": 2,
+      "response": "Error: groundTruth.toLowerCase is not a function",
+      "prediction": "Error: groundTruth.toLowerCase is not a function",
+      "ground_truth": 2,
+      "question_type": "multi-session",
+      "llm_score": 0,
+      "correct": false,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_ec904b3c_1",
+        "answer_ec904b3c_4",
+        "answer_ec904b3c_3",
+        "answer_ec904b3c_2"
+      ]
+    },
+    {
+      "question": "How many days did I spend on camping trips in the United States this year?",
+      "answer": "8 days.",
+      "response": "根据记忆文件中的信息，我无法确定今年（2026年）在美国的露营天数。\n\n这些对话记录（answer_a8b4290f_1.md、answer_a8b4290f_2.md、answer_a8b4290f_3.md）均来自2023年4月29日的对话。在这些对话中，用户提到过去曾进行过以下露营旅行：\n\n- 黄石国家公园5天露营旅行（上一次对话中提到\"上个月\"）\n- 4月初大苏尔3天单人露营旅行\n\n但这些是2023年的旅行信息，且用户明确问的是\"今年\"的露营天数，而记忆文件中没有关于2026年的露营旅行信息。\n\n**我不知道今年你在美国露营旅行的天数。** 记忆文件中没有关于2026年的露营经历记录。",
+      "prediction": "根据记忆文件中的信息，我无法确定今年（2026年）在美国的露营天数。\n\n这些对话记录（answer_a8b4290f_1.md、answer_a8b4290f_2.md、answer_a8b4290f_3.md）均来自2023年4月29日的对话。在这些对话中，用户提到过去曾进行过以下露营旅行：\n\n- 黄石国家公园5天露营旅行（上一次对话中提到\"上个月\"）\n- 4月初大苏尔3天单人露营旅行\n\n但这些是2023年的旅行信息，且用户明确问的是\"今年\"的露营天数，而记忆文件中没有关于2026年的露营旅行信息。\n\n**我不知道今年你在美国露营旅行的天数。** 记忆文件中没有关于2026年的露营经历记录。",
+      "ground_truth": "8 days.",
+      "question_type": "multi-session",
+      "llm_score": 0,
+      "correct": false,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_a8b4290f_3",
+        "answer_a8b4290f_1",
+        "answer_a8b4290f_2"
+      ]
+    },
+    {
+      "question": "Can you recommend some resources where I can learn more about video editing?",
+      "answer": "The user would prefer responses that suggest resources specifically tailored to Adobe Premiere Pro, especially those that delve into its advanced settings. They might not prefer general video editing resources or resources related to other video editing software.",
+      "response": "根据记忆文件中的对话记录，对方是一位使用 Adobe Premiere Pro 进行视频编辑的用户，曾收到以下推荐资源：\n\n**在线学习平台**\n- Adobe Premiere Pro 官方文档和教程\n- Udemy、LinkedIn Learning、Skillshare 等在线课程平台\n\n**YouTube 频道**\n- Premiere Bro\n- Video Copilot\n- Adobe Creative Cloud\n\n**社区与论坛**\n- Reddit 的 r/premierepro\n- Adobe Premiere Pro 官方论坛\n\n此外，对话中还深入讨论了 Lumetri Color Panel（Creative 面板与 Curves 面板）、Color Match 功能、Toe 和 Shoulder 控制等高级调色技巧，这些内容也属于视频编辑学习的范畴。",
+      "prediction": "根据记忆文件中的对话记录，对方是一位使用 Adobe Premiere Pro 进行视频编辑的用户，曾收到以下推荐资源：\n\n**在线学习平台**\n- Adobe Premiere Pro 官方文档和教程\n- Udemy、LinkedIn Learning、Skillshare 等在线课程平台\n\n**YouTube 频道**\n- Premiere Bro\n- Video Copilot\n- Adobe Creative Cloud\n\n**社区与论坛**\n- Reddit 的 r/premierepro\n- Adobe Premiere Pro 官方论坛\n\n此外，对话中还深入讨论了 Lumetri Color Panel（Creative 面板与 Curves 面板）、Color Match 功能、Toe 和 Shoulder 控制等高级调色技巧，这些内容也属于视频编辑学习的范畴。",
+      "ground_truth": "The user would prefer responses that suggest resources specifically tailored to Adobe Premiere Pro, especially those that delve into its advanced settings. They might not prefer general video editing resources or resources related to other video editing software.",
+      "question_type": "single-session-preference",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0.0909090909090909,
+      "bleu_score": 0.08571428571428572,
+      "bleu1": 0.08571428571428572,
+      "bleu2": 0.023809523809523808,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_edb03329"
+      ]
+    },
+    {
+      "question": "Can you suggest some accessories that would complement my current photography setup?",
+      "answer": "The user would prefer suggestions of Sony-compatible accessories or high-quality photography gear that can enhance their photography experience. They may not prefer suggestions of other brands' equipment or low-quality gear.",
+      "response": "\n根据记忆文件中的信息，我找到了您当前摄影装备的相关细节：\n\n**您现有的摄影装备包括：**\n- Sony A7R IV 相机\n- Sony 24-70mm f/2.8 镜头\n- Godox V1 闪光灯（您最终选择购买）\n- Gitzo GT3543LS 三脚架（您在了解中）\n\n**建议您考虑的配件：**\n\n1. **闪光灯配件** — 您已经购买了 Godox V1 闪光灯，可以考虑 Godox 官方硬质保护盒来保护闪光灯，或者 Think Tank Photo 的软质便携袋。\n\n2. **外部电池** — 您在对话中提到需要为 Sony A7R IV 充电的移动电源，建议 Anker PowerCore 20000 PD（20,000mAh，支持 USB-C PD 快充），可为此设备充电 3-4 次。\n\n3. **镜头清洁套装** — 您拥有 Sony 24-70mm f/2.8 镜头，建议配备专用超细纤维布、镜头清洁纸巾和镜头清洁液，按照正确方法清洁以避免划痕。\n\n4. **相机包** — 对话中您提到想升级相机包，Peak Design、Lowepro 或 MindShift Gear 都有为索尼相机设计的款式，可根据您的背负方式（双肩包、斜挎包）和携带器材数量选择。\n\n如果您能告诉我更多关于您目前的具体需求（例如主要拍摄题材、预算等），我可以给出更有针对性的建议。",
+      "prediction": "\n根据记忆文件中的信息，我找到了您当前摄影装备的相关细节：\n\n**您现有的摄影装备包括：**\n- Sony A7R IV 相机\n- Sony 24-70mm f/2.8 镜头\n- Godox V1 闪光灯（您最终选择购买）\n- Gitzo GT3543LS 三脚架（您在了解中）\n\n**建议您考虑的配件：**\n\n1. **闪光灯配件** — 您已经购买了 Godox V1 闪光灯，可以考虑 Godox 官方硬质保护盒来保护闪光灯，或者 Think Tank Photo 的软质便携袋。\n\n2. **外部电池** — 您在对话中提到需要为 Sony A7R IV 充电的移动电源，建议 Anker PowerCore 20000 PD（20,000mAh，支持 USB-C PD 快充），可为此设备充电 3-4 次。\n\n3. **镜头清洁套装** — 您拥有 Sony 24-70mm f/2.8 镜头，建议配备专用超细纤维布、镜头清洁纸巾和镜头清洁液，按照正确方法清洁以避免划痕。\n\n4. **相机包** — 对话中您提到想升级相机包，Peak Design、Lowepro 或 MindShift Gear 都有为索尼相机设计的款式，可根据您的背负方式（双肩包、斜挎包）和携带器材数量选择。\n\n如果您能告诉我更多关于您目前的具体需求（例如主要拍摄题材、预算等），我可以给出更有针对性的建议。",
+      "ground_truth": "The user would prefer suggestions of Sony-compatible accessories or high-quality photography gear that can enhance their photography experience. They may not prefer suggestions of other brands' equipment or low-quality gear.",
+      "question_type": "single-session-preference",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0.02531645569620253,
+      "bleu_score": 0.018867924528301886,
+      "bleu1": 0.018867924528301886,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_555dfb94"
+      ]
+    },
+    {
+      "question": "Can you recommend some recent publications or conferences that I might find interesting?",
+      "answer": "The user would prefer suggestions related to recent research papers, articles, or conferences that focus on artificial intelligence in healthcare, particularly those that involve deep learning for medical image analysis. They would not be interested in general AI topics or those unrelated to healthcare.",
+      "response": "根据记忆文件中的信息，您（对话中的用户）主要对以下领域感兴趣：\n\n**研究兴趣方向：**\n- 多智能体强化学习（Multi-agent reinforcement learning）\n- 多模态强化学习（Multimodal reinforcement learning）\n- 将AI用于环境可持续发展（塑料废物清理、生态系统监测等）\n- 机器人与自主系统（Robotics and Autonomous Systems）\n\n**您关注的研究者和机构：**\n- Dr. Stefano V Aldrich（爱丁堡大学），其研究方向与您的目标高度契合\n\n**您曾在陈述中提到希望投稿的AI顶会：**\n- NeurIPS、CVPR、ICML、ICLR、ICCV\n\n**推荐您关注的近期出版物和会议：**\n\n**会议（按您提到的领域）：**\n- **NeurIPS**（神经信息处理系统大会）- 多智能体RL、强化学习\n- **ICLR**（国际学习表征大会）- 深度学习、RL，特别是ICLR近年有多智能体系统的优秀论文\n- **ICML**（国际机器学习大会）- RL和多智能体系统的重镇\n- **CVPR**（计算机视觉与模式识别大会）- 多模态学习、视觉导航\n- **CoRL**（机器人学习大会）- 机器人RL，与您的环境机器人方向高度相关\n- **IROS**（智能机器人与系统国际会议）- 自主系统、机器人应用\n\n**建议关注的出版渠道：**\n- 爱丁堡大学 informatics 学院（ANC、CISA、IPAB）相关研究组发表的论文\n- 特别是 Dr. Stefano V Aldrich 所在实验室的近期 publications\n\n**环境AI应用方向可关注：**\n- 机器人强化学习在环境监测/清理中的应用论文\n- 多智能体系统在生态监测中的应用（如无人机群监测）",
+      "prediction": "根据记忆文件中的信息，您（对话中的用户）主要对以下领域感兴趣：\n\n**研究兴趣方向：**\n- 多智能体强化学习（Multi-agent reinforcement learning）\n- 多模态强化学习（Multimodal reinforcement learning）\n- 将AI用于环境可持续发展（塑料废物清理、生态系统监测等）\n- 机器人与自主系统（Robotics and Autonomous Systems）\n\n**您关注的研究者和机构：**\n- Dr. Stefano V Aldrich（爱丁堡大学），其研究方向与您的目标高度契合\n\n**您曾在陈述中提到希望投稿的AI顶会：**\n- NeurIPS、CVPR、ICML、ICLR、ICCV\n\n**推荐您关注的近期出版物和会议：**\n\n**会议（按您提到的领域）：**\n- **NeurIPS**（神经信息处理系统大会）- 多智能体RL、强化学习\n- **ICLR**（国际学习表征大会）- 深度学习、RL，特别是ICLR近年有多智能体系统的优秀论文\n- **ICML**（国际机器学习大会）- RL和多智能体系统的重镇\n- **CVPR**（计算机视觉与模式识别大会）- 多模态学习、视觉导航\n- **CoRL**（机器人学习大会）- 机器人RL，与您的环境机器人方向高度相关\n- **IROS**（智能机器人与系统国际会议）- 自主系统、机器人应用\n\n**建议关注的出版渠道：**\n- 爱丁堡大学 informatics 学院（ANC、CISA、IPAB）相关研究组发表的论文\n- 特别是 Dr. Stefano V Aldrich 所在实验室的近期 publications\n\n**环境AI应用方向可关注：**\n- 机器人强化学习在环境监测/清理中的应用论文\n- 多智能体系统在生态监测中的应用（如无人机群监测）",
+      "ground_truth": "The user would prefer suggestions related to recent research papers, articles, or conferences that focus on artificial intelligence in healthcare, particularly those that involve deep learning for medical image analysis. They would not be interested in general AI topics or those unrelated to healthcare.",
+      "question_type": "single-session-preference",
+      "llm_score": 0,
+      "correct": false,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_d87a6ef8"
+      ]
+    },
+    {
+      "question": "Can you suggest a hotel for my upcoming trip to Miami?",
+      "answer": "The user would prefer suggestions of hotels in Miami that offer great views, possibly of the ocean or the city skyline, and have unique features such as a rooftop pool or a hot tub on the balcony. They may not prefer suggestions of basic or budget hotels without these features.",
+      "response": "根据我对记忆文件的全面搜索，我没有找到任何关于您迈阿密旅行的信息。记忆文件中包含的内容涉及：西雅图酒店预订、拉斯维加斯打包建议、亚利桑那州行程规划、键盘推荐、书籍推荐等话题，但没有任何与迈阿密相关的内容。\n\n因此，我无法根据您的记忆为您推荐迈阿密的酒店。您可以告诉我更多关于您的旅行偏好（比如预算、入住日期、想要的设施等），我可以帮您做一般性的推荐。",
+      "prediction": "根据我对记忆文件的全面搜索，我没有找到任何关于您迈阿密旅行的信息。记忆文件中包含的内容涉及：西雅图酒店预订、拉斯维加斯打包建议、亚利桑那州行程规划、键盘推荐、书籍推荐等话题，但没有任何与迈阿密相关的内容。\n\n因此，我无法根据您的记忆为您推荐迈阿密的酒店。您可以告诉我更多关于您的旅行偏好（比如预算、入住日期、想要的设施等），我可以帮您做一般性的推荐。",
+      "ground_truth": "The user would prefer suggestions of hotels in Miami that offer great views, possibly of the ocean or the city skyline, and have unique features such as a rooftop pool or a hot tub on the balcony. They may not prefer suggestions of basic or budget hotels without these features.",
+      "question_type": "single-session-preference",
+      "llm_score": 0,
+      "correct": false,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_d586e9cd"
+      ]
+    },
+    {
+      "question": "Which three events happened in the order from first to last: the day I helped my friend prepare the nursery, the day I helped my cousin pick out stuff for her baby shower, and the day I ordered a customized phone case for my friend's birthday?",
+      "answer": "First, I helped my friend prepare the nursery, then I helped my cousin pick out stuff for her baby shower, and lastly, I ordered a customized phone case for my friend's birthday.",
+      "response": "根据记忆文件中的时间信息，三个事件按时间顺序排列如下：\n\n1. **2023年2月5日（周日）** — 帮助朋友准备婴儿房（nursery），花了一整个下午在 Buy Buy Baby 购物\n2. **2023年2月10日（周五）** — 帮助表姐挑选 baby shower 的东西，在 Target 购买了尿布、湿巾和婴儿监控器\n3. **2023年2月20日（周一）** — 为朋友的生日订购了定制手机壳",
+      "prediction": "根据记忆文件中的时间信息，三个事件按时间顺序排列如下：\n\n1. **2023年2月5日（周日）** — 帮助朋友准备婴儿房（nursery），花了一整个下午在 Buy Buy Baby 购物\n2. **2023年2月10日（周五）** — 帮助表姐挑选 baby shower 的东西，在 Target 购买了尿布、湿巾和婴儿监控器\n3. **2023年2月20日（周一）** — 为朋友的生日订购了定制手机壳",
+      "ground_truth": "First, I helped my friend prepare the nursery, then I helped my cousin pick out stuff for her baby shower, and lastly, I ordered a customized phone case for my friend's birthday.",
+      "question_type": "temporal-reasoning",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0.04545454545454546,
+      "bleu_score": 0.03526313438557121,
+      "bleu1": 0.03526313438557121,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_3e9fce53_1",
+        "answer_3e9fce53_2",
+        "answer_3e9fce53_3"
+      ]
+    },
+    {
+      "question": "How many weeks ago did I meet up with my aunt and receive the crystal chandelier?",
+      "answer": 4,
+      "response": "Error: groundTruth.toLowerCase is not a function",
+      "prediction": "Error: groundTruth.toLowerCase is not a function",
+      "ground_truth": 4,
+      "question_type": "temporal-reasoning",
+      "llm_score": 0,
+      "correct": false,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_0b4a8adc_1"
+      ]
+    },
+    {
+      "question": "How many months have passed since I participated in two charity events in a row, on consecutive days?",
+      "answer": 2,
+      "response": "Error: groundTruth.toLowerCase is not a function",
+      "prediction": "Error: groundTruth.toLowerCase is not a function",
+      "ground_truth": 2,
+      "question_type": "temporal-reasoning",
+      "llm_score": 0,
+      "correct": false,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_4bfcc250_4",
+        "answer_4bfcc250_3",
+        "answer_4bfcc250_2",
+        "answer_4bfcc250_1"
+      ]
+    },
+    {
+      "question": "What was my personal best time in the charity 5K run?",
+      "answer": "25 minutes and 50 seconds (or 25:50)",
+      "response": "根据记忆文件中的信息，您在慈善5K跑的个人最好成绩是 **25分50秒**。\n\n这个成绩记录在2023年5月30日的对话中，您当时提到正在为另一场慈善5K跑做准备，希望能打破25分50秒的个人最好成绩。",
+      "prediction": "根据记忆文件中的信息，您在慈善5K跑的个人最好成绩是 **25分50秒**。\n\n这个成绩记录在2023年5月30日的对话中，您当时提到正在为另一场慈善5K跑做准备，希望能打破25分50秒的个人最好成绩。",
+      "ground_truth": "25 minutes and 50 seconds (or 25:50)",
+      "question_type": "knowledge-update",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0,
+      "bleu_score": 0,
+      "bleu1": 0,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_a25d4a91_1",
+        "answer_a25d4a91_2"
+      ]
+    },
+    {
+      "question": "How many Korean restaurants have I tried in my city?",
+      "answer": "four",
+      "response": "根据记忆文件中的对话记录，你在与 AI 的交流中提到过自己尝试过韩国餐厅的经历。\n\n在 **2023年9月30日** 的对话中，你表示：\"我已经尝试过 **四家** 不同的韩国餐厅\"（\"I've tried four different ones so far\"），并希望获得更多推荐。\n\n在更早的 **2023年8月11日** 的对话中，你提到当时尝试过 **三家** 韩国餐厅，并具体描述了：\n- 一家提供美味石锅拌饭（bibimbap）的餐厅\n- 一家提供辣泡菜汤（kimchi jjigae）的餐厅\n- 一家提供独特甜薯面版辣炒年糕（japchae）的餐厅\n\n由于这两次对话发生在不同日期，你可能是在不同时间段内统计的餐厅数量。根据最新的记录，你尝试过 **4家** 韩国餐厅。",
+      "prediction": "根据记忆文件中的对话记录，你在与 AI 的交流中提到过自己尝试过韩国餐厅的经历。\n\n在 **2023年9月30日** 的对话中，你表示：\"我已经尝试过 **四家** 不同的韩国餐厅\"（\"I've tried four different ones so far\"），并希望获得更多推荐。\n\n在更早的 **2023年8月11日** 的对话中，你提到当时尝试过 **三家** 韩国餐厅，并具体描述了：\n- 一家提供美味石锅拌饭（bibimbap）的餐厅\n- 一家提供辣泡菜汤（kimchi jjigae）的餐厅\n- 一家提供独特甜薯面版辣炒年糕（japchae）的餐厅\n\n由于这两次对话发生在不同日期，你可能是在不同时间段内统计的餐厅数量。根据最新的记录，你尝试过 **4家** 韩国餐厅。",
+      "ground_truth": "four",
+      "question_type": "knowledge-update",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0.07142857142857142,
+      "bleu_score": 0.037037037037037035,
+      "bleu1": 0.037037037037037035,
+      "bleu2": 0,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_3f9693b7_1",
+        "answer_3f9693b7_2"
+      ]
+    },
+    {
+      "question": "Where did Rachel move to after her recent relocation?",
+      "answer": "the suburbs",
+      "response": "根据记忆文件中的信息，Rachel 在最近一次搬迁中搬回了郊区（suburbs），但文件中没有具体说明是哪个郊区或城市。\n\n具体背景如下：\n- 在 2023/05/24 的对话中，Rachel 刚搬到了芝加哥（Chicago）的新公寓\n- 在 2023/05/27 的对话中，用户的友人 Rachel \"just moved back to the suburbs again\"（刚又搬回了郊区）\n\n因此 Rachel 最新的搬迁目的地是\"郊区\"，但未指明具体是哪个郊区或城市。",
+      "prediction": "根据记忆文件中的信息，Rachel 在最近一次搬迁中搬回了郊区（suburbs），但文件中没有具体说明是哪个郊区或城市。\n\n具体背景如下：\n- 在 2023/05/24 的对话中，Rachel 刚搬到了芝加哥（Chicago）的新公寓\n- 在 2023/05/27 的对话中，用户的友人 Rachel \"just moved back to the suburbs again\"（刚又搬回了郊区）\n\n因此 Rachel 最新的搬迁目的地是\"郊区\"，但未指明具体是哪个郊区或城市。",
+      "ground_truth": "the suburbs",
+      "question_type": "knowledge-update",
+      "llm_score": 1,
+      "correct": true,
+      "f1_score": 0.18181818181818182,
+      "bleu_score": 0.1,
+      "bleu1": 0.1,
+      "bleu2": 0.047619047619047616,
+      "bleu3": 0,
+      "bleu4": 0,
+      "evidence_session_ids": [
+        "answer_0b1a0942_1",
+        "answer_0b1a0942_2"
+      ]
+    }
+  ]
+}
