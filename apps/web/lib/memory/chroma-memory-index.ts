@@ -3,7 +3,7 @@ import {
   rawMessageToMemoryRecord,
   type RawMessage,
 } from "@openloomi/indexeddb";
-import { ChromaVectorStore } from "@openloomi/rag/chroma-store";
+import { ChromaVectorStore } from "@openloomi/rag";
 import type { DocumentChunk } from "@openloomi/rag/vector-service";
 
 const DEFAULT_RAW_MESSAGES_COLLECTION = "openloomi_raw_messages";

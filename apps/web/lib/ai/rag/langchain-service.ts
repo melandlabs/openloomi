@@ -118,7 +118,7 @@ async function getConfiguredVectorStore() {
     return null;
   }
 
-  const { getChromaVectorStore } = await import("@openloomi/rag/chroma-store");
+  const { getChromaVectorStore } = await import("@openloomi/rag");
   return getChromaVectorStore({
     url: process.env.CHROMA_URL,
     collectionName:
