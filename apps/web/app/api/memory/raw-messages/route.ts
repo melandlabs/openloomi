@@ -4,6 +4,7 @@ import {
   getRawMessageStorageBackend,
   isRawMessageStorageAvailable,
 } from "@/lib/memory/raw-message-store";
+import { upsertRawMessagesToChroma } from "@/lib/memory/chroma-memory-index";
 import { AppError } from "@openloomi/shared/errors";
 import {
   queryMemoryWithFallback,
@@ -216,6 +217,7 @@ export async function POST(request: NextRequest) {
           createdAt: message.createdAt ?? now,
         })) as RawMessage[];
         const ids = await manager.storeMessages(normalized);
+        await upsertRawMessagesToChroma(normalized);
         return Response.json({
           success: true,
           stored: ids.length,
@@ -268,6 +270,17 @@ export async function POST(request: NextRequest) {
       case "updateEmbeddings": {
         const updates = Array.isArray(body.updates) ? body.updates : [];
         const updated = await manager.updateMessageEmbeddings(updates, userId);
+        const updatedMessages = (
+          await Promise.all(
+            updates.map(async (update: { messageId?: unknown }) => {
+              if (typeof update.messageId !== "string") {
+                return null;
+              }
+              return manager.getMessageById(update.messageId);
+            }),
+          )
+        ).filter((message): message is RawMessage => message !== null);
+        await upsertRawMessagesToChroma(updatedMessages);
         return Response.json({ success: true, updated });
       }
 

@@ -1,10 +1,15 @@
-import { inArray, sql } from "drizzle-orm";
-import { bot, insightEmbeddings } from "@/lib/db/schema";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { bot, insight, insightEmbeddings } from "@/lib/db/schema";
 import type { DrizzleDB } from "@/lib/db/types";
 import {
   buildInsightEmbeddingDocument,
   type InsightEmbeddingTextInput,
 } from "@/lib/insights/embedding";
+import {
+  isInsightChromaEnabled,
+  type ChromaInsightVectorInput,
+  upsertInsightsToChroma,
+} from "@/lib/memory/chroma-memory-index";
 
 export type InsightEmbeddingCandidate = {
   insightId: string;
@@ -29,6 +34,11 @@ export interface UpsertInsightEmbeddingsResult {
   skippedNoProvider: boolean;
   failed: boolean;
   error?: string;
+}
+
+export interface SyncInsightEmbeddingsToChromaResult {
+  scanned: number;
+  synced: number;
 }
 
 function emptyResult(requested: number): UpsertInsightEmbeddingsResult {
@@ -60,6 +70,88 @@ export function getInsightEmbeddingModelName(): string {
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function parseEmbeddingVector(value: string): number[] | null {
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+    const vector = parsed.map((item) => Number(item));
+    return vector.every((item) => Number.isFinite(item)) ? vector : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function syncInsightEmbeddingsToChroma({
+  db,
+  userId,
+  botId,
+  limit = 200,
+  includeArchived = false,
+}: {
+  db: DrizzleDB;
+  userId?: string;
+  botId?: string;
+  limit?: number;
+  includeArchived?: boolean;
+}): Promise<SyncInsightEmbeddingsToChromaResult> {
+  if (!isInsightChromaEnabled()) {
+    return { scanned: 0, synced: 0 };
+  }
+
+  const whereClauses = [isNull(insight.pendingDeletionAt)];
+  if (userId) {
+    whereClauses.push(eq(insightEmbeddings.userId, userId));
+  }
+  if (botId) {
+    whereClauses.push(eq(insightEmbeddings.botId, botId));
+  }
+  if (!includeArchived) {
+    whereClauses.push(eq(insight.isArchived, false));
+  }
+
+  const rows = await db
+    .select({
+      insightId: insightEmbeddings.insightId,
+      userId: insightEmbeddings.userId,
+      botId: insightEmbeddings.botId,
+      content: insightEmbeddings.content,
+      contentHash: insightEmbeddings.contentHash,
+      embedding: insightEmbeddings.embedding,
+      embeddingModel: insightEmbeddings.embeddingModel,
+      embeddingDimensions: insightEmbeddings.embeddingDimensions,
+      title: insight.title,
+      description: insight.description,
+      taskLabel: insight.taskLabel,
+      importance: insight.importance,
+      urgency: insight.urgency,
+      platform: insight.platform,
+      account: insight.account,
+      time: insight.time,
+      archived: insight.isArchived,
+    })
+    .from(insightEmbeddings)
+    .innerJoin(insight, eq(insight.id, insightEmbeddings.insightId))
+    .where(and(...whereClauses))
+    .orderBy(desc(insightEmbeddings.updatedAt))
+    .limit(Math.min(1_000, Math.max(1, Math.floor(limit))));
+
+  const synced = await upsertInsightsToChroma(
+    rows
+      .map((row: any) => ({
+        ...row,
+        embedding: parseEmbeddingVector(row.embedding),
+      }))
+      .filter(
+        (row: any): row is ChromaInsightVectorInput =>
+          Array.isArray(row.embedding) && row.embedding.length > 0,
+      ),
+  );
+
+  return { scanned: rows.length, synced };
 }
 
 export async function upsertInsightEmbeddingsForCandidates({
@@ -211,6 +303,35 @@ export async function upsertInsightEmbeddingsForCandidates({
           updatedAt: now,
         },
       });
+
+    try {
+      await upsertInsightsToChroma(
+        changedDocuments.map((document, index) => {
+          const embedding = embeddingVectors[index];
+          return {
+            insightId: document.insightId,
+            userId: document.userId,
+            botId: document.botId,
+            content: document.content,
+            contentHash: document.contentHash,
+            embedding,
+            embeddingModel: modelName,
+            embeddingDimensions: embedding.length,
+            title: document.payload.title,
+            description: document.payload.description,
+            taskLabel: document.payload.taskLabel,
+            importance: document.payload.importance,
+            urgency: document.payload.urgency,
+            platform: document.payload.platform,
+            account: document.payload.account,
+            time: document.payload.time,
+            archived: (document.payload as any).isArchived,
+          };
+        }),
+      );
+    } catch (error) {
+      console.warn("[InsightEmbedding] Failed to sync Chroma index:", error);
+    }
 
     result.embedded = rows.length;
     return result;

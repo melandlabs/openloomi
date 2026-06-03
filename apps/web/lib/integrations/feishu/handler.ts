@@ -19,6 +19,7 @@ import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 import { getCloudAuthToken } from "@/lib/auth/token-manager";
 import { handleAgentRuntime } from "@/lib/ai/runtime/shared";
 import { getRawMessageManager } from "@/lib/memory/raw-message-store";
+import { upsertRawMessagesToChroma } from "@/lib/memory/chroma-memory-index";
 import {
   getInsightEmbeddingModelName,
   hasInsightEmbeddingProviderConfig,
@@ -39,6 +40,18 @@ import { FeishuAdapter } from "@openloomi/integrations/feishu";
 import { createTaskSession } from "@/lib/files/workspace/sessions";
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+
+const FEISHU_UNIFIED_MEMORY_SEARCH_ONLY =
+  process.env.FEISHU_UNIFIED_MEMORY_SEARCH_ONLY === "true";
+const FEISHU_UNIFIED_MEMORY_EXCLUDED_TOOLS = [
+  "chatInsight",
+  "searchKnowledgeBase",
+  "getFullDocumentContent",
+  "listKnowledgeBaseDocuments",
+  "getRawMessages",
+  "searchRawMessages",
+  "searchMemoryPath",
+];
 
 type FeishuCredentials = {
   appId?: string;
@@ -164,6 +177,7 @@ async function storeFeishuRawMessage(input: {
       input.authToken,
     );
     await manager.storeMessage(messageWithEmbedding);
+    await upsertRawMessagesToChroma([messageWithEmbedding]);
     console.log("[Feishu] Stored raw message", {
       messageId: input.messageId,
       role: input.role,
@@ -737,6 +751,9 @@ export async function handleFeishuInboundMessage(
           language: insightSettings?.language ?? null,
           abortController,
           workDir,
+          ...(FEISHU_UNIFIED_MEMORY_SEARCH_ONLY
+            ? { excludeTools: FEISHU_UNIFIED_MEMORY_EXCLUDED_TOOLS }
+            : {}),
           ...(token && {
             modelConfig: {
               apiKey: token,

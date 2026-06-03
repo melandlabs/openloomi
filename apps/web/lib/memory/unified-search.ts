@@ -4,6 +4,10 @@ import {
   getRawMessageManager,
   isRawMessageStorageAvailable,
 } from "@/lib/memory/raw-message-store";
+import {
+  isRawMessageChromaEnabled,
+  searchRawMessagesWithChroma,
+} from "@/lib/memory/chroma-memory-index";
 import type { RawMessage } from "@openloomi/indexeddb";
 
 export type UnifiedMemorySearchSource = "memory" | "insights" | "knowledge";
@@ -328,28 +332,56 @@ async function searchRawMemoryHybrid(input: {
   ).flat();
 
   let semanticResults: UnifiedMemorySearchResult[] = [];
-  if (
-    typeof manager.searchMessagesSemantically === "function" &&
-    hasEmbeddingProviderConfig(input.authToken)
-  ) {
+  if (hasEmbeddingProviderConfig(input.authToken)) {
     const queryEmbedding = await embedQuery(input.query, input.authToken);
     if (queryEmbedding.length > 0) {
-      semanticResults = (
-        await Promise.all(
-          filters.map((filter) =>
-            manager.searchMessagesSemantically?.({
-              userId: input.userId,
-              queryEmbedding,
-              limit: input.limit,
-              threshold: input.threshold,
-              ...filter,
-            }),
-          ),
+      if (isRawMessageChromaEnabled()) {
+        try {
+          semanticResults = (
+            await Promise.all(
+              filters.map((filter) => {
+                const botId = "botId" in filter ? filter.botId : undefined;
+                return searchRawMessagesWithChroma({
+                  userId: input.userId,
+                  queryEmbedding,
+                  limit: input.limit,
+                  threshold: input.threshold,
+                  botId,
+                });
+              }),
+            )
+          )
+            .flat()
+            .map(toMemoryResult);
+        } catch (error) {
+          console.warn(
+            "[UnifiedMemory] Chroma raw message search failed; falling back to database search:",
+            error,
+          );
+        }
+      }
+
+      if (
+        semanticResults.length === 0 &&
+        typeof manager.searchMessagesSemantically === "function"
+      ) {
+        semanticResults = (
+          await Promise.all(
+            filters.map((filter) =>
+              manager.searchMessagesSemantically?.({
+                userId: input.userId,
+                queryEmbedding,
+                limit: input.limit,
+                threshold: input.threshold,
+                ...filter,
+              }),
+            ),
+          )
         )
-      )
-        .flat()
-        .filter(isRawMemorySemanticResult)
-        .map(toMemoryResult);
+          .flat()
+          .filter(isRawMemorySemanticResult)
+          .map(toMemoryResult);
+      }
     }
   }
 

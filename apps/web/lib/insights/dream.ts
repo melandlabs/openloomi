@@ -5,6 +5,7 @@ import { normalizeInsight } from "@/lib/db/serialization";
 import { buildInsightEmbeddingDocument } from "@/lib/insights/embedding";
 import {
   getInsightEmbeddingModelName,
+  syncInsightEmbeddingsToChroma,
   upsertInsightEmbeddingsForCandidates,
   type InsightEmbeddingCandidate,
   type UpsertInsightEmbeddingsResult,
@@ -33,6 +34,7 @@ export interface RunInsightEmbeddingDreamResult {
   embedded: number;
   dryRun: boolean;
   reasons: Record<InsightEmbeddingDreamReason, number>;
+  chromaSynced?: number;
   upsert?: UpsertInsightEmbeddingsResult;
 }
 
@@ -144,13 +146,31 @@ export async function runInsightEmbeddingDream(
     }
   }
 
-  if (input.dryRun || candidates.length === 0) {
+  if (input.dryRun) {
     return {
       scanned: rows.length,
       selected: candidates.length,
       embedded: 0,
       dryRun: Boolean(input.dryRun),
       reasons,
+    };
+  }
+
+  if (candidates.length === 0) {
+    const chromaSync = await syncInsightEmbeddingsToChroma({
+      db,
+      userId: input.userId,
+      botId: input.botId,
+      limit: scanLimit,
+      includeArchived,
+    });
+    return {
+      scanned: rows.length,
+      selected: candidates.length,
+      embedded: 0,
+      dryRun: false,
+      reasons,
+      chromaSynced: chromaSync.synced,
     };
   }
 
@@ -161,6 +181,13 @@ export async function runInsightEmbeddingDream(
       authToken: input.authToken,
     },
   });
+  const chromaSync = await syncInsightEmbeddingsToChroma({
+    db,
+    userId: input.userId,
+    botId: input.botId,
+    limit: scanLimit,
+    includeArchived,
+  });
 
   return {
     scanned: rows.length,
@@ -168,6 +195,7 @@ export async function runInsightEmbeddingDream(
     embedded: upsert.embedded,
     dryRun: false,
     reasons,
+    chromaSynced: chromaSync.synced,
     upsert,
   };
 }

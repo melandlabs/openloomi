@@ -1,6 +1,10 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, insight, insightEmbeddings } from "@/lib/db";
 import { isTauriMode } from "@/lib/env/constants";
+import {
+  isInsightChromaEnabled,
+  searchInsightsWithChroma,
+} from "@/lib/memory/chroma-memory-index";
 
 const DEFAULT_LIMIT = 10;
 const DEFAULT_THRESHOLD = 0.7;
@@ -294,6 +298,29 @@ export async function searchInsightsSemantically(
   const limit = clampLimit(input.limit);
   const threshold = clampThreshold(input.threshold);
   const queryEmbedding = await embedQuery(query, input.authToken);
+
+  if (isInsightChromaEnabled()) {
+    try {
+      const results = await searchInsightsWithChroma({
+        userId: input.userId,
+        queryEmbedding,
+        limit,
+        threshold,
+        botIds: input.botIds,
+        includeArchived: input.includeArchived,
+      });
+
+      return results.map((result) => ({
+        type: "insight",
+        ...result,
+      }));
+    } catch (error) {
+      console.warn(
+        "[InsightSearch] Chroma insight search failed; falling back to database search:",
+        error,
+      );
+    }
+  }
 
   if (isTauriMode()) {
     return searchInsightEmbeddingsWithSqlite({

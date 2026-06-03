@@ -10,6 +10,7 @@ import {
 import { runWeeklyInsightMaintenance } from "@/lib/insights/maintenance";
 import { runInsightEmbeddingDream } from "@/lib/insights/dream";
 import { getRawMessageManager } from "@/lib/memory/raw-message-store";
+import { upsertRawMessagesToChroma } from "@/lib/memory/chroma-memory-index";
 import {
   getInsightEmbeddingModelName,
   hasInsightEmbeddingProviderConfig,
@@ -142,11 +143,19 @@ export async function runRawMessageEmbeddingDreamIfDue(
     embedDocuments: (documents) => embeddings.embedDocuments(documents),
     limit: 100,
   });
+  const recentMessages = await manager.queryMessages({
+    userId: schedulerUserId,
+    includeArchived: false,
+    pageSize: 200,
+    reverse: true,
+  });
+  const chromaSynced = await upsertRawMessagesToChroma(recentMessages);
 
   console.log("[LocalScheduler] Raw message embedding dream completed", {
     scanned: result.scanned,
     selected: result.selected,
     embedded: result.embedded,
+    chromaSynced,
     reasons: result.reasons,
   });
 
