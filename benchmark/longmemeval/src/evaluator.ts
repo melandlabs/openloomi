@@ -235,6 +235,9 @@ export class LongMemEvalEvaluator {
       return checkpoint;
     }
 
+    // Convert answer to string (may be number in dataset)
+    const answerStr = String(entry.answer);
+
     try {
       const response = await this.queryMemory(entry);
 
@@ -242,10 +245,10 @@ export class LongMemEvalEvaluator {
       let isCorrect = false;
       try {
         isCorrect =
-          (await evaluateLLMJudge(entry.question, entry.answer, response)) ===
+          (await evaluateLLMJudge(entry.question, answerStr, response)) ===
           1;
         console.log(
-          `[Q] ${isCorrect ? "✓" : "✗"} Q: "${entry.question.substring(0, 60)}..." GT: "${entry.answer}"`,
+          `[Q] ${isCorrect ? "✓" : "✗"} Q: "${entry.question.substring(0, 60)}..." GT: "${answerStr}"`,
         );
         if (!isCorrect) {
           console.log(`    Agent response: "${response.substring(0, 300)}..."`);
@@ -257,14 +260,14 @@ export class LongMemEvalEvaluator {
       }
 
       // Calculate additional metrics
-      const metrics = calculateMetrics(response, entry.answer);
+      const metrics = calculateMetrics(response, answerStr);
 
       const pred: Prediction = {
         question: entry.question,
-        answer: entry.answer,
+        answer: answerStr,
         response,
         prediction: response,
-        ground_truth: entry.answer,
+        ground_truth: answerStr,
         question_type: entry.question_type,
         llm_score: isCorrect ? 1 : 0,
         correct: isCorrect,
@@ -288,10 +291,10 @@ export class LongMemEvalEvaluator {
 
       const pred: Prediction = {
         question: entry.question,
-        answer: entry.answer,
+        answer: answerStr,
         response: `Error: ${errorMessage}`,
         prediction: `Error: ${errorMessage}`,
-        ground_truth: entry.answer,
+        ground_truth: answerStr,
         question_type: entry.question_type,
         llm_score: 0,
         correct: false,
@@ -314,17 +317,26 @@ export class LongMemEvalEvaluator {
    */
   private async queryMemory(entry: LongMemEvalEntry): Promise<string> {
     const memoryPath = `~/.openloomi/data/memory/bench/longmemeval_${entry.question_id}/`;
+
+    // Build date context for temporal reasoning
+    const dateRange =
+      entry.haystack_dates.length > 0
+        ? `${Math.min(...entry.haystack_dates.map((d) => new Date(d).getTime())) > 0 ? entry.haystack_dates.sort()[0] : "unknown"} to ${entry.haystack_dates.sort()[entry.haystack_dates.length - 1]}`
+        : "unknown";
+
     const prompt = `Please answer the following question based on the information in your memory files.
 
 Question: ${entry.question}
+${entry.question_date ? `(This question was asked on: ${entry.question_date})` : ""}
 
 IMPORTANT INSTRUCTIONS:
 1. Search your memory files in the directory: ${memoryPath}
 2. Read ALL .md files in this directory and its subdirectories to find the answer
 3. The memory files contain conversation history between two people
 4. Pay attention to specific facts mentioned - the question is asking about the other person's life/experiences
-5. Provide a specific answer based on the evidence in the memories
-6. If you cannot find the answer, say you don't know rather than guessing`;
+5. The conversation memories span from ${dateRange}. When answering temporal questions (e.g., "how many weeks ago", "how many months ago"), use the DATE shown at the top of each memory file (the session date), NOT today's date. Calculate the time difference from THAT session date.
+6. Provide a specific answer based on the evidence in the memories
+7. If you cannot find the answer, say you don't know rather than guessing`;
 
     return await callAgentApi(prompt, this.port, this.authToken);
   }
