@@ -56,6 +56,12 @@ export {
 } from "./sqlite-vec-store";
 
 export {
+  ChromaVectorStore,
+  getChromaVectorStore,
+  resetChromaVectorStore,
+} from "./chroma-store";
+
+export {
   getPGVectorStore,
   processDocumentWithPGVector,
   searchWithPGVector,

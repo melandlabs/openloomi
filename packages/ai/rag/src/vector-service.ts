@@ -11,6 +11,8 @@
 
 export { SQLiteVecStore } from "./sqlite-vec-store";
 export { getSQLiteVecStore, resetSQLiteVecStore } from "./sqlite-vec-store";
+export { ChromaVectorStore } from "./chroma-store";
+export { getChromaVectorStore, resetChromaVectorStore } from "./chroma-store";
 
 export {
   getPGVectorStore,

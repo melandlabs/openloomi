@@ -10,6 +10,7 @@
     "./vector-service": "./src/vector-service.ts",
     "./parsers": "./src/parsers.ts",
     "./universal-embeddings": "./src/universal-embeddings.ts",
+    "./chroma-store": "./src/chroma-store.ts",
     "./sqlite-vec-store": "./src/sqlite-vec-store.ts",
     "./pgvector-store": "./src/pgvector-store.ts"
   },
@@ -23,6 +24,7 @@
     "pdfjs-dist": "^4.9.155",
     "jszip": "^3.10.1",
     "better-sqlite3": "^11.7.0",
+    "chromadb": "^3.4.3",
     "sqlite-vec": "^0.1.6-alpha.5",
     "pg": "^8.13.1",
     "openai": "^4.85.2"
