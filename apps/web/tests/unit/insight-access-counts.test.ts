@@ -25,6 +25,12 @@ const schema = vi.hoisted(() => ({
     configKey: "config.configKey",
     configValue: "config.configValue",
   },
+  rssSubscriptions: {
+    _name: "rss_subscriptions",
+    id: "rss.id",
+    userId: "rss.userId",
+    catalogId: "rss.catalogId",
+  },
 }));
 
 vi.mock("@/lib/db/schema", () => schema);
