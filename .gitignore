@@ -128,3 +128,6 @@ Note.md
 **/*.app/Contents/Resources/_up_/
 
 # pnpm-lock.yaml - kept in version control for reproducible builds
+
+# Large dataset files (downloaded separately)
+benchmark/longmemeval/dataset/*.json

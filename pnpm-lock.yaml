@@ -902,6 +902,25 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  benchmark/longmemeval:
+    dependencies:
+      '@ai-sdk/openai-compatible':
+        specifier: ^1.0.0
+        version: 1.0.36(zod@4.4.3)
+      ai:
+        specifier: ^5.0.0-beta.6
+        version: 5.0.0-beta.6(zod@4.4.3)
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
+    devDependencies:
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
   packages/ai:
     dependencies:
       '@ai-sdk/openai-compatible':
@@ -13149,6 +13168,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.0-beta.2(zod@4.3.6)
       zod: 4.3.6
 
+  '@ai-sdk/gateway@1.0.0-beta.3(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0-beta.1
+      '@ai-sdk/provider-utils': 3.0.0-beta.2(zod@4.4.3)
+      zod: 4.4.3
+
   '@ai-sdk/gateway@2.0.82(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 2.0.1
@@ -13182,6 +13207,14 @@ snapshots:
       eventsource-parser: 3.0.8
       zod: 4.3.6
       zod-to-json-schema: 3.25.2(zod@4.3.6)
+
+  '@ai-sdk/provider-utils@3.0.0-beta.2(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0-beta.1
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.8
+      zod: 4.4.3
+      zod-to-json-schema: 3.25.2(zod@4.4.3)
 
   '@ai-sdk/provider-utils@3.0.23(zod@4.3.6)':
     dependencies:
@@ -18897,6 +18930,14 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.0-beta.2(zod@4.3.6)
       '@opentelemetry/api': 1.9.0
       zod: 4.3.6
+
+  ai@5.0.0-beta.6(zod@4.4.3):
+    dependencies:
+      '@ai-sdk/gateway': 1.0.0-beta.3(zod@4.4.3)
+      '@ai-sdk/provider': 2.0.0-beta.1
+      '@ai-sdk/provider-utils': 3.0.0-beta.2(zod@4.4.3)
+      '@opentelemetry/api': 1.9.0
+      zod: 4.4.3
 
   ai@5.0.179(zod@4.3.6):
     dependencies:

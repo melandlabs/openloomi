@@ -1,0 +1,19 @@
+{
+  "name": "@openloomi/benchmark-longmemeval",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "benchmark": "tsx src/index.ts",
+    "lint": "node ../../node_modules/@biomejs/biome/bin/biome lint",
+    "lint:fix": "node ../../node_modules/@biomejs/biome/bin/biome lint --write --unsafe"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^1.0.0",
+    "ai": "^5.0.0-beta.6",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5.6.3"
+  }
+}
