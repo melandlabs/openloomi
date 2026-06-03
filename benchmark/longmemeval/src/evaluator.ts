@@ -245,8 +245,7 @@ export class LongMemEvalEvaluator {
       let isCorrect = false;
       try {
         isCorrect =
-          (await evaluateLLMJudge(entry.question, answerStr, response)) ===
-          1;
+          (await evaluateLLMJudge(entry.question, answerStr, response)) === 1;
         console.log(
           `[Q] ${isCorrect ? "✓" : "✗"} Q: "${entry.question.substring(0, 60)}..." GT: "${answerStr}"`,
         );
