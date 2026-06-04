@@ -175,6 +175,10 @@ const zh = {
   templateCharacter: {
     ...baseZh.templateCharacter,
   },
+  meetingSummary: {
+    selectAudioFile: "选择音频文件",
+    loadFailed: "文件加载失败，请重试。",
+  },
 };
 
 export default zh;

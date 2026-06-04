@@ -185,6 +185,10 @@ const en = {
   templateCharacter: {
     ...baseEn.templateCharacter,
   },
+  meetingSummary: {
+    selectAudioFile: "Select audio file",
+    loadFailed: "Failed to load files. Please try again.",
+  },
 };
 
 export default en;

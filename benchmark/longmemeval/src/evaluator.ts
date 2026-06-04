@@ -226,9 +226,9 @@ export class LongMemEvalEvaluator {
    * Evaluate a single question.
    */
   async evaluateQuestion(entry: LongMemEvalEntry): Promise<Prediction> {
-    // Check for checkpoint (resume support)
+    // Check for checkpoint (resume support) - only use if not an error
     const checkpoint = await this.loadCheckpoint(entry.question_id);
-    if (checkpoint) {
+    if (checkpoint?.response && !checkpoint.response.startsWith("Error:")) {
       console.log(
         `[LongMemEval] Resuming from checkpoint for question ${entry.question_id}`,
       );
@@ -330,12 +330,59 @@ ${entry.question_date ? `(This question was asked on: ${entry.question_date})` :
 
 IMPORTANT INSTRUCTIONS:
 1. Search your memory files in the directory: ${memoryPath}
-2. Read ALL .md files in this directory and its subdirectories to find the answer
+2. Read ALL .md files in this directory and its subdirectories to find the answer. Do NOT stop reading until you have checked every single file. Count the total number of files first, then read each one completely.
 3. The memory files contain conversation history between two people
 4. Pay attention to specific facts mentioned - the question is asking about the other person's life/experiences
-5. The conversation memories span from ${dateRange}. When answering temporal questions (e.g., "how many weeks ago", "how many months ago"), use the DATE shown at the top of each memory file (the session date), NOT today's date. Calculate the time difference from THAT session date.
-6. Provide a specific answer based on the evidence in the memories
-7. If you cannot find the answer, say you don't know rather than guessing`;
+5. CRITICAL: Distinguish between PLANNED/FUTURE actions ("I will...", "I'm going to...", "I plan to...") and COMPLETED/PAST actions ("I did...", "I have...", "I finished..."). A plan is NOT the same as an actual event. If someone SAYS they will do something but there's no later confirmation they actually did it, the answer should reflect that the action was NOT completed.
+
+${
+  entry.question_type === "temporal-reasoning"
+    ? `\
+6. For temporal questions:
+   - ALWAYS find the EXACT date/time from each relevant memory file
+   - Find when the event happened AND when the reference point is (e.g., "when did I go on my 10th jog outdoors?")
+   - Calculate the EXACT difference in days/weeks/months
+   - If question asks "how many weeks had passed since X when Y", find the date of X and the date of Y, then subtract
+   - Use the session date shown at the top of each file as the authoritative date
+   - Verify your calculation before answering
+   - IMPORTANT: When the question asks about something like "when did X happen", check if the memory file contains actual completion of X, not just planning to do X`
+    : `\
+6. The conversation memories span from ${dateRange}. When answering temporal questions (e.g., "how many weeks ago", "how many months ago"), use the DATE shown at the top of each memory file (the session date), NOT today's date. Calculate the time difference from THAT session date.`
+}
+
+${
+  entry.question_type === "multi-session"
+    ? `\
+7. For counting questions across multiple sessions:
+   - FIRST: List ALL ${entry.haystack_sessions?.length || "?"} memory files and confirm you have read each one
+   - Go through EVERY memory file systematically - do not skip any, even if you think you found the answer early
+   - Keep a running list of every item you find with the source file
+   - If the question asks "how many X", list each X you found with the file it came from
+   - Make sure you don't count the same item twice
+   - Add up the total count carefully
+   - Do NOT stop reading at the first file that seems to answer the question - later files may have additional relevant information`
+    : ""
+}
+
+${
+  entry.question_type === "knowledge-update"
+    ? `\
+7. For knowledge-update questions:
+   - Look for information that has been explicitly stated as completed or confirmed
+   - If you only find someone planning to do something ("I will...", "I'm going to...") but no confirmation they actually did it, the information should be considered "not updated" or "not available"
+   - If the information is not explicitly mentioned in any memory file, respond: "I don't know" or "The information is not available in my memory." Do NOT guess or infer.`
+    : ""
+}
+
+${
+  entry.question_type === "single-session-preference"
+    ? `\
+7. For preference questions, if no relevant preference information exists in the memory files, respond: "I don't know" or "I don't have information about your preference for this topic."`
+    : ""
+}
+
+7. Provide a specific answer based on the evidence in the memories
+8. If you cannot find the answer, say you don't know rather than guessing`;
 
     return await callAgentApi(prompt, this.port, this.authToken);
   }

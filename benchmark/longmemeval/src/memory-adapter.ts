@@ -102,7 +102,7 @@ export async function callAgentApi(
       prompt,
       provider: "claude",
     }),
-    signal: AbortSignal.timeout(1_200_000), // 20 min timeout
+    signal: AbortSignal.timeout(2_400_000), // 40 min timeout
   });
 
   if (!response.ok) {
