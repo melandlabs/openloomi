@@ -13,7 +13,7 @@ import {
 import {
   getConfiguredEmbeddingModelName,
   getEmbeddingProviderType,
-} from "@openloomi/rag/embedding-provider";
+} from "@openloomi/rag";
 
 export type InsightEmbeddingCandidate = {
   insightId: string;
