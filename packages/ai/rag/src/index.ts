@@ -34,6 +34,7 @@ export {
 export { UniversalEmbeddings } from "./universal-embeddings";
 export {
   CloudEmbeddingProvider,
+  getConfiguredEmbeddingModelName,
   getConfiguredEmbeddingProvider,
   getEmbeddingProviderType,
   type CloudEmbeddingProviderOptions,
@@ -41,6 +42,10 @@ export {
   type EmbeddingProviderFactoryOptions,
   type EmbeddingProviderType,
 } from "./embedding-provider";
+export {
+  LocalTransformersEmbeddingProvider,
+  type LocalTransformersEmbeddingProviderOptions,
+} from "./local-transformers-embedding-provider";
 
 export {
   TextLoader,

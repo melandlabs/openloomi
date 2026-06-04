@@ -16,7 +16,10 @@ import {
   hasInsightEmbeddingProviderConfig,
 } from "@/lib/insights/embedding-service";
 import { UniversalEmbeddings } from "@openloomi/rag/universal-embeddings";
-import { runRawMessageEmbeddingDream } from "@openloomi/indexeddb";
+import {
+  runRawMessageEmbeddingDream,
+  type RawMessage,
+} from "@openloomi/indexeddb";
 
 const INSIGHT_EMBEDDING_DREAM_INTERVAL = 24 * 60 * 60 * 1000;
 const RAW_MESSAGE_EMBEDDING_DREAM_INTERVAL = 24 * 60 * 60 * 1000;
@@ -71,6 +74,42 @@ async function persistInsightEmbeddingDreamRunAt(userId: string, runAt: Date) {
   await updateUserInsightSettings(userId, {
     lastInsightEmbeddingDreamRunAt: runAt,
   });
+}
+
+function getEmbeddingDimensions(message: RawMessage): number {
+  return message.embeddingDimensions ?? message.embedding?.length ?? 0;
+}
+
+function filterRawMessagesForCurrentEmbeddingModel(
+  messages: RawMessage[],
+  embeddingModel: string,
+  targetDimensions?: number,
+): RawMessage[] {
+  const currentModelMessages = messages.filter((message) => {
+    const dimensions = getEmbeddingDimensions(message);
+    return (
+      Array.isArray(message.embedding) &&
+      message.embedding.length > 0 &&
+      message.embeddingModel === embeddingModel &&
+      dimensions > 0 &&
+      dimensions === message.embedding.length
+    );
+  });
+
+  const firstWithDimensions = currentModelMessages.find(
+    (message) => getEmbeddingDimensions(message) > 0,
+  );
+  const resolvedDimensions =
+    targetDimensions ??
+    (firstWithDimensions ? getEmbeddingDimensions(firstWithDimensions) : 0);
+
+  if (!resolvedDimensions) {
+    return currentModelMessages;
+  }
+
+  return currentModelMessages.filter(
+    (message) => getEmbeddingDimensions(message) === resolvedDimensions,
+  );
 }
 
 // Dream keeps insight embeddings complete over time without blocking normal insight writes.
@@ -137,9 +176,10 @@ export async function runRawMessageEmbeddingDreamIfDue(
   console.log("[LocalScheduler] Running raw message embedding dream");
   const manager = await getRawMessageManager();
   const embeddings = new UniversalEmbeddings(authToken);
+  const embeddingModel = getInsightEmbeddingModelName();
   const result = await runRawMessageEmbeddingDream(manager as any, {
     userId: schedulerUserId,
-    embeddingModel: getInsightEmbeddingModelName(),
+    embeddingModel,
     embedDocuments: (documents) => embeddings.embedDocuments(documents),
     limit: 100,
   });
@@ -149,12 +189,19 @@ export async function runRawMessageEmbeddingDreamIfDue(
     pageSize: 200,
     reverse: true,
   });
-  const chromaSynced = await upsertRawMessagesToChroma(recentMessages);
+  const chromaReadyMessages = filterRawMessagesForCurrentEmbeddingModel(
+    recentMessages,
+    embeddingModel,
+    embeddings.getDimensions(),
+  );
+  const chromaSynced = await upsertRawMessagesToChroma(chromaReadyMessages);
 
   console.log("[LocalScheduler] Raw message embedding dream completed", {
     scanned: result.scanned,
     selected: result.selected,
     embedded: result.embedded,
+    chromaCandidates: recentMessages.length,
+    chromaReady: chromaReadyMessages.length,
     chromaSynced,
     reasons: result.reasons,
   });

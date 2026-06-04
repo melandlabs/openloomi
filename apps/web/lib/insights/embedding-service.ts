@@ -10,6 +10,10 @@ import {
   type ChromaInsightVectorInput,
   upsertInsightsToChroma,
 } from "@/lib/memory/chroma-memory-index";
+import {
+  getConfiguredEmbeddingModelName,
+  getEmbeddingProviderType,
+} from "@openloomi/rag/embedding-provider";
 
 export type InsightEmbeddingCandidate = {
   insightId: string;
@@ -56,6 +60,10 @@ function emptyResult(requested: number): UpsertInsightEmbeddingsResult {
 }
 
 export function hasInsightEmbeddingProviderConfig(authToken?: string): boolean {
+  if (getEmbeddingProviderType() === "local") {
+    return true;
+  }
+
   return Boolean(
     authToken ||
     process.env.OPENAI_EMBEDDINGS_API_KEY ||
@@ -65,7 +73,7 @@ export function hasInsightEmbeddingProviderConfig(authToken?: string): boolean {
 }
 
 export function getInsightEmbeddingModelName(): string {
-  return process.env.LLM_EMBEDDING_MODEL || "text-embedding-3-small";
+  return getConfiguredEmbeddingModelName();
 }
 
 function toErrorMessage(error: unknown): string {

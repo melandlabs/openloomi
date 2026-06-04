@@ -5,6 +5,8 @@
  * specific cloud API or local model runtime.
  */
 
+import { LocalTransformersEmbeddingProvider } from "./local-transformers-embedding-provider";
+
 const DEFAULT_CLOUD_EMBEDDING_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_CLOUD_EMBEDDING_MODEL = "text-embedding-3-small";
 const DEFAULT_EMBEDDING_BATCH_SIZE = 10;
@@ -35,12 +37,22 @@ export function getConfiguredEmbeddingProvider(
   const provider = getEmbeddingProviderType();
 
   if (provider === "local") {
-    throw new Error(
-      "Local embedding provider is not implemented yet. Use EMBEDDING_PROVIDER=cloud for now.",
-    );
+    return new LocalTransformersEmbeddingProvider();
   }
 
   return new CloudEmbeddingProvider(options);
+}
+
+export function getConfiguredEmbeddingModelName(): string {
+  if (getEmbeddingProviderType() === "local") {
+    return (
+      process.env.LOCAL_EMBEDDING_MODEL || "Xenova/all-MiniLM-L6-v2"
+    ).trim();
+  }
+
+  return (
+    process.env.LLM_EMBEDDING_MODEL || DEFAULT_CLOUD_EMBEDDING_MODEL
+  ).trim();
 }
 
 export function getEmbeddingProviderType(): EmbeddingProviderType {
