@@ -99,6 +99,22 @@ abstract class BaseCLBenchEvaluator {
   protected buildPrompt(entry: CLBenchEntry): string {
     const parts: string[] = [];
 
+    // Detect user message language from the last user message
+    let userLanguage = "English";
+    for (let i = entry.messages.length - 1; i >= 0; i--) {
+      const msg = entry.messages[i];
+      if (msg.role === "user") {
+        // Simple language detection based on character ranges
+        const hasChinese = /[\u4e00-\u9fff]/.test(msg.content);
+        const hasJapanese = /[\u3040-\u309f\u30a0-\u30ff]/.test(msg.content);
+        const hasKorean = /[\uac00-\ud7af]/.test(msg.content);
+        if (hasChinese) userLanguage = "Chinese";
+        else if (hasJapanese) userLanguage = "Japanese";
+        else if (hasKorean) userLanguage = "Korean";
+        break;
+      }
+    }
+
     for (const msg of entry.messages) {
       if (msg.role === "system") {
         parts.push(`System: ${msg.content}`);
@@ -107,6 +123,11 @@ abstract class BaseCLBenchEvaluator {
       }
       // assistant messages are the context, not added as prompt
     }
+
+    // Add language instruction to ensure response matches context language
+    parts.push(
+      `\n\nImportant: Respond in ${userLanguage} language, matching the language of the user message above.`,
+    );
 
     return parts.join("\n\n");
   }

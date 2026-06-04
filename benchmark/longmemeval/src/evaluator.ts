@@ -226,9 +226,13 @@ export class LongMemEvalEvaluator {
    * Evaluate a single question.
    */
   async evaluateQuestion(entry: LongMemEvalEntry): Promise<Prediction> {
-    // Check for checkpoint (resume support) - only use if not an error
+    // Check for checkpoint (resume support) - skip if error or incorrect
     const checkpoint = await this.loadCheckpoint(entry.question_id);
-    if (checkpoint?.response && !checkpoint.response.startsWith("Error:")) {
+    if (
+      checkpoint?.response &&
+      checkpoint.correct &&
+      !checkpoint.response.startsWith("Error:")
+    ) {
       console.log(
         `[LongMemEval] Resuming from checkpoint for question ${entry.question_id}`,
       );

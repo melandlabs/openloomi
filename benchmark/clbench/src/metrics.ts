@@ -4,16 +4,11 @@
  * Includes rubric evaluation with GPT-5.1 judge, BLEU, F1 score.
  */
 
-import { generateText } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { RUBRIC_EVALUATION_PROMPT } from "./prompts";
-import type { RubricResult } from "./types.js";
+import type { RubricResult } from "./types";
 
-const openrouter = createOpenAICompatible({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
-  name: "openrouter",
-});
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 /**
  * Calculate F1 score between prediction and ground truth.
@@ -157,11 +152,6 @@ export async function evaluateRubrics(
 ): Promise<RubricResult[]> {
   const results: RubricResult[] = [];
 
-  // Build context summary for rubric evaluation
-  const contextSummary = messages
-    .map((m) => `${m.role}: ${m.content}`)
-    .join("\n");
-
   for (const rubric of rubrics) {
     const prompt = RUBRIC_EVALUATION_PROMPT.replace("{rubric}", rubric).replace(
       "{response}",
@@ -174,28 +164,60 @@ export async function evaluateRubrics(
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const { text } = await generateText({
-          model: openrouter("qwen/qwen3.7-max"),
-          system:
-            "You are an impartial judge evaluating responses. Always respond with valid JSON.",
-          prompt,
+        // Use direct fetch to call OpenRouter API
+        const fetchResponse = await fetch(OPENROUTER_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "qwen/qwen3.7-plus",
+            messages: [
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+            max_tokens: 1000,
+          }),
+          signal: AbortSignal.timeout(60000),
         });
+
+        if (!fetchResponse.ok) {
+          throw new Error(`OpenRouter API error: ${fetchResponse.status}`);
+        }
+
+        const data = await fetchResponse.json();
+        const text =
+          data.choices?.[0]?.message?.content ||
+          data.choices?.[0]?.message?.reasoning ||
+          "";
+
+        // Try to extract JSON from the response (in case there's extra text)
+        let jsonStr = text;
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[0];
+        }
 
         // Parse JSON response
         let result: RubricJudgeResult;
         try {
-          result = JSON.parse(text);
+          result = JSON.parse(jsonStr);
         } catch {
           // Try to extract passed/failed from text
           const lowerText = text.toLowerCase();
           if (
             lowerText.includes('"passed": true') ||
-            lowerText.includes('"passed":true')
+            lowerText.includes('"passed":true') ||
+            lowerText.includes('"passed" : true')
           ) {
             passed = true;
           } else if (
             lowerText.includes('"passed": false') ||
-            lowerText.includes('"passed":false')
+            lowerText.includes('"passed":false') ||
+            lowerText.includes('"passed" : false')
           ) {
             passed = false;
           } else if (
@@ -206,15 +228,15 @@ export async function evaluateRubrics(
           } else {
             passed = false;
           }
-          reasoning = text.slice(0, 200);
+          reasoning = `Could not parse JSON. Raw response: ${text.slice(0, 100)}`;
           break;
         }
 
         passed = result.passed ?? false;
         reasoning = result.reasoning ?? "";
 
-        // Only count as success if we got a clear result
-        if (result.passed !== undefined) {
+        // Only count as success if we got BOTH fields
+        if (result.passed !== undefined && result.reasoning !== undefined) {
           break;
         }
       } catch (error) {

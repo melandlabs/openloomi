@@ -21,13 +21,14 @@ EVALUATION INSTRUCTIONS:
 2. Analyze whether the response satisfies it
 3. Consider if the response demonstrates understanding of the context provided
 4. Be strict but fair - the response must genuinely satisfy the criterion to be marked as passed
-5. Think step by step about whether the criterion is met
 
-First, provide your reasoning (2-3 sentences), then respond with valid JSON containing:
-- "passed": true/false
-- "reasoning": your explanation
+CRITICAL: You MUST return a valid JSON object with BOTH fields:
+{
+  "passed": true or false,
+  "reasoning": "your explanation (2-3 sentences)"
+}
 
-Return ONLY the JSON object, nothing else.`;
+Do NOT return anything other than the JSON object. The JSON must be valid and parseable.`;
 
 // Low reasoning effort prompt for CL-bench (professional tasks)
 export const CLBENCH_REASONING_EFFORT = "low";
