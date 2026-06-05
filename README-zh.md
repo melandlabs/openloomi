@@ -8,7 +8,7 @@
 <a href="./README.md">English</a> | <a href="./README-zh.md">简体中文</a>
 </p>
 
-**你的 AI 工作伙伴，记住所有工作细节。**
+**OpenLoomi 是一个能一直记住你的 AI。**
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-4B4B4B?logo=linux&logoColor=white)](https://openloomi.ai)
 [![License](https://img.shields.io/badge/License-Apache%202.0-F8D52A?logo=apache)](https://www.apache.org/licenses/LICENSE-2.0)
@@ -21,17 +21,19 @@
 
 ## 什么是 OpenLoomi？
 
-OpenLoomi 是一个开源的 AI 工作空间，运行在你的桌面上。它连接你已经在使用的工具——消息应用、邮件、日历、文档、项目追踪器——并为你的人、项目和决策构建一个自我进化的记忆系统。
+OpenLoomi 是一个开源的 AI 工作空间，运行在你的桌面上。它连接你已经在使用的工具——消息应用、邮件、日历、文档、项目追踪器——并为你的人、项目和决策构建一个**全域上下文图谱**。
+
+不同于 ChatGPT 或 Claude——那些 AI 每次对话结束就忘了——OpenLoomi 的记忆会自己"长出来"，完全可见、可审计。
 
 ## 功能特性
 
-|     | 功能模块                                                   | 功能说明                                                                                                                                                                                                                       |
-| --- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 🧠  | **[自我进化记忆](https://openloomi.ai/docs/memory)**       | 短→中→长期记忆，配合渐进式遗忘引擎——按访问频率、时效性和重要性评分，自动摘要归档，可回溯数月前的上下文                                                                                                                         |
-| 🔌  | **[平台连接器](https://openloomi.ai/docs/connectors)**     | Telegram、WhatsApp、微信、钉钉、飞书、Gmail、Google Calendar、Outlook、Google Docs、X/Twitter、Instagram、LinkedIn、Facebook Messenger、Jira、HubSpot、Asana、iMessage、QQ、RSS — 消息、邮件、日历事件、文档和项目更新持续流入 |
-| ⏰  | **[自动化](https://openloomi.ai/docs/automation)**         | 支持 cron 表达式、间隔或一次性触发的定时任务 — 智能体驱动执行，配合超时恢复和执行历史                                                                                                                                          |
-| 🖥️  | **[安全隐私](https://openloomi.ai/docs/privacy-security)** | Windows、macOS、Linux 原生桌面应用 — 本地优先存储（IndexedDB + SQLite），AES-256 加密，数据不离开你的设备                                                                                                                      |
-| 🔗  | **[开源 Skills](https://openloomi.ai/docs/skills)**        | OpenLoomi Skills 完全开源，可集成到任何 AI Agent — Claude Code、Codex、OpenClaw、Hermes 等                                                                                                                                     |
+|     | 功能模块                                                   | 功能说明                                                                                                                                                                                                                                 |
+| --- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🧠  | **[全域上下文图谱](https://openloomi.ai/docs/memory)**     | 短→中→长期记忆，记忆会自己"长出来"——完全可见、可审计，始终记住你数月前的人、项目、决策                                                                                                                                                   |
+| 🔌  | **[平台连接器](https://openloomi.ai/docs/connectors)**     | Telegram、WhatsApp、微信、钉钉、飞书、Gmail、Google Calendar、Outlook、Google Docs、X/Twitter、Instagram、LinkedIn、Facebook Messenger、Jira、HubSpot、Asana、iMessage、QQ、RSS — 消息、邮件、日历事件、文档和项目更新持续自动更新上下文 |
+| ⏰  | **[主动任务](https://openloomi.ai/docs/automation)**       | 智能任务执行，预判你的需求——不只是定时自动化，而是情境感知的行动，在恰当时机自动发生                                                                                                                                                     |
+| 🖥️  | **[安全便捷](https://openloomi.ai/docs/privacy-security)** | Windows、macOS、Linux 原生桌面应用 — **开箱即用**，安装几分钟就能开始工作，不需要折腾配置；本地优先存储（IndexedDB + SQLite），AES-256 加密，数据不离开你的设备，访问日志可审计                                                          |
+| 🔗  | **[开源 Skills](https://openloomi.ai/docs/skills)**        | OpenLoomi Skills 完全开源，可集成到任何 AI Agent — Claude Code、Codex、OpenClaw、Hermes 等                                                                                                                                               |
 
 <p align="center">
   <img src="screenshots/components.png" alt="架构图" width="100%">
@@ -80,10 +82,10 @@ pnpm tauri:dev
 
 ## 安全隐私
 
-- 本地优先：数据通过 IndexedDB + SQLite 存储在你的设备上
-- AES-256 加密存储数据
-- 绝不使用你的数据进行训练
-- 硬件级隔离处理，无公开网关
+- **本地优先**：断网也能用，数据不发送外部服务器
+- **可审计**：你可以查看和审计数据访问的时间、原因
+- **AES-256 加密**存储数据
+- **硬件级隔离处理，无公开网关**
 
 ## 反馈
 
