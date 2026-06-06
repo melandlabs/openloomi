@@ -370,9 +370,7 @@ export async function searchInsightsSemantically(
                   ? metadata.platform
                   : null,
               account:
-                typeof metadata.account === "string"
-                  ? metadata.account
-                  : null,
+                typeof metadata.account === "string" ? metadata.account : null,
               time:
                 typeof metadata.time === "number"
                   ? new Date(metadata.time)

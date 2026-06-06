@@ -220,23 +220,19 @@ describe("sqlite raw message search", () => {
       expect(
         (
           directDb
-            .prepare(
-              "SELECT COUNT(*) AS count FROM raw_messages_vec_d3",
-            )
+            .prepare("SELECT COUNT(*) AS count FROM raw_messages_vec_d3")
             .get() as { count: number }
         ).count,
       ).toBe(1);
 
-      directDb.prepare("DELETE FROM raw_messages WHERE message_id = ?").run(
-        "direct-delete",
-      );
+      directDb
+        .prepare("DELETE FROM raw_messages WHERE message_id = ?")
+        .run("direct-delete");
 
       expect(
         (
           directDb
-            .prepare(
-              "SELECT COUNT(*) AS count FROM raw_messages_vec_d3",
-            )
+            .prepare("SELECT COUNT(*) AS count FROM raw_messages_vec_d3")
             .get() as { count: number }
         ).count,
       ).toBe(0);

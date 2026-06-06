@@ -128,9 +128,8 @@ async function getConfiguredVectorStore() {
       });
     }
 
-    const { getSQLiteVecStore } = await import(
-      "@openloomi/rag/sqlite-vec-store"
-    );
+    const { getSQLiteVecStore } =
+      await import("@openloomi/rag/sqlite-vec-store");
     return await getSQLiteVecStore(TAURI_DB_PATH, undefined, {
       collectionName:
         process.env.SQLITE_VEC_RAG_COLLECTION || "openloomi_rag_chunks",

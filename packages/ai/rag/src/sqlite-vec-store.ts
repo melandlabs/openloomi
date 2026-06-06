@@ -53,8 +53,7 @@ export class SQLiteVecStore implements IVectorStore {
     _schemaModule?: SchemaModule,
     options: SQLiteVecStoreOptions = {},
   ) {
-    this.collectionName =
-      options.collectionName || DEFAULT_COLLECTION_NAME;
+    this.collectionName = options.collectionName || DEFAULT_COLLECTION_NAME;
     const safeCollectionName = sanitizeIdentifier(this.collectionName);
     this.recordsTableName = `openloomi_vec_${safeCollectionName}_records`;
     this.vectorTablePrefix = `openloomi_vec_${safeCollectionName}_d`;
@@ -229,9 +228,7 @@ export class SQLiteVecStore implements IVectorStore {
           this.deleteVector(record.dimensions, record.id);
         }
         this.db
-          .prepare(
-            `DELETE FROM ${this.recordsTableName} WHERE document_id = ?`,
-          )
+          .prepare(`DELETE FROM ${this.recordsTableName} WHERE document_id = ?`)
           .run(documentId);
       },
     );
@@ -243,9 +240,7 @@ export class SQLiteVecStore implements IVectorStore {
     timestampField = "timestamp",
   ): Promise<number> {
     const records = this.db
-      .prepare(
-        `SELECT id, metadata, dimensions FROM ${this.recordsTableName}`,
-      )
+      .prepare(`SELECT id, metadata, dimensions FROM ${this.recordsTableName}`)
       .all() as Array<{
       id: string;
       metadata: string | null;
@@ -411,8 +406,7 @@ export async function getSQLiteVecStore(
   schemaModule?: SchemaModule,
   options: SQLiteVecStoreOptions = {},
 ): Promise<SQLiteVecStore> {
-  const collectionName =
-    options.collectionName || DEFAULT_COLLECTION_NAME;
+  const collectionName = options.collectionName || DEFAULT_COLLECTION_NAME;
   const instanceKey = `${dbPath}::${collectionName}`;
   let instance = storeInstances.get(instanceKey);
   if (!instance) {

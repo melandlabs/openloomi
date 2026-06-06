@@ -579,9 +579,7 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
             )
             .all(olderThan, userId)
         : this.db
-            .prepare(
-              "SELECT message_id FROM raw_messages WHERE created_at < ?",
-            )
+            .prepare("SELECT message_id FROM raw_messages WHERE created_at < ?")
             .all(olderThan)
     ) as Array<{ message_id: string }>;
     const result = userId
@@ -1134,7 +1132,9 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
 
   private getVectorTableName(dimensions: number): string {
     if (!Number.isInteger(dimensions) || dimensions <= 0) {
-      throw new Error(`Invalid raw message embedding dimensions: ${dimensions}`);
+      throw new Error(
+        `Invalid raw message embedding dimensions: ${dimensions}`,
+      );
     }
     return `raw_messages_vec_d${dimensions}`;
   }

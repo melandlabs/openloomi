@@ -232,9 +232,9 @@ export async function syncInsightEmbeddingsToSQLiteVec({
         embedding: parseEmbeddingVector(row.embedding),
       }))
       .filter(
-        (row: any): row is Parameters<
-          typeof upsertInsightsToSQLiteVec
-        >[0][number] =>
+        (
+          row: any,
+        ): row is Parameters<typeof upsertInsightsToSQLiteVec>[0][number] =>
           Array.isArray(row.embedding) && row.embedding.length > 0,
       ),
   );
@@ -447,7 +447,10 @@ export async function upsertInsightEmbeddingsForCandidates({
         }),
       );
     } catch (error) {
-      console.warn("[InsightEmbedding] Failed to sync sqlite-vec index:", error);
+      console.warn(
+        "[InsightEmbedding] Failed to sync sqlite-vec index:",
+        error,
+      );
     }
 
     result.embedded = rows.length;

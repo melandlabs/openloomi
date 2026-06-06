@@ -45,8 +45,7 @@ export function isInsightSQLiteVecEnabled(): boolean {
 }
 
 async function getInsightSQLiteVecStore() {
-  const { getSQLiteVecStore } =
-    await import("@openloomi/rag/sqlite-vec-store");
+  const { getSQLiteVecStore } = await import("@openloomi/rag/sqlite-vec-store");
   return await getSQLiteVecStore(TAURI_DB_PATH, undefined, {
     collectionName:
       process.env.SQLITE_VEC_INSIGHTS_COLLECTION || "openloomi_insights",
