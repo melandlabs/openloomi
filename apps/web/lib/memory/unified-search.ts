@@ -9,6 +9,7 @@ import {
   searchRawMessagesWithChroma,
 } from "@/lib/memory/chroma-memory-index";
 import type { RawMessage } from "@openloomi/indexeddb";
+import { getEmbeddingProviderType } from "@openloomi/rag";
 
 export type UnifiedMemorySearchSource = "memory" | "insights" | "knowledge";
 
@@ -134,6 +135,9 @@ function toKnowledgeResult(result: {
 }
 
 function hasEmbeddingProviderConfig(authToken?: string): boolean {
+  if (getEmbeddingProviderType() === "local") {
+    return true;
+  }
   return Boolean(
     authToken ||
     process.env.OPENAI_EMBEDDINGS_API_KEY ||
@@ -332,6 +336,7 @@ async function searchRawMemoryHybrid(input: {
   ).flat();
 
   let semanticResults: UnifiedMemorySearchResult[] = [];
+  let semanticBackendHandled = false;
   if (hasEmbeddingProviderConfig(input.authToken)) {
     const queryEmbedding = await embedQuery(input.query, input.authToken);
     if (queryEmbedding.length > 0) {
@@ -353,6 +358,12 @@ async function searchRawMemoryHybrid(input: {
           )
             .flat()
             .map(toMemoryResult);
+          semanticBackendHandled = true;
+          console.log("[UnifiedMemory] Raw message semantic search completed", {
+            backend: "chroma",
+            dimensions: queryEmbedding.length,
+            count: semanticResults.length,
+          });
         } catch (error) {
           console.warn(
             "[UnifiedMemory] Chroma raw message search failed; falling back to database search:",
@@ -362,7 +373,7 @@ async function searchRawMemoryHybrid(input: {
       }
 
       if (
-        semanticResults.length === 0 &&
+        !semanticBackendHandled &&
         typeof manager.searchMessagesSemantically === "function"
       ) {
         semanticResults = (

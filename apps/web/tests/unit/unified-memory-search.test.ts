@@ -4,6 +4,8 @@ const {
   getRawMessageManagerMock,
   isRawMessageStorageAvailableMock,
   queryMessagesMock,
+  isRawMessageChromaEnabledMock,
+  searchRawMessagesWithChromaMock,
   searchInsightsSemanticallyMock,
   searchMessagesSemanticallyMock,
   searchSimilarChunksMock,
@@ -12,6 +14,8 @@ const {
   getRawMessageManagerMock: vi.fn(),
   isRawMessageStorageAvailableMock: vi.fn(),
   queryMessagesMock: vi.fn(),
+  isRawMessageChromaEnabledMock: vi.fn(),
+  searchRawMessagesWithChromaMock: vi.fn(),
   searchInsightsSemanticallyMock: vi.fn(),
   searchMessagesSemanticallyMock: vi.fn(),
   searchSimilarChunksMock: vi.fn(),
@@ -21,6 +25,11 @@ const {
 vi.mock("@/lib/memory/raw-message-store", () => ({
   getRawMessageManager: getRawMessageManagerMock,
   isRawMessageStorageAvailable: isRawMessageStorageAvailableMock,
+}));
+
+vi.mock("@/lib/memory/chroma-memory-index", () => ({
+  isRawMessageChromaEnabled: isRawMessageChromaEnabledMock,
+  searchRawMessagesWithChroma: searchRawMessagesWithChromaMock,
 }));
 
 vi.mock("@openloomi/rag/universal-embeddings", () => ({
@@ -53,6 +62,8 @@ describe("unified memory search", () => {
     getRawMessageManagerMock.mockReset();
     isRawMessageStorageAvailableMock.mockReset();
     queryMessagesMock.mockReset();
+    isRawMessageChromaEnabledMock.mockReset();
+    searchRawMessagesWithChromaMock.mockReset();
     searchInsightsSemanticallyMock.mockReset();
     searchMessagesSemanticallyMock.mockReset();
     searchSimilarChunksMock.mockReset();
@@ -64,6 +75,8 @@ describe("unified memory search", () => {
       searchMessagesSemantically: searchMessagesSemanticallyMock,
     });
     queryMessagesMock.mockResolvedValue([]);
+    isRawMessageChromaEnabledMock.mockReturnValue(false);
+    searchRawMessagesWithChromaMock.mockResolvedValue([]);
     searchInsightsSemanticallyMock.mockResolvedValue([]);
     searchMessagesSemanticallyMock.mockResolvedValue([]);
     searchSimilarChunksMock.mockResolvedValue([]);
@@ -284,5 +297,29 @@ describe("unified memory search", () => {
         matchType: "keyword",
       },
     });
+  });
+
+  it("does not use database semantic fallback when Chroma returns no matches", async () => {
+    isRawMessageStorageAvailableMock.mockReturnValue(true);
+    isRawMessageChromaEnabledMock.mockReturnValue(true);
+
+    const output = await searchUnifiedMemory({
+      userId: "user-1",
+      query: "no chroma match",
+      sources: ["memory"],
+      limit: 5,
+      threshold: 0.7,
+      authToken: "token",
+    });
+
+    expect(searchRawMessagesWithChromaMock).toHaveBeenCalledWith({
+      userId: "user-1",
+      queryEmbedding: [0.1, 0.2],
+      limit: 5,
+      threshold: 0.7,
+      botId: undefined,
+    });
+    expect(searchMessagesSemanticallyMock).not.toHaveBeenCalled();
+    expect(output.results).toEqual([]);
   });
 });
