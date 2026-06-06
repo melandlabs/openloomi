@@ -64,7 +64,7 @@ export class SQLiteVecStore implements IVectorStore {
     this.db.pragma("synchronous = FULL");
 
     try {
-      (sqliteVec as any).load(this.db);
+      sqliteVec.load(this.db);
     } catch (error) {
       this.db.close();
       throw new Error(

@@ -1,4 +1,11 @@
+import { randomUUID } from "node:crypto";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { SQLiteRawMessageManager } from "../../../../packages/sqlite/src/raw-message-manager";
+import type { RawMessage } from "../../../../packages/indexeddb/src/storage";
+import Database from "better-sqlite3";
+import * as sqliteVec from "sqlite-vec";
 import { createRawMessageStorageConformanceSuite } from "../helpers/raw-message-storage-conformance";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -30,7 +37,7 @@ describe("sqlite raw message search", () => {
         userId: "user-1",
         timestamp: 1774500000,
         content: "retention cleanup candidate",
-      } as any);
+      } as RawMessage);
 
       const stored = await storage.getMessageById("default-created-at");
       const nowSeconds = Math.floor(Date.now() / 1000);
@@ -183,6 +190,62 @@ describe("sqlite raw message search", () => {
       expect(results[0]?.similarity).toBeGreaterThan(0.99);
     } finally {
       await storage.close();
+    }
+  });
+
+  it("removes vec0 rows when raw messages are deleted with direct SQL", async () => {
+    const dbPath = join(
+      tmpdir(),
+      `openloomi-raw-message-trigger-${randomUUID()}.db`,
+    );
+    const storage = new SQLiteRawMessageManager({ dbPath });
+    let directDb: Database.Database | undefined;
+    await storage.init();
+    try {
+      await storage.storeMessage({
+        messageId: "direct-delete",
+        platform: "slack",
+        botId: "bot-1",
+        userId: "user-1",
+        timestamp: 1774500000,
+        content: "delete trigger test",
+        embedding: [1, 0, 0],
+        embeddingModel: "model-a",
+        embeddingDimensions: 3,
+        createdAt: 1774500000000,
+      });
+
+      directDb = new Database(dbPath);
+      sqliteVec.load(directDb);
+      expect(
+        (
+          directDb
+            .prepare(
+              "SELECT COUNT(*) AS count FROM raw_messages_vec_d3",
+            )
+            .get() as { count: number }
+        ).count,
+      ).toBe(1);
+
+      directDb.prepare("DELETE FROM raw_messages WHERE message_id = ?").run(
+        "direct-delete",
+      );
+
+      expect(
+        (
+          directDb
+            .prepare(
+              "SELECT COUNT(*) AS count FROM raw_messages_vec_d3",
+            )
+            .get() as { count: number }
+        ).count,
+      ).toBe(0);
+    } finally {
+      if (directDb?.open) {
+        directDb.close();
+      }
+      await storage.close();
+      rmSync(dbPath, { force: true });
     }
   });
 });
