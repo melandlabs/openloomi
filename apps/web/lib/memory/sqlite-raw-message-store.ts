@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import { SQLiteRawMessageManager } from "@openloomi/sqlite";
 import { isTauriMode } from "@/lib/env/constants";
 import { getTauriDbPath } from "@/lib/env/tauri-paths";
+import { isRawMessageChromaEnabled } from "@/lib/memory/chroma-memory-index";
 
 let manager: SQLiteRawMessageManager | null = null;
 
@@ -22,7 +23,10 @@ export async function getSQLiteRawMessageManager(): Promise<SQLiteRawMessageMana
   if (!manager) {
     const dbPath = getTauriDbPath();
     mkdirSync(dirname(dbPath), { recursive: true });
-    manager = new SQLiteRawMessageManager(dbPath);
+    manager = new SQLiteRawMessageManager({
+      dbPath,
+      enableVectorSearch: !isRawMessageChromaEnabled(),
+    });
     await manager.init();
   }
 

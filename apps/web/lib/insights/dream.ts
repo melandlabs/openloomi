@@ -6,6 +6,7 @@ import { buildInsightEmbeddingDocument } from "@/lib/insights/embedding";
 import {
   getInsightEmbeddingModelName,
   syncInsightEmbeddingsToChroma,
+  syncInsightEmbeddingsToSQLiteVec,
   upsertInsightEmbeddingsForCandidates,
   type InsightEmbeddingCandidate,
   type UpsertInsightEmbeddingsResult,
@@ -35,6 +36,7 @@ export interface RunInsightEmbeddingDreamResult {
   dryRun: boolean;
   reasons: Record<InsightEmbeddingDreamReason, number>;
   chromaSynced?: number;
+  sqliteVecSynced?: number;
   upsert?: UpsertInsightEmbeddingsResult;
 }
 
@@ -157,13 +159,22 @@ export async function runInsightEmbeddingDream(
   }
 
   if (candidates.length === 0) {
-    const chromaSync = await syncInsightEmbeddingsToChroma({
-      db,
-      userId: input.userId,
-      botId: input.botId,
-      limit: scanLimit,
-      includeArchived,
-    });
+    const [chromaSync, sqliteVecSync] = await Promise.all([
+      syncInsightEmbeddingsToChroma({
+        db,
+        userId: input.userId,
+        botId: input.botId,
+        limit: scanLimit,
+        includeArchived,
+      }),
+      syncInsightEmbeddingsToSQLiteVec({
+        db,
+        userId: input.userId,
+        botId: input.botId,
+        limit: scanLimit,
+        includeArchived,
+      }),
+    ]);
     return {
       scanned: rows.length,
       selected: candidates.length,
@@ -171,6 +182,7 @@ export async function runInsightEmbeddingDream(
       dryRun: false,
       reasons,
       chromaSynced: chromaSync.synced,
+      sqliteVecSynced: sqliteVecSync.synced,
     };
   }
 
@@ -181,13 +193,22 @@ export async function runInsightEmbeddingDream(
       authToken: input.authToken,
     },
   });
-  const chromaSync = await syncInsightEmbeddingsToChroma({
-    db,
-    userId: input.userId,
-    botId: input.botId,
-    limit: scanLimit,
-    includeArchived,
-  });
+  const [chromaSync, sqliteVecSync] = await Promise.all([
+    syncInsightEmbeddingsToChroma({
+      db,
+      userId: input.userId,
+      botId: input.botId,
+      limit: scanLimit,
+      includeArchived,
+    }),
+    syncInsightEmbeddingsToSQLiteVec({
+      db,
+      userId: input.userId,
+      botId: input.botId,
+      limit: scanLimit,
+      includeArchived,
+    }),
+  ]);
 
   return {
     scanned: rows.length,
@@ -196,6 +217,7 @@ export async function runInsightEmbeddingDream(
     dryRun: false,
     reasons,
     chromaSynced: chromaSync.synced,
+    sqliteVecSynced: sqliteVecSync.synced,
     upsert,
   };
 }

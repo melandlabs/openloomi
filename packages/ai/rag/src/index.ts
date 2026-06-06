@@ -82,6 +82,8 @@ export {
   resetSQLiteVecStore,
   type VectorSearchResult,
   type DocumentChunk,
+  type SQLiteVecStoreOptions,
+  type SchemaModule,
 } from "./sqlite-vec-store";
 
 export {

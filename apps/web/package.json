@@ -227,7 +227,7 @@
     "sharp": "^0.34.5",
     "snoowrap": "^1.23.0",
     "sonner": "^2.0.7",
-    "sqlite-vec": "0.1.7-alpha.2",
+    "sqlite-vec": "^0.1.9",
     "stripe": "^19.1.0",
     "swr": "^2.4.1",
     "tailwind-merge": "^2.5.2",

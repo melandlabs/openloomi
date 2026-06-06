@@ -13,7 +13,7 @@ import {
 import { eq, desc, sql, inArray, asc } from "drizzle-orm";
 import { parseFile } from "@/lib/files/parsers";
 import { randomUUID } from "node:crypto";
-import { isTauriMode } from "@/lib/env";
+import { isTauriMode, TAURI_DB_PATH } from "@/lib/env";
 import { estimateTokens } from "@/lib/ai";
 import { UniversalEmbeddings } from "@openloomi/rag/universal-embeddings";
 import type { DocumentChunk } from "@openloomi/rag/vector-service";
@@ -109,21 +109,39 @@ export function getRAGVectorStoreBackend(): RAGVectorStoreBackend {
 }
 
 export function shouldSkipRAGEmbeddings(explicitSkip = false): boolean {
-  if (explicitSkip) return true;
-  return isTauriMode() && getRAGVectorStoreBackend() !== "chroma";
+  return explicitSkip;
 }
 
 async function getConfiguredVectorStore() {
-  if (getRAGVectorStoreBackend() !== "chroma") {
+  const backend = getRAGVectorStoreBackend();
+  if (backend === "sqlite-vec" && !isTauriMode()) {
     return null;
   }
 
-  const { getChromaVectorStore } = await import("@openloomi/rag");
-  return getChromaVectorStore({
-    url: process.env.CHROMA_URL,
-    collectionName:
-      process.env.CHROMA_RAG_COLLECTION || process.env.CHROMA_COLLECTION,
-  });
+  try {
+    if (backend === "chroma") {
+      const { getChromaVectorStore } = await import("@openloomi/rag");
+      return getChromaVectorStore({
+        url: process.env.CHROMA_URL,
+        collectionName:
+          process.env.CHROMA_RAG_COLLECTION || process.env.CHROMA_COLLECTION,
+      });
+    }
+
+    const { getSQLiteVecStore } = await import(
+      "@openloomi/rag/sqlite-vec-store"
+    );
+    return await getSQLiteVecStore(TAURI_DB_PATH, undefined, {
+      collectionName:
+        process.env.SQLITE_VEC_RAG_COLLECTION || "openloomi_rag_chunks",
+    });
+  } catch (error) {
+    console.warn(
+      `[RAG] ${backend} vector store unavailable; using database fallback:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -282,9 +300,10 @@ export async function processDocument(
     }));
 
     await vectorStore.addChunks(vectorChunks);
-    console.log("[RAG] Added chunks to Chroma vector store", {
+    console.log("[RAG] Added chunks to vector store", {
       documentId: document.id,
       chunks: vectorChunks.length,
+      backend: getRAGVectorStoreBackend(),
     });
   }
 
@@ -370,7 +389,7 @@ export async function searchSimilarChunks(
         };
       });
 
-    console.log("[RAG] Chroma vector search completed", {
+    console.log("[RAG] Vector search completed", {
       query,
       count: filteredResults.length,
       backend: getRAGVectorStoreBackend(),
@@ -549,7 +568,15 @@ export async function deleteDocument(documentId: string): Promise<void> {
  * Delete all documents for a user
  */
 export async function deleteUserDocuments(userId: string): Promise<void> {
+  const documents = await getUserDocuments(userId);
+  const vectorStore = await getConfiguredVectorStore();
+  if (vectorStore) {
+    for (const document of documents) {
+      await vectorStore.deleteDocument(document.id);
+    }
+  }
   await db.delete(ragChunks).where(eq(ragChunks.userId, userId));
+  await db.delete(ragDocuments).where(eq(ragDocuments.userId, userId));
 }
 
 /**

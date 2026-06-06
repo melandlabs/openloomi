@@ -30,7 +30,7 @@
     "openai": "^4.85.2",
     "pdfjs-dist": "^4.9.155",
     "pg": "^8.13.1",
-    "sqlite-vec": "^0.1.6-alpha.5",
+    "sqlite-vec": "^0.1.9",
     "zod": "^4.3.6"
   },
   "devDependencies": {

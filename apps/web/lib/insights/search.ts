@@ -5,6 +5,11 @@ import {
   isInsightChromaEnabled,
   searchInsightsWithChroma,
 } from "@/lib/memory/chroma-memory-index";
+import {
+  isInsightSQLiteVecEnabled,
+  searchInsightsWithSQLiteVec,
+} from "@/lib/memory/sqlite-vector-index";
+import { getEmbeddingProviderType } from "@openloomi/rag";
 
 const DEFAULT_LIMIT = 10;
 const DEFAULT_THRESHOLD = 0.7;
@@ -59,6 +64,10 @@ type InsightEmbeddingRow = {
   time: Date | null;
 };
 
+type PgVectorInsightSearchRow = Omit<InsightEmbeddingRow, "embedding"> & {
+  similarity: number;
+};
+
 function clampLimit(limit: number | undefined): number {
   if (!Number.isFinite(limit)) {
     return DEFAULT_LIMIT;
@@ -74,6 +83,9 @@ function clampThreshold(threshold: number | undefined): number {
 }
 
 function hasEmbeddingProviderConfig(authToken?: string): boolean {
+  if (getEmbeddingProviderType() === "local") {
+    return true;
+  }
   return Boolean(
     authToken ||
     process.env.OPENAI_EMBEDDINGS_API_KEY ||
@@ -214,7 +226,7 @@ async function searchInsightEmbeddingsWithPgVector(input: {
     .orderBy(distanceSql)
     .limit(input.limit);
 
-  return rows.map((row: any) =>
+  return (rows as PgVectorInsightSearchRow[]).map((row) =>
     toSearchResult(
       {
         insightId: row.insightId,
@@ -310,10 +322,16 @@ export async function searchInsightsSemantically(
         includeArchived: input.includeArchived,
       });
 
-      return results.map((result) => ({
-        type: "insight",
+      const mappedResults = results.map((result) => ({
+        type: "insight" as const,
         ...result,
       }));
+      console.log("[InsightSearch] Semantic search completed", {
+        backend: "chroma",
+        dimensions: queryEmbedding.length,
+        count: mappedResults.length,
+      });
+      return mappedResults;
     } catch (error) {
       console.warn(
         "[InsightSearch] Chroma insight search failed; falling back to database search:",
@@ -323,7 +341,65 @@ export async function searchInsightsSemantically(
   }
 
   if (isTauriMode()) {
-    return searchInsightEmbeddingsWithSqlite({
+    if (isInsightSQLiteVecEnabled()) {
+      try {
+        const results = await searchInsightsWithSQLiteVec({
+          userId: input.userId,
+          queryEmbedding,
+          limit,
+          threshold,
+          botIds: input.botIds,
+          includeArchived: input.includeArchived,
+        });
+        const mappedResults = results.map((result) => {
+          const metadata = result.metadata ?? {};
+          return {
+            type: "insight" as const,
+            id: result.id,
+            content: result.content,
+            similarity: result.score,
+            metadata: {
+              botId: String(metadata.botId ?? ""),
+              title: String(metadata.title ?? ""),
+              description: String(metadata.description ?? ""),
+              taskLabel: String(metadata.taskLabel ?? ""),
+              importance: String(metadata.importance ?? ""),
+              urgency: String(metadata.urgency ?? ""),
+              platform:
+                typeof metadata.platform === "string"
+                  ? metadata.platform
+                  : null,
+              account:
+                typeof metadata.account === "string"
+                  ? metadata.account
+                  : null,
+              time:
+                typeof metadata.time === "number"
+                  ? new Date(metadata.time)
+                  : null,
+              embeddingModel: String(metadata.embeddingModel ?? ""),
+              embeddingDimensions: Number(
+                metadata.embeddingDimensions ?? queryEmbedding.length,
+              ),
+              contentHash: String(metadata.contentHash ?? ""),
+            },
+          };
+        });
+        console.log("[InsightSearch] Semantic search completed", {
+          backend: "sqlite-vec",
+          dimensions: queryEmbedding.length,
+          count: mappedResults.length,
+        });
+        return mappedResults;
+      } catch (error) {
+        console.warn(
+          "[InsightSearch] sqlite-vec search failed; falling back to stored embeddings:",
+          error,
+        );
+      }
+    }
+
+    const results = await searchInsightEmbeddingsWithSqlite({
       userId: input.userId,
       queryEmbedding,
       limit,
@@ -331,9 +407,19 @@ export async function searchInsightsSemantically(
       botIds: input.botIds,
       includeArchived: input.includeArchived,
     });
+    console.warn(
+      "[InsightSearch] Semantic search used stored-embedding fallback",
+      {
+        backend: "stored-embedding-fallback",
+        dimensions: queryEmbedding.length,
+        count: results.length,
+        sqliteVecEnabled: isInsightSQLiteVecEnabled(),
+      },
+    );
+    return results;
   }
 
-  return searchInsightEmbeddingsWithPgVector({
+  const results = await searchInsightEmbeddingsWithPgVector({
     userId: input.userId,
     queryEmbedding,
     limit,
@@ -341,4 +427,10 @@ export async function searchInsightsSemantically(
     botIds: input.botIds,
     includeArchived: input.includeArchived,
   });
+  console.log("[InsightSearch] Semantic search completed", {
+    backend: "pgvector",
+    dimensions: queryEmbedding.length,
+    count: results.length,
+  });
+  return results;
 }

@@ -227,6 +227,13 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+function sqliteDistanceToScore(distance: number): number {
+  if (!Number.isFinite(distance)) {
+    return 0;
+  }
+  return 1 / (1 + Math.max(0, distance));
+}
+
 function normalizeTimestampToMs(value: number): number {
   if (value < 1e11) {
     return Math.floor(value * 1000);
@@ -241,7 +248,6 @@ function currentUnixSeconds(): number {
 export class SQLiteRawMessageManager implements RawMessageStorageManager {
   private readonly db: DatabaseLike;
   private readonly ownsConnection: boolean;
-  private readonly vectorDimensions: number;
   private readonly enableVectorSearch: boolean;
   private initialized = false;
   private vectorSearchAvailable = false;
@@ -250,7 +256,6 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
     if (typeof options === "string") {
       this.db = new Database(options);
       this.ownsConnection = true;
-      this.vectorDimensions = 1536;
       this.enableVectorSearch = true;
       return;
     }
@@ -258,14 +263,12 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
     if (options.db) {
       this.db = options.db;
       this.ownsConnection = false;
-      this.vectorDimensions = options.vectorDimensions ?? 1536;
       this.enableVectorSearch = options.enableVectorSearch ?? true;
       return;
     }
 
     this.db = new Database(options.dbPath ?? ":memory:");
     this.ownsConnection = true;
-    this.vectorDimensions = options.vectorDimensions ?? 1536;
     this.enableVectorSearch = options.enableVectorSearch ?? true;
   }
 
@@ -568,6 +571,19 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
 
   async deleteOldMessages(olderThan: number, userId?: string): Promise<number> {
     await this.init();
+    const ids = (
+      userId
+        ? this.db
+            .prepare(
+              "SELECT message_id FROM raw_messages WHERE created_at < ? AND user_id = ?",
+            )
+            .all(olderThan, userId)
+        : this.db
+            .prepare(
+              "SELECT message_id FROM raw_messages WHERE created_at < ?",
+            )
+            .all(olderThan)
+    ) as Array<{ message_id: string }>;
     const result = userId
       ? this.db
           .prepare(
@@ -577,6 +593,9 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
       : this.db
           .prepare("DELETE FROM raw_messages WHERE created_at < ?")
           .run(olderThan);
+    for (const row of ids) {
+      this.deleteMessageFromVectorTables(row.message_id);
+    }
     return result.changes;
   }
 
@@ -781,6 +800,19 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
     userId?: string,
   ): Promise<number> {
     await this.init();
+    const ids = (
+      userId
+        ? this.db
+            .prepare(
+              "SELECT message_id FROM raw_messages WHERE archived_at IS NOT NULL AND archived_at < ? AND user_id = ?",
+            )
+            .all(olderThan, userId)
+        : this.db
+            .prepare(
+              "SELECT message_id FROM raw_messages WHERE archived_at IS NOT NULL AND archived_at < ?",
+            )
+            .all(olderThan)
+    ) as Array<{ message_id: string }>;
     const result = userId
       ? this.db
           .prepare(
@@ -792,6 +824,9 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
             "DELETE FROM raw_messages WHERE archived_at IS NOT NULL AND archived_at < ?",
           )
           .run(olderThan);
+    for (const row of ids) {
+      this.deleteMessageFromVectorTables(row.message_id);
+    }
     return result.changes;
   }
 
@@ -931,12 +966,31 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
 
     if (
       this.vectorSearchAvailable &&
-      input.queryEmbedding.length === this.vectorDimensions
+      this.vectorTableExists(input.queryEmbedding.length)
     ) {
-      return this.searchMessagesWithVectorTable(input);
+      const results = this.searchMessagesWithVectorTable(input);
+      console.log("[SQLite Raw Messages] Semantic search completed", {
+        backend: "sqlite-vec",
+        dimensions: input.queryEmbedding.length,
+        count: results.length,
+      });
+      return results;
     }
 
-    return this.searchMessagesWithStoredEmbeddings(input);
+    const results = this.searchMessagesWithStoredEmbeddings(input);
+    console.warn(
+      "[SQLite Raw Messages] Semantic search used stored-embedding fallback",
+      {
+        backend: "stored-embedding-fallback",
+        dimensions: input.queryEmbedding.length,
+        count: results.length,
+        vectorSearchAvailable: this.vectorSearchAvailable,
+        vectorTableExists:
+          this.vectorSearchAvailable &&
+          this.vectorTableExists(input.queryEmbedding.length),
+      },
+    );
+    return results;
   }
 
   private initializeVectorSearch(): void {
@@ -945,16 +999,9 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
     }
 
     try {
-      (sqliteVec as any).load(this.db);
-      this.db.exec(`
-        CREATE VIRTUAL TABLE IF NOT EXISTS raw_messages_vec
-        USING vec0(
-          embedding float[${this.vectorDimensions}],
-          message_id TEXT PRIMARY KEY
-        )
-      `);
+      sqliteVec.load(this.db);
       this.vectorSearchAvailable = true;
-      this.rebuildVectorTable();
+      this.rebuildVectorTables();
     } catch (error) {
       this.vectorSearchAvailable = false;
       console.warn("[SQLite Raw Messages] sqlite-vec unavailable:", error);
@@ -969,53 +1016,78 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
       return;
     }
 
-    const deleteStmt = this.db.prepare(
-      "DELETE FROM raw_messages_vec WHERE message_id = ?",
-    );
-    deleteStmt.run(messageId);
+    this.deleteMessageFromVectorTables(messageId);
 
-    if (!embedding || embedding.length !== this.vectorDimensions) {
+    if (!embedding || embedding.length === 0) {
       return;
     }
 
+    this.ensureVectorTable(embedding.length);
     this.db
       .prepare(
         `
-          INSERT INTO raw_messages_vec (embedding, message_id)
+          INSERT INTO ${this.getVectorTableName(embedding.length)}
+            (embedding, message_id)
           VALUES (?, ?)
         `,
       )
       .run(floatArrayToBuffer(embedding), messageId);
   }
 
-  private rebuildVectorTable(): void {
+  private rebuildVectorTables(): void {
     if (!this.vectorSearchAvailable) {
       return;
     }
 
-    this.clearVectorTable();
+    // The legacy table was fixed to one dimension. Dimension-specific tables
+    // let embedding-model migrations coexist while dream reindexes old rows.
+    this.db.exec("DROP TABLE IF EXISTS raw_messages_vec");
+    for (const triggerName of this.listVectorDeleteTriggers()) {
+      this.db.exec(`DROP TRIGGER IF EXISTS ${triggerName}`);
+    }
+    for (const tableName of this.listVectorTables()) {
+      this.db.exec(`DROP TABLE IF EXISTS ${tableName}`);
+    }
+
     const rows = this.db
       .prepare(
         `
           SELECT message_id, embedding, embedding_dimensions
           FROM raw_messages
           WHERE embedding IS NOT NULL
-            AND embedding_dimensions = ?
+            AND embedding_dimensions IS NOT NULL
+            AND embedding_dimensions > 0
         `,
       )
-      .all(this.vectorDimensions) as Array<{
+      .all() as Array<{
       message_id: string;
       embedding: Buffer;
       embedding_dimensions: number;
     }>;
 
-    const stmt = this.db.prepare(
-      "INSERT INTO raw_messages_vec (embedding, message_id) VALUES (?, ?)",
-    );
     const insertMany = this.db.transaction(
-      (items: Array<{ message_id: string; embedding: Buffer }>) => {
+      (
+        items: Array<{
+          message_id: string;
+          embedding: Buffer;
+          embedding_dimensions: number;
+        }>,
+      ) => {
         for (const row of items) {
-          stmt.run(row.embedding, row.message_id);
+          if (row.embedding.length !== row.embedding_dimensions * 4) {
+            continue;
+          }
+          this.ensureVectorTable(row.embedding_dimensions);
+          this.db
+            .prepare(
+              `
+                INSERT INTO ${this.getVectorTableName(
+                  row.embedding_dimensions,
+                )} (embedding, message_id)
+                VALUES (?, ?)
+              `,
+            )
+            .run(row.embedding, row.message_id);
         }
       },
     );
@@ -1026,7 +1098,81 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
     if (!this.vectorSearchAvailable) {
       return;
     }
-    this.db.prepare("DELETE FROM raw_messages_vec").run();
+    for (const tableName of this.listVectorTables()) {
+      this.db.prepare(`DELETE FROM ${tableName}`).run();
+    }
+  }
+
+  private ensureVectorTable(dimensions: number): void {
+    const tableName = this.getVectorTableName(dimensions);
+    this.db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS ${tableName}
+      USING vec0(
+        embedding float[${dimensions}],
+        message_id TEXT PRIMARY KEY
+      );
+
+      -- vec0 virtual tables cannot declare a foreign key, so keep direct SQL
+      -- deletes consistent with the source table through a dimension trigger.
+      CREATE TRIGGER IF NOT EXISTS ${this.getVectorDeleteTriggerName(dimensions)}
+      AFTER DELETE ON raw_messages
+      BEGIN
+        DELETE FROM ${tableName} WHERE message_id = OLD.message_id;
+      END;
+    `);
+  }
+
+  private vectorTableExists(dimensions: number): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        )
+        .get(this.getVectorTableName(dimensions)),
+    );
+  }
+
+  private getVectorTableName(dimensions: number): string {
+    if (!Number.isInteger(dimensions) || dimensions <= 0) {
+      throw new Error(`Invalid raw message embedding dimensions: ${dimensions}`);
+    }
+    return `raw_messages_vec_d${dimensions}`;
+  }
+
+  private getVectorDeleteTriggerName(dimensions: number): string {
+    return `${this.getVectorTableName(dimensions)}_delete`;
+  }
+
+  private listVectorTables(): string[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'raw_messages_vec_d%'",
+        )
+        .all() as Array<{ name: string }>
+    )
+      .map((row) => row.name)
+      .filter((name) => /^raw_messages_vec_d\d+$/.test(name));
+  }
+
+  private listVectorDeleteTriggers(): string[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'raw_messages_vec_d%_delete'",
+        )
+        .all() as Array<{ name: string }>
+    )
+      .map((row) => row.name)
+      .filter((name) => /^raw_messages_vec_d\d+_delete$/.test(name));
+  }
+
+  private deleteMessageFromVectorTables(messageId: string): void {
+    for (const tableName of this.listVectorTables()) {
+      this.db
+        .prepare(`DELETE FROM ${tableName} WHERE message_id = ?`)
+        .run(messageId);
+    }
   }
 
   private searchMessagesWithVectorTable(
@@ -1042,7 +1188,7 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
       .prepare(
         `
           SELECT message_id, distance
-          FROM raw_messages_vec
+          FROM ${this.getVectorTableName(input.queryEmbedding.length)}
           WHERE embedding MATCH ?
           ORDER BY distance
           LIMIT ?
@@ -1064,7 +1210,9 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
       .map((message) =>
         this.toSemanticSearchResult(
           message,
-          1 - (byDistance.get(message.messageId) ?? Number.POSITIVE_INFINITY),
+          sqliteDistanceToScore(
+            byDistance.get(message.messageId) ?? Number.POSITIVE_INFINITY,
+          ),
         ),
       )
       .filter(

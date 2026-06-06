@@ -1,429 +1,528 @@
 /**
- * SQLite-vec Vector Store.
- * Local vector search using the sqlite-vec extension.
+ * SQLite vector store backed by the sqlite-vec extension.
  *
- * Compared to PGVectorStore:
- * - No external database service required
- * - Suitable for local desktop applications
- * - Performance slightly lower than PostgreSQL but fully featured
+ * Application tables remain the source of truth. This store owns a compact
+ * record table plus one vec0 table per embedding dimension, which allows model
+ * migrations (for example 384 -> 1024 dimensions) without rebuilding unrelated
+ * collections or mixing incompatible vectors.
  */
 
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
+import type {
+  DocumentChunk,
+  IVectorStore,
+  VectorSearchFilter,
+  VectorSearchResult,
+  VectorStoreSearchOptions,
+  VectorStoreStats,
+} from "./vector-service";
 
-export interface VectorSearchResult {
-  id: string;
-  content: string;
-  score: number;
-  documentId: string;
-  metadata?: Record<string, unknown>;
-}
+export type { DocumentChunk, VectorSearchResult } from "./vector-service";
 
-export interface DocumentChunk {
-  id: string;
-  documentId: string;
-  content: string;
-  embedding: number[];
-  metadata?: Record<string, unknown>;
-}
-
+// Kept for source compatibility with callers that still pass the app schema.
+// The generic index intentionally does not depend on Drizzle or business tables.
 export interface SchemaModule {
-  ragChunks: {
-    id: unknown;
-    documentId: unknown;
-    userId: unknown;
-    content: unknown;
-    embedding: unknown;
-    metadata: unknown;
-    chunkIndex: unknown;
-  };
-  ragDocuments: {
-    id: unknown;
-    documentId: unknown;
-    userId: unknown;
-    fileName: unknown;
-  };
-  InsertRAGChunk: Record<string, unknown>;
-  InsertRAGDocument: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
-/**
- * SQLite Vector Store class.
- */
-export class SQLiteVecStore {
-  private db: Database.Database;
-  private drizzleDb: any; // Drizzle instance
-  private vecTableName: string;
-  private initialized = false;
+export interface SQLiteVecStoreOptions {
+  collectionName?: string;
+}
 
-  constructor(dbPath: string, schemaModule: SchemaModule) {
-    // Open database connection
+interface StoredVectorRecord {
+  id: string;
+  document_id: string;
+  content: string;
+  metadata: string | null;
+  embedding: Buffer;
+  dimensions: number;
+}
+
+const DEFAULT_COLLECTION_NAME = "openloomi_rag_chunks";
+const SEARCH_OVERFETCH_MULTIPLIER = 8;
+
+export class SQLiteVecStore implements IVectorStore {
+  private readonly db: Database.Database;
+  private readonly collectionName: string;
+  private readonly recordsTableName: string;
+  private readonly vectorTablePrefix: string;
+
+  constructor(
+    dbPath: string,
+    _schemaModule?: SchemaModule,
+    options: SQLiteVecStoreOptions = {},
+  ) {
+    this.collectionName =
+      options.collectionName || DEFAULT_COLLECTION_NAME;
+    const safeCollectionName = sanitizeIdentifier(this.collectionName);
+    this.recordsTableName = `openloomi_vec_${safeCollectionName}_records`;
+    this.vectorTablePrefix = `openloomi_vec_${safeCollectionName}_d`;
+
     this.db = new Database(dbPath);
-
-    // Enable WAL mode
     this.db.pragma("journal_mode = WAL");
-    // Use FULL to maximize durability under sudden power loss.
     this.db.pragma("synchronous = FULL");
 
-    // Load sqlite-vec extension
     try {
       (sqliteVec as any).load(this.db);
-      console.log("✅ sqlite-vec extension loaded");
     } catch (error) {
-      console.error("❌ Failed to load sqlite-vec:", error);
-      throw error;
+      this.db.close();
+      throw new Error(
+        `sqlite-vec extension is unavailable for collection "${this.collectionName}": ${toErrorMessage(error)}`,
+      );
     }
 
-    // Lazy-init Drizzle to avoid import cycle
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    this.initDrizzle(schemaModule);
-
-    // User-specific vector table name (using a common name)
-    this.vecTableName = "rag_chunks_vec";
-
-    // Initialize vector table
-    this.initVectorTable();
+    this.initializeRecordsTable();
   }
 
-  private async initDrizzle(schemaModule: SchemaModule): Promise<void> {
-    const { drizzle } = await import("drizzle-orm/better-sqlite3");
-    this.drizzleDb = drizzle(this.db, { schema: schemaModule as any });
-  }
-
-  /**
-   * Initialize vector table (using sqlite-vec's vec0 virtual table).
-   */
-  private initVectorTable() {
-    try {
-      // Check if table already exists
-      const existingTable = this.db
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
-        .get(this.vecTableName);
-
-      if (!existingTable) {
-        console.log(`📝 Creating vector table: ${this.vecTableName}`);
-
-        // Create vec0 virtual table
-        // Embedding vector dimension is 1536 (OpenAI text-embedding-3-small dimension)
-        this.db.exec(`
-          CREATE VIRTUAL TABLE IF NOT EXISTS ${this.vecTableName}
-          USING vec0(
-            embedding float[1536],
-            chunk_id TEXT PRIMARY KEY
-          )
-        `);
-
-        console.log(`✅ Vector table created: ${this.vecTableName}`);
-      } else {
-        console.log(`✅ Vector table already exists: ${this.vecTableName}`);
-      }
-
-      this.initialized = true;
-    } catch (error) {
-      console.error("❌ Failed to initialize vector table:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Add document chunk to vector store.
-   */
   async addChunk(chunk: DocumentChunk): Promise<void> {
-    try {
-      // 1. First insert into rag_chunks table
-      const chunkData: Record<string, unknown> = {
-        id: chunk.id,
-        documentId: chunk.documentId,
-        userId: "local", // Fixed user ID for local mode
-        chunkIndex: 0, // Can be obtained from metadata
-        content: chunk.content,
-        embedding: JSON.stringify(chunk.embedding),
-        metadata: chunk.metadata ? JSON.stringify(chunk.metadata) : null,
-      };
-
-      await this.drizzleDb
-        .insert({} as any) // schema resolved at runtime
-        .values(chunkData)
-        .onConflictDoNothing();
-
-      // 2. Insert vector into vec0 table
-      const vecStmt = this.db.prepare(`
-        INSERT INTO ${this.vecTableName} (embedding, chunk_id)
-        VALUES (?, ?)
-        ON CONFLICT(chunk_id) DO UPDATE SET embedding = excluded.embedding
-      `);
-
-      // Convert embedding array to the format required by sqlite-vec
-      const embeddingBytes = this.floatArrayToBytes(chunk.embedding);
-      vecStmt.run(embeddingBytes, chunk.id);
-
-      console.log(`✅ Added chunk ${chunk.id} to vector store`);
-    } catch (error) {
-      console.error(`❌ Failed to add chunk ${chunk.id}:`, error);
-      throw error;
-    }
+    await this.addChunks([chunk]);
   }
 
-  /**
-   * Batch add document chunks.
-   */
   async addChunks(chunks: DocumentChunk[]): Promise<void> {
-    const insertMany = this.db.transaction(async (chunks: DocumentChunk[]) => {
-      for (const chunk of chunks) {
-        await this.addChunk(chunk);
+    if (chunks.length === 0) {
+      return;
+    }
+
+    const upsertMany = this.db.transaction((items: DocumentChunk[]) => {
+      for (const chunk of items) {
+        validateEmbedding(chunk.id, chunk.embedding);
+        const previous = this.getRecord(chunk.id);
+
+        if (previous && previous.dimensions !== chunk.embedding.length) {
+          this.deleteVector(previous.dimensions, chunk.id);
+        }
+
+        const dimensions = chunk.embedding.length;
+        this.ensureVectorTable(dimensions);
+        this.db
+          .prepare(
+            `
+              INSERT INTO ${this.recordsTableName} (
+                id, document_id, content, metadata, embedding, dimensions,
+                updated_at
+              )
+              VALUES (
+                @id, @documentId, @content, @metadata, @embedding, @dimensions,
+                @updatedAt
+              )
+              ON CONFLICT(id) DO UPDATE SET
+                document_id = excluded.document_id,
+                content = excluded.content,
+                metadata = excluded.metadata,
+                embedding = excluded.embedding,
+                dimensions = excluded.dimensions,
+                updated_at = excluded.updated_at
+            `,
+          )
+          .run({
+            id: chunk.id,
+            documentId: chunk.documentId,
+            content: chunk.content,
+            metadata: stringifyMetadata(chunk.metadata),
+            embedding: floatArrayToBuffer(chunk.embedding),
+            dimensions,
+            updatedAt: Date.now(),
+          });
+
+        // vec0 upsert support differs between extension versions. Delete then
+        // insert is deterministic and remains inside the surrounding transaction.
+        this.deleteVector(dimensions, chunk.id);
+        this.db
+          .prepare(
+            `
+              INSERT INTO ${this.getVectorTableName(dimensions)}
+                (embedding, record_id)
+              VALUES (?, ?)
+            `,
+          )
+          .run(floatArrayToBuffer(chunk.embedding), chunk.id);
       }
     });
 
-    await insertMany(chunks);
+    upsertMany(chunks);
   }
 
-  /**
-   * Vector similarity search.
-   * @param queryEmbedding Query vector
-   * @param limit Number of results to return
-   * @param userId Optional user ID filter
-   * @returns List of search results
-   */
   async similaritySearch(
     queryEmbedding: number[],
     limit = 10,
     userId?: string,
   ): Promise<VectorSearchResult[]> {
-    try {
-      if (!this.initialized) {
-        throw new Error("Vector store not initialized");
+    return this.similaritySearchWithOptions(queryEmbedding, {
+      limit,
+      filter: userId ? { userId } : undefined,
+    });
+  }
+
+  async similaritySearchWithOptions(
+    queryEmbedding: number[],
+    options: VectorStoreSearchOptions,
+  ): Promise<VectorSearchResult[]> {
+    validateEmbedding("query", queryEmbedding);
+    const dimensions = queryEmbedding.length;
+    if (!this.vectorTableExists(dimensions)) {
+      return [];
+    }
+
+    const limit = Math.max(1, Math.floor(options.limit ?? 10));
+    const scanLimit = Math.max(limit, limit * SEARCH_OVERFETCH_MULTIPLIER);
+    const nearest = this.db
+      .prepare(
+        `
+          SELECT record_id, distance
+          FROM ${this.getVectorTableName(dimensions)}
+          WHERE embedding MATCH ?
+          ORDER BY distance
+          LIMIT ?
+        `,
+      )
+      .all(floatArrayToBuffer(queryEmbedding), scanLimit) as Array<{
+      record_id: string;
+      distance: number;
+    }>;
+
+    const records = this.getRecords(nearest.map((item) => item.record_id));
+    const recordsById = new Map(records.map((record) => [record.id, record]));
+
+    const results: VectorSearchResult[] = [];
+    for (const item of nearest) {
+      const record = recordsById.get(item.record_id);
+      if (!record) {
+        continue;
+      }
+      const metadata = parseMetadata(record.metadata);
+      if (!matchesFilter(metadata, options.filter)) {
+        continue;
       }
 
-      // Convert query vector to byte array
-      const queryBytes = this.floatArrayToBytes(queryEmbedding);
-
-      // Perform vector search
-      // Use KNN search algorithm
-      const sql = `
-        SELECT
-          chunk_id,
-          distance
-        FROM ${this.vecTableName}
-        WHERE embedding MATCH ?
-        ORDER BY distance
-        LIMIT ?
-      `;
-
-      const results = this.db.prepare(sql).all(queryBytes, limit) as Array<{
-        chunk_id: string;
-        distance: number;
-      }>;
-
-      // Get full chunk information
-      const chunkIds = results.map((r) => r.chunk_id);
-
-      // Dynamic import of schema-dependent types at call time
-      const { eq } = await import("drizzle-orm");
-      const schemaModule = (this as any)._schemaModule;
-      if (!schemaModule || chunkIds.length === 0) {
-        return results.map((result) => ({
-          id: result.chunk_id,
-          content: "",
-          score: 1 - result.distance,
-          documentId: "",
-          metadata: undefined,
-        }));
-      }
-
-      const chunks = await this.drizzleDb
-        .select()
-        .from(schemaModule.ragChunks)
-        .where(eq(schemaModule.ragChunks.id as any, chunkIds[0]));
-
-      // Merge results
-      const finalResults: VectorSearchResult[] = results.map((result) => {
-        const chunk = chunks.find((c: any) => c.id === result.chunk_id);
-        return {
-          id: result.chunk_id,
-          content: chunk?.content || "",
-          score: 1 - result.distance, // Convert distance to similarity score
-          documentId: chunk?.documentId || "",
-          metadata: chunk?.metadata
-            ? JSON.parse(chunk.metadata as string)
-            : undefined,
-        };
+      results.push({
+        id: record.id,
+        content: record.content,
+        score: distanceToScore(item.distance),
+        documentId: record.document_id,
+        metadata,
+        embedding: options.includeEmbeddings
+          ? bufferToFloatArray(record.embedding)
+          : undefined,
       });
-
-      return finalResults;
-    } catch (error) {
-      console.error("❌ Vector search failed:", error);
-      throw error;
+      if (results.length >= limit) {
+        break;
+      }
     }
+    return results;
   }
 
-  /**
-   * Delete a document and all its chunks.
-   */
   async deleteDocument(documentId: string): Promise<void> {
-    try {
-      const schemaModule = (this as any)._schemaModule;
+    const records = this.db
+      .prepare(
+        `
+          SELECT id, dimensions
+          FROM ${this.recordsTableName}
+          WHERE document_id = ?
+        `,
+      )
+      .all(documentId) as Array<{ id: string; dimensions: number }>;
 
-      // 1. Get all chunk IDs for the document
-      if (schemaModule) {
-        const { eq } = await import("drizzle-orm");
-        const chunks = await this.drizzleDb
-          .select({ id: (schemaModule.ragChunks as any).id })
-          .from(schemaModule.ragChunks)
-          .where(eq((schemaModule.ragChunks as any).documentId, documentId));
-
-        // 2. Delete from vector table
-        const deleteVecStmt = this.db.prepare(`
-          DELETE FROM ${this.vecTableName} WHERE chunk_id = ?
-        `);
-
-        const deleteVec = this.db.transaction((chunkIds: string[]) => {
-          for (const chunkId of chunkIds) {
-            deleteVecStmt.run(chunkId);
-          }
-        });
-
-        await deleteVec(chunks.map((c: any) => c.id));
-
-        // 3. Delete from rag_chunks table
-        await this.drizzleDb
-          .delete(schemaModule.ragChunks)
-          .where(eq((schemaModule.ragChunks as any).documentId, documentId));
-
-        // 4. Delete from rag_documents table
-        await this.drizzleDb
-          .delete(schemaModule.ragDocuments)
-          .where(eq((schemaModule.ragDocuments as any).id, documentId));
-      }
-
-      console.log(`✅ Deleted document ${documentId} and its chunks`);
-    } catch (error) {
-      console.error(`❌ Failed to delete document ${documentId}:`, error);
-      throw error;
-    }
+    const deleteRecords = this.db.transaction(
+      (items: Array<{ id: string; dimensions: number }>) => {
+        for (const record of items) {
+          this.deleteVector(record.dimensions, record.id);
+        }
+        this.db
+          .prepare(
+            `DELETE FROM ${this.recordsTableName} WHERE document_id = ?`,
+          )
+          .run(documentId);
+      },
+    );
+    deleteRecords(records);
   }
 
-  /**
-   * Get total document count.
-   */
+  async deleteOlderThan(
+    timestamp: number,
+    timestampField = "timestamp",
+  ): Promise<number> {
+    const records = this.db
+      .prepare(
+        `SELECT id, metadata, dimensions FROM ${this.recordsTableName}`,
+      )
+      .all() as Array<{
+      id: string;
+      metadata: string | null;
+      dimensions: number;
+    }>;
+    const expired = records.filter((record) => {
+      const value = normalizeTimestamp(
+        parseMetadata(record.metadata)[timestampField],
+      );
+      return Number.isFinite(value) && value < timestamp;
+    });
+
+    const deleteExpired = this.db.transaction((items: typeof expired) => {
+      const deleteRecord = this.db.prepare(
+        `DELETE FROM ${this.recordsTableName} WHERE id = ?`,
+      );
+      for (const record of items) {
+        this.deleteVector(record.dimensions, record.id);
+        deleteRecord.run(record.id);
+      }
+    });
+    deleteExpired(expired);
+    return expired.length;
+  }
+
   async getDocumentCount(): Promise<number> {
-    try {
-      const schemaModule = (this as any)._schemaModule;
-      if (!schemaModule) return 0;
-
-      const result = await this.drizzleDb
-        .select({ count: (schemaModule.ragDocuments as any).id })
-        .from(schemaModule.ragDocuments);
-
-      return result.length;
-    } catch (error) {
-      console.error("❌ Failed to get document count:", error);
-      return 0;
-    }
+    const result = this.db
+      .prepare(
+        `SELECT COUNT(DISTINCT document_id) AS count FROM ${this.recordsTableName}`,
+      )
+      .get() as { count: number };
+    return result.count;
   }
 
-  /**
-   * Get total chunk count.
-   */
   async getChunkCount(): Promise<number> {
-    try {
-      const schemaModule = (this as any)._schemaModule;
-      if (!schemaModule) return 0;
-
-      const result = await this.drizzleDb
-        .select({ count: (schemaModule.ragChunks as any).id })
-        .from(schemaModule.ragChunks);
-
-      return result.length;
-    } catch (error) {
-      console.error("❌ Failed to get chunk count:", error);
-      return 0;
-    }
+    const result = this.db
+      .prepare(`SELECT COUNT(*) AS count FROM ${this.recordsTableName}`)
+      .get() as { count: number };
+    return result.count;
   }
 
-  /**
-   * Clear all vector data.
-   */
+  async getStats(): Promise<VectorStoreStats> {
+    const result = this.db
+      .prepare(
+        `
+          SELECT COUNT(*) AS count, MAX(dimensions) AS dimensions
+          FROM ${this.recordsTableName}
+        `,
+      )
+      .get() as { count: number; dimensions: number | null };
+    return {
+      count: result.count,
+      dimensions: result.dimensions ?? 0,
+    };
+  }
+
   async clear(): Promise<void> {
-    try {
-      const schemaModule = (this as any)._schemaModule;
-
-      // Delete vector table
-      this.db.exec(`DROP TABLE IF EXISTS ${this.vecTableName}`);
-
-      // Delete RAG tables
-      if (schemaModule) {
-        await this.drizzleDb.delete(schemaModule.ragChunks);
-        await this.drizzleDb.delete(schemaModule.ragDocuments);
+    const vectorTables = this.listVectorTables();
+    const clearAll = this.db.transaction(() => {
+      for (const tableName of vectorTables) {
+        this.db.exec(`DROP TABLE IF EXISTS ${tableName}`);
       }
-
-      // Re-initialize
-      this.initVectorTable();
-
-      console.log("✅ Cleared all vector data");
-    } catch (error) {
-      console.error("❌ Failed to clear vector data:", error);
-      throw error;
-    }
+      this.db.prepare(`DELETE FROM ${this.recordsTableName}`).run();
+    });
+    clearAll();
   }
 
-  /**
-   * Close database connection.
-   */
   close(): void {
-    try {
+    if (this.db.open) {
       this.db.close();
-      console.log("✅ Vector store connection closed");
-    } catch (error) {
-      console.error("❌ Failed to close connection:", error);
     }
   }
 
-  /**
-   * Convert float array to byte array format required by sqlite-vec.
-   */
-  private floatArrayToBytes(arr: number[]): Buffer {
-    const buffer = Buffer.allocUnsafe(arr.length * 4);
-    for (let i = 0; i < arr.length; i++) {
-      buffer.writeFloatLE(arr[i], i * 4);
-    }
-    return buffer;
+  private initializeRecordsTable(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS ${this.recordsTableName} (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        metadata TEXT,
+        embedding BLOB NOT NULL,
+        dimensions INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS ${this.recordsTableName}_document_idx
+        ON ${this.recordsTableName}(document_id);
+      CREATE INDEX IF NOT EXISTS ${this.recordsTableName}_dimensions_idx
+        ON ${this.recordsTableName}(dimensions);
+    `);
   }
 
-  /**
-   * Convert byte array to float array.
-   */
-  private bytesToFloatArray(buffer: Buffer): number[] {
-    const arr: number[] = [];
-    for (let i = 0; i < buffer.length; i += 4) {
-      arr.push(buffer.readFloatLE(i));
+  private ensureVectorTable(dimensions: number): void {
+    this.db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS ${this.getVectorTableName(dimensions)}
+      USING vec0(
+        embedding float[${dimensions}],
+        record_id TEXT PRIMARY KEY
+      )
+    `);
+  }
+
+  private vectorTableExists(dimensions: number): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        )
+        .get(this.getVectorTableName(dimensions)),
+    );
+  }
+
+  private getVectorTableName(dimensions: number): string {
+    if (!Number.isInteger(dimensions) || dimensions <= 0) {
+      throw new Error(`Invalid embedding dimensions: ${dimensions}`);
     }
-    return arr;
+    return `${this.vectorTablePrefix}${dimensions}`;
+  }
+
+  private listVectorTables(): string[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE ?",
+        )
+        .all(`${this.vectorTablePrefix}%`) as Array<{ name: string }>
+    ).map((row) => row.name);
+  }
+
+  private getRecord(id: string): StoredVectorRecord | undefined {
+    return this.db
+      .prepare(`SELECT * FROM ${this.recordsTableName} WHERE id = ?`)
+      .get(id) as StoredVectorRecord | undefined;
+  }
+
+  private getRecords(ids: string[]): StoredVectorRecord[] {
+    if (ids.length === 0) {
+      return [];
+    }
+    const placeholders = ids.map(() => "?").join(", ");
+    return this.db
+      .prepare(
+        `SELECT * FROM ${this.recordsTableName} WHERE id IN (${placeholders})`,
+      )
+      .all(...ids) as StoredVectorRecord[];
+  }
+
+  private deleteVector(dimensions: number, id: string): void {
+    if (!this.vectorTableExists(dimensions)) {
+      return;
+    }
+    this.db
+      .prepare(
+        `DELETE FROM ${this.getVectorTableName(dimensions)} WHERE record_id = ?`,
+      )
+      .run(id);
   }
 }
 
-/**
- * Get SQLiteVecStore instance (singleton pattern).
- */
-let vectorStoreInstance: SQLiteVecStore | null = null;
+const storeInstances = new Map<string, SQLiteVecStore>();
 
 export async function getSQLiteVecStore(
   dbPath: string,
-  schemaModule: SchemaModule,
+  schemaModule?: SchemaModule,
+  options: SQLiteVecStoreOptions = {},
 ): Promise<SQLiteVecStore> {
-  if (!vectorStoreInstance) {
-    vectorStoreInstance = new SQLiteVecStore(dbPath, schemaModule);
-    // Attach schema module for use in methods
-    (vectorStoreInstance as any)._schemaModule = schemaModule;
+  const collectionName =
+    options.collectionName || DEFAULT_COLLECTION_NAME;
+  const instanceKey = `${dbPath}::${collectionName}`;
+  let instance = storeInstances.get(instanceKey);
+  if (!instance) {
+    instance = new SQLiteVecStore(dbPath, schemaModule, options);
+    storeInstances.set(instanceKey, instance);
   }
-  return vectorStoreInstance;
+  return instance;
 }
 
-/**
- * Close and reset the vector store instance.
- */
 export function resetSQLiteVecStore(): void {
-  if (vectorStoreInstance) {
-    vectorStoreInstance.close();
-    vectorStoreInstance = null;
+  for (const store of storeInstances.values()) {
+    store.close();
   }
+  storeInstances.clear();
+}
+
+function sanitizeIdentifier(value: string): string {
+  const sanitized = value.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!sanitized || !/^[a-z_]/.test(sanitized)) {
+    return `collection_${sanitized || "default"}`;
+  }
+  return sanitized;
+}
+
+function validateEmbedding(id: string, embedding: number[]): void {
+  if (
+    embedding.length === 0 ||
+    !embedding.every((value) => Number.isFinite(value))
+  ) {
+    throw new Error(`Vector record ${id} has an invalid embedding`);
+  }
+}
+
+function floatArrayToBuffer(values: number[]): Buffer {
+  const buffer = Buffer.allocUnsafe(values.length * 4);
+  for (let index = 0; index < values.length; index += 1) {
+    buffer.writeFloatLE(values[index], index * 4);
+  }
+  return buffer;
+}
+
+function bufferToFloatArray(buffer: Buffer): number[] {
+  const values: number[] = [];
+  for (let offset = 0; offset < buffer.length; offset += 4) {
+    values.push(buffer.readFloatLE(offset));
+  }
+  return values;
+}
+
+function stringifyMetadata(
+  metadata: Record<string, unknown> | undefined,
+): string | null {
+  return metadata ? JSON.stringify(metadata) : null;
+}
+
+function parseMetadata(value: string | null): Record<string, unknown> {
+  if (!value) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function matchesFilter(
+  metadata: Record<string, unknown>,
+  filter?: VectorSearchFilter,
+): boolean {
+  if (!filter) {
+    return true;
+  }
+  if (filter.userId && metadata.userId !== filter.userId) return false;
+  if (filter.platform && metadata.platform !== filter.platform) return false;
+  if (filter.channel && metadata.channel !== filter.channel) return false;
+
+  const timestamp = normalizeTimestamp(metadata.timestamp);
+  if (filter.startTime !== undefined || filter.endTime !== undefined) {
+    if (!Number.isFinite(timestamp)) return false;
+    if (filter.startTime !== undefined && timestamp < filter.startTime) {
+      return false;
+    }
+    if (filter.endTime !== undefined && timestamp > filter.endTime) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function normalizeTimestamp(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  }
+  return Number.NaN;
+}
+
+function distanceToScore(distance: number): number {
+  return 1 / (1 + Math.max(0, distance));
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

@@ -11,7 +11,7 @@
   "dependencies": {
     "@openloomi/indexeddb": "workspace:*",
     "better-sqlite3": "^11.10.0",
-    "sqlite-vec": "0.1.7-alpha.2"
+    "sqlite-vec": "^0.1.9"
   },
   "devDependencies": {
     "@openloomi/config": "workspace:*",

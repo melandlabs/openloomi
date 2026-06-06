@@ -25,7 +25,8 @@ export type VectorStoreConfig =
   | {
       type: "sqlite-vec";
       dbPath: string;
-      schemaModule: SchemaModule;
+      schemaModule?: SchemaModule;
+      collectionName?: string;
     }
   | {
       type: "custom";
@@ -264,7 +265,9 @@ export async function createVectorStore(
       return new ChromaVectorStore(options);
     }
     case "sqlite-vec":
-      return getSQLiteVecStore(config.dbPath, config.schemaModule);
+      return getSQLiteVecStore(config.dbPath, config.schemaModule, {
+        collectionName: config.collectionName,
+      });
     case "custom":
       return config.store;
   }

@@ -67,6 +67,19 @@ const nextConfig = {
       "**/stable-x86_64-pc-windows-msvc/**",
     ],
   },
+  // sqlite-vec selects its native binary dynamically, which Next's static
+  // tracer cannot discover reliably. Include the JS loader and whichever
+  // platform package is installed for the current build machine.
+  outputFileTracingIncludes: {
+    "*": [
+      "../../node_modules/sqlite-vec/**/*",
+      "../../node_modules/sqlite-vec-darwin-arm64/**/*",
+      "../../node_modules/sqlite-vec-darwin-x64/**/*",
+      "../../node_modules/sqlite-vec-linux-arm64/**/*",
+      "../../node_modules/sqlite-vec-linux-x64/**/*",
+      "../../node_modules/sqlite-vec-windows-x64/**/*",
+    ],
+  },
 
   productionBrowserSourceMaps: false,
 
@@ -81,6 +94,14 @@ const nextConfig = {
   serverExternalPackages: [
     "@larksuiteoapi/node-sdk",
     "better-sqlite3",
+    // sqlite-vec resolves and loads a platform-specific native extension at
+    // runtime. Bundling it rewrites import.meta.resolve under Turbopack.
+    "sqlite-vec",
+    "sqlite-vec-darwin-arm64",
+    "sqlite-vec-darwin-x64",
+    "sqlite-vec-linux-arm64",
+    "sqlite-vec-linux-x64",
+    "sqlite-vec-windows-x64",
     "bindings", // better-sqlite3 dependency
     "prebuild-install", // better-sqlite3 dependency
     "@photon-ai/imessage-kit",

@@ -67,6 +67,21 @@ if (fs.existsSync(`${rootNodeModules}/bindings`)) {
   console.log("  Copied bindings");
 }
 
+for (const packageName of [
+  "sqlite-vec",
+  "sqlite-vec-darwin-arm64",
+  "sqlite-vec-darwin-x64",
+  "sqlite-vec-linux-arm64",
+  "sqlite-vec-linux-x64",
+  "sqlite-vec-windows-x64",
+]) {
+  const source = `${rootNodeModules}/${packageName}`;
+  if (!fs.existsSync(source)) continue;
+
+  copyDirRec(source, `.next/standalone/node_modules/${packageName}`);
+  console.log(`  Copied ${packageName}`);
+}
+
 fs.writeFileSync(".next/standalone/package.json", "{}");
 fs.writeFileSync(".next/standalone/apps/web/package.json", "{}");
 fs.writeFileSync(".next/standalone/node_modules/package.json", "{}");

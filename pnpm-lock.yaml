@@ -711,8 +711,8 @@ importers:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       sqlite-vec:
-        specifier: 0.1.7-alpha.2
-        version: 0.1.7-alpha.2
+        specifier: ^0.1.9
+        version: 0.1.9
       stripe:
         specifier: ^19.1.0
         version: 19.3.1(@types/node@22.19.17)
@@ -1026,7 +1026,7 @@ importers:
         specifier: ^8.13.1
         version: 8.20.0
       sqlite-vec:
-        specifier: ^0.1.6-alpha.5
+        specifier: ^0.1.9
         version: 0.1.9
       zod:
         specifier: ^4.3.6
@@ -1537,8 +1537,8 @@ importers:
         specifier: ^11.10.0
         version: 11.10.0
       sqlite-vec:
-        specifier: 0.1.7-alpha.2
-        version: 0.1.7-alpha.2
+        specifier: ^0.1.9
+        version: 0.1.9
     devDependencies:
       '@openloomi/config':
         specifier: workspace:*
