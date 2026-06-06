@@ -50,6 +50,14 @@ export interface IVectorStore {
   getDocumentCount(): Promise<number>;
   getChunkCount(): Promise<number>;
   clear(): Promise<void>;
+  // Optional capabilities keep existing stores source-compatible while newer
+  // backends expose native filters, retention, and dimension statistics.
+  similaritySearchWithOptions?(
+    queryEmbedding: number[],
+    options: VectorStoreSearchOptions,
+  ): Promise<VectorSearchResult[]>;
+  deleteOlderThan?(timestamp: number, timestampField?: string): Promise<number>;
+  getStats?(): Promise<VectorStoreStats>;
 }
 
 export interface VectorSearchResult {
@@ -58,6 +66,7 @@ export interface VectorSearchResult {
   score: number;
   documentId: string;
   metadata?: Record<string, unknown>;
+  embedding?: number[];
 }
 
 export interface DocumentChunk {
@@ -66,6 +75,25 @@ export interface DocumentChunk {
   content: string;
   embedding: number[];
   metadata?: Record<string, unknown>;
+}
+
+export interface VectorSearchFilter {
+  userId?: string;
+  platform?: string;
+  channel?: string;
+  startTime?: number;
+  endTime?: number;
+}
+
+export interface VectorStoreSearchOptions {
+  limit?: number;
+  filter?: VectorSearchFilter;
+  includeEmbeddings?: boolean;
+}
+
+export interface VectorStoreStats {
+  count: number;
+  dimensions: number;
 }
 
 // ---------------------------------------------------------------------------

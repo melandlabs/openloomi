@@ -8,6 +8,7 @@
     "./chunking": "./src/chunking.ts",
     "./embeddings": "./src/embeddings.ts",
     "./vector-service": "./src/vector-service.ts",
+    "./unified-vector-search-service": "./src/unified-vector-search-service.ts",
     "./parsers": "./src/parsers.ts",
     "./embedding-provider": "./src/embedding-provider.ts",
     "./local-transformers-embedding-provider": "./src/local-transformers-embedding-provider.ts",

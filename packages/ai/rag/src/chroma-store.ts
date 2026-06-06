@@ -3,11 +3,19 @@
  * Client-server vector search using ChromaDB's TypeScript client.
  */
 
-import { ChromaClient } from "chromadb";
+import {
+  ChromaClient,
+  ChromaNotFoundError,
+  IncludeEnum,
+  type Where,
+} from "chromadb";
 import type {
   DocumentChunk,
   IVectorStore,
+  VectorSearchFilter,
   VectorSearchResult,
+  VectorStoreSearchOptions,
+  VectorStoreStats,
 } from "./vector-service";
 
 type ChromaCollection = Awaited<
@@ -67,18 +75,40 @@ export class ChromaVectorStore implements IVectorStore {
     limit = 10,
     userId?: string,
   ): Promise<VectorSearchResult[]> {
+    return this.similaritySearchWithOptions(queryEmbedding, {
+      limit,
+      filter: userId ? { userId } : undefined,
+    });
+  }
+
+  async similaritySearchWithOptions(
+    queryEmbedding: number[],
+    options: VectorStoreSearchOptions,
+  ): Promise<VectorSearchResult[]> {
     const collection = await this.getCollection();
+    // Embeddings are comparatively large, so request them only when the caller
+    // explicitly needs to reuse or inspect the returned vectors.
+    const include = [
+      IncludeEnum.documents,
+      IncludeEnum.metadatas,
+      IncludeEnum.distances,
+    ];
+    if (options.includeEmbeddings) {
+      include.push(IncludeEnum.embeddings);
+    }
 
     const result = await collection.query({
       queryEmbeddings: [queryEmbedding],
-      nResults: limit,
-      where: userId ? { userId } : undefined,
+      nResults: options.limit ?? 10,
+      where: buildWhereFilter(options.filter),
+      include,
     });
 
     const ids = result.ids?.[0] ?? [];
     const documents = result.documents?.[0] ?? [];
     const metadatas = result.metadatas?.[0] ?? [];
     const distances = result.distances?.[0] ?? [];
+    const embeddings = result.embeddings?.[0] ?? [];
 
     return ids.map((id, index) => {
       const metadata = normalizeMetadata(metadatas[index]);
@@ -88,6 +118,7 @@ export class ChromaVectorStore implements IVectorStore {
         score: distanceToScore(distances[index]),
         documentId: String(metadata.documentId ?? ""),
         metadata,
+        embedding: embeddings[index] ?? undefined,
       };
     });
   }
@@ -109,6 +140,46 @@ export class ChromaVectorStore implements IVectorStore {
     return await collection.count();
   }
 
+  async deleteOlderThan(
+    timestamp: number,
+    timestampField = "timestamp",
+  ): Promise<number> {
+    const collection = await this.getCollection();
+    const where: Where = {
+      [timestampField]: { $lt: timestamp },
+    };
+    const matches = await collection.get({
+      where,
+      include: [],
+    });
+
+    // Chroma's delete result does not consistently expose a deleted count
+    // across client/server versions, so collect matching IDs first.
+    if (matches.ids.length === 0) {
+      return 0;
+    }
+
+    await collection.delete({ ids: matches.ids });
+    return matches.ids.length;
+  }
+
+  async getStats(): Promise<VectorStoreStats> {
+    const collection = await this.getCollection();
+    const count = await collection.count();
+    if (count === 0) {
+      return { count: 0, dimensions: 0 };
+    }
+
+    const sample = await collection.get({
+      limit: 1,
+      include: [IncludeEnum.embeddings],
+    });
+    return {
+      count,
+      dimensions: sample.embeddings[0]?.length ?? 0,
+    };
+  }
+
   async clear(): Promise<void> {
     try {
       await this.client.deleteCollection({ name: this.collectionName });
@@ -125,6 +196,9 @@ export class ChromaVectorStore implements IVectorStore {
     if (!this.collection) {
       this.collection = await this.client.getOrCreateCollection({
         name: this.collectionName,
+        // OpenLoomi always supplies vectors explicitly. Disabling Chroma's
+        // default embedding function avoids model downloads and dimension drift.
+        embeddingFunction: null,
         metadata: {
           source: "@openloomi/rag",
           store: "chroma",
@@ -141,6 +215,27 @@ export class ChromaVectorStore implements IVectorStore {
       documentId: chunk.documentId,
     });
   }
+}
+
+function buildWhereFilter(filter?: VectorSearchFilter): Where | undefined {
+  if (!filter) {
+    return undefined;
+  }
+
+  const clauses: Where[] = [];
+  if (filter.userId) clauses.push({ userId: filter.userId });
+  if (filter.platform) clauses.push({ platform: filter.platform });
+  if (filter.channel) clauses.push({ channel: filter.channel });
+  if (filter.startTime !== undefined) {
+    clauses.push({ timestamp: { $gte: filter.startTime } });
+  }
+  if (filter.endTime !== undefined) {
+    clauses.push({ timestamp: { $lte: filter.endTime } });
+  }
+
+  if (clauses.length === 0) return undefined;
+  if (clauses.length === 1) return clauses[0];
+  return { $and: clauses };
 }
 
 let chromaVectorStoreInstance: ChromaVectorStore | null = null;
@@ -194,6 +289,8 @@ function sanitizeMetadata(metadata: Record<string, unknown>): ChromaMetadata {
       continue;
     }
 
+    // Chroma accepts scalar metadata only; preserve structured values as JSON
+    // instead of silently dropping useful application context.
     sanitized[key] = JSON.stringify(value);
   }
 
@@ -219,12 +316,17 @@ function isChromaMetadataValue(value: unknown): value is ChromaMetadataValue {
 
 function distanceToScore(distance: number | null | undefined): number {
   if (typeof distance !== "number") return 0;
+  // Convert a lower-is-better distance into a bounded higher-is-better score.
   return 1 / (1 + Math.max(0, distance));
 }
 
 function isNotFoundError(error: unknown): boolean {
+  if (error instanceof ChromaNotFoundError) {
+    return true;
+  }
   if (!error || typeof error !== "object") return false;
 
+  const name = "name" in error ? String(error.name) : "";
   const message = "message" in error ? String(error.message) : "";
-  return /not.?found|does not exist|404/i.test(message);
+  return /not.?found|does not exist|404/i.test(`${name} ${message}`);
 }

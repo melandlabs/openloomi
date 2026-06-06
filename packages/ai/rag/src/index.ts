@@ -29,7 +29,22 @@ export {
   configureVectorService,
   type IVectorStore,
   type SearchResult,
+  type VectorSearchFilter,
+  type VectorStoreSearchOptions,
+  type VectorStoreStats,
 } from "./vector-service";
+
+export {
+  UnifiedVectorSearchService,
+  createVectorStore,
+  type RawMessageWithEmbedding,
+  type UnifiedVectorSearchResult,
+  type UnifiedVectorSearchServiceOptions,
+  type UnifiedVectorSearchStats,
+  type VectorSearchByVectorOptions,
+  type VectorSearchOptions,
+  type VectorStoreConfig,
+} from "./unified-vector-search-service";
 
 export { UniversalEmbeddings } from "./universal-embeddings";
 export {
