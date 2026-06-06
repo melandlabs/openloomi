@@ -89,6 +89,7 @@ import {
 } from "@openloomi/indexeddb/extractor";
 import { shouldSkipGmailEmail } from "../integrations/email/classifier";
 import { FeishuAdapter } from "@openloomi/integrations/feishu";
+import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 
 import {
   DEFAULT_CATEGORIES,
@@ -123,6 +124,34 @@ import {
 
 function botNeedsOldInsights(bot: BotWithAccount): boolean {
   return bot.adapter !== "rss" && bot.adapter !== "hubspot";
+}
+
+async function setInsightAIUserContext({
+  userId,
+  user,
+  userType,
+}: {
+  userId: string;
+  user: SummaryUserContext;
+  userType: SummaryUserContext["type"];
+}) {
+  const openaiCompatible = await getUserLlmProviderConfig({
+    userId,
+    providerType: "openai_compatible",
+  });
+
+  setAIUserContext({
+    id: userId,
+    email: user.email,
+    name: user.name,
+    type: userType,
+    token: user.token,
+    llmApiSettings: openaiCompatible
+      ? {
+          openaiCompatible,
+        }
+      : undefined,
+  });
 }
 
 function mapInsightPayload(
@@ -303,13 +332,11 @@ export async function getInsightsByBotId({
         .filter(Boolean)
         .join("\n\n");
 
-      // Set AI user context for proper billing in proxy mode
-      setAIUserContext({
-        id: actualUserId,
-        email: user.email,
-        name: user.name,
-        type: userType,
-        token: user.token,
+      // Set AI user context for provider routing, billing, and local proxy mode.
+      await setInsightAIUserContext({
+        userId: actualUserId,
+        user,
+        userType,
       });
 
       const { insights: data } = await generateProjectInsights(
@@ -2911,12 +2938,10 @@ export async function dealMessageChunk(
           .filter(Boolean)
           .join("\n\n");
 
-        setAIUserContext({
-          id: userId,
-          email: user.email || "",
-          name: user.name || null,
-          type: userType,
-          token: user.token,
+        await setInsightAIUserContext({
+          userId,
+          user,
+          userType,
         });
 
         const {
