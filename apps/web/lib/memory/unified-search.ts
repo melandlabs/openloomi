@@ -8,7 +8,6 @@ import {
   isRawMessageChromaEnabled,
   searchRawMessagesWithChroma,
 } from "@/lib/memory/chroma-memory-index";
-import type { RawMessage } from "@openloomi/indexeddb";
 import { getEmbeddingProviderType } from "@openloomi/rag";
 
 export type UnifiedMemorySearchSource = "memory" | "insights" | "knowledge";
@@ -49,9 +48,6 @@ export interface UnifiedMemorySearchOutput {
 
 const DEFAULT_LIMIT = 10;
 const DEFAULT_THRESHOLD = 0.7;
-const MEMORY_KEYWORD_BASE_SCORE = 0.78;
-const MEMORY_KEYWORD_MATCH_BONUS = 0.04;
-const MEMORY_HYBRID_MATCH_BONUS = 0.08;
 const DEFAULT_SOURCES: UnifiedMemorySearchSource[] = [
   "memory",
   "insights",
@@ -194,109 +190,7 @@ function isRawMemorySemanticResult(result: unknown): result is {
   );
 }
 
-function extractRawMemoryKeywords(query: string): string[] {
-  const normalized = query.trim().replace(/\s+/g, " ");
-  if (!normalized) {
-    return [];
-  }
-
-  const tokens = normalized
-    .split(/[\s,.;:!?()[\]{}"'`，。！？、；：]+/u)
-    .map((token) => token.trim())
-    .filter((token) => token.length > 1);
-
-  return Array.from(new Set([normalized, ...tokens])).slice(0, 8);
-}
-
-function countKeywordMatches(message: RawMessage, keywords: string[]): number {
-  const haystack = [
-    message.content,
-    message.channel,
-    message.person,
-    message.platform,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return keywords.reduce((count, keyword) => {
-    return haystack.includes(keyword.toLowerCase()) ? count + 1 : count;
-  }, 0);
-}
-
-function toKeywordMemoryResult(
-  message: RawMessage,
-  keywords: string[],
-): UnifiedMemorySearchResult {
-  const matchCount = countKeywordMatches(message, keywords);
-  const similarity = Math.min(
-    0.95,
-    MEMORY_KEYWORD_BASE_SCORE + matchCount * MEMORY_KEYWORD_MATCH_BONUS,
-  );
-
-  return {
-    type: "memory",
-    id: message.messageId,
-    content: message.archivedAt ? "" : message.content,
-    similarity,
-    metadata: {
-      userId: message.userId,
-      platform: message.platform,
-      botId: message.botId,
-      channel: message.channel,
-      person: message.person,
-      timestamp:
-        message.timestamp < 1e11 ? message.timestamp * 1000 : message.timestamp,
-      memoryStage: message.memoryStage,
-      matchType: "keyword",
-      keywordMatches: matchCount,
-    },
-  };
-}
-
-function mergeMemoryHybridResults(
-  semanticResults: UnifiedMemorySearchResult[],
-  keywordResults: UnifiedMemorySearchResult[],
-  limit: number,
-): UnifiedMemorySearchResult[] {
-  const byId = new Map<string, UnifiedMemorySearchResult>();
-
-  for (const result of semanticResults) {
-    byId.set(result.id, {
-      ...result,
-      metadata: {
-        ...result.metadata,
-        matchType: "semantic",
-      },
-    });
-  }
-
-  for (const result of keywordResults) {
-    const existing = byId.get(result.id);
-    if (!existing) {
-      byId.set(result.id, result);
-      continue;
-    }
-
-    byId.set(result.id, {
-      ...existing,
-      similarity: Math.min(
-        1,
-        Math.max(existing.similarity, result.similarity) +
-          MEMORY_HYBRID_MATCH_BONUS,
-      ),
-      metadata: {
-        ...existing.metadata,
-        matchType: "hybrid",
-        keywordMatches: result.metadata.keywordMatches,
-      },
-    });
-  }
-
-  return mergeUnifiedMemorySearchResults(Array.from(byId.values()), limit);
-}
-
-async function searchRawMemoryHybrid(input: {
+async function searchRawMemorySemantically(input: {
   userId: string;
   query: string;
   authToken?: string;
@@ -309,31 +203,6 @@ async function searchRawMemoryHybrid(input: {
     input.botIds && input.botIds.length > 0
       ? input.botIds.map((botId) => ({ botId }))
       : [{}];
-  const keywords = extractRawMemoryKeywords(input.query);
-
-  const keywordResults = (
-    await Promise.all(
-      filters.map(async (filter) => {
-        if (
-          keywords.length === 0 ||
-          typeof manager.queryMessages !== "function"
-        ) {
-          return [];
-        }
-        const messages = await manager.queryMessages({
-          userId: input.userId,
-          keywords,
-          reverse: true,
-          includeArchived: false,
-          pageSize: Math.max(input.limit * 3, input.limit),
-          ...filter,
-        });
-        return messages
-          .map((message) => toKeywordMemoryResult(message, keywords))
-          .filter((result) => result.similarity >= input.threshold);
-      }),
-    )
-  ).flat();
 
   let semanticResults: UnifiedMemorySearchResult[] = [];
   let semanticBackendHandled = false;
@@ -396,7 +265,7 @@ async function searchRawMemoryHybrid(input: {
     }
   }
 
-  return mergeMemoryHybridResults(semanticResults, keywordResults, input.limit);
+  return mergeUnifiedMemorySearchResults(semanticResults, input.limit);
 }
 
 export async function searchUnifiedMemory(
@@ -421,7 +290,7 @@ export async function searchUnifiedMemory(
 
   if (sources.includes("memory")) {
     if (isRawMessageStorageAvailable()) {
-      const memoryResults = await searchRawMemoryHybrid({
+      const memoryResults = await searchRawMemorySemantically({
         userId: input.userId,
         query,
         authToken: input.authToken,

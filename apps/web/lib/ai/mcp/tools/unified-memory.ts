@@ -1,5 +1,5 @@
 /**
- * Unified Memory tool - searchUnifiedMemory
+ * Semantic memory tool - searchUnifiedMemory
  */
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
@@ -117,7 +117,7 @@ function pickLogMetadata(metadata: Record<string, unknown>) {
 }
 
 /**
- * Create the unified memory search tool.
+ * Create the semantic memory search tool.
  */
 export function createUnifiedMemorySearchTool(
   session: Session,
@@ -126,12 +126,14 @@ export function createUnifiedMemorySearchTool(
   return tool(
     "searchUnifiedMemory",
     [
-      "Search the user's unified memory across raw messages, extracted insights, and uploaded knowledge.",
+      "Primary semantic memory recall tool. Search the user's memory semantically across raw messages, extracted insights, and uploaded knowledge.",
       "",
-      "**MUST USE when:**",
-      "- User asks broad questions about remembered context, past conversations, documents, tasks, projects, people, or preferences",
+      "**DEFAULT FIRST SEARCH TOOL. MUST USE FIRST when:**",
+      "- User asks about remembered context, past conversations, uploaded documents, knowledge base content, raw/original messages, extracted insights, tasks, projects, people, decisions, risks, owners, next actions, or preferences",
       "- User asks something like 'what do you remember about...', 'what did we discuss...', 'find anything about...'",
-      "- A keyword-only raw message search may miss semantically related content",
+      "- User asks document/PDF/knowledge questions and the relevant source may be uploaded knowledge",
+      "- Semantic recall is more useful than exact keyword matching",
+      "- The relevant source is unclear or may span memory, insights, and knowledge",
       "",
       "**Search strategy:**",
       "- Start with sources=['memory','insights','knowledge'] unless the user clearly asks for only one source",
@@ -139,6 +141,7 @@ export function createUnifiedMemorySearchTool(
       "- Use sources=['insights'] for summarized tasks, todos, priorities, and extracted events",
       "- Use sources=['knowledge'] for uploaded documents and strategy memory",
       "- Use a concise natural-language query; semantic search works better than long prompt dumps",
+      "- Use narrower keyword/exact-match tools after this tool if semantic results are missing or a literal phrase lookup is needed",
     ].join("\n"),
     {
       query: z.string().describe("Natural-language memory search query."),
@@ -204,7 +207,7 @@ export function createUnifiedMemorySearchTool(
         const { hitSources, hitSourceCounts, hitSourceScores } =
           getHitSourceSummary(result.results);
 
-        console.log("[UnifiedMemoryTool] search completed", {
+        console.log("[SemanticMemoryTool] search completed", {
           query: result.query,
           requestedSources: result.sources,
           hitSources,
@@ -225,7 +228,7 @@ export function createUnifiedMemorySearchTool(
         });
 
         const text = [
-          `Unified memory search results for: ${result.query}`,
+          `Semantic memory search results for: ${result.query}`,
           `Sources: ${result.sources.join(", ")}; count: ${result.count}`,
           `Hit sources: ${hitSources.length > 0 ? hitSources.join(", ") : "none"}`,
           result.warnings.length > 0
@@ -253,7 +256,7 @@ export function createUnifiedMemorySearchTool(
           content: [
             {
               type: "text" as const,
-              text: `Failed to search unified memory: ${
+              text: `Failed to search semantic memory: ${
                 error instanceof Error ? error.message : String(error)
               }`,
             },
