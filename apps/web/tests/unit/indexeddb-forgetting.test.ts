@@ -7,6 +7,7 @@ import type {
   RawMessageQuery,
 } from "../../../../packages/indexeddb/src/manager";
 import {
+  createIndexedDBMemoryStorageAdapter,
   queryMemoryWithFallback,
   runMemoryForgettingCycle,
 } from "../../../../packages/indexeddb/src/forgetting";
@@ -371,5 +372,57 @@ describe("indexeddb forgetting bridge", () => {
       expect(rawHit.record.embeddingUpdatedAt).toBe(now - DAY_MS);
     }
     expect(manager.accessedIds).toContain("r1");
+  });
+
+  it("recalls raw memories semantically from stored MemoryRecord embeddings", async () => {
+    const now = Date.now();
+    const manager = new InMemoryManager();
+
+    manager.rawMessages = [
+      createRaw({
+        messageId: "semantic-near",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - DAY_MS) / 1000),
+        text: "project alpha contract amount and risk notes",
+        embedding: [1, 0],
+      }),
+      createRaw({
+        messageId: "semantic-far",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - DAY_MS) / 1000) + 1,
+        text: "dinner plan",
+        embedding: [0, 1],
+      }),
+      createRaw({
+        messageId: "semantic-missing-vector",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - DAY_MS) / 1000) + 2,
+        text: "matching text without an embedding",
+      }),
+    ];
+
+    const storage = createIndexedDBMemoryStorageAdapter(
+      manager as unknown as IndexedDBManager,
+    );
+
+    const hits = await storage.semanticRecallRaw?.({
+      userId: "u1",
+      queryEmbedding: [1, 0],
+      limit: 2,
+      threshold: 0.5,
+      tiers: ["short"],
+      dimensions: {
+        platform: "slack",
+        botId: "bot-1",
+      },
+    });
+
+    expect(hits).toBeDefined();
+    expect(hits?.map((hit) => hit.record.id)).toEqual(["semantic-near"]);
+    expect(hits?.[0]?.record.embedding).toEqual([1, 0]);
+    expect(hits?.[0]?.similarity).toBeCloseTo(1);
   });
 });

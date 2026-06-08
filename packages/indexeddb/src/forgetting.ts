@@ -5,12 +5,15 @@ import {
   type MemoryLockHandle,
   type MemoryPageResult,
   type MemoryRecord,
+  type MemorySemanticRecallHit,
+  type MemorySemanticRecallQuery,
   type MemorySearchQuery,
   type MemorySearchWithFallbackResult,
   type MemoryStorageAdapter,
   type MemorySummary,
   type MemorySummarySearchQuery,
 } from "../../ai/src/memory";
+import { cosineSimilarity } from "./embedding";
 import type {
   IndexedDBManager,
   MemoryStage,
@@ -142,6 +145,72 @@ function getPageSize(input: { pageSize?: number; limit?: number }): number {
   // Preserve old `limit` behavior while preferring explicit `pageSize`.
   return input.pageSize ?? input.limit ?? 50;
 }
+
+function clampSemanticLimit(value: number | undefined): number {
+  if (!Number.isFinite(value)) {
+    return 10;
+  }
+  return Math.max(1, Math.floor(value as number));
+}
+
+function clampSemanticThreshold(value: number | undefined): number {
+  if (!Number.isFinite(value)) {
+    return 0.7;
+  }
+  return Math.min(1, Math.max(-1, value as number));
+}
+
+function dimensionMatches(
+  record: MemoryRecord,
+  dimensions: MemorySemanticRecallQuery["dimensions"],
+): boolean {
+  if (!dimensions) {
+    return true;
+  }
+
+  const recordDimensions = record.dimensions ?? {};
+  return Object.entries(dimensions).every(([key, value]) => {
+    if (value === undefined) {
+      return true;
+    }
+    return recordDimensions[key] === value;
+  });
+}
+
+function timeMatches(
+  record: MemoryRecord,
+  query: Pick<MemorySemanticRecallQuery, "startTime" | "endTime">,
+): boolean {
+  if (query.startTime !== undefined && record.timestamp < query.startTime) {
+    return false;
+  }
+  if (query.endTime !== undefined && record.timestamp >= query.endTime) {
+    return false;
+  }
+  return true;
+}
+
+type NativeRawSemanticSearchResult = {
+  message: RawMessage;
+  similarity: number;
+};
+
+type NativeSemanticSearchManager = IndexedDBManager & {
+  searchMessagesSemantically?: (input: {
+    userId: string;
+    queryEmbedding: number[];
+    limit?: number;
+    scanLimit?: number;
+    threshold?: number;
+    includeArchived?: boolean;
+    platform?: string;
+    botId?: string;
+    channel?: string;
+    person?: string;
+    startTime?: number;
+    endTime?: number;
+  }) => Promise<NativeRawSemanticSearchResult[]>;
+};
 
 function hasMoreByLength<T>(items: T[], pageSize: number): MemoryPageResult<T> {
   // We intentionally fetch `pageSize + 1` upstream so we can compute hasMore cheaply.
@@ -289,6 +358,117 @@ export function createIndexedDBMemoryStorageAdapter(
             : undefined,
       });
       return hasMoreByLength(raw.map(toMemoryRecord), pageSize);
+    },
+
+    async semanticRecallRaw(query: MemorySemanticRecallQuery) {
+      if (query.queryEmbedding.length === 0) {
+        return [];
+      }
+
+      const limit = clampSemanticLimit(query.limit);
+      const threshold = clampSemanticThreshold(query.threshold);
+      const platform =
+        typeof query.dimensions?.platform === "string"
+          ? String(query.dimensions.platform)
+          : undefined;
+      const channel =
+        typeof query.dimensions?.channel === "string"
+          ? String(query.dimensions.channel)
+          : undefined;
+      const person =
+        typeof query.dimensions?.person === "string"
+          ? String(query.dimensions.person)
+          : undefined;
+      const botId =
+        typeof query.dimensions?.botId === "string"
+          ? String(query.dimensions.botId)
+          : undefined;
+
+      const nativeManager = manager as NativeSemanticSearchManager;
+      if (typeof nativeManager.searchMessagesSemantically === "function") {
+        const nativeResults = await nativeManager.searchMessagesSemantically({
+          userId: query.userId,
+          queryEmbedding: query.queryEmbedding,
+          // Over-fetch because the shared memory contract supports tier and
+          // arbitrary dimension filters that some raw backends do not push down.
+          limit: Math.max(limit * 5, limit),
+          threshold,
+          includeArchived: false,
+          platform,
+          botId,
+          channel,
+          person,
+          startTime:
+            query.startTime === undefined
+              ? undefined
+              : normalizeTimestampFromMs(query.startTime),
+          endTime:
+            query.endTime === undefined
+              ? undefined
+              : normalizeTimestampFromMs(query.endTime),
+        });
+
+        return nativeResults
+          .map(
+            (result): MemorySemanticRecallHit => ({
+              record: toMemoryRecord(result.message),
+              similarity: result.similarity,
+            }),
+          )
+          .filter((hit) => {
+            if (query.tiers && !query.tiers.includes(hit.record.tier)) {
+              return false;
+            }
+            return (
+              timeMatches(hit.record, query) &&
+              dimensionMatches(hit.record, query.dimensions)
+            );
+          })
+          .slice(0, limit);
+      }
+
+      const scanLimit = Math.max(limit * 10, limit);
+      const raw = await manager.queryMessages({
+        userId: query.userId,
+        includeArchived: false,
+        pageSize: scanLimit,
+        reverse: true,
+        memoryStages: query.tiers as MemoryStage[] | undefined,
+        platform,
+        botId,
+        channel,
+        person,
+        startTime:
+          query.startTime === undefined
+            ? undefined
+            : normalizeTimestampFromMs(query.startTime),
+        endTime:
+          query.endTime === undefined
+            ? undefined
+            : normalizeTimestampFromMs(query.endTime),
+      });
+
+      return raw
+        .map((message): MemorySemanticRecallHit | null => {
+          if (!message.embedding || message.embedding.length === 0) {
+            return null;
+          }
+          const similarity = cosineSimilarity(
+            query.queryEmbedding,
+            message.embedding,
+          );
+          if (!Number.isFinite(similarity) || similarity < threshold) {
+            return null;
+          }
+          return {
+            record: toMemoryRecord(message),
+            similarity,
+          };
+        })
+        .filter((hit): hit is MemorySemanticRecallHit => hit !== null)
+        .filter((hit) => dimensionMatches(hit.record, query.dimensions))
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, limit);
     },
 
     async querySummaries(query: MemorySummarySearchQuery) {

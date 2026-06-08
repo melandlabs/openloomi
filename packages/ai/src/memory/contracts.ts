@@ -125,6 +125,22 @@ export interface MemorySummarySearchQuery {
   dimensions?: MemoryDimensions;
 }
 
+export interface MemorySemanticRecallQuery {
+  userId: string;
+  queryEmbedding: number[];
+  limit?: number;
+  threshold?: number;
+  tiers?: MemoryTier[];
+  dimensions?: MemoryDimensions;
+  startTime?: number;
+  endTime?: number;
+}
+
+export interface MemorySemanticRecallHit {
+  record: MemoryRecord;
+  similarity: number;
+}
+
 export interface MemoryStorageAdapter {
   acquireLock(input: {
     key: string;
@@ -142,6 +158,9 @@ export interface MemoryStorageAdapter {
   querySummaries(
     query: MemorySummarySearchQuery,
   ): Promise<MemoryPageResult<MemorySummary>>;
+  semanticRecallRaw?(
+    query: MemorySemanticRecallQuery,
+  ): Promise<MemorySemanticRecallHit[]>;
   markRecordsAccessed?(input: MemoryMarkAccessedInput): Promise<void>;
 }
 
@@ -210,6 +229,16 @@ export type MemorySearchHit =
       timestamp: number;
       summary: MemorySummary;
     };
+
+export interface MemorySemanticRecallResult {
+  items: Array<
+    MemorySemanticRecallHit & {
+      sourceType: "raw";
+      timestamp: number;
+    }
+  >;
+  rawCount: number;
+}
 
 export interface MemorySearchWithFallbackResult {
   items: MemorySearchHit[];

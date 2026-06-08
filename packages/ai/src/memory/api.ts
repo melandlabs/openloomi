@@ -1,6 +1,8 @@
 import type {
   MemorySearchHit,
   MemorySearchQuery,
+  MemorySemanticRecallQuery,
+  MemorySemanticRecallResult,
   MemorySearchWithFallbackResult,
   MemoryStorageAdapter,
 } from "./contracts";
@@ -23,6 +25,9 @@ export interface MemoryQueryApi {
   queryWithFallback(
     input: QueryWithFallbackInput,
   ): Promise<MemorySearchWithFallbackResult>;
+  semanticRecall(
+    input: MemorySemanticRecallQuery,
+  ): Promise<MemorySemanticRecallResult>;
 }
 
 function resolvePageSize(
@@ -39,6 +44,48 @@ export function createMemoryQueryApi(
   const markRawAccessOnRead = input.markRawAccessOnRead ?? true;
 
   return {
+    async semanticRecall(recallInput: MemorySemanticRecallQuery) {
+      if (
+        recallInput.queryEmbedding.length === 0 ||
+        !input.storage.semanticRecallRaw
+      ) {
+        return {
+          items: [],
+          rawCount: 0,
+        };
+      }
+
+      const limit = Math.max(
+        1,
+        Math.floor(recallInput.limit ?? defaultPageSize),
+      );
+      const hits = await input.storage.semanticRecallRaw({
+        ...recallInput,
+        limit,
+      });
+      const items = hits.slice(0, limit).map((hit) => ({
+        ...hit,
+        sourceType: "raw" as const,
+        timestamp: hit.record.timestamp,
+      }));
+
+      if (markRawAccessOnRead && input.storage.markRecordsAccessed) {
+        const rawIds = items.map((hit) => hit.record.id);
+        if (rawIds.length > 0) {
+          await input.storage.markRecordsAccessed({
+            userId: recallInput.userId,
+            ids: rawIds,
+            at: Date.now(),
+          });
+        }
+      }
+
+      return {
+        items,
+        rawCount: items.length,
+      };
+    },
+
     async queryWithFallback(queryInput: QueryWithFallbackInput) {
       const pageSize = resolvePageSize(queryInput, defaultPageSize);
       const minRawResults = queryInput.minRawResultsWithoutFallback ?? pageSize;

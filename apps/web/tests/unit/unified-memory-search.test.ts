@@ -201,34 +201,8 @@ describe("unified memory search", () => {
     ]);
   });
 
-  it("hybrid searches raw memory with FTS keywords and semantic vectors", async () => {
+  it("searches raw memory semantically without invoking legacy keyword lookup", async () => {
     isRawMessageStorageAvailableMock.mockReturnValue(true);
-    queryMessagesMock.mockResolvedValue([
-      {
-        messageId: "message-1",
-        userId: "user-1",
-        platform: "slack",
-        botId: "bot-1",
-        channel: "product",
-        person: "alice",
-        timestamp: 1774500000,
-        content: "Raw project feedback",
-        createdAt: 1774500000,
-        memoryStage: "short",
-      },
-      {
-        messageId: "message-2",
-        userId: "user-1",
-        platform: "slack",
-        botId: "bot-1",
-        channel: "product",
-        person: "bob",
-        timestamp: 1774500010,
-        content: "Project keyword-only note",
-        createdAt: 1774500010,
-        memoryStage: "short",
-      },
-    ]);
     searchMessagesSemanticallyMock.mockResolvedValue([
       {
         type: "memory",
@@ -254,14 +228,7 @@ describe("unified memory search", () => {
     });
 
     expect(universalEmbedQueryMock).toHaveBeenCalledWith("project feedback");
-    expect(queryMessagesMock).toHaveBeenCalledWith({
-      userId: "user-1",
-      keywords: ["project feedback", "project", "feedback"],
-      reverse: true,
-      includeArchived: false,
-      pageSize: 15,
-      botId: "bot-1",
-    });
+    expect(queryMessagesMock).not.toHaveBeenCalled();
     expect(searchMessagesSemanticallyMock).toHaveBeenCalledWith({
       userId: "user-1",
       queryEmbedding: [0.1, 0.2],
@@ -270,10 +237,7 @@ describe("unified memory search", () => {
       botId: "bot-1",
     });
     expect(output.warnings).toEqual([]);
-    expect(output.results.map((result) => result.id)).toEqual([
-      "message-1",
-      "message-2",
-    ]);
+    expect(output.results.map((result) => result.id)).toEqual(["message-1"]);
     expect(output.results[0]).toMatchObject({
       type: "memory",
       id: "message-1",
@@ -282,19 +246,152 @@ describe("unified memory search", () => {
         userId: "user-1",
         botId: "bot-1",
         platform: "slack",
-        matchType: "hybrid",
       },
     });
-    expect(output.results[0]?.similarity).toBe(1);
-    expect(output.results[1]).toMatchObject({
-      type: "memory",
-      id: "message-2",
-      content: "Project keyword-only note",
+    expect(output.results[0]?.similarity).toBe(0.93);
+  });
+
+  it("covers #71 cross-source semantic indexing across memory, insights, and knowledge", async () => {
+    isRawMessageStorageAvailableMock.mockReturnValue(true);
+    searchMessagesSemanticallyMock.mockImplementation(
+      async (input: { botId?: string }) => {
+        if (input.botId === "bot-a") {
+          return [
+            {
+              id: "memory-a",
+              content: "Raw memory: Alpha contract risk and core equipment",
+              similarity: 0.94,
+              metadata: {
+                userId: "user-1",
+                botId: "bot-a",
+                platform: "feishu",
+              },
+            },
+          ];
+        }
+        if (input.botId === "bot-b") {
+          return [
+            {
+              id: "memory-b",
+              content: "Raw memory: Beta project related follow-up",
+              similarity: 0.72,
+              metadata: {
+                userId: "user-1",
+                botId: "bot-b",
+                platform: "slack",
+              },
+            },
+          ];
+        }
+        return [];
+      },
+    );
+    searchInsightsSemanticallyMock.mockResolvedValue([
+      {
+        type: "insight",
+        id: "insight-top",
+        content: "Insight: Alpha has highest delivery risk",
+        similarity: 0.97,
+        metadata: {
+          botId: "bot-a",
+          title: "Alpha risk",
+        },
+      },
+      {
+        type: "insight",
+        id: "insight-low",
+        content: "Insight: low score should lose the global top-N cutoff",
+        similarity: 0.65,
+        metadata: {
+          botId: "bot-b",
+          title: "Low score",
+        },
+      },
+    ]);
+    searchSimilarChunksMock.mockResolvedValue([
+      {
+        chunkId: "chunk-alpha",
+        documentId: "doc-alpha",
+        documentName: "Alpha.md",
+        content: "Knowledge: Alpha core equipment list",
+        similarity: 0.91,
+        chunkIndex: 3,
+      },
+    ]);
+
+    const output = await searchUnifiedMemory({
+      userId: "user-1",
+      query: "Alpha contract risk and core equipment",
+      sources: ["memory", "insights", "knowledge"],
+      limit: 4,
+      threshold: 0.6,
+      authToken: "token",
+      botIds: ["bot-a", "bot-b"],
+      documentIds: ["doc-alpha"],
+    });
+
+    expect(universalEmbedQueryMock).toHaveBeenCalledWith(
+      "Alpha contract risk and core equipment",
+    );
+    expect(searchMessagesSemanticallyMock).toHaveBeenCalledTimes(2);
+    expect(searchMessagesSemanticallyMock).toHaveBeenNthCalledWith(1, {
+      userId: "user-1",
+      queryEmbedding: [0.1, 0.2],
+      limit: 4,
+      threshold: 0.6,
+      botId: "bot-a",
+    });
+    expect(searchMessagesSemanticallyMock).toHaveBeenNthCalledWith(2, {
+      userId: "user-1",
+      queryEmbedding: [0.1, 0.2],
+      limit: 4,
+      threshold: 0.6,
+      botId: "bot-b",
+    });
+    expect(queryMessagesMock).not.toHaveBeenCalled();
+    expect(searchInsightsSemanticallyMock).toHaveBeenCalledWith({
+      userId: "user-1",
+      query: "Alpha contract risk and core equipment",
+      limit: 4,
+      threshold: 0.6,
+      botIds: ["bot-a", "bot-b"],
+      includeArchived: undefined,
+      authToken: "token",
+    });
+    expect(searchSimilarChunksMock).toHaveBeenCalledWith(
+      "user-1",
+      "Alpha contract risk and core equipment",
+      {
+        limit: 4,
+        threshold: 0.6,
+        documentIds: ["doc-alpha"],
+      },
+      "token",
+    );
+
+    // This is the important #71 behavior: three isolated sources come back
+    // through one semantic result contract and are globally ranked by score.
+    expect(output).toMatchObject({
+      query: "Alpha contract risk and core equipment",
+      sources: ["memory", "insights", "knowledge"],
+      count: 4,
+      warnings: [],
+    });
+    expect(
+      output.results.map((result) => `${result.type}:${result.id}`),
+    ).toEqual([
+      "insight:insight-top",
+      "memory:memory-a",
+      "knowledge:chunk-alpha",
+      "memory:memory-b",
+    ]);
+    expect(output.results[2]).toMatchObject({
+      type: "knowledge",
+      id: "chunk-alpha",
       metadata: {
-        userId: "user-1",
-        botId: "bot-1",
-        platform: "slack",
-        matchType: "keyword",
+        documentId: "doc-alpha",
+        documentName: "Alpha.md",
+        chunkIndex: 3,
       },
     });
   });
@@ -321,5 +418,61 @@ describe("unified memory search", () => {
     });
     expect(searchMessagesSemanticallyMock).not.toHaveBeenCalled();
     expect(output.results).toEqual([]);
+  });
+
+  it("falls back to database semantic search when Chroma raw memory search fails", async () => {
+    isRawMessageStorageAvailableMock.mockReturnValue(true);
+    isRawMessageChromaEnabledMock.mockReturnValue(true);
+    searchRawMessagesWithChromaMock.mockRejectedValue(
+      new Error("Chroma temporarily unavailable"),
+    );
+    searchMessagesSemanticallyMock.mockResolvedValue([
+      {
+        id: "db-semantic-memory",
+        content: "Database vector fallback result",
+        similarity: 0.88,
+        metadata: {
+          userId: "user-1",
+          botId: "bot-1",
+        },
+      },
+    ]);
+
+    const output = await searchUnifiedMemory({
+      userId: "user-1",
+      query: "fallback memory",
+      sources: ["memory"],
+      limit: 5,
+      threshold: 0.7,
+      authToken: "token",
+      botIds: ["bot-1"],
+    });
+
+    expect(searchRawMessagesWithChromaMock).toHaveBeenCalledWith({
+      userId: "user-1",
+      queryEmbedding: [0.1, 0.2],
+      limit: 5,
+      threshold: 0.7,
+      botId: "bot-1",
+    });
+    expect(searchMessagesSemanticallyMock).toHaveBeenCalledWith({
+      userId: "user-1",
+      queryEmbedding: [0.1, 0.2],
+      limit: 5,
+      threshold: 0.7,
+      botId: "bot-1",
+    });
+    expect(output.results).toEqual([
+      {
+        type: "memory",
+        id: "db-semantic-memory",
+        content: "Database vector fallback result",
+        similarity: 0.88,
+        metadata: {
+          userId: "user-1",
+          botId: "bot-1",
+        },
+      },
+    ]);
   });
 });

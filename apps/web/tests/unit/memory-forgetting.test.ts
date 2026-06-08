@@ -470,6 +470,86 @@ describe("memory forgetting engine", () => {
 });
 
 describe("memory query api", () => {
+  it("returns empty semantic recall when the storage has no vector recall adapter", async () => {
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: [], hasMore: false }),
+      querySummaries: async () => ({ items: [], hasMore: false }),
+    };
+
+    const api = createMemoryQueryApi({ storage });
+    const result = await api.semanticRecall({
+      userId: "u1",
+      queryEmbedding: [1, 0],
+      limit: 5,
+    });
+
+    expect(result.items).toEqual([]);
+    expect(result.rawCount).toBe(0);
+  });
+
+  it("recalls semantic raw memory and marks hits as accessed", async () => {
+    const rawRecords = [
+      createRecord({ id: "semantic-1", userId: "u1", timestamp: 2000 }),
+      createRecord({ id: "semantic-2", userId: "u1", timestamp: 1000 }),
+    ];
+
+    let semanticRecallCount = 0;
+    let markAccessCount = 0;
+
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: [], hasMore: false }),
+      querySummaries: async () => ({ items: [], hasMore: false }),
+      semanticRecallRaw: async (query) => {
+        semanticRecallCount += 1;
+        expect(query).toMatchObject({
+          userId: "u1",
+          queryEmbedding: [1, 0],
+          limit: 1,
+          threshold: 0.5,
+        });
+        return [
+          { record: rawRecords[0], similarity: 0.95 },
+          { record: rawRecords[1], similarity: 0.8 },
+        ];
+      },
+      markRecordsAccessed: async (input) => {
+        markAccessCount += 1;
+        expect(input.userId).toBe("u1");
+        expect(input.ids).toEqual(["semantic-1"]);
+      },
+    };
+
+    const api = createMemoryQueryApi({ storage });
+    const result = await api.semanticRecall({
+      userId: "u1",
+      queryEmbedding: [1, 0],
+      limit: 1,
+      threshold: 0.5,
+    });
+
+    expect(semanticRecallCount).toBe(1);
+    expect(markAccessCount).toBe(1);
+    expect(result.rawCount).toBe(1);
+    expect(result.items).toEqual([
+      {
+        sourceType: "raw",
+        timestamp: 2000,
+        record: rawRecords[0],
+        similarity: 0.95,
+      },
+    ]);
+  });
+
   it("does not query summaries when raw results are sufficient", async () => {
     const rawRecords = [
       createRecord({ id: "r1", userId: "u1", timestamp: 2000 }),
