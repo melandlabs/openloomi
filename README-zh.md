@@ -39,6 +39,17 @@ OpenLoomi 是一个开源的 AI 工作空间，运行在你的桌面上。它连
   <img src="screenshots/components.png" alt="架构图" width="100%">
 </p>
 
+## 测评基准
+
+OpenLoomi 的记忆系统在基准测试中进行了严格评估：
+
+| 基准测试                                                                                    | 指标         | 结果      |
+| ------------------------------------------------------------------------------------------- | ------------ | --------- |
+| [LoCoMo](https://github.com/melandlabs/openloomi/tree/main/benchmark/locomo)                | 端到端准确率 | **96.3%** |
+| [LongMemEval-S500](https://github.com/melandlabs/openloomi/tree/main/benchmark/longmemeval) | 端到端准确率 | **97.6%** |
+
+详细测评数据：[https://openloomi.ai/docs/benchmark](https://openloomi.ai/docs/benchmark)
+
 ## 快速开始
 
 **直接下载**（面向终端用户）：
