@@ -41,10 +41,10 @@ OpenLoomi is an open-source AI workspace that runs on your desktop. It connects 
 
 OpenLoomi's memory system is rigorously evaluated against academic and industry benchmarks:
 
-| Benchmark                                                                                   | Metric              | Result    |
-| ------------------------------------------------------------------------------------------- | ------------------- | --------- |
-| [LoCoMo](https://github.com/melandlabs/openloomi/tree/main/benchmark/locomo)                | End-to-end accuracy | **96.3%** |
-| [LongMemEval-S500](https://github.com/melandlabs/openloomi/tree/main/benchmark/longmemeval) | End-to-end accuracy | **97.6%** |
+| Benchmark                                                                                | Metric              | Result    |
+| ---------------------------------------------------------------------------------------- | ------------------- | --------- |
+| [LoCoMo](https://github.com/melandlabs/openloomi/tree/main/benchmark/locomo)             | End-to-end accuracy | **96.3%** |
+| [LongMemEval-S](https://github.com/melandlabs/openloomi/tree/main/benchmark/longmemeval) | End-to-end accuracy | **97.6%** |
 
 Full benchmark details: [https://openloomi.ai/docs/benchmark](https://openloomi.ai/docs/benchmark)
 
