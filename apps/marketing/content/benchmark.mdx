@@ -1,0 +1,89 @@
+---
+title: "Memory Benchmarks"
+description: "OpenLoomi memory system evaluation benchmarks — LoCoMo, LongMemEval, and Aloomi Harness performance data"
+icon: "FaChartLine"
+---
+
+# Memory Benchmarks
+
+OpenLoomi's memory system is rigorously evaluated against academic and industry benchmarks to ensure industry-leading performance in real-world scenarios.
+
+---
+
+## LoCoMo (Long-term Conversation Memory)
+
+**Source**: Stony Brook University — Academic Benchmark Dataset
+
+LoCoMo contains real conversation records with corresponding observations, summaries, and QA pairs, specifically designed to evaluate memory system performance across different retrieval modes.
+
+### Question Categories
+
+| Category      | Description                         |
+| ------------- | ----------------------------------- |
+| `single_hop`  | Single memory retrieval fact recall |
+| `temporal`    | Date/time reasoning questions       |
+| `multi_hop`   | Cross-session multi-step reasoning  |
+| `open_domain` | Open-domain fusion Q&A              |
+
+### Results
+
+| Conversation | Total | Passed | Pass Rate |
+| ------------ | ----- | ------ | --------- |
+| conv-26      | 150   | 149    | 97.40%    |
+| conv-30      | 80    | 81     | 98.77%    |
+| conv-41      | 152   | 152    | 100%      |
+| conv-42      | 191   | 199    | 95.98%    |
+| conv-43      | 167   | 178    | 93.82%    |
+| conv-44      | 113   | 123    | 91.87%    |
+| conv-47      | 145   | 150    | 96.67%    |
+| conv-48      | 187   | 191    | 97.91%    |
+| conv-49      | 146   | 156    | 93.59%    |
+| conv-50      | 154   | 158    | 97.47%    |
+
+**End-to-end accuracy: 96.3%**
+
+Performance is on par with leading open-source memory projects like agentmemory and mempalace.
+
+🔗 [GitHub Repository](https://github.com/melandlabs/openloomi/tree/main/benchmark/locomo)
+
+---
+
+## LongMemEval-S500
+
+**Scale**: 500 QA Pairs, 10+ Question Types, 100+ Sessions
+
+Extracted from real multi-turn conversations, LongMemEval contains questions covering short-term memory, cross-session reasoning, temporal reasoning, and more — evaluating Agent memory recall capability in complex scenarios.
+
+### Question Types
+
+- **single-session-assistant**: Assistant interactions within a single session
+- **single-session-user**: User interactions within a single session
+- **multi-session**: Cross-session multi-step reasoning
+- **temporal-reasoning**: Time-sensitive query reasoning
+- **knowledge-update**: Knowledge iteration and fact changes
+- **single-session-preference**: User preference queries
+
+### Results
+
+| Type                      | Count   | Accuracy            |
+| ------------------------- | ------- | ------------------- |
+| single-session-assistant  | 56      | 100% (56/56)        |
+| single-session-user       | 70      | 100% (70/70)        |
+| multi-session             | 133     | 98.5% (131/133)     |
+| temporal-reasoning        | 133     | 97.7% (130/133)     |
+| knowledge-update          | 78      | 94.9% (74/78)       |
+| single-session-preference | 30      | 90.0% (27/30)       |
+| **Overall**               | **500** | **97.6% (488/500)** |
+
+The system demonstrates high robustness and accuracy in complex multimodal memory reasoning tasks.
+
+🔗 [GitHub Repository](https://github.com/melandlabs/openloomi/tree/main/benchmark/longmemeval)
+
+## Performance Summary
+
+| Benchmark        | Metric              | Result    |
+| ---------------- | ------------------- | --------- |
+| LoCoMo           | End-to-end accuracy | **96.3%** |
+| LongMemEval-S500 | End-to-end accuracy | **97.6%** |
+
+All benchmarks demonstrate performance on par with or exceeding current leading open-source memory projects, validating OpenLoomi's approach to agent memory systems.

@@ -12,6 +12,48 @@ This document covers the system architecture, data model, and the relationships 
 
 ---
 
+## Holistic Context Graph
+
+At its core, OpenLoomi's memory system builds a **Holistic Context Graph** — a comprehensive representation of your work that captures:
+
+- **People**: Who you work with, their roles, relationships, and collaboration patterns
+- **Projects**: What you're working on, goals, timelines, and progress
+- **Decisions**: Key decisions made, context, stakeholders, and outcomes
+- **Timeline**: How context evolves over time, with temporal validity for historical queries
+
+### The Four Pain Points of Agent Memory
+
+Current agent memory systems suffer from four critical challenges:
+
+1. **Memory Brittleness** — Agents struggle to establish meaningful connections in massive, scattered data. Raw storage without intelligent curation leads to context rot, where agents can't distinguish signal from noise.
+
+2. **Temporal Reasoning Deficiency** — Time-sensitive queries like "what did I work on last week?" fail because systems lack dynamic updates and long-term knowledge tracking with temporal context.
+
+3. **The Forgetting Dilemma** — "Remembering everything" isn't the goal. Naive retention leads to information overload and context rot, while aggressive forgetting loses critical information.
+
+4. **Evaluation Gap** — Industry benchmarks lack standard maintenance and continuous improvement, making it impossible to quantitatively measure progress in real business scenarios.
+
+### The Solution
+
+Unlike traditional memory systems that merely store and retrieve messages, the Holistic Context Graph builds structured knowledge from raw data through a self-evolving closed loop:
+
+```
+Diverse context sources (email, IM, screen, audio)
+    ↓
+Raw messages (scattered)
+    ↓
+Structured Memory Insights + Timeline
+    ↓
+Agent reads memory before execution → updates memory & detects after
+    ↓
+Spatial dimension: Hebbian Memory Connections
+Temporal dimension: Time-Travel Queries
+```
+
+OpenLoomi transforms this pattern for personal AI agents, extracting structured insights from diverse context sources (email, IM, screen, audio) and building the Holistic Context Graph through progressive abstraction.
+
+---
+
 ## System Overview
 
 The memory system spans five distinct data layers, each serving a different purpose in the information architecture:
@@ -162,6 +204,19 @@ The keyword index catches exact matches (specific names, IDs, dates) that semant
 
 The forgetting engine is a scheduled background process that manages the memory lifecycle. It promotes records between tiers and compresses groups into summaries.
 
+A core insight from our experience: **memory isn't about storing longer** — naively storing everything leads to context rot where agents drown in noise and can't establish meaningful connections. The real challenge is building algorithms that can distinguish signal from noise, and **the forgetting algorithm is harder to get right than the storage algorithm**.
+
+### Two-Phase Lifecycle
+
+The forgetting engine implements a two-phase lifecycle that balances retention with relevance:
+
+| Phase                | Transition   | Action                                       |
+| -------------------- | ------------ | -------------------------------------------- |
+| Phase 1: Short → Mid | Score < 0.65 | Promote to Mid tier, generate L1 Summary     |
+| Phase 2: Mid → Long  | Score < 0.45 | Promote to Long tier, generate L2/L3 Summary |
+
+For example, a half-year-old casual greeting message gets automatically demoted or forgotten, while an important decision from three months ago is preserved and reinforced.
+
 ### Tier Lifecycle
 
 ```
@@ -256,6 +311,37 @@ If semantic results are insufficient (`results < minRawResultsWithoutFallback`),
 1. Keyword search on `keywordsText` field
 2. Time-bounded query on `userId_endTimestamp`
 3. Results merged with semantic results and resort by timestamp
+
+### Temporal Reasoning: Time-Travel Queries
+
+The **time dimension** of the Holistic Context Graph solves one of the hardest challenges in agent memory: handling **time-sensitive queries** like "What did I work on last week?" or "Give me a summary of decisions made in January."
+
+Standard retrieval fails because it returns current state without temporal context. OpenLoomi implements **Temporal Validity** — the ability to see what was relevant at a specific point in time:
+
+```bash
+# Get insights valid at a specific point in time
+node $SKILL_DIR/scripts/openloomi-memory.cjs get-insights-as-of 2024-01-01
+
+# Get currently valid insights
+node $SKILL_DIR/scripts/openloomi-memory.cjs get-current-insights
+
+# Get insights overlapping a time interval
+node $SKILL_DIR/scripts/openloomi-memory.cjs get-insights-in-interval 2024-01-01 2026-06-01
+```
+
+When querying with a historical timestamp, OpenLoomi:
+
+1. Filters to records valid at that point in time
+2. Returns the contextual snapshot as it existed then — decisions, project status, conclusions
+3. Shows the evolution of insights across timelines
+
+This enables questions like:
+
+- "What was my priority in Q3 2024?"
+- "What decisions did we make between January and March?"
+- "Show me the project status at the end of February"
+
+Temporal reasoning connects with real-time data sources (connectors, integrations, screen/audio capture) to build a complete picture of how context evolved over time.
 
 ### Access Tracking
 
@@ -442,6 +528,55 @@ The background indexing pipeline writes new vectors while the user may be simult
 ### Why dimension-key Grouping?
 
 Grouping by `platform + channel + person + botId` ensures that summaries respect natural conversation boundaries. A week's worth of Slack messages in `#engineering` won't be compressed into the same summary as a week's Telegram messages from a different person. This preserves topical coherence in the summarization output.
+
+### Spatial Dimension: Hebbian Memory Connections
+
+The **spatial dimension** of the Holistic Context Graph implements **associative memory connections** inspired by the Hebbian learning principle ("neurons that fire together wire together"):
+
+```typescript
+// Connection strength increases when insights are accessed together
+Wnew = Wold + alpha * (Wmax - Wold) * activity;
+
+// Long-unaccessed connections decay over time
+Wdecay = (w * e) ^ -yt;
+```
+
+When you access an Insight A, the system automatically strengthens its connection to related Insights based on shared keywords or semantic similarity. This enables **associative recall** — when you remember one thing, related memories surface automatically.
+
+**Example**: When you ask "Why is this client stuck?", the system not only finds the current project context, but also associatively recalls lessons from similar projects three months ago.
+
+### Coding Agent-Inspired Architecture
+
+The Holistic Context Graph architecture was inspired by closed-loop patterns from Coding Agent workflows. The complete flow:
+
+```
+GitHub Issue (people/projects/...) → Design Review → Result/Status Update
+    ↓
+Structured Code Test & Verification → Process State Update
+    ↓
+PR with Git History → Public/Private Data Standards
+    ↓
+Raw Messages → Summary → Agent Updates Insight
+    ↓
+Structured Memory Insights + Timeline + Global Relationship Graph + Self-Evolving Memory
+```
+
+This creates a complete **Holistic Context Graph**: global/local preferences + structured code + GitHub Issue/Kanban + Git History + Coding Agent patterns + immutable raw context + Insights + Timeline + global relationship graph + self-evolving memory.
+
+---
+
+## Memory Evaluation Framework
+
+OpenLoomi's memory system is evaluated across four key dimensions, ensuring comprehensive assessment of accuracy, recall, temporal reasoning, and knowledge update capabilities:
+
+| Dimension              | Description                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Accuracy**           | Measures how well generated answers match objective facts, using F1-Score, BLEU and other professional metrics                             |
+| **Recall Rate**        | Evaluates the system's ability to correctly retrieve and associate relevant information from historical memory when facing complex queries |
+| **Temporal Reasoning** | Tests the system's ability to handle time-sensitive queries and understand event sequences and timeliness constraints                      |
+| **Knowledge Update**   | Examines the memory system's dynamic adaptation when knowledge evolves or facts change                                                     |
+
+OpenLoomi achieves **96%+ accuracy** on LoCoMo and LongMemEval-S500 benchmarks, on par with SOTA. See [Benchmarks](/docs/benchmark) for detailed performance data.
 
 ---
 

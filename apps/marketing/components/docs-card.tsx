@@ -73,11 +73,6 @@ export const OpenLoomiDocsCards = (): JSX.Element => {
       description: "Connect messaging platforms, email, and productivity tools",
     },
     {
-      id: "understanding",
-      title: "Understanding",
-      description: "Smart insights from your communications",
-    },
-    {
       id: "chat",
       title: "Chat",
       description: "Ask in plain language, get answers from your data",
@@ -103,14 +98,24 @@ export const OpenLoomiDocsCards = (): JSX.Element => {
       description: "Upload documents and ask AI questions",
     },
     {
-      id: "settings",
-      title: "Settings",
-      description: "Configure your OpenLoomi experience",
+      id: "memory",
+      title: "Memory",
+      description: "Tiered storage, forgetting engine, and temporal reasoning",
+    },
+    {
+      id: "benchmark",
+      title: "Benchmarks",
+      description: "LoCoMo, LongMemEval, and Aloomi Harness performance data",
     },
     {
       id: "privacy-security",
       title: "Privacy & Security",
       description: "How we protect your data and privacy",
+    },
+    {
+      id: "glossary",
+      title: "Glossary",
+      description: "Key terms and concepts",
     },
     {
       id: "use-cases",
