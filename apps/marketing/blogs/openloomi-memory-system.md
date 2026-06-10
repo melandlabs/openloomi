@@ -1,202 +1,279 @@
 ---
-title: "OpenLoomi Memory System: Raw Messages, Insights, and RAG Recall"
-date: 2026-05-26
-description: A technical deep dive into OpenLoomi Memory, including raw message lifecycle, insight tracking, and unified RAG recall.
+title: "OpenLoomi Memory System: Lifecycle, Vector Indexing, and Semantic Recall"
+date: 2026-06-10
+description: A source-level guide to OpenLoomi memory domains, lifecycle compaction, embedding maintenance, vector backends, and cross-source semantic recall.
 ---
 
-# Internal Memory Implementation Mechanism
+# OpenLoomi Memory System
 
-This document explains how OpenLoomi's internal memory system works in code. It
-is written for maintainers who need to change ingestion, lifecycle compaction,
-retrieval, storage backends, or the final unified search stage.
+_Last verified against the current repository on June 10, 2026, including the
+memory pipeline merged in
+[PR #154](https://github.com/melandlabs/openloomi/pull/154)._
 
-The important mental model is that OpenLoomi does not have one magic "memory"
-box. It has several memory-like surfaces, each with a different job:
+This document describes how OpenLoomi stores, compacts, embeds, and retrieves
+memory. It is intended for maintainers working on the lifecycle engine, raw
+message stores, insights, RAG, vector backends, APIs, or agent tools. For a
+shorter product comparison, see
+[Memory Capabilities Comparison](/blogs/memory-capabilities-comparison).
 
-- Raw message memory stores original or near-original messages in
-  `raw_messages`.
-- Lifecycle summaries store rule-based compaction artifacts in
-  `memory_summaries`.
-- Insights store LLM-generated interpretations in the insights layer.
-- Knowledge stores uploaded/generated document chunks in the RAG layer.
-- Filesystem memory stores human-readable local Markdown and JSON files.
-- Unified search is the application-level front door that queries raw memory,
-  insights, and knowledge, then returns one ranked result list.
+OpenLoomi does not have one physical "memory database". The product-level
+context atlas is assembled from several isolated data sources:
 
-If the names feel slightly overloaded, that is because they are. Welcome to
-software, where "memory" can mean five things before coffee.
+- Raw memory stores original or near-original messages.
+- Lifecycle summaries compact older raw memory.
+- Insights store LLM-derived interpretations.
+- Knowledge stores uploaded document chunks through RAG.
+- Filesystem memory stores inspectable local Markdown and JSON files.
+- Unified semantic search queries raw memory, insights, and knowledge, then
+  returns one globally ranked result list.
+
+There is no standalone `context_atlas` table or service. "Context atlas" is the
+product concept formed by these sources and their retrieval paths.
 
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
-- [Core Memory Types](#core-memory-types)
+- [Design Principles](#design-principles)
+- [End-to-End Data Flows](#end-to-end-data-flows)
+- [Core Memory Contracts](#core-memory-contracts)
 - [Raw Message Ingestion](#raw-message-ingestion)
 - [Memory Tiers](#memory-tiers)
 - [Forgetting Engine](#forgetting-engine)
 - [Retention Scoring](#retention-scoring)
 - [Summarization](#summarization)
-- [Storage Architecture](#storage-architecture)
-- [Query API and Summary Fallback](#query-api-and-summary-fallback)
-- [Embeddings and Semantic Search](#embeddings-and-semantic-search)
-- [Unified Search Stage](#unified-search-stage)
-- [Filesystem Sync](#filesystem-sync)
-- [Session Context](#session-context)
-- [Operational Boundaries](#operational-boundaries)
-- [Failure Modes](#failure-modes)
+- [Persistence and Index Architecture](#persistence-and-index-architecture)
+- [Embeddings and Vector Backends](#embeddings-and-vector-backends)
+- [Query and Recall APIs](#query-and-recall-apis)
+- [MCP and Agent Recall](#mcp-and-agent-recall)
+- [Failure and Fallback Behavior](#failure-and-fallback-behavior)
+- [Testing](#testing)
 - [Maintenance Checklist](#maintenance-checklist)
 - [Implementation References](#implementation-references)
 
 ## Architecture Overview
 
-The shared lifecycle engine lives in `packages/ai/src/memory/`. It is deliberately
-storage-agnostic. The engine knows how to score old records, decide which records
-can move to colder tiers, group them, create summaries, and call adapter methods
-to persist transitions. It does not know whether the records are stored in
-IndexedDB, SQLite, Postgres, or a test map.
-
-At a high level:
+The lifecycle engine in `packages/ai/src/memory/` is storage-independent:
 
 ```text
-Connector and insight refresh pipelines
-  -> raw message extractor
+connector/chat ingestion
+  -> RawMessage
   -> raw_messages
        | memoryStage: short / mid / long
-       | accessCount, importanceScore, pinned/archive flags
-       | optional embeddings
+       | access and importance metadata
+       | optional embedding
        v
   MemoryStorageAdapter
        v
   createMemoryForgettingEngine().runCycle()
-       | scan old records
-       | score retention priority
-       | group eligible records by time and dimensions
-       | create rule-based MemorySummary records
-       | promote raw records between tiers
+       | select old candidates
+       | calculate retention score
+       | group by time and dimensions
+       | create MemorySummary
+       | promote records between tiers
        | optionally archive details
        v
   memory_summaries
 ```
 
-The read side has two major paths:
+The main read paths are separate:
 
 ```text
-Lifecycle-aware raw query
-  -> createMemoryQueryApi().queryWithFallback()
-  -> query raw records first
-  -> append summaries when raw hits are insufficient
+Lifecycle-aware query
+  -> MemoryQueryApi.queryWithFallback()
+  -> raw records first
+  -> lifecycle summaries when raw results are insufficient
 ```
 
 ```text
-Application-level global search
-  -> /api/memory/search
+Engine-level vector recall
+  -> MemoryQueryApi.semanticRecall()
+  -> MemoryStorageAdapter.semanticRecallRaw()
+  -> native vector search or stored-embedding cosine fallback
+```
+
+```text
+Application-level semantic search
+  -> POST /api/memory/search
   -> searchUnifiedMemory()
-  -> raw memory hybrid search
-  -> insight semantic search
-  -> knowledge/RAG chunk search
-  -> ranked unified results
+       -> raw memory semantic search
+       -> insight semantic search
+       -> knowledge/RAG semantic search
+  -> global similarity ranking
 ```
 
-These paths are related but not identical. Summary fallback is part of the raw
-memory query API. Unified search is a broader search aggregator across multiple
-corpora.
+These paths share data, but they solve different problems. Summary fallback
+preserves lifecycle continuity. Engine recall retrieves `MemoryRecord`s.
+Unified search combines multiple corpora for applications and agent tools.
 
-## Core Memory Types
+The application-level unified path is semantic-only. It does not run the
+legacy raw-message keyword query, read lifecycle summaries, or scan filesystem
+memory. Exact phrase lookup and source-specific pagination remain available
+through their existing tools and APIs.
 
-The core contracts are defined in `packages/ai/src/memory/contracts.ts`.
+## Design Principles
 
-### `MemoryRecord`
+The implementation follows four boundaries that are easy to miss when reading
+one file at a time.
 
-`MemoryRecord` is the engine-native representation of one memory item. For raw
-messages, it is usually derived from `RawMessage`.
+### 1. Memory Is a Set of Domains
 
-Important fields:
+Raw messages, lifecycle summaries, insights, RAG chunks, and local files are
+not aliases for one record type. They have different owners, metadata, update
+paths, and deletion semantics.
 
-| Field                              | Meaning                                                                                                       |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `id`                               | Engine-level ID. For raw messages this is normally `messageId`.                                               |
-| `userId`                           | Owner scope. All lifecycle and query calls must preserve this.                                                |
-| `timestamp`                        | Unix timestamp in milliseconds inside the engine.                                                             |
-| `text`                             | Raw text content. It may be omitted after detail archival.                                                    |
-| `mediaRefs`                        | Attachment URLs used as a weak retention signal.                                                              |
-| `embedding` and embedding metadata | Optional vector data for semantic retrieval.                                                                  |
-| `tier`                             | `short`, `mid`, or `long`.                                                                                    |
-| `accessCount`, `lastAccessAt`      | Retrieval feedback used by scoring.                                                                           |
-| `importanceScore`                  | Explicit caller/storage importance signal.                                                                    |
-| `isPinned`                         | Pinned records are protected from transitions.                                                                |
-| `archivedAt`                       | Detail archival marker.                                                                                       |
-| `dimensions`                       | Facets such as `platform`, `channel`, `person`, and `botId`.                                                  |
-| `metadata`                         | Backend-specific extension data. The IndexedDB bridge preserves the original raw record under `__rawMessage`. |
+### 2. Canonical Data Owns Meaning
 
-### `MemorySummary`
+Database rows and local files are canonical records. Chroma collections and
+sqlite-vec tables are searchable indexes. An index can be cleared or rebuilt
+without redefining the source record.
 
-`MemorySummary` represents a compact summary of a group of older records.
+### 3. Lifecycle and Retrieval Are Orthogonal
 
-Important fields:
+The forgetting engine decides how long raw details remain hot and when to
+create compact summaries. Semantic search decides which indexed records are
+similar to a query. Moving a record from `short` to `mid` does not automatically
+reduce its vector-search score.
 
-| Field                                  | Meaning                                                         |
-| -------------------------------------- | --------------------------------------------------------------- |
-| `summaryId`                            | Deterministic `ms_<hash>` ID generated by the engine.           |
-| `summaryTier`                          | `L1`, `L2`, or `L3`. Current normal runs produce `L1` and `L2`. |
-| `sourceTier`                           | Tier before transition, such as `short` or `mid`.               |
-| `startTimestamp`, `endTimestamp`       | Source record time window in milliseconds.                      |
-| `messageCount`                         | Number of source records included.                              |
-| `sourceRecordIds`                      | Raw record IDs represented by the summary.                      |
-| `keyPoints`, `keywords`, `summaryText` | Rule-based summary payload.                                     |
-| `dimensions`                           | Group dimensions copied from the first record in the group.     |
-| `qualityScore`                         | Simple summary quality hint from the summarizer.                |
+### 4. Unification Happens at Interfaces
 
-`MemorySummary` should not be confused with an insight. A memory summary is a
-lifecycle compaction artifact. An insight is an LLM-generated interpretation
-stored and queried by the insights subsystem.
+OpenLoomi uses shared contracts at two levels:
 
-### `MemoryStorageAdapter`
+- `UnifiedVectorSearchService` presents one API over one vector backend or
+  collection.
+- `searchUnifiedMemory()` presents one query/result contract over raw memory,
+  insights, and knowledge.
 
-`MemoryStorageAdapter` is the boundary between generic memory logic and concrete
-storage:
+Neither requires all source data to live in one physical table. One giant
+memory bucket would be easy to draw and rather less charming to maintain.
 
-| Method                            | Purpose                                                            |
-| --------------------------------- | ------------------------------------------------------------------ |
-| `acquireLock()` / `releaseLock()` | Prevent concurrent lifecycle runs for the same user.               |
-| `listCandidates()`                | Return old raw records that may be eligible for transition.        |
-| `saveSummaries()`                 | Persist generated summaries.                                       |
-| `transitionRecords()`             | Promote records to the target tier and attach a summary reference. |
-| `archiveRecordDetails()`          | Optionally mark long-tier source details as archived.              |
-| `queryRaw()`                      | Retrieve raw records for lifecycle-aware reads.                    |
-| `querySummaries()`                | Retrieve summary fallback records.                                 |
-| `markRecordsAccessed()`           | Increment access metadata after raw records are read.              |
+## End-to-End Data Flows
 
-The default production bridge is
-`createIndexedDBMemoryStorageAdapter()` in
-`packages/indexeddb/src/forgetting.ts`. Despite the name, it adapts the shared
-raw-message manager shape, so the same lifecycle adapter can be used over
-browser IndexedDB-style managers and server-selected SQLite/Postgres managers.
+### Raw Memory Write and Repair
+
+```text
+connector or chat payload
+  -> normalize to RawMessage
+  -> upsert canonical raw_messages row by messageId
+  -> persist lifecycle and embedding metadata
+  -> embedding dream scans missing/model-changed/content-changed records
+  -> update stored embedding
+  -> synchronize configured sqlite-vec or Chroma index
+```
+
+### Insight Write and Repair
+
+```text
+insight create or update
+  -> persist structured insight fields
+  -> build stable embedding content and hash
+  -> persist insight_embeddings record
+  -> synchronize configured sqlite-vec or Chroma index
+  -> scheduled dream repairs omissions or stale vectors
+```
+
+Lifecycle summaries and insights are intentionally different. A lifecycle
+summary is rule-based compaction of raw records. An insight is interpreted
+application data produced by the insight pipeline.
+
+### Knowledge Ingestion
+
+```text
+document upload
+  -> parse text
+  -> split into overlapping chunks
+  -> generate chunk embeddings
+  -> persist document and chunk rows
+  -> add vector chunks to sqlite-vec or Chroma in Tauri
+     or use pgvector-backed search in server deployments
+```
+
+### Cross-Source Recall
+
+```text
+authenticated semantic query
+  -> selected raw-memory branch
+  -> selected insight branch
+  -> selected knowledge branch
+  -> normalize source-specific hits
+  -> global similarity sort
+  -> stable source/ID tie break
+  -> top N evidence returned to API or MCP caller
+```
+
+The source branches currently generate their query embeddings independently.
+Deployments should therefore keep embedding models compatible when their scores
+will be compared in one global list.
+
+## Core Memory Contracts
+
+Core contracts live in `packages/ai/src/memory/contracts.ts`.
+
+### MemoryRecord
+
+`MemoryRecord` is the lifecycle engine representation of one raw memory item.
+
+| Field                         | Purpose                                               |
+| ----------------------------- | ----------------------------------------------------- |
+| `id`, `userId`                | Identity and ownership scope.                         |
+| `timestamp`                   | Unix timestamp in milliseconds inside the engine.     |
+| `text`, `mediaRefs`           | Recallable detail and attachment references.          |
+| `embedding`                   | Optional vector used by semantic recall.              |
+| `embeddingModel`              | Model that generated the vector.                      |
+| `embeddingContentHash`        | Detects content changes that require re-embedding.    |
+| `embeddingDimensions`         | Prevents incompatible vectors from being mixed.       |
+| `tier`                        | `short`, `mid`, or `long`.                            |
+| `accessCount`, `lastAccessAt` | Retrieval feedback used by retention scoring.         |
+| `importanceScore`, `isPinned` | Explicit retention signals.                           |
+| `archivedAt`                  | Marks raw detail as cold/archived.                    |
+| `dimensions`                  | Facets such as platform, channel, person, and bot ID. |
+| `metadata`                    | Backend-specific extension data.                      |
+
+`MemoryRecord` is not a second copy of `raw_messages`. Storage adapters map a
+persisted `RawMessage` into this engine-level shape.
+
+### MemorySummary
+
+`MemorySummary` is a rule-based compaction artifact created during tier
+transitions. It contains:
+
+- the source time window,
+- source and summary tiers,
+- source record IDs,
+- key points and keywords,
+- summary text,
+- grouping dimensions,
+- an optional quality score.
+
+A lifecycle summary is not an insight. Insights are LLM-derived records owned
+by the insights subsystem and have their own embedding/search pipeline.
+
+### MemoryStorageAdapter
+
+`MemoryStorageAdapter` separates engine logic from persistence:
+
+| Method                            | Purpose                                           |
+| --------------------------------- | ------------------------------------------------- |
+| `acquireLock()` / `releaseLock()` | Prevent overlapping lifecycle runs.               |
+| `listCandidates()`                | Load old records eligible for scoring.            |
+| `saveSummaries()`                 | Persist generated lifecycle summaries.            |
+| `transitionRecords()`             | Move records to the next memory tier.             |
+| `archiveRecordDetails()`          | Optionally archive long-tier source details.      |
+| `queryRaw()`                      | Query lifecycle-aware raw memory.                 |
+| `querySummaries()`                | Query lifecycle summaries.                        |
+| `semanticRecallRaw()`             | Optional vector recall for raw `MemoryRecord`s.   |
+| `markRecordsAccessed()`           | Feed retrieval activity back into retention data. |
+
+The main adapter is `createIndexedDBMemoryStorageAdapter()` in
+`packages/indexeddb/src/forgetting.ts`. Despite its historical name, it bridges
+the shared manager shape used by browser IndexedDB and server-selected raw
+message stores.
 
 ## Raw Message Ingestion
 
-Raw memory starts as connector or chat payloads. The extractor in
-`packages/indexeddb/src/extractor.ts` converts platform-specific payloads into
-raw message records. It supports chat and content sources such as Slack,
-Discord, Telegram, WhatsApp, iMessage, email providers, Teams, LinkedIn,
-Instagram, Twitter/X, RSS, and generic message-like inputs.
+Connector and chat payloads are normalized into `RawMessage` records. The
+shared storage shape is defined in `packages/indexeddb/src/storage.ts`.
 
-The active production path is commonly insight refresh:
-
-```text
-apps/web/lib/insights/processor.ts
-  -> extractRawMessages(...)
-  -> returns rawMessages with the insight refresh result
-  -> apps/web/hooks/use-insight-refresh.ts
-  -> storeRawMessagesFromInsight()
-  -> IndexedDB or /api/memory/raw-messages
-```
-
-Raw messages are upserted by `messageId`. When platform-native IDs are missing,
-the extractor builds deterministic IDs from stable fields such as platform,
-bot, timestamp, channel, sender, and content hash. This matters because insight
-refresh can run repeatedly; repeated imports should update existing history,
-not spray duplicate memories everywhere like confetti.
-
-New raw records normally start with:
+New records normally begin with:
 
 | Field             | Default |
 | ----------------- | ------- |
@@ -205,738 +282,539 @@ New raw records normally start with:
 | `importanceScore` | `0`     |
 | `isPinned`        | `false` |
 
-At the engine level, `packages/ai/src/memory/ingest.ts` provides
-`normalizeMemoryRecordForIngest()`, which defaults missing `tier` values to
-`short`.
+Raw messages are upserted by `messageId`. Stable IDs are important because
+connector and insight refresh jobs can ingest the same history repeatedly.
+
+`normalizeMemoryRecordForIngest()` in `packages/ai/src/memory/ingest.ts`
+provides the equivalent engine-level normalization and defaults a missing tier
+to `short`.
 
 ## Memory Tiers
 
-The memory lifecycle uses three raw record tiers:
+Raw records use three lifecycle tiers:
 
-| Tier    | Meaning                                                        | Default transition rule                                    |
-| ------- | -------------------------------------------------------------- | ---------------------------------------------------------- |
-| `short` | Recent, detailed memory.                                       | After 7 days, low-retention records can move to `mid`.     |
-| `mid`   | Older memory that still keeps raw shape unless archived later. | After 90 days, lower-retention records can move to `long`. |
-| `long`  | Cold long-term memory.                                         | Details may be archived after transition.                  |
+| Tier    | Meaning                                | Default transition                                          |
+| ------- | -------------------------------------- | ----------------------------------------------------------- |
+| `short` | Recent detailed memory.                | Old, low-retention groups can move to `mid` after 7 days.   |
+| `mid`   | Older memory with retained raw detail. | Old, low-retention groups can move to `long` after 90 days. |
+| `long`  | Cold long-term memory.                 | Source details may be archived.                             |
 
-Summary tiers describe the compaction artifact produced during transitions:
+Transitions create summary tiers:
 
-| Source tier | Target tier                | Summary tier                                         |
-| ----------- | -------------------------- | ---------------------------------------------------- |
-| `short`     | `mid`                      | `L1`                                                 |
-| `mid`       | `long`                     | `L2`                                                 |
-| `long`      | N/A in current engine loop | `L3` helper exists but is not used by normal phases. |
+| Transition     | Summary |
+| -------------- | ------- |
+| `short -> mid` | `L1`    |
+| `mid -> long`  | `L2`    |
 
-The default policy lives in `packages/ai/src/memory/policy.ts`:
+The `L3` type/helper exists, but the current engine loop does not run a normal
+`long -> ...` phase.
 
-| Setting                            | Default                                  |
-| ---------------------------------- | ---------------------------------------- |
-| `shortMaxAgeMs`                    | `7 * DAY_MS`                             |
-| `midMaxAgeMs`                      | `90 * DAY_MS`                            |
-| `scoreThresholds.shortToMid`       | `0.65`                                   |
-| `scoreThresholds.midToLong`        | `0.45`                                   |
-| `groupWindowMs.short`              | `1 * DAY_MS`                             |
-| `groupWindowMs.mid`                | `7 * DAY_MS`                             |
-| `minRecordsPerGroup`               | `3`                                      |
-| `maxCandidatesPerTierPerRun.short` | `500`                                    |
-| `maxCandidatesPerTierPerRun.mid`   | `500`                                    |
-| `lock.keyPrefix`                   | `memory_forgetting`                      |
-| `lock.ttlMs`                       | `60_000`                                 |
-| `groupByDimensionKeys`             | `platform`, `channel`, `person`, `botId` |
-
-The thresholds are retention thresholds, not deletion thresholds. A record with
-a lower score is considered less important to keep in the current hot tier.
+Changing a tier does not currently apply an automatic semantic-search penalty.
+Semantic ranking is based on vector similarity. Tiers can be supplied as
+filters to engine-level recall.
 
 ## Forgetting Engine
 
-`createMemoryForgettingEngine()` lives in `packages/ai/src/memory/engine.ts`.
-The name "forgetting" is slightly dramatic: the engine does not immediately
-erase memory. It progressively compacts and cools records.
+`createMemoryForgettingEngine()` in `packages/ai/src/memory/engine.ts`
+implements progressive compaction. "Forgetting" here means cooling and
+summarizing before irreversible deletion.
 
-For each `runCycle({ userId })`, the engine:
+The default policy in `packages/ai/src/memory/policy.ts` is:
 
-1. Builds a lock key: `memory_forgetting:<userId>`.
-2. Acquires the storage lock.
-3. Processes the `short -> mid` phase.
-4. Processes the `mid -> long` phase.
-5. Releases the lock in a `finally` block.
+| Setting                        | Default                           |
+| ------------------------------ | --------------------------------- |
+| Short age window               | 7 days                            |
+| Mid age window                 | 90 days                           |
+| `short -> mid` score threshold | `0.65`                            |
+| `mid -> long` score threshold  | `0.45`                            |
+| Short grouping window          | 1 day                             |
+| Mid grouping window            | 7 days                            |
+| Minimum records per group      | 3                                 |
+| Maximum candidates per phase   | 500                               |
+| Lock TTL                       | 60 seconds                        |
+| Group dimensions               | platform, channel, person, bot ID |
 
-Each phase follows the same shape:
+For each user, `runCycle()`:
 
-1. Compute the cutoff timestamp from the tier age window.
-2. Ask storage for candidates in the source tier older than that cutoff.
-3. Score every candidate with `DefaultMemoryRecordScorer` unless a custom scorer
-   was injected.
-4. Keep only records that are:
-   - not pinned,
-   - not already archived,
-   - scored at or below the phase threshold.
-5. Group eligible records by:
-   - source tier,
-   - bucketed timestamp,
-   - `platform`,
-   - `channel`,
-   - `person`,
-   - `botId`.
-6. Skip groups smaller than `minRecordsPerGroup`.
-7. Summarize each group.
-8. Save one `MemorySummary`.
-9. Promote the source records to the target tier.
-10. When the target tier is `long`, call `archiveRecordDetails()` if the adapter
-    implements it.
+1. Acquires `memory_forgetting:<userId>`.
+2. Runs the `short -> mid` phase.
+3. Runs the `mid -> long` phase.
+4. Releases the lock in a `finally` block.
 
-The group ID includes the source tier, bucket start, and dimension key. Summary
-IDs are deterministic hashes of user, summary tier, group ID, and group end
-timestamp. This makes summary upserts retry-friendly if a run fails after a
-partial write.
+Each phase:
 
-`dryRun` runs the same scan, scoring, grouping, and counting logic, but skips
-the writes. It returns counters such as:
+1. Loads source-tier records older than the phase cutoff.
+2. Calculates retention scores.
+3. Excludes pinned, archived, and high-retention records.
+4. Groups eligible records by time bucket and configured dimensions.
+5. Skips groups smaller than three records by default.
+6. Creates one rule-based summary per group.
+7. Persists the summary and promotes its source records.
+8. Archives source details when the target tier is `long` and the adapter
+   supports archival.
 
-- `scannedRecords`
-- `eligibleRecords`
-- `createdSummaries`
-- `transitionedRecords`
-- `archivedDetailRecords`
-
-The IndexedDB/server bridge adds an optional hard-delete phase in
-`runMemoryForgettingCycle()`. Hard delete only happens when the caller provides
-`hardDeleteArchivedOlderThan`. Archival and hard deletion are intentionally
-separate: archival is part of lifecycle cooling, hard delete is the irreversible
-"no take-backsies" button.
+`dryRun` executes selection, scoring, grouping, and counting without writes.
+The bridge-level `runMemoryForgettingCycle()` can also perform an optional hard
+delete when `hardDeleteArchivedOlderThan` is explicitly provided. Archive and
+hard delete are intentionally separate operations.
 
 ## Retention Scoring
 
-`DefaultMemoryRecordScorer` lives in `packages/ai/src/memory/scorer.ts`.
-
-The score range is `[0, 1]`. Higher means "keep this record hot longer".
-
-Formula:
+`DefaultMemoryRecordScorer` in `packages/ai/src/memory/scorer.ts` returns a
+score in `[0, 1]`. A higher score means the record should remain hot longer.
 
 ```text
 score = clamp01(
-  0.35 * recencyScore +
-  0.30 * accessScore +
-  0.25 * importanceScore +
-  0.10 * mediaScore +
+  0.35 * recency +
+  0.30 * access +
+  0.25 * importance +
+  0.10 * media +
   pinnedBoost
 )
 ```
 
 Signals:
 
-| Signal              | Behavior                                                                                                                                                                   |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `recencyScore`      | Decays linearly over 180 days: `clamp01(1 - ageMs / 180 days)`.                                                                                                            |
-| `accessScore`       | Uses `clamp01(log1p(accessCount) / log(10))`, so repeated retrieval helps but saturates.                                                                                   |
-| `importanceScore`   | Max of explicit `importanceScore` and inferred keyword importance.                                                                                                         |
-| inferred importance | Counts terms such as `deadline`, `todo`, `urgent`, `risk`, `decision`, `blocker`, `meeting`, `action item`, `milestone`, `bug`, `incident`, and `follow up`; caps quickly. |
-| `mediaScore`        | `0.7` when attachments exist, otherwise `0.25`.                                                                                                                            |
-| `pinnedBoost`       | `+0.3` for pinned records before final clamping.                                                                                                                           |
+- Recency decays linearly over 180 days.
+- Access uses a logarithmic score based on `accessCount`.
+- Importance is the maximum of explicit importance and inferred keywords.
+- Media receives `0.7` when present and `0.25` otherwise.
+- Pinned records receive a `0.3` boost and are also excluded from transition
+  eligibility.
 
-Pinned records also fail the eligibility filter before transition, so they are
-protected twice. It is a little redundant, but redundancy is cheaper than
-accidentally compacting the one thing a user explicitly pinned.
+Inferred importance recognizes terms such as `deadline`, `urgent`, `risk`,
+`decision`, `blocker`, `action item`, `milestone`, `bug`, and `incident`.
 
 ## Summarization
 
-`RuleBasedMemorySummarizer` lives in
-`packages/ai/src/memory/summarizer.ts`. It does not call an LLM.
+`RuleBasedMemorySummarizer` in `packages/ai/src/memory/summarizer.ts` does not
+call an LLM.
 
-For each group, it:
+For each group it:
 
-1. Sorts records by timestamp ascending.
-2. Reads non-empty `text`.
-3. Uses up to the first five text records as `keyPoints`.
-4. Truncates each key point to 180 characters.
-5. Extracts up to 12 keywords with simple token counting and stop-word removal.
-6. Builds `summaryText` containing:
-   - source time window,
-   - tier transition,
-   - summary tier,
-   - record count,
-   - highlights.
-7. Sets `qualityScore` to `0.75` when highlights exist, otherwise `0.45`.
+1. Sorts records chronologically.
+2. Selects up to five unique text highlights.
+3. Truncates highlights to 180 characters.
+4. Extracts up to 12 keywords with token frequency and stop-word filtering.
+5. Writes the source window, transition, record count, and highlights.
+6. Assigns quality `0.75` when text highlights exist or `0.45` otherwise.
 
-Example shape:
+The `MemorySummarizer` interface is injectable, so a future summarizer can
+replace this implementation without changing the engine.
 
-```text
-Window: 2026-01-01 -> 2026-01-07
-Tier transition: short -> mid (L1)
-Records: 18
-Highlights: First useful message... | Second useful message...
-```
+## Persistence and Index Architecture
 
-Attachment-only groups use a fallback highlight:
+OpenLoomi keeps canonical records and vector indexes conceptually separate.
+The database row remains the source record; Chroma or a dimension-specific
+`sqlite-vec` table is a searchable index that can be repaired or rebuilt.
 
-```text
-Highlights: (no text content, likely attachment-driven records)
-```
+| Corpus      | Canonical persistence                                  | Semantic index/search path                                      |
+| ----------- | ------------------------------------------------------ | --------------------------------------------------------------- |
+| Raw memory  | IndexedDB, SQLite, or Postgres `raw_messages`          | Chroma, SQLite `vec0`, Postgres pgvector, or stored-vector scan |
+| Insights    | Insight tables plus `insight_embeddings`               | Chroma, SQLite `vec0`, Postgres pgvector, or stored-vector scan |
+| Knowledge   | RAG document and chunk tables                          | Chroma, SQLite `vec0`, or Postgres pgvector                     |
+| Summaries   | IndexedDB, SQLite, or Postgres `memory_summaries`      | No cross-source semantic branch                                 |
+| Local files | Markdown and JSON under the Tauri memory/file workflow | Not automatically included in `/api/memory/search`              |
 
-The summarizer is injectable through `MemorySummarizer`. A future LLM-backed
-summarizer could be plugged in, but current lifecycle compaction is rule-based.
-That boundary is important when debugging output quality: if a lifecycle summary
-looks plain, it is not because the model had a bad day. No model was invited.
+### Browser IndexedDB
 
-## Storage Architecture
-
-There are two related storage contracts:
-
-- `MemoryStorageAdapter` in `packages/ai/src/memory/contracts.ts` is the
-  lifecycle/query boundary used by the shared engine.
-- `RawMessageStorage` in `packages/indexeddb/src/storage.ts` is the broader raw
-  message manager shape implemented by browser, SQLite, and Postgres storage.
-
-### Raw Message Stores
-
-`RawMessage` contains:
-
-- identity: `messageId`, optional numeric `id`,
-- ownership: `userId`,
-- source dimensions: `platform`, `botId`, `channel`, `person`,
-- time: `timestamp`, `createdAt`,
-- content: `content`, `attachments`,
-- embedding fields,
-- lifecycle fields: `memoryStage`, `accessCount`, `lastAccessAt`,
-  `importanceScore`, `archivedAt`, `isPinned`, `summaryRefId`,
-- arbitrary `metadata`.
-
-`MemorySummaryRecord` mirrors `MemorySummary` for concrete storage and adds
-`keywordsText` for simple keyword filtering.
-
-### IndexedDB
-
-`packages/indexeddb/src/manager.ts` owns the browser IndexedDB stores:
-
-| Store              | Key                                               | Purpose              |
-| ------------------ | ------------------------------------------------- | -------------------- |
-| `raw_messages`     | auto-increment `id` plus unique `messageId` index | Raw message records. |
-| `memory_summaries` | `summaryId`                                       | Lifecycle summaries. |
-
-Important raw indexes:
-
-- `messageId`
-- `platform`
-- `botId`
-- `userId`
-- `channel`
-- `person`
-- `timestamp`
-- `createdAt`
-- `memoryStage`
-- `archivedAt`
-- `isPinned`
-- `summaryRefId`
-- `userId_memoryStage`
-- `userId_timestamp`
-
-Important summary indexes:
-
-- `summaryId`
-- `userId`
-- `summaryTier`
-- `userId_summaryTier`
-- `userId_endTimestamp`
-- `keywords`
-- `keywordsText`
-
-The lifecycle adapter uses `userId_memoryStage` and `userId_timestamp` for
-candidate scans and bounded queries. Summary queries use user, tier, time, and
-keyword fields.
-
-### SQLite
-
-Tauri/local server-side raw storage uses
-`packages/sqlite/src/raw-message-manager.ts` and schema from
-`packages/sqlite/src/schema.ts`.
-
-SQLite storage includes:
+`packages/indexeddb/src/manager.ts` owns:
 
 - `raw_messages`,
 - `memory_summaries`,
-- `raw_messages_fts` FTS5 virtual table,
-- triggers that keep FTS rows synchronized,
-- optional `raw_messages_vec` virtual table when sqlite-vector support is
-  initialized.
+- indexes including `userId_memoryStage`, `userId_timestamp`,
+  `userId_summaryTier`, and `userId_endTimestamp`.
 
-Important SQLite indexes include:
+Browser IndexedDB also supports stored embeddings. When no native semantic
+search method exists, the memory adapter scans bounded candidates and computes
+cosine similarity in process.
 
-- `idx_raw_messages_user_timestamp`,
-- `idx_raw_messages_user_memory_stage`,
-- `idx_raw_messages_platform`,
-- `idx_raw_messages_bot_id`,
-- `idx_raw_messages_archived_at`,
-- `idx_raw_messages_created_at`,
-- `idx_memory_summaries_user_time`,
-- `idx_memory_summaries_user_tier`.
+### SQLite
 
-SQLite is selected in Tauri mode by
-`apps/web/lib/memory/sqlite-raw-message-store.ts`.
+Tauri uses `packages/sqlite/src/raw-message-manager.ts` and
+`packages/sqlite/src/schema.ts`.
+
+SQLite includes:
+
+- `raw_messages`,
+- `memory_summaries`,
+- `raw_messages_fts` and synchronization triggers,
+- dimension-specific sqlite-vec tables such as `raw_messages_vec_d1024`,
+- delete triggers that remove vector rows when source messages are deleted.
+
+Dimension-specific tables prevent vectors from different embedding models from
+being compared accidentally.
 
 ### Postgres
 
-Server/cloud raw storage uses
-`apps/web/lib/memory/postgres-raw-message-store.ts` and Drizzle schema in
-`apps/web/lib/db/schema.pg.ts`.
+Server deployments use
+`apps/web/lib/memory/postgres-raw-message-store.ts` and the Postgres Drizzle
+schema. The manager implements the same raw message, lifecycle summary,
+embedding update, and semantic-search operations. Raw memory and insight search
+use pgvector distance queries in server mode.
 
-Postgres implements the same manager operations:
-
-- raw message upsert/query,
-- summary upsert/query,
-- access marking,
-- stage promotion,
-- archive and hard delete,
-- embedding updates,
-- optional semantic search.
-
-`apps/web/lib/memory/raw-message-store.ts` chooses the backend:
+The server-side selector in `apps/web/lib/memory/raw-message-store.ts` chooses
+between SQLite and Postgres:
 
 ```text
-if Tauri mode:
-  SQLiteRawMessageManager
-else:
-  PostgresRawMessageManager
+Tauri server runtime -> SQLite
+web/server runtime   -> Postgres
 ```
 
-### Client API Bridge
+Browser IndexedDB is a separate client/local manager path. It is adapted by the
+same memory contracts, but the authenticated Next.js raw-message route does not
+select IndexedDB as a server backend.
 
-Browser-facing code imports `@openloomi/indexeddb/client`. That client can use
-the raw-message API first and fall back to browser IndexedDB when the API path
-is unavailable.
+### Files and Session State
 
-The main lifecycle-aware API route is
-`apps/web/app/api/memory/raw-messages/route.ts`. It supports actions including:
-
-| Action             | Behavior                                                                |
-| ------------------ | ----------------------------------------------------------------------- |
-| `store`            | Scope incoming raw messages to the authenticated user and persist them. |
-| `query`            | Query raw messages; optionally use summary fallback.                    |
-| `queryGrouped`     | Return grouped raw messages.                                            |
-| `stats`            | Return backend stats.                                                   |
-| `clearOld`         | Delete old raw messages for the authenticated user.                     |
-| `updateEmbeddings` | Persist embedding updates.                                              |
-| `semanticSearch`   | Call native manager semantic search when available.                     |
-| `upsertSummaries`  | Store lifecycle summary records.                                        |
-| `forgettingCycle`  | Run the lifecycle engine and optional archived hard delete.             |
-
-The route always scopes operations to `session.user.id`, which is the line
-between "memory feature" and "oops, cross-user data leak". Keep that line
-bright.
-
-## Query API and Summary Fallback
-
-`createMemoryQueryApi()` in `packages/ai/src/memory/api.ts` provides the
-lifecycle-aware read path.
-
-`queryWithFallback()`:
-
-1. Resolves page size from `pageSize`, `limit`, or default `50`.
-2. Calls `storage.queryRaw()`.
-3. Converts raw records to `MemorySearchHit` with `sourceType: "raw"`.
-4. If raw hits are fewer than `minRawResultsWithoutFallback`, queries summaries
-   for the remaining page capacity.
-5. Converts summaries to `MemorySearchHit` with `sourceType: "summary"`.
-6. Sorts all hits by timestamp descending.
-7. Slices to page size.
-8. Calls `markRecordsAccessed()` for returned raw records when available.
-
-This read path is for callers that want raw memory plus lifecycle summary
-fallback. In web API terms, it is exposed through `/api/memory/raw-messages`
-when `includeSummaryFallback` is enabled.
-
-It is intentionally not the same as unified search. Query fallback answers:
-"Show me memory records for this query, and use summaries when raw detail is
-thin." Unified search answers: "Search all memory-like knowledge sources and
-rank them together."
-
-## Embeddings and Semantic Search
-
-Memory embeddings have two layers.
-
-### Embedding Text Builder
-
-`packages/ai/src/memory/embedding.ts` builds deterministic text from a memory
-record. It can include:
-
-- text,
-- timestamp,
-- tier,
-- media references,
-- dimensions,
-- metadata.
-
-Metadata keys beginning with `__` are excluded, so adapter internals such as
-`__rawMessage` do not pollute embedding input.
-
-The content hash is versioned. If the embedding text format changes, the version
-must change too so stale embeddings can be detected and regenerated.
-
-### Raw Message Embedding Dream
-
-`packages/indexeddb/src/embedding.ts` contains the raw message embedding refresh
-flow. It scans candidate raw messages and embeds records when:
-
-- no embedding exists,
-- the embedding model changed,
-- the embedding content hash changed.
-
-Semantic search can happen in two ways:
-
-- client/helper-level cosine similarity over stored embeddings,
-- manager-native search, such as SQLite vector search or Postgres vector
-  distance.
-
-Unified search uses the manager-native semantic branch when available.
-
-## Unified Search Stage
-
-The final application-level search stage lives in
-`apps/web/lib/memory/unified-search.ts` and is exposed by
-`apps/web/app/api/memory/search/route.ts`.
-
-This stage is where OpenLoomi merges the three big searchable corpora:
-
-| Source      | Implementation                                                        | Returned `type` |
-| ----------- | --------------------------------------------------------------------- | --------------- |
-| `memory`    | Raw message keyword search plus optional raw message semantic search. | `memory`        |
-| `insights`  | `searchInsightsSemantically()` over LLM-generated insight records.    | `insight`       |
-| `knowledge` | `searchSimilarChunks()` over RAG document chunks.                     | `knowledge`     |
-
-Defaults:
-
-| Option      | Default / clamp                   |
-| ----------- | --------------------------------- |
-| `sources`   | `memory`, `insights`, `knowledge` |
-| `limit`     | default `10`, clamped to `1..50`  |
-| `threshold` | default `0.7`, clamped to `-1..1` |
-
-The route validates the request, authenticates the user, scopes `userId` to the
-session, forwards optional filters, and passes the cloud auth token to embedding
-providers:
-
-```text
-POST /api/memory/search
-  -> auth()
-  -> parse query, sources, limit, threshold, botIds, documentIds
-  -> extractCloudAuthToken()
-  -> searchUnifiedMemory()
-```
-
-Unified search output is source-neutral:
-
-```ts
-{
-  query: string;
-  sources: Array<"memory" | "insights" | "knowledge">;
-  results: Array<{
-    type: "memory" | "insight" | "knowledge";
-    id: string;
-    content: string;
-    similarity: number;
-    metadata: Record<string, unknown>;
-  }>;
-  count: number;
-  warnings: Array<{
-    source: "memory" | "insights" | "knowledge";
-    code: string;
-    message: string;
-  }>;
-}
-```
-
-### Raw Memory Branch
-
-The raw memory branch is hybrid:
-
-1. Normalize the query.
-2. Extract up to eight keyword strings. The list includes the full normalized
-   query plus tokenized words.
-3. Query raw messages through `manager.queryMessages()` with:
-   - `userId`,
-   - extracted `keywords`,
-   - `includeArchived: false`,
-   - `reverse: true`,
-   - `pageSize: limit * 3`,
-   - optional `botId` filters.
-4. Convert matching raw messages into `UnifiedMemorySearchResult`.
-5. Assign keyword scores from `0.78` upward:
-   - base score: `0.78`,
-   - `+0.04` per keyword match,
-   - capped at `0.95`.
-6. If an embedding provider is configured and
-   `manager.searchMessagesSemantically()` exists, embed the query and run native
-   semantic search.
-7. Merge semantic and keyword results by ID.
-8. Mark semantic-only hits as `matchType: "semantic"`, keyword-only hits as
-   `matchType: "keyword"`, and overlapping hits as `matchType: "hybrid"`.
-9. Hybrid hits receive a `+0.08` bonus, capped at `1`.
-
-Embedding provider config is considered available when any of these exists:
-
-- request auth token,
-- `OPENAI_EMBEDDINGS_API_KEY`,
-- `OPENROUTER_API_KEY`,
-- `LLM_API_KEY`.
-
-If raw message storage is unavailable, unified search adds a warning:
-
-```text
-source: memory
-code: raw_message_storage_unavailable
-```
-
-It does not fail the entire request. This is important because insight or
-knowledge search can still produce useful results.
-
-### Insights Branch
-
-When `sources` includes `insights`, unified search calls
-`searchInsightsSemantically()` with:
-
-- `userId`,
-- `query`,
-- `limit`,
-- `threshold`,
-- optional `botIds`,
-- optional `includeArchivedInsights`,
-- optional `authToken`.
-
-Insights are LLM-derived records. They are not the same as memory lifecycle
-summaries.
-
-### Knowledge Branch
-
-When `sources` includes `knowledge`, unified search calls `searchSimilarChunks()`
-with:
-
-- `userId`,
-- `query`,
-- `limit`,
-- `threshold`,
-- optional `documentIds`,
-- optional `authToken`.
-
-Knowledge results are converted from RAG chunks into unified results with
-metadata such as `documentId`, `documentName`, and `chunkIndex`.
-
-### Final Merge
-
-All source results are merged by `mergeUnifiedMemorySearchResults()`:
-
-1. Sort by descending `similarity`.
-2. Break ties by `type`.
-3. Break remaining ties by `id`.
-4. Slice to the requested limit.
-
-This final stage does not query `memory_summaries` directly. Summary fallback
-belongs to the raw-message query API and `createMemoryQueryApi()`. Unified
-search is optimized for multi-corpus search, not lifecycle browsing.
-
-Put another way:
-
-- Use `/api/memory/raw-messages` with summary fallback when you need faithful
-  raw memory retrieval with lifecycle summaries.
-- Use `/api/memory/search` when you need a global search box across memory,
-  insights, and knowledge.
-
-## Filesystem Sync
-
-Filesystem memory is adjacent to structured raw memory, but it is not the same
-pipeline.
-
-### File-Backed Conversation Store
-
-`packages/ai/src/store/conversation-store.ts` stores conversation messages in
+`packages/ai/src/store/conversation-store.ts` stores connector conversations in
 per-day JSON files:
 
 ```text
 {memoryDir}/{prefix}/YYYY-MM-DD.json
 ```
 
-The day file shape is:
+In Tauri, `apps/web/lib/ai/memory/chat-sync.ts` exports chat Markdown under:
+
+```text
+<appDataDir>/data/memory/chats/YYYY-MM-DD/<title>-<chatId>.md
+```
+
+The broader local directory also contains `people`, `projects`, `notes`, and
+`strategy`. These files are not automatically inserted into raw memory or RAG;
+they require an explicit indexing/import path and are not searched by
+`searchUnifiedMemory()`.
+
+`apps/web/lib/session/context.ts` manages temporary login and insight-processing
+state. It uses Redis when configured and `ioredis-mock` in Tauri/development.
+Its 30-minute session state is operational context, not durable memory.
+
+## Embeddings and Vector Backends
+
+The embedding provider is shared through `@openloomi/rag`. It can use a cloud
+provider or local Transformers.js models.
+
+Raw memory, insights, and knowledge remain isolated sources. Each source can
+select its own backend:
+
+```dotenv
+VECTOR_STORE_BACKEND=sqlite-vec
+
+RAW_MESSAGE_VECTOR_STORE_BACKEND=sqlite-vec
+INSIGHT_VECTOR_STORE_BACKEND=sqlite-vec
+RAG_VECTOR_STORE_BACKEND=sqlite-vec
+```
+
+Supported backends in the current local implementation are:
+
+- `sqlite-vec`,
+- ChromaDB client-server mode.
+
+Server deployments can use the Postgres/pgvector paths already implemented by
+raw memory, insights, and RAG. `sqlite-vec` is used by the Tauri runtime; the RAG
+service does not open it in a normal web/server process.
+
+See
+[Local Embeddings and Vector Backends](https://github.com/melandlabs/openloomi/blob/main/docs/vector-backends.md)
+for runtime configuration and table/collection details.
+
+### Two Different "Unified" Layers
+
+Two similarly named layers solve different problems:
+
+| Layer                        | Responsibility                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------ |
+| `UnifiedVectorSearchService` | One backend-independent API over a single vector collection or custom store.   |
+| `searchUnifiedMemory()`      | Fan-out search over three isolated corpora, followed by global result ranking. |
+
+`UnifiedVectorSearchService` lives in
+`packages/ai/rag/src/unified-vector-search-service.ts`. It can initialize a
+Chroma, `sqlite-vec`, or custom `IVectorStore`; generate missing embeddings;
+upsert records; search by text or vector; filter common metadata; delete old
+records; and report backend statistics.
+
+The application memory search does not put raw memory, insights, and knowledge
+into one collection through that class. Each corpus keeps its own persistence,
+metadata, retention rules, and search adapter. "Unified" at the application
+layer means one request and one result contract, not one giant vector table
+wearing three hats.
+
+### Embedding Refresh
+
+Raw message and insight embedding maintenance regenerates vectors when:
+
+- the vector is missing,
+- the embedding model changed,
+- the embedding content hash changed.
+
+Embedding metadata is persisted with the source record and synchronized to the
+configured vector backend. Chroma receives explicit embeddings; OpenLoomi does
+not rely on Chroma's default embedding function.
+
+The desktop scheduler runs raw-message and insight embedding repair jobs on
+24-hour windows. The raw-message timestamp is tracked in process; the insight
+timestamp is also persisted in user insight settings. The raw-message job scans
+up to 100 candidates, updates stale or missing vectors, then synchronizes
+recent compatible vectors to Chroma when enabled. Insight write paths also
+generate embeddings incrementally, while the scheduled dream repairs
+omissions without blocking normal writes.
+
+## Query and Recall APIs
+
+### Raw Query with Summary Fallback
+
+`MemoryQueryApi.queryWithFallback()`:
+
+1. Queries raw records.
+2. If raw results are below `minRawResultsWithoutFallback`, queries lifecycle
+   summaries for the remaining capacity.
+3. Merges raw and summary hits by descending timestamp.
+4. Marks returned raw records as accessed.
+
+The web route exposes this through `/api/memory/raw-messages` with action
+`query` and `includeSummaryFallback: true`.
+
+### Engine-Level Semantic Recall
+
+`MemoryQueryApi.semanticRecall()` accepts:
+
+- `queryEmbedding`,
+- `limit` and `threshold`,
+- optional tiers,
+- optional time range,
+- optional dimensions.
+
+It calls `MemoryStorageAdapter.semanticRecallRaw()`, wraps hits with
+`sourceType: "raw"`, and marks returned records as accessed.
+
+The IndexedDB bridge:
+
+1. Uses `manager.searchMessagesSemantically()` when the active manager provides
+   native semantic search.
+2. Over-fetches before applying engine-only tier and arbitrary dimension
+   filters.
+3. Otherwise scans bounded raw candidates and computes cosine similarity over
+   stored `MemoryRecord.embedding` values.
+
+This is an engine API, not a separate HTTP route.
+
+### Unified Semantic Search
+
+`POST /api/memory/search` is the cross-source application endpoint:
+
+```json
+{
+  "query": "User's last project feedback",
+  "sources": ["memory", "insights", "knowledge"],
+  "limit": 10,
+  "threshold": 0.7
+}
+```
+
+`searchUnifiedMemory()` in `apps/web/lib/memory/unified-search.ts`:
+
+1. Normalizes the query, source list, limit, and threshold.
+2. Searches every selected source independently with the requested per-source
+   limit.
+3. Converts every hit into `UnifiedMemorySearchResult`.
+4. Sorts the combined hits by descending similarity.
+5. Uses type and ID as stable tie breakers.
+6. Returns the global top N.
+
+Source behavior:
+
+| Source      | Search path                                                                                                             |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `memory`    | Query embedding -> Chroma raw collection when enabled -> raw manager semantic search when Chroma is disabled or errors. |
+| `insights`  | Chroma, sqlite-vec, stored-embedding fallback, or pgvector depending on runtime/configuration.                          |
+| `knowledge` | RAG chunk search through the configured vector store.                                                                   |
+
+Unified search is semantic-only. Existing source-specific MCP tools can still
+perform exact or keyword lookup when literal matching is required.
+
+The current implementation asks each selected source branch to generate its own
+query embedding. It does not yet calculate one vector and share it across all
+three branches. In practice, deployments should keep the corpora on compatible
+embedding models when their similarity scores will be compared globally.
+Cross-model similarity scores are not automatically calibrated.
+
+Important Chroma behavior: if a Chroma query succeeds with zero results, raw
+memory search does not also query the database backend. Database fallback is
+used when Chroma is disabled or throws.
+
+The endpoint returns:
 
 ```ts
-Record<userKey, Record<accountId, ConversationMessage[]>>;
+interface UnifiedMemorySearchResult {
+  type: "memory" | "insight" | "knowledge";
+  id: string;
+  content: string;
+  similarity: number;
+  metadata: Record<string, unknown>;
+}
 ```
 
-The store supports:
+The three source stores remain isolated. "Unified" describes the query and
+result contract, not a requirement to put all vectors into one collection.
 
-- lazy migration from legacy `{prefix}-conversations.json`,
-- appending messages,
-- loading one day,
-- loading a date range,
-- listing available days,
-- clearing conversations,
-- writing `compact_summary` messages across a compacted date range.
+## MCP and Agent Recall
 
-### Tauri Memory Directory
+The business-tools MCP server exposes the cross-source search as
+`searchUnifiedMemory`. Its localized UI label is "Searching Semantic Memory" /
+"语义记忆搜索".
 
-`apps/web/lib/ai/memory/fs-sync.ts` resolves the local memory root in Tauri:
+The tool description tells the agent to use it early for broad questions about
+past conversations, projects, people, decisions, risks, owners, next actions,
+uploaded documents, or extracted insights. It defaults to all three sources
+unless the request clearly belongs to only one corpus.
+
+The MCP defaults intentionally favor recall more than the HTTP endpoint:
+
+| Surface                    | Default limit | Default threshold | Maximum limit |
+| -------------------------- | ------------- | ----------------- | ------------- |
+| `POST /api/memory/search`  | `10`          | `0.7`             | `50`          |
+| `searchUnifiedMemory` tool | `8`           | `0.35`            | `20`          |
+
+For model-facing output, each result includes its source type, similarity, ID,
+selected metadata, and content. Individual content is capped at 1,200
+characters to control tool-context growth. The tool also logs hit counts,
+maximum/average scores by source, warnings, and previews of the top five
+results.
+
+Source-specific tools remain useful after semantic recall:
+
+- raw-message tools provide keyword lookup and pagination,
+- insight tools expose structured task/event fields,
+- knowledge tools support document-specific workflows and full-document reads,
+- filesystem-memory tools inspect local paths not covered by unified search.
+
+This separation is deliberate: semantic recall is the broad first pass; exact
+or structured tools are the microscope.
+
+### HTTP and Raw Memory APIs
+
+`POST /api/memory/raw-messages` supports:
+
+| Action             | Purpose                                                    |
+| ------------------ | ---------------------------------------------------------- |
+| `store`            | Persist authenticated-user raw messages.                   |
+| `query`            | Query raw messages, optionally with summary fallback.      |
+| `queryGrouped`     | Return grouped raw messages.                               |
+| `stats`            | Return raw store statistics.                               |
+| `clearOld`         | Delete old records for the current user.                   |
+| `updateEmbeddings` | Persist vectors and synchronize Chroma.                    |
+| `semanticSearch`   | Run manager-native semantic search with a supplied vector. |
+| `upsertSummaries`  | Persist lifecycle summaries.                               |
+| `forgettingCycle`  | Run lifecycle compaction and optional hard delete.         |
+
+`POST /api/memory/search` is the authenticated cross-source semantic endpoint.
+The semantic memory MCP tool calls the same unified search service. Legacy
+source-specific tools remain available for narrower exact/keyword workflows.
+
+All web routes replace caller-provided ownership with the authenticated
+`session.user.id`.
+
+## Failure and Fallback Behavior
+
+| Condition                              | Behavior                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------- |
+| Forgetting lock is held                | Returns `skipped_locked`.                                                             |
+| Group has fewer than three records     | No transition or summary.                                                             |
+| Record is pinned or archived           | Excluded from transition.                                                             |
+| Embedding provider is missing          | Raw semantic search returns no hits; insight/knowledge paths can fail the request.    |
+| Chroma raw query throws                | Falls back to the raw database semantic manager.                                      |
+| Chroma raw query succeeds with no hits | Returns no raw hits; no duplicate DB query.                                           |
+| sqlite-vec is unavailable              | Raw and insight paths can use stored-embedding fallback.                              |
+| Tauri RAG vector store is unavailable  | Current fallback returns ordered database chunks with fixed similarity `1.0`.         |
+| Raw storage is unavailable             | Unified search emits a memory warning and can still return insight/knowledge results. |
+| Filesystem sync runs outside Tauri     | Helpers throw or return without writing.                                              |
+
+Runtime logs identify the actual semantic backend:
 
 ```text
-<appDataDir>/data/memory
+[UnifiedMemory] Raw message semantic search completed { backend: 'chroma', ... }
+[SQLite Raw Messages] Semantic search completed { backend: 'sqlite-vec', ... }
+[InsightSearch] Semantic search completed { backend: 'sqlite-vec', ... }
+[RAG] Vector search completed { backend: 'sqlite-vec', ... }
+[SemanticMemoryTool] search completed { hitSources, hitSourceCounts, ... }
 ```
 
-The expected local structure includes:
+Fallbacks use explicit `stored-embedding-fallback` logging instead of silently
+changing behavior. The Tauri RAG database fallback is a compatibility path, not
+true semantic ranking; maintainers should treat that log path as degraded mode.
 
-```text
-data/memory/
-  people/
-  projects/
-  notes/
-  strategy/
-  chats/
+## Testing
+
+Focused lifecycle and retrieval tests:
+
+```bash
+pnpm --filter web exec vitest run \
+  tests/unit/memory-forgetting.test.ts \
+  tests/unit/indexeddb-forgetting.test.ts \
+  tests/unit/memory-embedding.test.ts \
+  tests/unit/indexeddb-memory-embedding.test.ts \
+  tests/unit/insight-embedding.test.ts \
+  tests/unit/insight-search.test.ts \
+  tests/unit/unified-vector-search-service.test.ts \
+  tests/unit/unified-memory-search.test.ts
 ```
 
-`apps/web/lib/ai/memory/chat-sync.ts` exports chat history to Markdown:
+Backend-specific tests:
 
-```text
-<appDataDir>/data/memory/chats/YYYY-MM-DD/{safe-title}-{chatIdPrefix}.md
+```bash
+pnpm --filter web exec vitest run \
+  tests/unit/sqlite-raw-message-storage.test.ts \
+  tests/unit/postgres-raw-message-store.test.ts \
+  tests/unit/sqlite-vec-store.test.ts \
+  tests/unit/chroma-vector-store.test.ts
 ```
-
-This is useful for local inspection and agent-readable files. It does not
-automatically insert those files into `raw_messages`, `memory_summaries`, or RAG
-unless a separate import/indexing flow does so.
-
-## Session Context
-
-`apps/web/lib/session/context.ts` manages temporary login and insight processing
-state. It is not the memory database, but it affects which integrations can
-fetch data and therefore which raw messages can be produced.
-
-Important key prefixes:
-
-| Prefix              | Purpose                                          |
-| ------------------- | ------------------------------------------------ |
-| `login_session:`    | Login flow state.                                |
-| `insights_session:` | Insight processing state.                        |
-| `insights_lock:`    | Best-effort single-flight lock for insight work. |
-
-Default TTL:
-
-```text
-SESSION_EXPIRE_MS = 1,800,000 = 30 minutes
-```
-
-Runtime behavior:
-
-| Environment                     | Session backend                                                  |
-| ------------------------------- | ---------------------------------------------------------------- |
-| Tauri                           | `ioredis-mock` plus local JSON files for login/insight payloads. |
-| Server with `REDIS_URL`         | Real Redis.                                                      |
-| Development without `REDIS_URL` | `ioredis-mock`.                                                  |
-
-`tryAcquireInsightLock(botId)` allows processing when Redis is unavailable so
-local development does not grind to a halt. Very considerate, very "let the dev
-ship the thing".
-
-## Operational Boundaries
-
-These boundaries prevent confusion during maintenance:
-
-| Boundary                             | What it means                                                                                                |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Memory lifecycle vs insights         | Lifecycle summaries are rule-based; insights may be LLM-generated.                                           |
-| Raw query fallback vs unified search | Raw query fallback can append `memory_summaries`; unified search merges raw memory, insights, and knowledge. |
-| Raw messages vs filesystem memory    | Raw messages are structured database records; filesystem memory is local files.                              |
-| IndexedDB vs SQLite/Postgres         | Browser IndexedDB is a local/fallback store; server/Tauri routes select SQLite or Postgres.                  |
-| Archive vs hard delete               | Archive marks details cold; hard delete irreversibly removes old archived rows.                              |
-| Seconds vs milliseconds              | Engine APIs use milliseconds; some raw edges store seconds and adapters normalize.                           |
-
-The most common debugging mistake is treating every "summary" as the same
-thing. There are lifecycle summaries, insight summaries, compaction summaries,
-and document chunks that might summarize something. Same English word, different
-tables, different rules, different drama.
-
-## Failure Modes
-
-| Area                            | Failure mode                                            | Expected behavior                                                                            |
-| ------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Forgetting lock                 | Another run owns the lock.                              | Engine returns `skipped_locked`.                                                             |
-| Summary saved, transition fails | Partial lifecycle progress.                             | Retry is intended to be safe because summaries upsert by deterministic ID.                   |
-| Group too small                 | Fewer than `minRecordsPerGroup`.                        | No summary is created; records remain in place.                                              |
-| Pinned record                   | Candidate is old but pinned.                            | It is excluded from transition eligibility.                                                  |
-| Archived record                 | Candidate already has `archivedAt`.                     | It is excluded from transition eligibility.                                                  |
-| IndexedDB closed                | Connection closes during an operation.                  | Manager retry/reopen paths handle common closed-state errors.                                |
-| Raw storage unavailable         | No SQLite/Postgres/IndexedDB path.                      | Raw API reports unavailable; unified search can return warnings and still use other sources. |
-| Missing embedding config        | No token or embedding API key.                          | Semantic branch is skipped or returns an embedding-provider error at the route boundary.     |
-| Semantic manager unavailable    | Manager lacks native vector search.                     | Keyword raw memory search still runs.                                                        |
-| Filesystem sync in web mode     | Tauri-only filesystem helpers are called outside Tauri. | Path helpers throw or write helpers return early.                                            |
-| Redis unavailable in dev        | No real Redis configured.                               | `ioredis-mock` is used; insight lock is best-effort.                                         |
 
 ## Maintenance Checklist
 
-When changing memory code:
-
-- If `MemoryRecord` changes, update adapter mapping in
-  `packages/indexeddb/src/forgetting.ts` and embedding text generation in
-  `packages/ai/src/memory/embedding.ts`.
-- If `RawMessage` changes, update `packages/indexeddb/src/storage.ts`,
-  IndexedDB manager mapping, SQLite mapping, Postgres mapping, and API route
-  serialization.
-- If lifecycle thresholds change, update `packages/ai/src/memory/policy.ts` and
-  the tests that assert transition behavior.
-- If scoring changes, update `DefaultMemoryRecordScorer` tests.
-- If grouping dimensions change, review summary quality and query filter
-  compatibility.
-- If summary shape changes, update `MemorySummary`, `MemorySummaryRecord`,
-  summary query code, and migration logic.
-- If timestamp handling changes, audit every second/millisecond normalization
-  point. This is where bugs wear fake mustaches.
-- If embedding text changes, bump the embedding text version/hash scheme so old
-  vectors regenerate.
-- If `/api/memory/raw-messages` action shapes change, update
-  `packages/indexeddb/src/sqlite-client.ts` and client tests.
-- If unified search changes, update
+- When `MemoryRecord` changes, update adapter mapping and embedding text
+  generation.
+- When `RawMessage` changes, update IndexedDB, SQLite, Postgres, API
+  serialization, and storage contract tests.
+- When lifecycle policy or scoring changes, update forgetting tests and this
+  document.
+- When embedding text changes, bump the content-hash version so stale vectors
+  regenerate.
+- When a vector dimension changes, use dimension-specific sqlite-vec tables or
+  a new/cleared Chroma collection.
+- When unified search changes, update
   `apps/web/tests/unit/unified-memory-search.test.ts`.
-- If Tauri SQLite migration changes, update migration version/state handling and
-  migration tests.
-- If filesystem memory is imported into structured memory later, document that
-  new bridge explicitly. It does not happen automatically today.
-
-Useful tests:
-
-- `apps/web/tests/unit/memory-forgetting.test.ts`
-- `apps/web/tests/unit/indexeddb-forgetting.test.ts`
-- `apps/web/tests/unit/memory-embedding.test.ts`
-- `apps/web/tests/unit/indexeddb-memory-embedding.test.ts`
-- `apps/web/tests/unit/unified-memory-search.test.ts`
-- `apps/web/tests/unit/raw-message-storage-contract.test.ts`
-- `apps/web/tests/unit/sqlite-raw-message-storage.test.ts`
-- `apps/web/tests/unit/sqlite-raw-message-migration.test.ts`
-- `apps/web/tests/unit/postgres-raw-message-store.test.ts`
-- `apps/web/tests/unit/rag-embeddings.test.ts`
+- Audit every seconds/milliseconds conversion when changing timestamp handling.
+- Keep lifecycle summaries, insights, and RAG chunks conceptually distinct.
 
 ## Implementation References
 
-| File                                                | Purpose                                                         |
-| --------------------------------------------------- | --------------------------------------------------------------- |
-| `packages/ai/src/memory/contracts.ts`               | Core memory types and adapter interfaces.                       |
-| `packages/ai/src/memory/engine.ts`                  | Forgetting lifecycle orchestration.                             |
-| `packages/ai/src/memory/policy.ts`                  | Default tier windows, thresholds, grouping, and lock config.    |
-| `packages/ai/src/memory/scorer.ts`                  | Retention priority scoring.                                     |
-| `packages/ai/src/memory/summarizer.ts`              | Rule-based lifecycle summary generation.                        |
-| `packages/ai/src/memory/api.ts`                     | Raw-first query with summary fallback.                          |
-| `packages/ai/src/memory/ingest.ts`                  | Engine-level ingest normalization.                              |
-| `packages/ai/src/memory/embedding.ts`               | Stable embedding text and content hash builder.                 |
-| `packages/indexeddb/src/storage.ts`                 | Raw message and summary storage contract.                       |
-| `packages/indexeddb/src/extractor.ts`               | Connector payload to raw-message conversion.                    |
-| `packages/indexeddb/src/manager.ts`                 | Browser IndexedDB raw message and summary manager.              |
-| `packages/indexeddb/src/forgetting.ts`              | `MemoryStorageAdapter` bridge and lifecycle/query entry points. |
-| `packages/indexeddb/src/embedding.ts`               | Raw message embedding refresh and semantic search helpers.      |
-| `packages/indexeddb/src/client.ts`                  | Browser-facing raw memory client and fallback facade.           |
-| `packages/indexeddb/src/sqlite-client.ts`           | API-backed raw message facade and SQLite migration helpers.     |
-| `packages/sqlite/src/schema.ts`                     | SQLite raw message, summary, FTS, and index schema.             |
-| `packages/sqlite/src/raw-message-manager.ts`        | SQLite raw message manager.                                     |
-| `apps/web/lib/memory/raw-message-store.ts`          | SQLite/Postgres backend selector.                               |
-| `apps/web/lib/memory/sqlite-raw-message-store.ts`   | Tauri SQLite manager factory.                                   |
-| `apps/web/lib/memory/postgres-raw-message-store.ts` | Postgres raw message manager.                                   |
-| `apps/web/app/api/memory/raw-messages/route.ts`     | Raw memory API actions.                                         |
-| `apps/web/app/api/memory/search/route.ts`           | Unified memory search route.                                    |
-| `apps/web/lib/memory/unified-search.ts`             | Raw memory + insights + knowledge search merger.                |
-| `apps/web/lib/insights/search.ts`                   | Insight semantic search.                                        |
-| `apps/web/lib/ai/rag/langchain-service.ts`          | Knowledge-base RAG search.                                      |
-| `packages/ai/src/store/conversation-store.ts`       | File-backed per-day conversation store.                         |
-| `apps/web/lib/ai/memory/fs-sync.ts`                 | Tauri filesystem memory root helpers.                           |
-| `apps/web/lib/ai/memory/chat-sync.ts`               | Chat history Markdown export.                                   |
-| `apps/web/lib/session/context.ts`                   | Login/insight session state and locks.                          |
+| File                                                   | Responsibility                                                |
+| ------------------------------------------------------ | ------------------------------------------------------------- |
+| `packages/ai/src/memory/contracts.ts`                  | Core records, summaries, recall queries, and storage adapter. |
+| `packages/ai/src/memory/engine.ts`                     | Lifecycle transition orchestration.                           |
+| `packages/ai/src/memory/policy.ts`                     | Age windows, thresholds, groups, and lock defaults.           |
+| `packages/ai/src/memory/scorer.ts`                     | Retention-priority scoring.                                   |
+| `packages/ai/src/memory/summarizer.ts`                 | Rule-based lifecycle summaries.                               |
+| `packages/ai/src/memory/api.ts`                        | Summary fallback and engine semantic recall.                  |
+| `packages/ai/src/memory/embedding.ts`                  | Stable embedding text and content hashes.                     |
+| `packages/indexeddb/src/storage.ts`                    | Raw message storage contract.                                 |
+| `packages/indexeddb/src/manager.ts`                    | Browser IndexedDB manager.                                    |
+| `packages/indexeddb/src/forgetting.ts`                 | Engine/storage bridge.                                        |
+| `packages/indexeddb/src/embedding.ts`                  | Raw embedding refresh and cosine helpers.                     |
+| `packages/sqlite/src/raw-message-manager.ts`           | SQLite raw, lifecycle, FTS, and vector operations.            |
+| `packages/ai/rag/src/unified-vector-search-service.ts` | Backend-independent vector collection operations.             |
+| `packages/ai/rag/src/embedding-provider.ts`            | Cloud/local embedding provider selection.                     |
+| `apps/web/lib/memory/postgres-raw-message-store.ts`    | Postgres raw memory implementation.                           |
+| `apps/web/lib/memory/unified-search.ts`                | Three-source semantic aggregation.                            |
+| `apps/web/lib/memory/chroma-memory-index.ts`           | Raw-memory and insight Chroma synchronization/search.         |
+| `apps/web/lib/insights/embedding-service.ts`           | Insight embedding generation and synchronization.             |
+| `apps/web/lib/insights/search.ts`                      | Insight semantic retrieval and backend fallbacks.             |
+| `apps/web/lib/cron/insight-maintenance.ts`             | Scheduled raw-message and insight embedding repair.           |
+| `apps/web/lib/ai/rag/langchain-service.ts`             | Knowledge chunk indexing and search.                          |
+| `apps/web/lib/ai/mcp/tools/unified-memory.ts`          | Model-facing semantic memory MCP tool.                        |
+| `apps/web/app/api/memory/raw-messages/route.ts`        | Raw memory API actions.                                       |
+| `apps/web/app/api/memory/search/route.ts`              | Unified semantic search API.                                  |
+| `packages/ai/src/store/conversation-store.ts`          | Per-day conversation JSON storage.                            |
+| `apps/web/lib/ai/memory/fs-sync.ts`                    | Tauri filesystem memory paths and writes.                     |
+| `apps/web/lib/ai/memory/chat-sync.ts`                  | Chat-to-Markdown export.                                      |
+| `apps/web/lib/session/context.ts`                      | Temporary login/insight session context.                      |
