@@ -1,6 +1,6 @@
 ---
 title: "OpenLoomi Memory System: Lifecycle, Vector Indexing, and Semantic Recall"
-date: 2026-06-10
+date: 2026-05-26
 description: A source-level guide to OpenLoomi memory domains, lifecycle compaction, embedding maintenance, vector backends, and cross-source semantic recall.
 ---
 

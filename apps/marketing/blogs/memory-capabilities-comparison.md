@@ -1,6 +1,6 @@
 ---
 title: "Memory Capabilities Comparison: OpenClaw vs. Hermes Agent vs. Claude Code vs. OpenLoomi"
-date: 2026-06-10
+date: 2026-05-27
 description: A comparison of durable memory, retrieval, and model-facing recall, with a source-level look at OpenLoomi's multi-corpus memory pipeline.
 ---
 

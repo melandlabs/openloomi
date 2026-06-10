@@ -76,11 +76,6 @@ pnpm tauri:dev
 
 Requires Node.js 22+, pnpm 9+, and Rust 1.75+.
 
-For local Transformers.js embeddings and configurable `sqlite-vec` or ChromaDB
-storage, see [Local Embeddings and Vector Backends](./docs/vector-backends.md).
-For the internal lifecycle, storage, and retrieval architecture, see
-[OpenLoomi Memory System](./apps/marketing/blogs/openloomi-memory-system.md).
-
 ## App Screenshots
 
 <table>
