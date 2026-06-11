@@ -315,13 +315,16 @@
   :root {
     --background: 220 10% 98%;
     --foreground: 220 44% 10%;
-    /* Sans-serif: unified to Noto Sans SC */
+    /* Sans-serif: Roboto → Noto Sans SC → system fonts */
     --font-sans:
-      "Noto Sans SC", "Source Han Sans", "PingFang SC", "Helvetica Neue",
-      -apple-system, BlinkMacSystemFont, sans-serif;
-    /* Serif: unified to Noto Serif SC */
+      var(--font-roboto), "Noto Sans SC", "Source Han Sans SC", "PingFang SC",
+      "Microsoft YaHei", "Helvetica Neue", -apple-system, BlinkMacSystemFont,
+      "Segoe UI", sans-serif;
+    /* Serif: Noto Serif SC → system serif */
     --font-serif:
-      "Noto Serif SC", "Source Han Serif", "Songti SC", Georgia, serif;
+      var(--font-noto-serif), "Noto Serif SC", "Source Han Serif SC",
+      "Songti SC", Georgia, serif;
+    /* Monospace */
     --font-mono:
       ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     --surface: 220 10% 98%;

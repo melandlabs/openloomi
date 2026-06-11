@@ -1,4 +1,4 @@
-import { Noto_Sans_SC, Noto_Serif_SC } from "next/font/google";
+import { Noto_Sans_SC, Noto_Serif_SC, Roboto } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { I18nProvider } from "@/components/i18n-provider";
 import { TooltipProvider } from "@openloomi/ui";
@@ -21,6 +21,13 @@ const notoSerifSC = Noto_Serif_SC({
   subsets: ["latin"],
   weight: ["400", "600"],
   display: "swap",
+  variable: "--font-noto-serif",
+});
+const roboto = Roboto({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-roboto",
 });
 
 export default async function RootLayout({
@@ -31,7 +38,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${notoSansSC.className} ${notoSerifSC.className}`}
+      className={`${notoSansSC.className} ${notoSerifSC.className} ${roboto.className}`}
       // `next-themes` injects an extra classname to the body element to avoid
       // visual flicker before hydration. Hence the `suppressHydrationWarning`
       // prop is necessary to avoid the React hydration mismatch warning.
