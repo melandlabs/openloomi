@@ -387,6 +387,58 @@ describe("memory forgetting engine", () => {
     expect(storage.releaseCalls).toBe(1);
   });
 
+  it("does not transition pinned records during forgetting", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const shortWindowStart =
+      Math.floor(
+        (now - DEFAULT_MEMORY_FORGETTING_POLICY.shortMaxAgeMs - 2 * dayMs) /
+          DEFAULT_MEMORY_FORGETTING_POLICY.groupWindowMs.short,
+      ) * DEFAULT_MEMORY_FORGETTING_POLICY.groupWindowMs.short;
+    storage.records = [
+      createRecord({
+        id: "s1",
+        userId: "u1",
+        tier: "short",
+        timestamp: shortWindowStart + 1_000,
+        text: "low value one",
+      }),
+      createRecord({
+        id: "s2",
+        userId: "u1",
+        tier: "short",
+        timestamp: shortWindowStart + 2_000,
+        text: "low value two",
+      }),
+      createRecord({
+        id: "s3",
+        userId: "u1",
+        tier: "short",
+        timestamp: shortWindowStart + 3_000,
+        text: "low value three",
+      }),
+      createRecord({
+        id: "pinned",
+        userId: "u1",
+        tier: "short",
+        timestamp: shortWindowStart + 4_000,
+        text: "pinned low value note",
+        isPinned: true,
+      }),
+    ];
+
+    const engine = createMemoryForgettingEngine({ storage });
+    const result = await engine.runCycle({ userId: "u1", now, dryRun: false });
+
+    expect(result.createdSummaries).toBe(1);
+    expect(result.transitionedRecords).toBe(3);
+    expect(storage.summaries[0]?.sourceRecordIds).not.toContain("pinned");
+    expect(storage.records.find((record) => record.id === "pinned")?.tier).toBe(
+      "short",
+    );
+  });
+
   it("persists summary and transitions records when not dryRun", async () => {
     const storage = new InMemoryStorageAdapter();
     const now = Date.now();
