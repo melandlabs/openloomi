@@ -73,13 +73,11 @@
 
   /* Fonts (aligned with alloomi apps/web design system) */
   --font-sans:
-    "Noto Sans SC", "Source Han Sans SC", "PingFang SC",
-    "Microsoft YaHei", "Helvetica Neue", -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
+    "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei",
+    "Helvetica Neue", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-serif:
     "Noto Serif SC", "Source Han Serif SC", "Songti SC", Georgia, serif;
-  --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* Border colors */
   --color-border-primary: #e5e7eb;
