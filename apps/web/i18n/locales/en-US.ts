@@ -49,6 +49,13 @@ const en = {
     aiSettingsReset: "User override reset to system defaults.",
     aiSettingsResetError: "Failed to reset API settings.",
     aiSettingsLoadError: "Failed to load API settings.",
+    aiSettingsRequiredTitle: "Configure an API key to start chatting",
+    aiSettingsRequiredDescription:
+      "Enable an Anthropic-compatible provider and save its API key, base URL, and model before starting a conversation.",
+    aiSettingsMissingBannerTitle: "No conversation API key configured",
+    aiSettingsMissingBannerDescription:
+      "Configure an Anthropic-compatible provider before starting a conversation.",
+    aiSettingsConfigureButton: "Configure",
   },
   insight: {
     ...(baseEn.insight ?? {}),

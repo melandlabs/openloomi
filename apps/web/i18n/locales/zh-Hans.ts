@@ -47,6 +47,13 @@ const zh = {
     aiSettingsReset: "已重置为系统默认配置",
     aiSettingsResetError: "API 设置重置失败",
     aiSettingsLoadError: "API 设置加载失败",
+    aiSettingsRequiredTitle: "请先配置 API 密钥再开始聊天",
+    aiSettingsRequiredDescription:
+      "请启用一个 Anthropic 兼容服务，并保存 API 密钥、接口地址和模型。",
+    aiSettingsMissingBannerTitle: "尚未配置对话 API 密钥",
+    aiSettingsMissingBannerDescription:
+      "请先配置 Anthropic 兼容服务，再开始聊天。",
+    aiSettingsConfigureButton: "去配置",
   },
   insight: {
     ...(baseZh.insight ?? {}),

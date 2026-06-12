@@ -13,6 +13,7 @@ import { SidePanelShell } from "@/components/agent/side-panel-shell";
 import { SidePanelProvider } from "@/components/agent/side-panel-context";
 import { ChatContextProvider } from "@/components/chat-context";
 import { SessionAuthChecker } from "@/components/session-auth-checker";
+import { ConversationApiOnboardingGuard } from "@/components/conversation-api-onboarding-guard";
 
 export default async function Layout({
   children,
@@ -31,21 +32,23 @@ export default async function Layout({
       {/** AppSidebar needs session email info and quota usage */}
       <SessionProvider session={session}>
         <SessionAuthChecker />
-        <SidebarProvider defaultOpen={true}>
-          <AppSidebar />
-          <SidebarInset className="relative z-10 md:h-svh md:max-h-svh md:overflow-hidden md:m-0 p-2 pl-0 sm:p-3 sm:pl-0">
-            <Suspense fallback={null}>
-              {/* SidePanelShell renders main content + temporary sidebar (flex-row) */}
-              <SidePanelProvider>
-                <ChatContextProvider>
-                  <GlobalInsightDrawerProvider>
-                    <SidePanelShell>{children}</SidePanelShell>
-                  </GlobalInsightDrawerProvider>
-                </ChatContextProvider>
-              </SidePanelProvider>
-            </Suspense>
-          </SidebarInset>
-        </SidebarProvider>
+        <ConversationApiOnboardingGuard>
+          <SidebarProvider defaultOpen={true}>
+            <AppSidebar />
+            <SidebarInset className="relative z-10 md:h-svh md:max-h-svh md:overflow-hidden md:m-0 p-2 pl-0 sm:p-3 sm:pl-0">
+              <Suspense fallback={null}>
+                {/* SidePanelShell renders main content + temporary sidebar (flex-row) */}
+                <SidePanelProvider>
+                  <ChatContextProvider>
+                    <GlobalInsightDrawerProvider>
+                      <SidePanelShell>{children}</SidePanelShell>
+                    </GlobalInsightDrawerProvider>
+                  </ChatContextProvider>
+                </SidePanelProvider>
+              </Suspense>
+            </SidebarInset>
+          </SidebarProvider>
+        </ConversationApiOnboardingGuard>
       </SessionProvider>
       {!isTauriMode() && (
         <CookieConfirm userCookieConfirm={userCookieConfirm} />

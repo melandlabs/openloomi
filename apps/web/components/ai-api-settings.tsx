@@ -1,12 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Badge, Button, Input, Label, Separator, Switch } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { toast } from "@/components/toast";
 import { fetchWithAuth } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import {
+  AI_SETTINGS_CHANGED_EVENT,
+  MISSING_API_KEY_REASON,
+} from "@/lib/ai/conversation-api-configuration";
 
 type ProviderType = "openai_compatible" | "anthropic_compatible";
 
@@ -94,6 +99,10 @@ function createDraft(setting?: AiSetting): ProviderDraft {
 
 export function AiApiSettings() {
   const { t } = useTranslation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const showMissingApiKeyNotice =
+    searchParams.get("reason") === MISSING_API_KEY_REASON;
   const [settings, setSettings] = useState<AiSetting[]>([]);
   const [systemDefaults, setSystemDefaults] = useState<
     Record<ProviderType, SystemDefault>
@@ -226,6 +235,17 @@ export function AiApiSettings() {
         apiKey: "",
         enabled: savedSetting.enabled,
       });
+      window.dispatchEvent(new Event(AI_SETTINGS_CHANGED_EVENT));
+      if (
+        showMissingApiKeyNotice &&
+        providerType === "anthropic_compatible" &&
+        savedSetting.enabled &&
+        savedSetting.hasApiKey &&
+        savedSetting.baseUrl?.trim() &&
+        savedSetting.model?.trim()
+      ) {
+        router.replace("/?page=ai-api-settings", { scroll: false });
+      }
       if (options.showToast !== false) {
         toast({
           type: "success",
@@ -270,6 +290,7 @@ export function AiApiSettings() {
         current.filter((setting) => setting.providerType !== providerType),
       );
       updateDraft(providerType, createDraft());
+      window.dispatchEvent(new Event(AI_SETTINGS_CHANGED_EVENT));
       toast({
         type: "success",
         description: t(
@@ -347,6 +368,32 @@ export function AiApiSettings() {
   return (
     <div className="w-full max-w-none space-y-8">
       <div className="w-full px-1 sm:px-0 space-y-8">
+        {showMissingApiKeyNotice && (
+          <div
+            role="status"
+            className="flex gap-3 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm"
+          >
+            <RemixIcon
+              name="info"
+              size="size-5"
+              className="mt-0.5 shrink-0 text-primary"
+            />
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">
+                {t(
+                  "settings.aiSettingsRequiredTitle",
+                  "Configure an API key to start chatting",
+                )}
+              </p>
+              <p className="text-muted-foreground">
+                {t(
+                  "settings.aiSettingsRequiredDescription",
+                  "Enable an Anthropic-compatible provider and save its API key, base URL, and model before starting a conversation.",
+                )}
+              </p>
+            </div>
+          </div>
+        )}
         <div className="flex flex-col gap-2">
           <p className="text-base font-semibold text-foreground-secondary">
             {t("settings.aiSettingsTitle", "API Settings")}
