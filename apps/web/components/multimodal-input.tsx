@@ -2271,7 +2271,7 @@ function PureMultimodalInput({
         </div>
       )}
 
-      <div className="bg-popover rounded-2xl p-0 border border-border shadow-sm">
+      <div className="rounded-[16px] border border-[#E9E9E9] bg-[#FFFFFF] shadow-[0_4px_12px_0_rgba(167,167,167,0.12)]">
         {/* Input area container */}
         <div className="relative flex flex-col">
           {/* Attachments, RAG documents and workspace files: unified card preview, same row, source distinguished in top-right corner */}
@@ -2645,9 +2645,10 @@ function PureMultimodalInput({
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 className={cx(
-                  "w-full rounded-xl px-4 py-3 min-h-[72px] max-h-[400px] border-0 bg-transparent",
-                  "resize-none focus-visible:outline-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
-                  "text-base md:text-sm",
+                  "w-full resize-none rounded-none border-0 bg-transparent px-0 py-0",
+                  "text-left text-[14px] font-normal leading-5 text-[#000000]",
+                  "normal-case shadow-none outline-none ring-0 ring-offset-0",
+                  "focus-visible:ring-0 focus-visible:ring-offset-0",
                 )}
                 rows={1}
                 onKeyDown={(event) => {
@@ -2757,7 +2758,7 @@ function PureMultimodalInput({
           </div>
 
           {/* Bottom action bar */}
-          <div className="h-14 rounded-b-xl flex items-center">
+          <div className="h-14 rounded-b-[16px] flex items-center">
             <div className="absolute left-3 right-3 bottom-3 flex items-center justify-between w-[calc(100%-24px)]">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 {/* + button: add file from space, upload from local (leftmost) */}
@@ -2769,7 +2770,7 @@ function PureMultimodalInput({
                           type="button"
                           variant="outline"
                           size="icon"
-                          className="size-9 shrink-0 rounded-lg"
+                          className="size-8 shrink-0 rounded-full bg-transparent p-0 transition-colors hover:bg-[#D9D9D9]"
                           aria-label={t("chat.addFile", "Add file")}
                         >
                           +
@@ -3048,10 +3049,10 @@ function PureStopButton({
           data-testid="stop-button"
           type="button"
           className={cx(
-            "size-9 shrink-0 rounded-full flex items-center justify-center",
-            "bg-primary text-primary-foreground",
-            "hover:bg-primary/85 focus-visible:ring-1 focus-visible:ring-offset-0 focus-visible:ring-ring",
+            "flex size-8 shrink-0 items-center justify-center rounded-[16px] text-white",
+            "hover:opacity-85 focus-visible:ring-0",
           )}
+          style={{ backgroundColor: "#000000" }}
           onClick={(event) => {
             event.preventDefault();
             stop();
@@ -3092,12 +3093,13 @@ function PureSendButton({
     <Button
       data-testid="send-button"
       type="button"
-      variant="magic-primary"
       size="icon"
       className={cx(
-        "size-9 shrink-0 rounded-full",
-        isDisabled ? "opacity-30" : "opacity-100",
+        "flex size-8 shrink-0 items-center justify-center rounded-[16px] p-0 text-white focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed",
       )}
+      style={{
+        backgroundColor: isDisabled ? "rgba(0,0,0,0.3)" : "#000000",
+      }}
       onClick={(event) => {
         event.preventDefault();
         submitForm();
@@ -3106,7 +3108,7 @@ function PureSendButton({
       aria-label={isUploadingFile ? "Uploading file..." : "Send message"}
     >
       {isUploadingFile ? (
-        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
       ) : (
         <ArrowUpIcon size={16} />
       )}
