@@ -248,7 +248,7 @@ function createComponents(
       );
       return (
         <p
-          className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-slate-950 dark:text-slate-50 h-full mt-0 mb-1"
+          className="!mb-0 leading-relaxed text-[14px] text-zinc-950 dark:text-zinc-50 min-w-0 [&:not(:first-child)]:mt-3"
           {...props}
         >
           {content}
@@ -257,7 +257,10 @@ function createComponents(
     },
     ol: ({ node, children, ...props }) => {
       return (
-        <ol className="list-decimal list-outside ml-4 my-0" {...props}>
+        <ol
+          className="list-decimal list-outside ml-6 mb-4 space-y-1 min-w-0"
+          {...props}
+        >
           {children}
         </ol>
       );
@@ -268,14 +271,17 @@ function createComponents(
         renderInstructionBadges,
       );
       return (
-        <li className="mt-0 leading-normal" {...props}>
+        <li className="my-1 leading-relaxed break-words min-w-0" {...props}>
           {content}
         </li>
       );
     },
     ul: ({ node, children, ...props }) => {
       return (
-        <ul className="list-disc list-outside ml-4 my-0" {...props}>
+        <ul
+          className="list-disc list-outside ml-6 mb-4 space-y-1 min-w-0"
+          {...props}
+        >
           {children}
         </ul>
       );
@@ -306,60 +312,42 @@ function createComponents(
     },
     h1: ({ node, children, ...props }) => {
       return (
-        <h1
-          className="text-[20px] font-semibold mt-2 mb-1 leading-tight"
-          {...props}
-        >
+        <h1 className="text-2xl font-bold mb-4 mt-6" {...props}>
           {children}
         </h1>
       );
     },
     h2: ({ node, children, ...props }) => {
       return (
-        <h2
-          className="text-[14px] font-medium mt-2 mb-1 leading-tight"
-          {...props}
-        >
+        <h2 className="text-xl font-bold mb-3 mt-5" {...props}>
           {children}
         </h2>
       );
     },
     h3: ({ node, children, ...props }) => {
       return (
-        <h3
-          className="text-[16px] font-semibold mt-2 mb-1 leading-tight"
-          {...props}
-        >
+        <h3 className="text-lg font-bold mb-3 mt-4" {...props}>
           {children}
         </h3>
       );
     },
     h4: ({ node, children, ...props }) => {
       return (
-        <h4
-          className="text-[15px] font-semibold mt-2 mb-1 leading-tight"
-          {...props}
-        >
+        <h4 className="text-base font-bold mb-2 mt-4" {...props}>
           {children}
         </h4>
       );
     },
     h5: ({ node, children, ...props }) => {
       return (
-        <h5
-          className="text-[15px] font-semibold mt-2 mb-1 leading-tight"
-          {...props}
-        >
+        <h5 className="text-sm font-bold mb-2 mt-4" {...props}>
           {children}
         </h5>
       );
     },
     h6: ({ node, children, ...props }) => {
       return (
-        <h6
-          className="text-[15px] font-semibold mt-2 mb-1 leading-tight"
-          {...props}
-        >
+        <h6 className="text-sm font-bold mb-2 mt-4" {...props}>
           {children}
         </h6>
       );
@@ -414,6 +402,16 @@ function createComponents(
         <td className="px-4 py-2 text-zinc-700 dark:text-zinc-300" {...props}>
           {children}
         </td>
+      );
+    },
+    blockquote: ({ node, children, ...props }) => {
+      return (
+        <blockquote
+          className="border-l-4 border-zinc-300 dark:border-zinc-600 pl-4 my-4 italic text-zinc-600 dark:text-zinc-400"
+          {...props}
+        >
+          {children}
+        </blockquote>
       );
     },
   };

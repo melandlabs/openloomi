@@ -763,8 +763,7 @@ const PurePreviewMessage = ({
                               className={cn(
                                 "flex flex-col gap-1 min-w-0 max-w-full break-words cursor-default",
                                 isUserMessage &&
-                                  "rounded-2xl p-4 bg-[var(--primary-50)] text-slate-900 border-0 dark:bg-[#1e3a5f]/30 dark:text-slate-100",
-                                !isUserMessage && "font-serif",
+                                  "rounded-[8px] bg-[#EDEDED] p-3 text-[14px] font-normal leading-5 text-black",
                               )}
                             >
                               {(() => {
@@ -1169,7 +1168,7 @@ const PurePreviewMessage = ({
                   {/* Edit mode for text messages */}
                   {mode === "edit" &&
                     message.parts?.some((p) => p.type === "text") && (
-                      <div className="flex w-full flex-row gap-2 items-start p-3 rounded-2xl bg-primary-50">
+                      <div className="flex w-full flex-row gap-2 items-start p-3 rounded-[8px] bg-[#EDEDED]">
                         <MessageEditor
                           key={message.id}
                           message={message}
@@ -1203,7 +1202,7 @@ const PurePreviewMessage = ({
               Array.isArray((message.metadata as any).ragDocuments) &&
               (message.metadata as any).ragDocuments.length > 0 && (
                 <div className="flex flex-row gap-2 items-end justify-end">
-                  <div className="flex flex-wrap gap-2 p-2 rounded-2xl bg-[var(--primary-50)] dark:bg-[#1e3a5f]/30 border-0">
+                  <div className="flex flex-wrap gap-2 p-2 rounded-[8px] bg-[#EDEDED]">
                     <div className="flex flex-wrap gap-1">
                       {(message.metadata as any).ragDocuments.map(
                         (doc: { id: string; name: string }) => {
