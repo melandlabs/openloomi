@@ -328,7 +328,6 @@ export function AppSidebar() {
     const currentPage = searchParams?.get("page");
     const isProfileSettingsPage =
       currentPage === "profile" ||
-      currentPage === "profile-soul" ||
       currentPage === "openloomi-soul" ||
       currentPage === "ai-api-settings" ||
       currentPage === "account-settings" ||
@@ -350,13 +349,6 @@ export function AppSidebar() {
         icon: "equalizer_2",
         type: "internal" as const,
         href: "/?page=account-settings",
-      },
-      {
-        key: "profile-soul",
-        title: "settings.profileSoulNavTitle",
-        icon: "brain_ai_3",
-        type: "internal" as const,
-        href: "/?page=profile-soul",
       },
       {
         key: "ai-api-settings",
@@ -680,8 +672,6 @@ export function AppSidebar() {
                       const isActive =
                         (item.href === "/?page=profile" &&
                           searchParams?.get("page") === "profile") ||
-                        (item.href === "/?page=profile-soul" &&
-                          searchParams?.get("page") === "profile-soul") ||
                         (item.href === "/?page=ai-api-settings" &&
                           searchParams?.get("page") === "ai-api-settings") ||
                         (item.href === "/?page=account-settings" &&

@@ -33,7 +33,6 @@ import { UserProfileSettings } from "@/components/user-profile-settings";
 import { AiApiSettings } from "@/components/ai-api-settings";
 import { ProfileOverview } from "@/components/profile-overview";
 import { StorageManagementPanel } from "@/components/storage-management-panel";
-import { PersonalizationProfileSoulPanel } from "@/components/personalization/personalization-profile-soul-panel";
 import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
 import { useChatContext } from "@/components/chat-context";
 import { InsightsPaginationProvider } from "@/hooks/use-insight-data";
@@ -590,8 +589,6 @@ export function Home() {
         return t("settings.general", "General");
       case "profile-edit":
         return t("settings.general", "General");
-      case "profile-soul":
-        return t("settings.profileSoulPageTitle", "About me");
       case "ai-api-settings":
         return t("settings.aiSettingsTitle", "AI Settings");
       case "openloomi-soul":
@@ -613,7 +610,6 @@ export function Home() {
       "profile",
       "account-settings",
       "profile-edit",
-      "profile-soul",
       "ai-api-settings",
       "openloomi-soul",
       "storage-management",
@@ -660,16 +656,6 @@ export function Home() {
     }
     if (page === "account-settings" || page === "profile-edit") {
       return renderUtilityPanel(<UserProfileSettings />, "account-settings");
-    }
-
-    if (page === "profile-soul") {
-      return renderUtilityPanel(
-        <PersonalizationProfileSoulPanel />,
-        "profile-soul",
-        undefined,
-        undefined,
-        t("insightPreferences.identity.introDescription"),
-      );
     }
 
     if (page === "ai-api-settings") {

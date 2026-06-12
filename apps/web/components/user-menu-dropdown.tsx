@@ -102,37 +102,14 @@ export function UserMenuDropdown({
   useEffect(() => {
     const handleOpenPersonalization = (event: Event) => {
       const customEvent = event as CustomEvent<{
-        targetPage?: "profile-soul";
-        tab?: "basic" | "contexts" | "roles" | "people" | "linkedAccounts";
+        tab?: "basic" | "linkedAccounts";
         addPlatform?: boolean;
       }>;
-
-      if (customEvent.detail?.targetPage === "profile-soul") {
-        router.push("/?page=profile-soul");
-        return;
-      }
-
-      if (
-        customEvent.detail?.tab === "roles" ||
-        customEvent.detail?.tab === "people"
-      ) {
-        router.push("/?page=profile-soul");
-        return;
-      }
 
       // Connectors moved to /connectors (legacy events may still send linkedAccounts)
       if (customEvent.detail?.tab === "linkedAccounts") {
         const q = customEvent.detail?.addPlatform ? "?addPlatform=true" : "";
         router.push(`/connectors${q}`);
-        return;
-      }
-
-      if (customEvent.detail?.tab === "basic") {
-        router.push("/?page=openloomi-soul");
-        return;
-      }
-      if (customEvent.detail?.tab === "contexts") {
-        router.push("/?page=profile-soul");
         return;
       }
 
