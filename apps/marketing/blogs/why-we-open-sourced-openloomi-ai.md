@@ -2,7 +2,7 @@
 title: Why We Open-Sourced OpenLoomi AI
 date: 2026-05-28
 description: Your AI work partner shouldn't also be your landlord.
-image: /img/blogs/20.png
+image: /img/blogs/openloomi-open-source.png
 ---
 
 _Your AI work partner shouldn't also be your landlord._

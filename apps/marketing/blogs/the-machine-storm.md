@@ -2,7 +2,6 @@
 title: The Machine Storm
 date: 2026-03-22
 description: What AI is actually doing to the world — and the only two ways to survive it
-image: /img/blogs/17.png
 ---
 
 There's a word people keep reaching for when they talk about AI: _disruption_. It sounds clinical and contained, like a brief turbulence before the seatbelt sign turns off.

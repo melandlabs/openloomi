@@ -2,7 +2,6 @@
 title: Personal Context Graphs
 date: 2026-01-29
 description: Personal Context Graphs - The Missing “World Model” for High-Leverage Work
-image: /img/blogs/13.png
 ---
 
 Most high-leverage work doesn’t fail in dramatic ways. It fails quietly.

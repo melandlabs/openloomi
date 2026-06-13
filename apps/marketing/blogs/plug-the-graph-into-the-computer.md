@@ -2,7 +2,6 @@
 title: Plug the Graph Into the Computer
 date: 2026-02-18
 description: Plug the Graph Into the Computer - Why "Suggestions" Don’t Change Work, Execution Does
-image: /img/blogs/15.png
 ---
 
 If you’ve tried most modern AI tools for work, you’ve probably had the same experience: they’re impressive in the moment, and strangely unsatisfying an hour later.

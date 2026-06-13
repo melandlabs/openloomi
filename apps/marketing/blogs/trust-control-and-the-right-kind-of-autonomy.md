@@ -2,7 +2,6 @@
 title: Trust, Control, and the Right Kind of Autonomy
 date: 2026-02-19
 description: Trust, Control, and the Right Kind of Autonomy - What Has to Be True Before AI Can Run High-Value Work
-image: /img/blogs/16.png
 ---
 
 By now, most people have seen enough AI demos to believe the raw capability is real. Models can read, write, summarize, reason, and increasingly act. The question isn’t “Can it do things?” The question is whether you’d let it do the kinds of things that actually matter. Because high-value work isn’t forgiving.

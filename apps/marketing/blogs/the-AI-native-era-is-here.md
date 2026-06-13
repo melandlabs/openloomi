@@ -2,7 +2,6 @@
 title: The AI-Native Era Is Here
 date: 2026-01-26
 description: The AI-Native Era Is Here — and Work Should Finally Feel Less Heavy
-image: /img/blogs/10.png
 ---
 
 If you’re in a role where outcomes depend on people, timing, and follow-through—not just producing an artifact—there’s a specific kind of exhaustion you’ve probably learned to tolerate.

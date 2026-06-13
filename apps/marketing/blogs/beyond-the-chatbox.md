@@ -2,7 +2,6 @@
 title: Beyond the Chatbox
 date: 2026-01-28
 description: Beyond the Chatbox - The AI Should Write the Prompt, Not You
-image: /img/blogs/12.png
 ---
 
 For the last two years, most “AI for work” products have shared the same shape: a chatbox for the prompt.

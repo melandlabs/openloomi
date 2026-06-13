@@ -2,7 +2,6 @@
 title: The Fragmentation Tax
 date: 2026-01-27
 description: The Fragmentation Tax - Why Modern Work Feels Busy, but Progress Feels Optional
-image: /img/blogs/11.png
 ---
 
 There’s a particular kind of frustration that shows up in high-performing teams: everyone is working all day, communication is constant, calendars are full, and yet the most important things still don’t reliably move forward.

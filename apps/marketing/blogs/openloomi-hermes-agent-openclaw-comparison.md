@@ -2,7 +2,6 @@
 title: OpenLoomi vs. Hermes-Agent vs. OpenClaw - A Comprehensive Comparison
 date: 2026-04-28
 description: An in-depth technical comparison of three AI agent platforms - OpenLoomi, Hermes-Agent, and OpenClaw
-image: /img/blogs/19.png
 ---
 
 # OpenLoomi / Hermes-Agent / OpenClaw Deep Comparison Report

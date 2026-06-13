@@ -2,7 +2,6 @@
 title: Traces Are the New Context
 date: 2026-02-15
 description: Traces Are the New Context - Why Process Footprints Decide Whether AI Can Really Run the Work
-image: /img/blogs/14.png
 ---
 
 Most software systems don’t fail because nobody recorded the final status. They fail because nobody can reconstruct what actually happened. The difference matters more than it sounds.
