@@ -290,6 +290,7 @@ fn main() {
             system::remove_file_custom,
             system::reveal_item_in_dir_custom,
             system::home_dir_custom,
+            system::get_system_locale,
             // Server status
             node::get_server_status,
             node::restart_server,

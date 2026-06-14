@@ -62,6 +62,23 @@ export const getMemoryDirectory = async () => {
 };
 
 /**
+ * Get the operating system's UI locale (e.g. "en-US", "zh-CN").
+ * Reads the OS-level language rather than the webview's `navigator.language`.
+ * Returns null on web (non-Tauri) environments.
+ */
+export const getSystemLocale = async (): Promise<string | null> => {
+  if (!isTauri()) {
+    return null;
+  }
+  try {
+    return await invoke<string>("get_system_locale");
+  } catch (error) {
+    console.error("Failed to get system locale:", error);
+    return null;
+  }
+};
+
+/**
  * Get application information
  */
 export const getAppInfo = async () => {

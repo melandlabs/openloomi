@@ -277,6 +277,16 @@ pub fn home_dir_custom() -> Result<String, String> {
     }
 }
 
+/// Tauri command: get the operating system's UI locale (e.g. "en-US", "zh-CN").
+///
+/// Reads the OS-level language rather than the webview's `navigator.language`,
+/// which can differ from the user's actual system language (notably on Windows
+/// WebView2 and non-localized macOS apps).
+#[tauri::command]
+pub fn get_system_locale() -> Result<String, String> {
+    sys_locale::get_locale().ok_or_else(|| "Failed to detect system locale".to_string())
+}
+
 /// Tauri command: get memory directory (app data/memory)
 #[tauri::command]
 pub fn get_memory_directory(app_handle: tauri::AppHandle) -> Result<String, String> {

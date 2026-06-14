@@ -6,6 +6,7 @@ import LanguageDetector from "i18next-browser-languagedetector";
 
 import enUS from "./locales/en-US";
 import zhHans from "./locales/zh-Hans";
+import { getSystemLocale } from "@/lib/tauri";
 
 // Language code mapping: Maps browser language codes to supported language codes
 const languageMap: Record<string, string> = {
@@ -68,22 +69,25 @@ i18n
   });
 
 // Manually detect and set language (called after client mount)
-export const detectAndSetLanguage = () => {
+export const detectAndSetLanguage = async () => {
   // If user has actively selected a language, prioritize their choice.
   const hasUserSelected =
     localStorage.getItem(LS_KEY_LANGUAGE_USER_SELECTED) === "true";
   const savedLanguage = localStorage.getItem(LS_KEY_LANGUAGE);
   if (hasUserSelected && savedLanguage && languageMap[savedLanguage]) {
-    i18n.changeLanguage(languageMap[savedLanguage]);
+    await i18n.changeLanguage(languageMap[savedLanguage]);
     return;
   }
 
-  // Default to system language (browser language), and write to cache.
-  const browserLang = navigator.language;
-  const detectedLanguage = convertLanguage(browserLang);
+  // Default to the system language. On the desktop app prefer the OS-level
+  // locale (the user's real computer language); fall back to the webview's
+  // browser language, which is all that is available on web.
+  const osLocale = await getSystemLocale();
+  const detectedSource = osLocale ?? navigator.language;
+  const detectedLanguage = convertLanguage(detectedSource);
 
   localStorage.setItem(LS_KEY_LANGUAGE, detectedLanguage);
-  i18n.changeLanguage(detectedLanguage);
+  await i18n.changeLanguage(detectedLanguage);
 };
 
 /**
