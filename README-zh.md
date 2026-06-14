@@ -5,7 +5,7 @@
 </picture>
 
 <p align="center">
-<a href="./README.md">English</a> | <a href="./README-zh.md">简体中文</a>
+<a href="./README.md">English</a> | <a href="./README-zh.md">简体中文</a> | <a href="./README-ja.md">日本語</a>
 </p>
 
 **OpenLoomi 是一个能一直记住你的 AI。**

@@ -1,0 +1,102 @@
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/images/logo-text-dark.png">
+  <img src="apps/web/public/images/logo-text.png" alt="OpenLoomi Logo" width="400">
+</picture>
+
+**いつもあなたを覚えているAI。**
+
+<p align="center">
+<a href="./README.md">English</a> | <a href="./README-zh.md">简体中文</a> | <a href="./README-ja.md">日本語</a>
+</p>
+
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-4B4B4B?logo=linux&logoColor=white)](https://openloomi.ai)
+[![License](https://img.shields.io/badge/License-Apache%202.0-F8D52A?logo=apache)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/xkJaJyWcsv)
+[![X](https://img.shields.io/badge/X-Follow-000000?logo=x&logoColor=white)](https://x.com/AlloomiAI)
+
+</div>
+
+---
+
+## OpenLoomiとは？
+
+OpenLoomiは、デスクトップ上で動作するオープンソースのAIワークスペースです。すでに使っているツール（メッセージアプリ、メール、カレンダー、ドキュメント、プロジェクト管理ツールなど）と連携し、あなたの人間関係、プロジェクト、意思決定の**ホリスティック・コンテキスト・グラフ**を構築します。
+
+## 機能
+
+|     | 機能                                                                       | 内容                                                                                                                                                                                                                                          |
+| --- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🧠  | **[ホリスティック・コンテキスト・グラフ](https://openloomi.ai/docs/memory)**                  | 短期 → 中期 → 長期の記憶が自律的に成長します。可視化・監査が可能で、何カ月にもわたってあなたの人間関係、プロジェクト、意思決定を常に記憶し続けます                                                                                                                                                                  |
+| 🔌  | **[プラットフォームコネクタ](https://openloomi.ai/docs/connectors)**                   | Telegram、WhatsApp、WeChat、DingTalk、Feishu、Gmail、Google Calendar、Outlook、Google Docs、X/Twitter、Instagram、LinkedIn、Facebook Messenger、Jira、HubSpot、Asana、iMessage、QQ、RSS。メッセージ、メール、カレンダーの予定、ドキュメント、プロジェクトの更新が継続的に流れ込みます |
+| ⏰  | **[プロアクティブタスク](https://openloomi.ai/docs/automation)**                     | あなたのニーズを先読みするインテリジェントなタスク実行。単なるスケジュール自動化ではなく、適切なタイミングで実行されるコンテキストを踏まえたアクションです                                                                                                                                                            |
+| 🖥️  | **[セキュリティと使いやすさ](https://openloomi.ai/docs/privacy-security)**             | Windows、macOS、Linux向けのネイティブデスクトップアプリ。**すぐに使えて**、セットアップは数分、設定で苦労することはありません。IndexedDB + SQLiteによるローカルファースト保存、AES-256暗号化、データが端末外に出ることはなく、監査可能なアクセスログを備えています                                                                                  |
+| 🔗  | **[オープンソース化されたスキル](https://openloomi.ai/docs/skills)**                     | OpenLoomi Skillsはオープンソースで、あらゆるエージェントに組み込めます。Claude Code、Codex、OpenClaw、Hermesなどに対応しています。                                                                                                                                                       |
+
+<p align="center">
+  <img src="screenshots/components.png" alt="Architecture" width="100%">
+</p>
+
+## クイックスタート
+
+**直接ダウンロード**（エンドユーザー向け）:
+
+| macOS Apple Silicon                                                                                        | macOS Intel                                                                                              | Linux AMD64                                                                                              | Linux ARM64                                                                                                | Windows                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [.dmg](https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_macOS_aarch64.dmg) | [.dmg](https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_macOS_amd64.dmg) | [.deb](https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_linux_amd64.deb) | [.deb](https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_linux_aarch64.deb) | [.exe](https://github.com/melandlabs/openloomi/releases/download/v0.5.0/openloomi_0.5.0_windows_amd64.exe) |
+
+詳細なドキュメントは[こちら](https://openloomi.ai/docs)で確認できます。
+
+**ローカルで開発**（開発者向け）:
+
+```bash
+git clone https://github.com/melandlabs/openloomi.git
+cd openloomi
+
+cp apps/web/.env.example apps/web/.env
+
+# .envにAIプロバイダーのキーを設定:
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   LLM_API_KEY=sk-...
+
+pnpm install
+pnpm tauri:dev
+```
+
+Node.js 22以上、pnpm 9以上、Rust 1.75以上が必要です。
+
+## アプリのスクリーンショット
+
+<table>
+<tr>
+<td><img src="screenshots/app/docx.gif" alt="Document preview" width="100%"></td>
+<td><img src="screenshots/app/excel.gif" alt="Spreadsheet preview" width="100%"></td>
+</tr>
+<tr>
+<td><img src="screenshots/app/automation.gif" alt="Automation" width="100%"></td>
+<td><img src="screenshots/app/connectors.gif" alt="Connectors" width="100%"></td>
+</tr>
+</table>
+
+## セキュリティ
+
+- **ローカルファースト**: オフラインで動作し、外部サーバーへデータを送信しません
+- **監査可能**: データがいつ、なぜアクセスされたかを正確に確認・監査できます
+- 保存データには**AES-256暗号化**を使用
+- **ハードウェア分離された処理、公開ゲートウェイなし**
+
+## フィードバック
+
+これは初期段階のソフトウェアです。実際にインストールしてツールを連携し、何が動かないかを教えてくれる方を募集しています。
+
+- [GitHub Issues](https://github.com/melandlabs/openloomi/issues) — バグ、インストールの問題、機能リクエスト
+- [Discord](https://discord.com/invite/xkJaJyWcsv) — ディスカッション、質問、サポート
+- [メール](mailto:developer@alloomi.ai) — その他なんでも
+
+## コントリビュート
+
+[CONTRIBUTING.md](./CONTRIBUTING.md)をご覧ください。[`good first issue`](https://github.com/melandlabs/openloomi/labels/good%20first%20issue)ラベルを探してみてください。
+
+## ライセンス
+
+[Apache 2.0](./LICENSE)

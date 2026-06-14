@@ -7,7 +7,7 @@
 **An AI That Always Remembers You.**
 
 <p align="center">
-<a href="./README.md">English</a> | <a href="./README-zh.md">简体中文</a>
+<a href="./README.md">English</a> | <a href="./README-zh.md">简体中文</a> | <a href="./README-ja.md">日本語</a>
 </p>
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-4B4B4B?logo=linux&logoColor=white)](https://openloomi.ai)
