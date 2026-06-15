@@ -72,11 +72,15 @@ const zh = {
     embeddingLocalTitle: "本地模型",
     embeddingLocalDescription: "在当前设备上运行 Transformers.js 模型。",
     embeddingLocalModel: "模型 ID 或本地路径",
+    embeddingCustomLocalModel: "自定义模型 ID 或本地路径",
+    embeddingCustomLocalModelPlaceholder:
+      "请输入 Hugging Face 模型 ID 或本地路径",
     embeddingDevice: "运行设备",
     embeddingLocalOnly: "仅使用本地文件",
     embeddingLocalOnlyDescription:
-      "禁止下载模型，只加载当前设备上已经存在的模型文件。",
-    embeddingLocalDownloadHint: "首次测试可能需要下载模型，因此会多等一会儿。",
+      "想要自行配置，可填写模型路径后打开此选项。禁止下载模型，只加载当前设备上已经存在的模型文件。",
+    embeddingLocalDownloadHint:
+      "首次测试可能需要下载模型，因此会多等一会儿。切换模型后，需要重启应用。",
     embeddingUsageHint: "用于知识库、记忆和语义搜索。",
     embeddingSaved: "Embedding 设置已保存",
     embeddingSaveError: "Embedding 设置保存失败",

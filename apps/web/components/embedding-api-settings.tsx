@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge, Button, Input, Label, Switch } from "@openloomi/ui";
+import {
+  Badge,
+  Button,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+} from "@openloomi/ui";
 
 import { RemixIcon } from "@/components/remix-icon";
 import { toast } from "@/components/toast";
@@ -46,9 +57,22 @@ type EmbeddingDraft = {
   apiKey: string;
   baseUrl: string;
   model: string;
-  device: string;
   localFilesOnly: boolean;
 };
+
+const CUSTOM_LOCAL_MODEL = "__custom__";
+const LOCAL_MODEL_OPTIONS = [
+  {
+    value: "Xenova/all-MiniLM-L6-v2",
+    label: "all-MiniLM-L6-v2",
+    dimensions: 384,
+  },
+  {
+    value: "Xenova/bge-large-zh-v1.5",
+    label: "bge-large-zh-v1.5",
+    dimensions: 1024,
+  },
+] as const;
 
 const initialDefaults: EmbeddingSystemDefaults = {
   providerType: "cloud",
@@ -76,7 +100,6 @@ function createDraft(
     model:
       setting?.model ??
       (providerType === "local" ? defaults.local.model : defaults.cloud.model),
-    device: setting?.device ?? defaults.local.device,
     localFilesOnly: setting?.localFilesOnly ?? defaults.local.localFilesOnly,
   };
 }
@@ -144,7 +167,7 @@ export function EmbeddingApiSettings() {
     apiKey: draft.apiKey.trim() || undefined,
     baseUrl: draft.baseUrl.trim() || null,
     model: draft.model.trim() || null,
-    device: draft.device.trim() || null,
+    device: defaults.local.device,
     localFilesOnly: draft.localFilesOnly,
     enabled: true,
   });
@@ -261,6 +284,11 @@ export function EmbeddingApiSettings() {
         Boolean(
           draft.apiKey.trim() || setting?.hasApiKey || defaults.cloud.hasApiKey,
         )));
+  const selectedLocalModel = LOCAL_MODEL_OPTIONS.some(
+    (option) => option.value === draft.model,
+  )
+    ? draft.model
+    : CUSTOM_LOCAL_MODEL;
 
   return (
     <section className="space-y-5">
@@ -428,56 +456,73 @@ export function EmbeddingApiSettings() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid items-start gap-4 lg:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="embedding-local-model">
                   {t("settings.embeddingLocalModel", "Model ID or local path")}
                 </Label>
-                <Input
-                  id="embedding-local-model"
-                  value={draft.model}
+                <Select
+                  value={selectedLocalModel}
                   disabled={busy}
-                  placeholder="Xenova/all-MiniLM-L6-v2"
-                  onChange={(event) =>
-                    updateDraft({ model: event.target.value })
+                  onValueChange={(model) =>
+                    updateDraft({
+                      model: model === CUSTOM_LOCAL_MODEL ? "" : model,
+                    })
+                  }
+                >
+                  <SelectTrigger id="embedding-local-model" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="min-w-[var(--radix-select-trigger-width)]">
+                    {LOCAL_MODEL_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label} ({option.dimensions}D)
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={CUSTOM_LOCAL_MODEL}>
+                      {t(
+                        "settings.embeddingCustomLocalModel",
+                        "Custom model ID or local path",
+                      )}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {selectedLocalModel === CUSTOM_LOCAL_MODEL && (
+                  <Input
+                    id="embedding-custom-local-model"
+                    value={draft.model}
+                    disabled={busy}
+                    placeholder={t(
+                      "settings.embeddingCustomLocalModelPlaceholder",
+                      "Enter a Hugging Face model ID or local path",
+                    )}
+                    onChange={(event) =>
+                      updateDraft({ model: event.target.value })
+                    }
+                  />
+                )}
+              </div>
+              <div className="flex min-h-[76px] items-start justify-between gap-4 rounded-lg bg-muted/40 p-3 lg:mt-7">
+                <div>
+                  <Label htmlFor="embedding-local-only">
+                    {t("settings.embeddingLocalOnly", "Use local files only")}
+                  </Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t(
+                      "settings.embeddingLocalOnlyDescription",
+                      "To use your own local model, enter its path and enable this option. Model downloads will be disabled, and only model files already available on this device will be loaded.",
+                    )}
+                  </p>
+                </div>
+                <Switch
+                  id="embedding-local-only"
+                  checked={draft.localFilesOnly}
+                  disabled={busy}
+                  onCheckedChange={(localFilesOnly) =>
+                    updateDraft({ localFilesOnly })
                   }
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="embedding-device">
-                  {t("settings.embeddingDevice", "Device")}
-                </Label>
-                <Input
-                  id="embedding-device"
-                  value={draft.device}
-                  disabled={busy}
-                  placeholder="cpu"
-                  onChange={(event) =>
-                    updateDraft({ device: event.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="flex items-start justify-between gap-4 rounded-lg bg-muted/40 p-3">
-              <div>
-                <Label htmlFor="embedding-local-only">
-                  {t("settings.embeddingLocalOnly", "Use local files only")}
-                </Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t(
-                    "settings.embeddingLocalOnlyDescription",
-                    "Disable model downloads and only load files already available on this device.",
-                  )}
-                </p>
-              </div>
-              <Switch
-                id="embedding-local-only"
-                checked={draft.localFilesOnly}
-                disabled={busy}
-                onCheckedChange={(localFilesOnly) =>
-                  updateDraft({ localFilesOnly })
-                }
-              />
             </div>
             <div className="flex gap-2 text-xs text-muted-foreground">
               <RemixIcon name="info" size="size-4" className="mt-0.5" />

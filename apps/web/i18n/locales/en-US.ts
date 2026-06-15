@@ -75,12 +75,15 @@ const en = {
     embeddingLocalTitle: "Local model",
     embeddingLocalDescription: "Run a Transformers.js model on this device.",
     embeddingLocalModel: "Model ID or local path",
+    embeddingCustomLocalModel: "Custom model ID or local path",
+    embeddingCustomLocalModelPlaceholder:
+      "Enter a Hugging Face model ID or local path",
     embeddingDevice: "Device",
     embeddingLocalOnly: "Use local files only",
     embeddingLocalOnlyDescription:
-      "Disable model downloads and only load files already available on this device.",
+      "To use your own local model, enter its path and enable this option. Model downloads will be disabled, and only model files already available on this device will be loaded.",
     embeddingLocalDownloadHint:
-      "The first test may download the model and take a little longer.",
+      "The first test may download the model and take a little longer. After switching models, you need to restart the application.",
     embeddingUsageHint: "Used by knowledge base, memory, and semantic search.",
     embeddingSaved: "Embedding settings saved.",
     embeddingSaveError: "Failed to save embedding settings.",
