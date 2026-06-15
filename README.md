@@ -4,7 +4,7 @@
   <img src="apps/web/public/images/logo-text.png" alt="OpenLoomi Logo" width="400">
 </picture>
 
-**An AI That Always Remembers You.**
+**Open-source AI coworker and workspace with a holistic context graph**
 
 <p align="center">
 <a href="./README.md">English</a> | <a href="./README-zh.md">简体中文</a> | <a href="./README-ja.md">日本語</a>
@@ -22,21 +22,7 @@
 
 ## What is OpenLoomi?
 
-OpenLoomi is an open-source AI workspace that runs on your desktop. It connects to the tools you already use — messaging apps, email, calendar, documents, project trackers — and builds a **Holistic Context Graph** of your people, projects, and decisions.
-
-## Features
-
-|     | Capability                                                               | What it does                                                                                                                                                                                                                                                                     |
-| --- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🧠  | **[Holistic Context Graph](https://openloomi.ai/docs/memory)**           | Short → mid → long-term memory that grows on its own — visible, auditable, and always remembering your people, projects, and decisions across months                                                                                                                             |
-| 🔌  | **[Platform Connectors](https://openloomi.ai/docs/connectors)**          | Telegram, WhatsApp, WeChat, DingTalk, Feishu, Gmail, Google Calendar, Outlook, Google Docs, X/Twitter, Instagram, LinkedIn, Facebook Messenger, Jira, HubSpot, Asana, iMessage, QQ, RSS — messages, emails, calendar events, documents, and project updates flow in continuously |
-| ⏰  | **[Proactive Tasks](https://openloomi.ai/docs/automation)**              | Intelligent task execution that anticipates your needs — not just scheduled automation, but context-aware actions that happen at the right moment                                                                                                                                |
-| 🖥️  | **[Security & Ease of Use](https://openloomi.ai/docs/privacy-security)** | Native app for Windows, macOS, Linux Desktop Apps — **works out of the box**, minutes to set up, no configuration wrestling; local-first storage with IndexedDB + SQLite, AES-256 encryption, no data leaves your machine, auditable access logs                                 |
-| 🔗  | **[Open Sourced Skills](https://openloomi.ai/docs/skills)**              | OpenLoomi Skills are open-source and can be integrated into any Agent — Claude Code, Codex, OpenClaw, Hermes, and more.                                                                                                                                                          |
-
-<p align="center">
-  <img src="screenshots/components.png" alt="Architecture" width="100%">
-</p>
+OpenLoomi is a Claude Cowork-style open-source alternative for builders who want local-first work memory around their AI agents. It connects your work tools so AI can understand people, projects, decisions, and follow-ups before it acts with human approval.
 
 ## Quick Start
 
@@ -56,15 +42,34 @@ cd openloomi
 
 cp apps/web/.env.example apps/web/.env
 
-# Set your AI provider keys in .env:
-#   ANTHROPIC_API_KEY=sk-ant-...
-#   LLM_API_KEY=sk-...
-
 pnpm install
 pnpm tauri:dev
 ```
 
 Requires Node.js 22+, pnpm 9+, Rust 1.75+, and on Windows: Visual Studio Build Tools with C++ workload. For more platform-specific setup requirements, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## Features
+
+|     | Capability                                                               | What it does                                                                                                                                                                                                                                                                     |
+| --- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🧠  | **[Holistic Context Graph](https://openloomi.ai/docs/memory)**           | Short → mid → long-term memory that grows on its own — visible, auditable, and always remembering your people, projects, and decisions across months                                                                                                                             |
+| 🔌  | **[Platform Connectors](https://openloomi.ai/docs/connectors)**          | Telegram, WhatsApp, WeChat, DingTalk, Feishu, Gmail, Google Calendar, Outlook, Google Docs, X/Twitter, Instagram, LinkedIn, Facebook Messenger, Jira, HubSpot, Asana, iMessage, QQ, RSS — messages, emails, calendar events, documents, and project updates flow in continuously |
+| ⏰  | **[Proactive Tasks](https://openloomi.ai/docs/automation)**              | Intelligent task execution that anticipates your needs — not just scheduled automation, but context-aware actions that happen at the right moment                                                                                                                                |
+| 🖥️  | **[Security & Ease of Use](https://openloomi.ai/docs/privacy-security)** | Native app for Windows, macOS, Linux Desktop Apps — **works out of the box**, minutes to set up, no configuration wrestling; local-first storage with IndexedDB + SQLite, AES-256 encryption, no data leaves your machine, auditable access logs                                 |
+| 🔗  | **[Open Sourced Skills](https://openloomi.ai/docs/skills)**              | OpenLoomi Skills are open-source and can be integrated into any Agent — Claude Code, Codex, OpenClaw, Hermes, and more.                                                                                                                                                          |
+
+<p align="center">
+  <img src="screenshots/components.png" alt="Architecture" width="100%">
+</p>
+
+## Why It Is Different
+
+| Compared with...           | OpenLoomi adds                                                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Claude Cowork-style agents | an open-source, local-first AI coworker/workspace with source evidence and approval                               |
+| Codex / Claude Code        | workspace context beyond the repo: people, product decisions, launch context, issues, and follow-ups              |
+| OpenClaw / Hermes-Agent    | context before and after the action: why it matters, what source was used, what changed, what remains open        |
+| RAG / knowledge bases      | work state, not just document retrieval: what changed, what is still true, and what should affect the next action |
 
 ## App Screenshots
 

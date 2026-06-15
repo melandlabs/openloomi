@@ -56,15 +56,20 @@ cd openloomi
 
 cp apps/web/.env.example apps/web/.env
 
-# .envにAIプロバイダーのキーを設定:
-#   ANTHROPIC_API_KEY=sk-ant-...
-#   LLM_API_KEY=sk-...
-
 pnpm install
 pnpm tauri:dev
 ```
 
-Node.js 22以上、pnpm 9以上、Rust 1.75以上が必要です。
+Node.js 22以上、pnpm 9以上、Rust 1.75以上が必要です。Windows では Visual Studio Build Tools と C++ ワークロードが必要です。プラットフォーム固有のセットアップ要件の詳細については、[CONTRIBUTING.md](./CONTRIBUTING.md) を参照してください。
+
+## 他のとは違う点
+
+| 比較対象                | OpenLoomi が追加するもの                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Claude Cowork 型 Agent  | オープンソースでローカルファーストのAI同僚/ワークスペース。ソース証拠と承認を備えている                             |
+| Codex / Claude Code     | リポジトリを超えたワークスペースコンテキスト： 사람、-product decisions、リリースコンテキスト、課題、フォローアップ |
+| OpenClaw / Hermes-Agent | アクションの前後：なぜ重要なのか、どのソースが使われたのか、何が変わったのか、何が残っているのか                    |
+| RAG / ナレッジベース    | ワーク状態であり単なるドキュメント検索ではない：何が変わったのか、何がまだ有効なのか、次のアクションに何影響するか  |
 
 ## アプリのスクリーンショット
 

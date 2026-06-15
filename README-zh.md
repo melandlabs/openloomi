@@ -56,15 +56,20 @@ cd openloomi
 
 cp apps/web/.env.example apps/web/.env
 
-# 在 .env 中设置你的 AI 提供商密钥：
-#   ANTHROPIC_API_KEY=sk-ant-...
-#   LLM_API_KEY=sk-...
-
 pnpm install
 pnpm tauri:dev
 ```
 
-需要 Node.js 22+、pnpm 9+ 和 Rust 1.75+。
+需要 Node.js 22+、pnpm 9+ 和 Rust 1.75+，Windows 还需要 Visual Studio Build Tools with C++ workload。更多平台特定设置要求请参见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+
+## 它有何不同
+
+| 与…相比                 | OpenLoomi 的优势                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| Claude Cowork 类 Agent  | 开源的、本地优先的 AI 工作空间/协作者，支持来源证据和审批                          |
+| Codex / Claude Code     | 超出仓库的工作空间上下文：人、产品决策、发布背景、问题和待跟进事项                 |
+| OpenClaw / Hermes-Agent | 操作前后的上下文：该操作为什么重要、使用了哪些来源、发生了什么改变、还有什么待解决 |
+| RAG / 知识库            | 工作状态，而不仅仅是文档检索：发生了什么改变、什么仍然有效、下一步操作应该考虑什么 |
 
 ## 应用截图
 

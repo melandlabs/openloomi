@@ -120,7 +120,8 @@ async function storeFeishuRawMessage(input: {
 
   try {
     const nowSec = Math.floor(Date.now() / 1000);
-    const { getRawMessageManager } = await import("@/lib/memory/raw-message-store");
+    const { getRawMessageManager } =
+      await import("@/lib/memory/raw-message-store");
     const manager = await getRawMessageManager();
     const rawMessage: RawMessage = {
       messageId: input.messageId,
@@ -147,7 +148,8 @@ async function storeFeishuRawMessage(input: {
       input.authToken,
     );
     await manager.storeMessage(messageWithEmbedding);
-    const { upsertRawMessagesToChroma } = await import("@/lib/memory/chroma-memory-index");
+    const { upsertRawMessagesToChroma } =
+      await import("@/lib/memory/chroma-memory-index");
     await upsertRawMessagesToChroma([messageWithEmbedding]);
     console.log("[Feishu] Stored raw message", {
       messageId: input.messageId,
@@ -165,9 +167,8 @@ async function embedRawMessageOnWrite(
   authToken?: string,
 ): Promise<RawMessage> {
   try {
-    const { hasUserEmbeddingProviderConfig } = await import(
-      "@/lib/ai/user-embedding-settings"
-    );
+    const { hasUserEmbeddingProviderConfig } =
+      await import("@/lib/ai/user-embedding-settings");
     if (
       !(await hasUserEmbeddingProviderConfig({
         userId: message.userId,
@@ -177,9 +178,8 @@ async function embedRawMessageOnWrite(
       return message;
     }
 
-    const { buildMemoryRecordEmbeddingDocument } = await import(
-      "@openloomi/ai/memory"
-    );
+    const { buildMemoryRecordEmbeddingDocument } =
+      await import("@openloomi/ai/memory");
     const { rawMessageToMemoryRecord } = await import("@openloomi/indexeddb");
 
     const document = buildMemoryRecordEmbeddingDocument(
