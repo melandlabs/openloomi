@@ -21,6 +21,8 @@ import { FocusedInsightFloatingBar } from "../focused-insight-floating-bar";
 import { WorkspaceFloatPanel } from "./workspace-float-panel";
 import { useGlobalInsightDrawer } from "@/components/global-insight-drawer";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { useConversationApiConfiguration } from "@/components/conversation-api-onboarding-guard";
+import { ConversationApiSetup } from "@/components/conversation-api-setup";
 
 interface AgentChatPanelProps {
   chatId?: string | null; // External chatId; if null, creates a new chat
@@ -49,6 +51,8 @@ export function AgentChatPanel({
   const searchParams = useSearchParams();
   const [input, setInput] = useState<string>(initialInput ?? "");
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
+  const apiConfigurationState = useConversationApiConfiguration();
+  const requiresApiSetup = apiConfigurationState === "missing";
 
   // Note: previousChatIdRef is not needed because the component gets the latest messages from context
   // When chatId changes, useChat in parent AgentPageClient handles the message switch automatically
@@ -390,6 +394,12 @@ export function AgentChatPanel({
         return Promise.reject(new Error("Chat is not properly initialized"));
       }
 
+      if (apiConfigurationState !== "available") {
+        return Promise.reject(
+          new Error("Conversation API configuration is not available"),
+        );
+      }
+
       // Check if AI is already responding to prevent duplicate submissions
       if (isAgentRunning) {
         console.warn("[sendMessage] Agent is already running");
@@ -398,7 +408,7 @@ export function AgentChatPanel({
 
       return sendMessage(message, requestOptions);
     },
-    [sendMessage, isAgentRunning],
+    [apiConfigurationState, sendMessage, isAgentRunning],
   );
 
   /** Auto-send initialMessageToSend after mount (e.g., from onboarding "Chat with openloomi" click): switches to new chat first, then sends, runs only once; if from URL send param, clears after sending */
@@ -407,6 +417,7 @@ export function AgentChatPanel({
     if (
       !initialMessageToSend?.trim() ||
       initialMessageSentRef.current ||
+      apiConfigurationState !== "available" ||
       !sendMessagePresent
     )
       return;
@@ -435,6 +446,7 @@ export function AgentChatPanel({
     return () => clearTimeout(timerId);
   }, [
     initialMessageToSend,
+    apiConfigurationState,
     pathname,
     router,
     searchParams,
@@ -531,19 +543,25 @@ export function AgentChatPanel({
               focusedInsights.length > 0 ? "pt-[56px]" : "pt-0",
             )}
           >
-            <div className="px-4 pb-4 w-full min-w-0">
-              <div className="mx-auto w-full max-w-3xl min-w-0">
-                <VirtualizedMessages
-                  chatId={chatId}
-                  votes={votes}
-                  messages={messages}
-                  sendMessage={sendMessagePresent}
-                  setMessages={setMessages}
-                  onRefresh={handleRefresh}
-                  onSuggestionsReady={handleSuggestionsReady}
-                  onSuggestionUsed={handleSuggestionUsed}
-                  isAgentRunning={isAgentRunningForChat}
-                />
+            <div className="flex flex-1 px-4 pb-4 w-full min-w-0">
+              <div className="mx-auto flex w-full max-w-3xl min-w-0">
+                {requiresApiSetup && messages.length === 0 ? (
+                  <ConversationApiSetup />
+                ) : (
+                  <div className="w-full">
+                    <VirtualizedMessages
+                      chatId={chatId}
+                      votes={votes}
+                      messages={messages}
+                      sendMessage={sendMessagePresent}
+                      setMessages={setMessages}
+                      onRefresh={handleRefresh}
+                      onSuggestionsReady={handleSuggestionsReady}
+                      onSuggestionUsed={handleSuggestionUsed}
+                      isAgentRunning={isAgentRunningForChat}
+                    />
+                  </div>
+                )}
               </div>
             </div>
             {/* Scroll anchor - used by scrollToBottom to determine bottom position */}
@@ -581,39 +599,45 @@ export function AgentChatPanel({
             </div>
           )}
 
-          <form className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-            <MultimodalInput
-              chatId={chatId}
-              input={input}
-              setInput={handleSetInput}
-              stop={stop}
-              attachments={attachments}
-              setAttachments={setAttachments}
-              setMessages={setMessages}
-              sendMessage={sendMessagePresent}
-              remainingSuggestions={remainingSuggestions}
-              onSuggestionClick={(suggestion) => {
-                handleSuggestionUsed(suggestion.id);
-                // Capture potential errors
-                try {
-                  sendMessagePresent({
-                    role: "user",
-                    parts: [{ type: "text", text: suggestion.title }],
-                  }).catch((error) => {
+          {requiresApiSetup ? (
+            messages.length > 0 ? (
+              <ConversationApiSetup compact />
+            ) : null
+          ) : (
+            <form className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+              <MultimodalInput
+                chatId={chatId}
+                input={input}
+                setInput={handleSetInput}
+                stop={stop}
+                attachments={attachments}
+                setAttachments={setAttachments}
+                setMessages={setMessages}
+                sendMessage={sendMessagePresent}
+                remainingSuggestions={remainingSuggestions}
+                onSuggestionClick={(suggestion) => {
+                  handleSuggestionUsed(suggestion.id);
+                  // Capture potential errors
+                  try {
+                    sendMessagePresent({
+                      role: "user",
+                      parts: [{ type: "text", text: suggestion.title }],
+                    }).catch((error) => {
+                      console.error(
+                        "[onSuggestionClick] Failed to send message:",
+                        error,
+                      );
+                    });
+                  } catch (error) {
                     console.error(
-                      "[onSuggestionClick] Failed to send message:",
+                      "[onSuggestionClick] Error sending message:",
                       error,
                     );
-                  });
-                } catch (error) {
-                  console.error(
-                    "[onSuggestionClick] Error sending message:",
-                    error,
-                  );
-                }
-              }}
-            />
-          </form>
+                  }
+                }}
+              />
+            </form>
+          )}
         </div>
       </div>
     </ErrorBoundary>

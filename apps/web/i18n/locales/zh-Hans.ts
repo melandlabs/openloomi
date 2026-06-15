@@ -18,6 +18,7 @@ const zh = {
     aiSettingsTitle: "API 设置",
     aiSettingsDescription:
       "为当前用户配置兼容的 AI 服务商接口，保存后会优先使用用户配置。",
+    conversationModelsTitle: "对话模型",
     aiSettingsOpenAiTitle: "OpenAI 兼容",
     aiSettingsOpenAiDescription:
       "支持 OpenAI、OpenRouter、Groq、Perplexity 或自定义兼容接口",
@@ -50,10 +51,40 @@ const zh = {
     aiSettingsRequiredTitle: "请先配置 API 密钥再开始聊天",
     aiSettingsRequiredDescription:
       "请启用一个 Anthropic 兼容服务，并保存 API 密钥、接口地址和模型。",
-    aiSettingsMissingBannerTitle: "尚未配置对话 API 密钥",
-    aiSettingsMissingBannerDescription:
-      "请先配置 Anthropic 兼容服务，再开始聊天。",
-    aiSettingsConfigureButton: "去配置",
+    aiSettingsRequiredForChat: "聊天必需",
+    aiSetupEyebrow: "一分钟完成设置",
+    aiSetupTitle: "连接你的对话模型",
+    aiSetupDescription:
+      "开始聊天前，需要先配置一个 Anthropic 兼容服务。凭证会被安全保存，之后也可以随时修改。",
+    aiSetupApiKey: "API 密钥",
+    aiSetupEndpoint: "接口地址",
+    aiSetupModel: "模型",
+    aiSetupAction: "设置服务商",
+    aiSetupHint: "如果管理员已经配置了系统密钥，请重新加载页面。",
+    aiSetupCompactTitle: "连接 AI 服务后继续聊天",
+    aiSetupCompactDescription:
+      "聊天记录不会受影响，完成对话 API 配置后即可发送新消息。",
+    embeddingTitle: "Embedding 模型",
+    embeddingDescription:
+      "选择 OpenLoomi 为知识库、记忆和语义搜索生成向量的方式。",
+    embeddingCloudTitle: "在线 API",
+    embeddingCloudDescription: "使用 OpenAI 兼容的 Embedding 接口。",
+    embeddingLocalTitle: "本地模型",
+    embeddingLocalDescription: "在当前设备上运行 Transformers.js 模型。",
+    embeddingLocalModel: "模型 ID 或本地路径",
+    embeddingDevice: "运行设备",
+    embeddingLocalOnly: "仅使用本地文件",
+    embeddingLocalOnlyDescription:
+      "禁止下载模型，只加载当前设备上已经存在的模型文件。",
+    embeddingLocalDownloadHint: "首次测试可能需要下载模型，因此会多等一会儿。",
+    embeddingUsageHint: "用于知识库、记忆和语义搜索。",
+    embeddingSaved: "Embedding 设置已保存",
+    embeddingSaveError: "Embedding 设置保存失败",
+    embeddingLoadError: "Embedding 设置加载失败",
+    embeddingReset: "Embedding 设置已重置为系统默认值",
+    embeddingResetError: "Embedding 设置重置失败",
+    embeddingTestSuccess: "Embedding 测试成功（{{dimensions}} 维）",
+    embeddingTestError: "Embedding 测试失败，请检查配置。",
   },
   insight: {
     ...(baseZh.insight ?? {}),

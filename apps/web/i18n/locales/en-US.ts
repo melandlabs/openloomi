@@ -18,6 +18,7 @@ const en = {
     aiSettingsTitle: "API Settings",
     aiSettingsDescription:
       "Configure per-user API settings for compatible AI providers.",
+    conversationModelsTitle: "Conversation models",
     aiSettingsOpenAiTitle: "OpenAI compatible",
     aiSettingsOpenAiDescription:
       "OpenAI, OpenRouter, Groq, Perplexity, or custom compatible endpoints",
@@ -52,10 +53,43 @@ const en = {
     aiSettingsRequiredTitle: "Configure an API key to start chatting",
     aiSettingsRequiredDescription:
       "Enable an Anthropic-compatible provider and save its API key, base URL, and model before starting a conversation.",
-    aiSettingsMissingBannerTitle: "No conversation API key configured",
-    aiSettingsMissingBannerDescription:
-      "Configure an Anthropic-compatible provider before starting a conversation.",
-    aiSettingsConfigureButton: "Configure",
+    aiSettingsRequiredForChat: "Required for chat",
+    aiSetupEyebrow: "One-minute setup",
+    aiSetupTitle: "Connect your conversation model",
+    aiSetupDescription:
+      "OpenLoomi needs an Anthropic-compatible provider before it can start a conversation. Your credentials are stored securely and can be changed later.",
+    aiSetupApiKey: "API key",
+    aiSetupEndpoint: "Endpoint",
+    aiSetupModel: "Model",
+    aiSetupAction: "Set up provider",
+    aiSetupHint:
+      "Already configured by your administrator? Reload after the system key is added.",
+    aiSetupCompactTitle: "Connect an AI provider to continue",
+    aiSetupCompactDescription:
+      "Your chat history is safe. Add a conversation API configuration to send new messages.",
+    embeddingTitle: "Embedding models",
+    embeddingDescription:
+      "Choose how OpenLoomi creates vectors for knowledge, memory, and semantic search.",
+    embeddingCloudTitle: "Online API",
+    embeddingCloudDescription: "Use an OpenAI-compatible embedding endpoint.",
+    embeddingLocalTitle: "Local model",
+    embeddingLocalDescription: "Run a Transformers.js model on this device.",
+    embeddingLocalModel: "Model ID or local path",
+    embeddingDevice: "Device",
+    embeddingLocalOnly: "Use local files only",
+    embeddingLocalOnlyDescription:
+      "Disable model downloads and only load files already available on this device.",
+    embeddingLocalDownloadHint:
+      "The first test may download the model and take a little longer.",
+    embeddingUsageHint: "Used by knowledge base, memory, and semantic search.",
+    embeddingSaved: "Embedding settings saved.",
+    embeddingSaveError: "Failed to save embedding settings.",
+    embeddingLoadError: "Failed to load embedding settings.",
+    embeddingReset: "Embedding settings reset to system defaults.",
+    embeddingResetError: "Failed to reset embedding settings.",
+    embeddingTestSuccess:
+      "Embedding test succeeded ({{dimensions}} dimensions).",
+    embeddingTestError: "Embedding test failed. Check the configuration.",
   },
   insight: {
     ...(baseEn.insight ?? {}),

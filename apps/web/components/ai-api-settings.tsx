@@ -12,6 +12,7 @@ import {
   AI_SETTINGS_CHANGED_EVENT,
   MISSING_API_KEY_REASON,
 } from "@/lib/ai/conversation-api-configuration";
+import { EmbeddingApiSettings } from "@/components/embedding-api-settings";
 
 type ProviderType = "openai_compatible" | "anthropic_compatible";
 
@@ -131,6 +132,15 @@ export function AiApiSettings() {
     }
     return map;
   }, [settings]);
+  const displayedProviders = useMemo(
+    () =>
+      showMissingApiKeyNotice
+        ? [...providers].sort((provider) =>
+            provider.type === "anthropic_compatible" ? -1 : 1,
+          )
+        : providers,
+    [showMissingApiKeyNotice],
+  );
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -244,7 +254,7 @@ export function AiApiSettings() {
         savedSetting.baseUrl?.trim() &&
         savedSetting.model?.trim()
       ) {
-        router.replace("/?page=ai-api-settings", { scroll: false });
+        router.replace("/?page=chat", { scroll: false });
       }
       if (options.showToast !== false) {
         toast({
@@ -396,7 +406,7 @@ export function AiApiSettings() {
         )}
         <div className="flex flex-col gap-2">
           <p className="text-base font-semibold text-foreground-secondary">
-            {t("settings.aiSettingsTitle", "API Settings")}
+            {t("settings.conversationModelsTitle", "Conversation models")}
           </p>
           <p className="max-w-3xl text-sm text-muted-foreground">
             {t(
@@ -407,7 +417,7 @@ export function AiApiSettings() {
         </div>
 
         <div className="flex flex-col gap-6">
-          {providers.map((provider) => {
+          {displayedProviders.map((provider) => {
             const setting = settingsByProvider.get(provider.type);
             const draft = drafts[provider.type];
             const defaults = systemDefaults[provider.type];
@@ -421,11 +431,18 @@ export function AiApiSettings() {
               Boolean(draft.baseUrl.trim()) &&
               Boolean(draft.model.trim()) &&
               Boolean(draft.apiKey.trim() || setting?.hasApiKey);
+            const isRequiredConversationProvider =
+              showMissingApiKeyNotice &&
+              provider.type === "anthropic_compatible";
 
             return (
               <section
                 key={provider.type}
-                className="rounded-lg border border-border bg-background p-4 sm:p-5"
+                className={cn(
+                  "rounded-lg border border-border bg-background p-4 sm:p-5",
+                  isRequiredConversationProvider &&
+                    "border-primary/40 ring-1 ring-primary/15",
+                )}
               >
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -442,6 +459,17 @@ export function AiApiSettings() {
                             ? t("settings.aiSettingsOverride", "User override")
                             : t("settings.aiSettingsSystem", "System default")}
                         </Badge>
+                        {isRequiredConversationProvider && (
+                          <Badge
+                            variant="secondary"
+                            className="h-5 rounded-md bg-primary/10 px-2 text-[11px] font-medium text-primary"
+                          >
+                            {t(
+                              "settings.aiSettingsRequiredForChat",
+                              "Required for chat",
+                            )}
+                          </Badge>
+                        )}
                       </div>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {t(
@@ -622,6 +650,8 @@ export function AiApiSettings() {
           })}
         </div>
 
+        <Separator />
+        <EmbeddingApiSettings />
         <Separator className="mb-8" />
       </div>
     </div>
