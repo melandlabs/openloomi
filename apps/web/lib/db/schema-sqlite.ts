@@ -937,6 +937,46 @@ export type InsertUserLlmApiSettings = InferInsertModel<
   typeof userLlmApiSettings
 >;
 
+export const userEmbeddingSettings = sqliteTable(
+  "user_embedding_settings",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    providerType: text("provider_type").$type<"cloud" | "local">().notNull(),
+    apiKeyEncrypted: text("api_key_encrypted"),
+    encryptionKeyId: text("encryption_key_id"),
+    baseUrl: text("base_url"),
+    model: text("model"),
+    device: text("device"),
+    localFilesOnly: integer("local_files_only", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    uniqueUser: uniqueIndex("user_embedding_settings_user_idx").on(
+      table.userId,
+    ),
+  }),
+);
+
+export type UserEmbeddingSettings = InferSelectModel<
+  typeof userEmbeddingSettings
+>;
+export type InsertUserEmbeddingSettings = InferInsertModel<
+  typeof userEmbeddingSettings
+>;
+
 const KNOWN_ACTIVITY_TIERS = new Set(["high", "medium", "low", "dormant"]);
 
 export const insightTimelineHistory = sqliteTable(

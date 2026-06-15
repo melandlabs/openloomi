@@ -11,13 +11,14 @@ import {
   upsertInsightsToChroma,
 } from "@/lib/memory/chroma-memory-index";
 import {
-  getConfiguredEmbeddingModelName,
-  getEmbeddingProviderType,
-} from "@openloomi/rag";
-import {
   isInsightSQLiteVecEnabled,
   upsertInsightsToSQLiteVec,
 } from "@/lib/memory/sqlite-vector-index";
+import {
+  createUserEmbeddingProvider,
+  getUserEmbeddingModelName,
+  hasUserEmbeddingProviderConfig,
+} from "@/lib/ai/user-embedding-settings";
 
 export type InsightEmbeddingCandidate = {
   insightId: string;
@@ -68,21 +69,15 @@ function emptyResult(requested: number): UpsertInsightEmbeddingsResult {
   };
 }
 
-export function hasInsightEmbeddingProviderConfig(authToken?: string): boolean {
-  if (getEmbeddingProviderType() === "local") {
-    return true;
-  }
-
-  return Boolean(
-    authToken ||
-    process.env.OPENAI_EMBEDDINGS_API_KEY ||
-    process.env.OPENROUTER_API_KEY ||
-    process.env.LLM_API_KEY,
-  );
+export function hasInsightEmbeddingProviderConfig(
+  authToken?: string,
+  userId?: string,
+): Promise<boolean> {
+  return hasUserEmbeddingProviderConfig({ userId, authToken });
 }
 
-export function getInsightEmbeddingModelName(): string {
-  return getConfiguredEmbeddingModelName();
+export function getInsightEmbeddingModelName(userId?: string): Promise<string> {
+  return getUserEmbeddingModelName(userId);
 }
 
 function toErrorMessage(error: unknown): string {
@@ -256,16 +251,6 @@ export async function upsertInsightEmbeddingsForCandidates({
     return result;
   }
 
-  if (!hasInsightEmbeddingProviderConfig(options.authToken)) {
-    console.warn(
-      "[InsightEmbedding] Skipping insight embedding generation: no embedding provider API key configured",
-    );
-    return {
-      ...result,
-      skippedNoProvider: true,
-    };
-  }
-
   try {
     const candidatesWithoutUser = candidates.filter(
       (candidate) => !candidate.userId,
@@ -284,7 +269,6 @@ export async function upsertInsightEmbeddingsForCandidates({
       );
     }
 
-    const modelName = getInsightEmbeddingModelName();
     const documents = candidates
       .map((candidate) => {
         const userId = candidate.userId ?? botUserIds.get(candidate.botId);
@@ -311,6 +295,25 @@ export async function upsertInsightEmbeddingsForCandidates({
       return result;
     }
 
+    const modelByUserId = new Map<string, string>();
+    for (const document of documents) {
+      if (!modelByUserId.has(document.userId)) {
+        modelByUserId.set(
+          document.userId,
+          await getInsightEmbeddingModelName(document.userId),
+        );
+      }
+    }
+    const documentsWithModel = documents.map((document) => {
+      const modelName = modelByUserId.get(document.userId);
+      if (!modelName) {
+        throw new Error(
+          `Unable to resolve embedding model for user ${document.userId}`,
+        );
+      }
+      return { ...document, modelName };
+    });
+
     const existingRows = await db
       .select({
         insightId: insightEmbeddings.insightId,
@@ -321,7 +324,7 @@ export async function upsertInsightEmbeddingsForCandidates({
       .where(
         inArray(
           insightEmbeddings.insightId,
-          documents.map((document) => document.insightId),
+          documentsWithModel.map((document) => document.insightId),
         ),
       );
 
@@ -329,38 +332,71 @@ export async function upsertInsightEmbeddingsForCandidates({
       string,
       { contentHash: string; embeddingModel: string }
     >(existingRows.map((row: any) => [row.insightId, row]));
-    const changedDocuments = documents.filter((document) => {
+    const changedDocuments = documentsWithModel.filter((document) => {
       const existing = existingByInsightId.get(document.insightId);
       return (
         !existing ||
         existing.contentHash !== document.contentHash ||
-        existing.embeddingModel !== modelName
+        existing.embeddingModel !== document.modelName
       );
     });
 
     result.changed = changedDocuments.length;
-    result.skippedUnchanged = documents.length - changedDocuments.length;
+    result.skippedUnchanged =
+      documentsWithModel.length - changedDocuments.length;
 
     if (changedDocuments.length === 0) {
       return result;
     }
 
-    const { UniversalEmbeddings } =
-      await import("@openloomi/rag/universal-embeddings");
-    const embeddings = new UniversalEmbeddings(options.authToken);
-    const embeddingVectors = await embeddings.embedDocuments(
-      changedDocuments.map((document) => document.content),
-    );
+    const documentsByUserId = new Map<string, typeof changedDocuments>();
+    for (const document of changedDocuments) {
+      const group = documentsByUserId.get(document.userId) ?? [];
+      group.push(document);
+      documentsByUserId.set(document.userId, group);
+    }
 
-    if (embeddingVectors.length !== changedDocuments.length) {
-      throw new Error(
-        `Embedding result count mismatch: expected ${changedDocuments.length}, got ${embeddingVectors.length}`,
+    const embeddedDocuments: Array<{
+      document: (typeof changedDocuments)[number];
+      embedding: number[];
+    }> = [];
+    for (const [userId, userDocuments] of documentsByUserId) {
+      const hasProvider = await hasInsightEmbeddingProviderConfig(
+        options.authToken,
+        userId,
       );
+      if (!hasProvider) {
+        result.skippedNoProvider = true;
+        console.warn(
+          "[InsightEmbedding] Skipping user without an embedding provider",
+          { userId, count: userDocuments.length },
+        );
+        continue;
+      }
+
+      const embeddings = await createUserEmbeddingProvider({
+        userId,
+        authToken: options.authToken,
+      });
+      const vectors = await embeddings.embedDocuments(
+        userDocuments.map((document) => document.content),
+      );
+      if (vectors.length !== userDocuments.length) {
+        throw new Error(
+          `Embedding result count mismatch: expected ${userDocuments.length}, got ${vectors.length}`,
+        );
+      }
+      userDocuments.forEach((document, index) => {
+        embeddedDocuments.push({ document, embedding: vectors[index] });
+      });
+    }
+
+    if (embeddedDocuments.length === 0) {
+      return result;
     }
 
     const now = new Date();
-    const rows = changedDocuments.map((document, index) => {
-      const embedding = embeddingVectors[index];
+    const rows = embeddedDocuments.map(({ document, embedding }) => {
       return {
         insightId: document.insightId,
         userId: document.userId,
@@ -368,7 +404,7 @@ export async function upsertInsightEmbeddingsForCandidates({
         content: document.content,
         contentHash: document.contentHash,
         embedding: `[${embedding.join(",")}]`,
-        embeddingModel: modelName,
+        embeddingModel: document.modelName,
         embeddingDimensions: embedding.length,
         createdAt: now,
         updatedAt: now,
@@ -394,8 +430,7 @@ export async function upsertInsightEmbeddingsForCandidates({
 
     try {
       await upsertInsightsToChroma(
-        changedDocuments.map((document, index) => {
-          const embedding = embeddingVectors[index];
+        embeddedDocuments.map(({ document, embedding }) => {
           return {
             insightId: document.insightId,
             userId: document.userId,
@@ -403,7 +438,7 @@ export async function upsertInsightEmbeddingsForCandidates({
             content: document.content,
             contentHash: document.contentHash,
             embedding,
-            embeddingModel: modelName,
+            embeddingModel: document.modelName,
             embeddingDimensions: embedding.length,
             title: document.payload.title,
             description: document.payload.description,
@@ -423,8 +458,7 @@ export async function upsertInsightEmbeddingsForCandidates({
 
     try {
       await upsertInsightsToSQLiteVec(
-        changedDocuments.map((document, index) => {
-          const embedding = embeddingVectors[index];
+        embeddedDocuments.map(({ document, embedding }) => {
           return {
             insightId: document.insightId,
             userId: document.userId,
@@ -432,7 +466,7 @@ export async function upsertInsightEmbeddingsForCandidates({
             content: document.content,
             contentHash: document.contentHash,
             embedding,
-            embeddingModel: modelName,
+            embeddingModel: document.modelName,
             embeddingDimensions: embedding.length,
             title: document.payload.title,
             description: document.payload.description,

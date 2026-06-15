@@ -8,7 +8,10 @@ import {
   isRawMessageChromaEnabled,
   searchRawMessagesWithChroma,
 } from "@/lib/memory/chroma-memory-index";
-import { getEmbeddingProviderType } from "@openloomi/rag";
+import {
+  createUserEmbeddingProvider,
+  hasUserEmbeddingProviderConfig,
+} from "@/lib/ai/user-embedding-settings";
 
 export type UnifiedMemorySearchSource = "memory" | "insights" | "knowledge";
 
@@ -130,29 +133,16 @@ function toKnowledgeResult(result: {
   };
 }
 
-function hasEmbeddingProviderConfig(authToken?: string): boolean {
-  if (getEmbeddingProviderType() === "local") {
-    return true;
-  }
-  return Boolean(
-    authToken ||
-    process.env.OPENAI_EMBEDDINGS_API_KEY ||
-    process.env.OPENROUTER_API_KEY ||
-    process.env.LLM_API_KEY,
-  );
-}
-
 async function embedQuery(
+  userId: string,
   query: string,
   authToken?: string,
 ): Promise<number[]> {
-  if (!hasEmbeddingProviderConfig(authToken)) {
+  if (!(await hasUserEmbeddingProviderConfig({ userId, authToken }))) {
     throw new Error("Embedding provider API key is not configured");
   }
 
-  const { UniversalEmbeddings } =
-    await import("@openloomi/rag/universal-embeddings");
-  const embeddings = new UniversalEmbeddings(authToken);
+  const embeddings = await createUserEmbeddingProvider({ userId, authToken });
   return embeddings.embedQuery(query);
 }
 
@@ -206,8 +196,17 @@ async function searchRawMemorySemantically(input: {
 
   let semanticResults: UnifiedMemorySearchResult[] = [];
   let semanticBackendHandled = false;
-  if (hasEmbeddingProviderConfig(input.authToken)) {
-    const queryEmbedding = await embedQuery(input.query, input.authToken);
+  if (
+    await hasUserEmbeddingProviderConfig({
+      userId: input.userId,
+      authToken: input.authToken,
+    })
+  ) {
+    const queryEmbedding = await embedQuery(
+      input.userId,
+      input.query,
+      input.authToken,
+    );
     if (queryEmbedding.length > 0) {
       if (isRawMessageChromaEnabled()) {
         try {

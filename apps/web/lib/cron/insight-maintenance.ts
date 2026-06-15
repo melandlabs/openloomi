@@ -11,11 +11,11 @@ import { runWeeklyInsightMaintenance } from "@/lib/insights/maintenance";
 import { runInsightEmbeddingDream } from "@/lib/insights/dream";
 import { getRawMessageManager } from "@/lib/memory/raw-message-store";
 import { upsertRawMessagesToChroma } from "@/lib/memory/chroma-memory-index";
+import { hasInsightEmbeddingProviderConfig } from "@/lib/insights/embedding-service";
 import {
-  getInsightEmbeddingModelName,
-  hasInsightEmbeddingProviderConfig,
-} from "@/lib/insights/embedding-service";
-import { UniversalEmbeddings } from "@openloomi/rag/universal-embeddings";
+  createUserEmbeddingProvider,
+  getUserEmbeddingModelName,
+} from "@/lib/ai/user-embedding-settings";
 import {
   runRawMessageEmbeddingDream,
   type RawMessage,
@@ -166,7 +166,7 @@ export async function runRawMessageEmbeddingDreamIfDue(
     return;
   }
 
-  if (!hasInsightEmbeddingProviderConfig(authToken)) {
+  if (!(await hasInsightEmbeddingProviderConfig(authToken, schedulerUserId))) {
     console.warn(
       "[LocalScheduler] Skipping raw message embedding dream: no embedding provider API key or cloud auth token configured",
     );
@@ -175,8 +175,11 @@ export async function runRawMessageEmbeddingDreamIfDue(
 
   console.log("[LocalScheduler] Running raw message embedding dream");
   const manager = await getRawMessageManager();
-  const embeddings = new UniversalEmbeddings(authToken);
-  const embeddingModel = getInsightEmbeddingModelName();
+  const embeddings = await createUserEmbeddingProvider({
+    userId: schedulerUserId,
+    authToken,
+  });
+  const embeddingModel = await getUserEmbeddingModelName(schedulerUserId);
   const result = await runRawMessageEmbeddingDream(manager as any, {
     userId: schedulerUserId,
     embeddingModel,

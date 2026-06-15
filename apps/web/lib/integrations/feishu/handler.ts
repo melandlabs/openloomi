@@ -20,16 +20,16 @@ import { getCloudAuthToken } from "@/lib/auth/token-manager";
 import { handleAgentRuntime } from "@/lib/ai/runtime/shared";
 import { getRawMessageManager } from "@/lib/memory/raw-message-store";
 import { upsertRawMessagesToChroma } from "@/lib/memory/chroma-memory-index";
-import {
-  getInsightEmbeddingModelName,
-  hasInsightEmbeddingProviderConfig,
-} from "@/lib/insights/embedding-service";
 import { buildMemoryRecordEmbeddingDocument } from "@openloomi/ai/memory";
 import {
   rawMessageToMemoryRecord,
   type RawMessage,
 } from "@openloomi/indexeddb";
-import { UniversalEmbeddings } from "@openloomi/rag/universal-embeddings";
+import {
+  createUserEmbeddingProvider,
+  getUserEmbeddingModelName,
+  hasUserEmbeddingProviderConfig,
+} from "@/lib/ai/user-embedding-settings";
 import {
   FeishuConversationStore,
   type ChatType,
@@ -193,7 +193,12 @@ async function embedRawMessageOnWrite(
   message: RawMessage,
   authToken?: string,
 ): Promise<RawMessage> {
-  if (!hasInsightEmbeddingProviderConfig(authToken)) {
+  if (
+    !(await hasUserEmbeddingProviderConfig({
+      userId: message.userId,
+      authToken,
+    }))
+  ) {
     return message;
   }
 
@@ -205,7 +210,10 @@ async function embedRawMessageOnWrite(
       return message;
     }
 
-    const embeddings = new UniversalEmbeddings(authToken);
+    const embeddings = await createUserEmbeddingProvider({
+      userId: message.userId,
+      authToken,
+    });
     const [embedding] = await embeddings.embedDocuments([document.content]);
     if (!embedding || embedding.length === 0) {
       return message;
@@ -214,7 +222,7 @@ async function embedRawMessageOnWrite(
     return {
       ...message,
       embedding,
-      embeddingModel: getInsightEmbeddingModelName(),
+      embeddingModel: await getUserEmbeddingModelName(message.userId),
       embeddingContentHash: document.contentHash,
       embeddingDimensions: embedding.length,
       embeddingUpdatedAt: Date.now(),

@@ -5,7 +5,10 @@
  * specific cloud API or local model runtime.
  */
 
-import { LocalTransformersEmbeddingProvider } from "./local-transformers-embedding-provider";
+import {
+  LocalTransformersEmbeddingProvider,
+  type LocalTransformersEmbeddingProviderOptions,
+} from "./local-transformers-embedding-provider";
 
 const DEFAULT_CLOUD_EMBEDDING_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_CLOUD_EMBEDDING_MODEL = "text-embedding-3-small";
@@ -22,9 +25,13 @@ export interface EmbeddingProvider {
 
 export interface EmbeddingProviderFactoryOptions {
   userAuthToken?: string;
+  providerType?: EmbeddingProviderType;
+  cloud?: Omit<CloudEmbeddingProviderOptions, "userAuthToken">;
+  local?: LocalTransformersEmbeddingProviderOptions;
 }
 
-export interface CloudEmbeddingProviderOptions extends EmbeddingProviderFactoryOptions {
+export interface CloudEmbeddingProviderOptions {
+  userAuthToken?: string;
   apiKey?: string;
   baseURL?: string;
   modelName?: string;
@@ -34,24 +41,34 @@ export interface CloudEmbeddingProviderOptions extends EmbeddingProviderFactoryO
 export function getConfiguredEmbeddingProvider(
   options: EmbeddingProviderFactoryOptions = {},
 ): EmbeddingProvider {
-  const provider = getEmbeddingProviderType();
+  const provider = options.providerType ?? getEmbeddingProviderType();
 
   if (provider === "local") {
-    return new LocalTransformersEmbeddingProvider();
+    return new LocalTransformersEmbeddingProvider(options.local);
   }
 
-  return new CloudEmbeddingProvider(options);
+  return new CloudEmbeddingProvider({
+    ...options.cloud,
+    userAuthToken: options.userAuthToken,
+  });
 }
 
-export function getConfiguredEmbeddingModelName(): string {
-  if (getEmbeddingProviderType() === "local") {
+export function getConfiguredEmbeddingModelName(
+  options: EmbeddingProviderFactoryOptions = {},
+): string {
+  const provider = options.providerType ?? getEmbeddingProviderType();
+  if (provider === "local") {
     return (
-      process.env.LOCAL_EMBEDDING_MODEL || "Xenova/all-MiniLM-L6-v2"
+      options.local?.modelName ||
+      process.env.LOCAL_EMBEDDING_MODEL ||
+      "Xenova/all-MiniLM-L6-v2"
     ).trim();
   }
 
   return (
-    process.env.LLM_EMBEDDING_MODEL || DEFAULT_CLOUD_EMBEDDING_MODEL
+    options.cloud?.modelName ||
+    process.env.LLM_EMBEDDING_MODEL ||
+    DEFAULT_CLOUD_EMBEDDING_MODEL
   ).trim();
 }
 
@@ -88,6 +105,7 @@ export class CloudEmbeddingProvider implements EmbeddingProvider {
       options.baseURL ||
       process.env.LLM_EMBEDDING_BASE_URL ||
       DEFAULT_CLOUD_EMBEDDING_BASE_URL;
+    this.baseURL = this.baseURL.replace(/\/+$/, "");
     this.batchSize = options.batchSize ?? getEmbeddingBatchSize();
   }
 

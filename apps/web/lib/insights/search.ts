@@ -9,7 +9,10 @@ import {
   isInsightSQLiteVecEnabled,
   searchInsightsWithSQLiteVec,
 } from "@/lib/memory/sqlite-vector-index";
-import { getEmbeddingProviderType } from "@openloomi/rag";
+import {
+  createUserEmbeddingProvider,
+  hasUserEmbeddingProviderConfig,
+} from "@/lib/ai/user-embedding-settings";
 
 const DEFAULT_LIMIT = 10;
 const DEFAULT_THRESHOLD = 0.7;
@@ -82,29 +85,16 @@ function clampThreshold(threshold: number | undefined): number {
   return Math.min(1, Math.max(-1, threshold ?? DEFAULT_THRESHOLD));
 }
 
-function hasEmbeddingProviderConfig(authToken?: string): boolean {
-  if (getEmbeddingProviderType() === "local") {
-    return true;
-  }
-  return Boolean(
-    authToken ||
-    process.env.OPENAI_EMBEDDINGS_API_KEY ||
-    process.env.OPENROUTER_API_KEY ||
-    process.env.LLM_API_KEY,
-  );
-}
-
 async function embedQuery(
+  userId: string,
   query: string,
   authToken?: string,
 ): Promise<number[]> {
-  if (!hasEmbeddingProviderConfig(authToken)) {
+  if (!(await hasUserEmbeddingProviderConfig({ userId, authToken }))) {
     throw new Error("Embedding provider API key is not configured");
   }
 
-  const { UniversalEmbeddings } =
-    await import("@openloomi/rag/universal-embeddings");
-  const embeddings = new UniversalEmbeddings(authToken);
+  const embeddings = await createUserEmbeddingProvider({ userId, authToken });
   return embeddings.embedQuery(query);
 }
 
@@ -309,7 +299,7 @@ export async function searchInsightsSemantically(
 
   const limit = clampLimit(input.limit);
   const threshold = clampThreshold(input.threshold);
-  const queryEmbedding = await embedQuery(query, input.authToken);
+  const queryEmbedding = await embedQuery(input.userId, query, input.authToken);
 
   if (isInsightChromaEnabled()) {
     try {

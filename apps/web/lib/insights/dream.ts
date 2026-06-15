@@ -103,7 +103,6 @@ export async function runInsightEmbeddingDream(
   const limit = clampLimit(input.limit, DEFAULT_DREAM_LIMIT);
   const scanLimit = clampLimit(input.scanLimit, Math.max(limit * 5, limit));
   const includeArchived = input.includeArchived ?? true;
-  const embeddingModel = getInsightEmbeddingModelName();
   const rows = await loadInsightDreamRows({
     userId: input.userId,
     botId: input.botId,
@@ -117,12 +116,21 @@ export async function runInsightEmbeddingDream(
     content_changed: 0,
   };
   const candidates: InsightEmbeddingCandidate[] = [];
+  const embeddingModelsByUserId = new Map<string, string>();
 
   for (const row of rows) {
     const normalizedInsight = normalizeInsight({ ...(row as any).insight });
     const document = buildInsightEmbeddingDocument(normalizedInsight as any);
     if (document.content.length === 0) {
       continue;
+    }
+
+    const userId = (row as any).userId as string | undefined;
+    const modelCacheKey = userId ?? "__system__";
+    let embeddingModel = embeddingModelsByUserId.get(modelCacheKey);
+    if (!embeddingModel) {
+      embeddingModel = await getInsightEmbeddingModelName(userId);
+      embeddingModelsByUserId.set(modelCacheKey, embeddingModel);
     }
 
     const reason = resolveInsightEmbeddingDreamReason({
@@ -139,7 +147,7 @@ export async function runInsightEmbeddingDream(
     candidates.push({
       insightId: normalizedInsight.id,
       botId: normalizedInsight.botId,
-      userId: (row as any).userId,
+      userId,
       payload: normalizedInsight as any,
     });
 

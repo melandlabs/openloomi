@@ -1097,6 +1097,45 @@ export type UserLlmApiSettings = InferSelectModel<typeof userLlmApiSettings>;
 export type InsertUserLlmApiSettings = InferInsertModel<
   typeof userLlmApiSettings
 >;
+
+export const userEmbeddingSettings = pgTable(
+  "user_embedding_settings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    providerType: varchar("provider_type", { length: 16 })
+      .$type<"cloud" | "local">()
+      .notNull(),
+    apiKeyEncrypted: text("api_key_encrypted"),
+    encryptionKeyId: text("encryption_key_id"),
+    baseUrl: text("base_url"),
+    model: text("model"),
+    device: varchar("device", { length: 64 }),
+    localFilesOnly: boolean("local_files_only").notNull().default(false),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    uniqueUser: uniqueIndex("user_embedding_settings_user_idx").on(
+      table.userId,
+    ),
+  }),
+);
+
+export type UserEmbeddingSettings = InferSelectModel<
+  typeof userEmbeddingSettings
+>;
+export type InsertUserEmbeddingSettings = InferInsertModel<
+  typeof userEmbeddingSettings
+>;
+
 const KNOWN_ACTIVITY_TIERS = new Set(["high", "medium", "low", "dormant"]);
 
 export const personCustomFields = pgTable(

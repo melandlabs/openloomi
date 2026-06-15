@@ -1,6 +1,7 @@
 import {
   getConfiguredEmbeddingProvider,
   type EmbeddingProvider,
+  type EmbeddingProviderFactoryOptions,
 } from "./embedding-provider";
 
 /**
@@ -12,9 +13,13 @@ import {
 export class UniversalEmbeddings implements EmbeddingProvider {
   private provider: EmbeddingProvider;
 
-  constructor(userAuthToken?: string, provider?: EmbeddingProvider) {
+  constructor(
+    userAuthToken?: string,
+    provider?: EmbeddingProvider,
+    options: Omit<EmbeddingProviderFactoryOptions, "userAuthToken"> = {},
+  ) {
     this.provider =
-      provider ?? getConfiguredEmbeddingProvider({ userAuthToken });
+      provider ?? getConfiguredEmbeddingProvider({ ...options, userAuthToken });
   }
 
   async embedDocuments(texts: string[]): Promise<number[][]> {

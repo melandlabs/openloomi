@@ -225,6 +225,13 @@
                         "when": 1780012800000,
                         "tag": "0102_user_llm_api_settings",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx": 32,
+                        "version": "7",
+                        "when": 1781481600000,
+                        "tag": "0104_user_embedding_settings",
+                        "breakpoints":  true
                     }
                 ]
 }

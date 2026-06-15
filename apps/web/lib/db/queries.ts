@@ -47,6 +47,8 @@ import {
   parseInsightSettings,
   userLlmApiSettings,
   type UserLlmApiSettings,
+  userEmbeddingSettings,
+  type UserEmbeddingSettings,
   userContacts,
   dingtalkBotInsightMessages,
   type UserContact,
@@ -5740,6 +5742,192 @@ export async function deleteUserLlmApiSetting({
     throw new AppError(
       "bad_request:database",
       `Failed to delete LLM API setting. ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export type EmbeddingProviderType = UserEmbeddingSettings["providerType"];
+
+export type UserEmbeddingSettingSafe = Omit<
+  UserEmbeddingSettings,
+  "apiKeyEncrypted" | "encryptionKeyId"
+> & {
+  hasApiKey: boolean;
+};
+
+export type UserEmbeddingSettingWithApiKey = UserEmbeddingSettingSafe & {
+  apiKey: string | null;
+};
+
+export type UpsertUserEmbeddingSettingInput = {
+  userId: string;
+  providerType: EmbeddingProviderType;
+  apiKey?: string | null;
+  baseUrl?: string | null;
+  model?: string | null;
+  device?: string | null;
+  localFilesOnly?: boolean;
+  enabled?: boolean;
+};
+
+function decryptEmbeddingApiKey(row: UserEmbeddingSettings): string | null {
+  const payload = decryptPayload<{ apiKey?: unknown }>(row.apiKeyEncrypted);
+  return typeof payload?.apiKey === "string" ? payload.apiKey : null;
+}
+
+function toSafeEmbeddingSetting(
+  row: UserEmbeddingSettings,
+): UserEmbeddingSettingSafe {
+  const {
+    apiKeyEncrypted: _apiKeyEncrypted,
+    encryptionKeyId: _keyId,
+    ...rest
+  } = row;
+  return {
+    ...rest,
+    hasApiKey: Boolean(_apiKeyEncrypted),
+  };
+}
+
+export async function getUserEmbeddingSetting(
+  userId: string,
+): Promise<UserEmbeddingSettingSafe | null> {
+  try {
+    const [row] = await db
+      .select()
+      .from(userEmbeddingSettings)
+      .where(eq(userEmbeddingSettings.userId, userId))
+      .limit(1);
+
+    return row ? toSafeEmbeddingSetting(row) : null;
+  } catch (error) {
+    console.error("Failed to get user embedding setting:", error);
+    throw new AppError(
+      "bad_request:database",
+      `Failed to retrieve embedding settings. ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export async function getUserEmbeddingSettingWithApiKey(
+  userId: string,
+): Promise<UserEmbeddingSettingWithApiKey | null> {
+  try {
+    const [row] = await db
+      .select()
+      .from(userEmbeddingSettings)
+      .where(eq(userEmbeddingSettings.userId, userId))
+      .limit(1);
+
+    if (!row) return null;
+    return {
+      ...toSafeEmbeddingSetting(row),
+      apiKey: decryptEmbeddingApiKey(row),
+    };
+  } catch (error) {
+    console.error("Failed to get user embedding setting with API key:", error);
+    throw new AppError(
+      "bad_request:database",
+      `Failed to retrieve embedding settings. ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export async function upsertUserEmbeddingSetting(
+  input: UpsertUserEmbeddingSettingInput,
+): Promise<UserEmbeddingSettingSafe> {
+  try {
+    const now = new Date();
+    const apiKey = normalizeNullableString(input.apiKey);
+    const baseUrl = normalizeNullableString(input.baseUrl);
+    const model = normalizeNullableString(input.model);
+    const device = normalizeNullableString(input.device);
+    const apiKeyEncrypted =
+      apiKey === undefined
+        ? undefined
+        : apiKey
+          ? encryptPayload({ apiKey })
+          : null;
+
+    const [existing] = await db
+      .select()
+      .from(userEmbeddingSettings)
+      .where(eq(userEmbeddingSettings.userId, input.userId))
+      .limit(1);
+
+    if (existing) {
+      const updatePayload: Record<string, unknown> = {
+        providerType: input.providerType,
+        updatedAt: now,
+      };
+
+      if (apiKeyEncrypted !== undefined) {
+        updatePayload.apiKeyEncrypted = apiKeyEncrypted;
+      }
+      if (baseUrl !== undefined) {
+        updatePayload.baseUrl = baseUrl;
+      }
+      if (model !== undefined) {
+        updatePayload.model = model;
+      }
+      if (device !== undefined) {
+        updatePayload.device = device;
+      }
+      if (typeof input.localFilesOnly === "boolean") {
+        updatePayload.localFilesOnly = input.localFilesOnly;
+      }
+      if (typeof input.enabled === "boolean") {
+        updatePayload.enabled = input.enabled;
+      }
+
+      const [updated] = await db
+        .update(userEmbeddingSettings)
+        .set(updatePayload)
+        .where(eq(userEmbeddingSettings.id, existing.id))
+        .returning();
+
+      return toSafeEmbeddingSetting(updated ?? existing);
+    }
+
+    const [created] = await db
+      .insert(userEmbeddingSettings)
+      .values({
+        id: generateUUID(),
+        userId: input.userId,
+        providerType: input.providerType,
+        apiKeyEncrypted: apiKeyEncrypted ?? null,
+        baseUrl: baseUrl ?? null,
+        model: model ?? null,
+        device: device ?? null,
+        localFilesOnly: input.localFilesOnly ?? false,
+        enabled: input.enabled ?? true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    return toSafeEmbeddingSetting(created);
+  } catch (error) {
+    console.error("Failed to upsert user embedding setting:", error);
+    throw new AppError(
+      "bad_request:database",
+      `Failed to store embedding settings. ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export async function deleteUserEmbeddingSetting(
+  userId: string,
+): Promise<void> {
+  try {
+    await db
+      .delete(userEmbeddingSettings)
+      .where(eq(userEmbeddingSettings.userId, userId));
+  } catch (error) {
+    console.error("Failed to delete user embedding setting:", error);
+    throw new AppError(
+      "bad_request:database",
+      `Failed to delete embedding settings. ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

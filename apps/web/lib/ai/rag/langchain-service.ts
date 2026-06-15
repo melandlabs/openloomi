@@ -17,14 +17,17 @@ import { isTauriMode, TAURI_DB_PATH } from "@/lib/env";
 import { estimateTokens } from "@/lib/ai";
 import { UniversalEmbeddings } from "@openloomi/rag/universal-embeddings";
 import type { DocumentChunk } from "@openloomi/rag/vector-service";
+import {
+  createUserEmbeddingProvider,
+  getUserEmbeddingModelName,
+} from "@/lib/ai/user-embedding-settings";
 
 // Re-export for consumers of langchain-service
 export { UniversalEmbeddings };
 
 // Initialize embeddings with universal provider (OpenAI or OpenRouter)
-const getEmbeddings = (authToken?: string) => {
-  return new UniversalEmbeddings(authToken);
-};
+const getEmbeddings = (userId: string, authToken?: string) =>
+  createUserEmbeddingProvider({ userId, authToken });
 
 // Initialize text splitter
 const getTextSplitter = async () => {
@@ -179,7 +182,8 @@ export async function processDocument(
   }
 
   // 3. Estimate tokens and calculate credit cost BEFORE generating embeddings
-  const embeddings = getEmbeddings(authToken);
+  const embeddings = await getEmbeddings(userId, authToken);
+  const embeddingModel = await getUserEmbeddingModelName(userId);
   const chunkTexts = chunks.map((c: any) => c.pageContent);
   const totalText = chunkTexts.join(" ");
   const estimatedTokens = options.skipEmbeddings
@@ -187,10 +191,7 @@ export async function processDocument(
     : estimateTokens(totalText);
   const estimatedCreditCost = options.skipEmbeddings
     ? 0
-    : calculateCreditCost(
-        process.env.LLM_EMBEDDING_MODEL || "openai/text-embedding-3-small",
-        estimatedTokens,
-      );
+    : calculateCreditCost(embeddingModel, estimatedTokens);
 
   // 5. Generate embeddings for all chunks using LangChain
   let embeddingVectors: number[][] | null = null;
@@ -210,10 +211,7 @@ export async function processDocument(
       );
     } catch (error) {
       console.error("[RAG] Embeddings generation failed:", error);
-      console.error(
-        "[RAG] Model:",
-        process.env.LLM_EMBEDDING_MODEL || "openai/text-embedding-3-small",
-      );
+      console.error("[RAG] Model:", embeddingModel);
       console.error("[RAG] Chunk count:", chunkTexts.length);
       throw new Error(
         `Failed to generate embeddings: ${error instanceof Error ? error.message : String(error)}`,
@@ -354,7 +352,7 @@ export async function searchSimilarChunks(
   const { limit = 5, threshold = 0.7, documentIds } = options;
 
   // 1. Generate embedding for query
-  const embeddings = getEmbeddings(authToken);
+  const embeddings = await getEmbeddings(userId, authToken);
   const queryEmbedding = await embeddings.embedQuery(query);
 
   const vectorStore = await getConfiguredVectorStore();
