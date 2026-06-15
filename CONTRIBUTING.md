@@ -11,6 +11,39 @@ Thank you for your interest in contributing to OpenLoomi!
 - Rust (for Tauri desktop app development)
 - Git
 
+### Platform-Specific Prerequisites
+
+#### Windows
+
+Developing on Windows requires additional C++ build tools for native modules like `better-sqlite3`.
+
+**Required Visual Studio Build Tools components:**
+
+- **Desktop development with C++**
+- **ARM64/ARM64EC MSVC build tools** (matching your device architecture)
+- **clang-related tooling** (LLVM)
+
+**Node.js:** Node.js 22+ is recommended. Node 24 may have compatibility issues with some native modules on Windows devices.
+
+**Installation steps:**
+
+1. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+2. During installation, select:
+   - Workloads → "Desktop development with C++"
+   - Individual components → "ARM64/ARM64EC MSVC build tools" (select the version matching your Windows ARM version)
+   - Individual components → "clang-related tooling" (optional but recommended)
+
+**Note:** Installing just the Visual Studio Build Tools alone is not sufficient. The specific ARM64 C++ components must be selected.
+
+#### macOS
+
+- Xcode Command Line Tools: `xcode-select --install`
+
+#### Linux
+
+- Build essentials: `sudo apt-get install build-essential` (Debian/Ubuntu)
+- Required for `better-sqlite3` and other native modules
+
 ### Initial Setup
 
 ```bash

@@ -63,7 +63,7 @@ pnpm install
 pnpm tauri:dev
 ```
 
-Requires Node.js 22+, pnpm 9+, and Rust 1.75+.
+Requires Node.js 22+, pnpm 9+, Rust 1.75+, and on Windows: Visual Studio Build Tools with C++ workload. For more platform-specific setup requirements, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## App Screenshots
 
