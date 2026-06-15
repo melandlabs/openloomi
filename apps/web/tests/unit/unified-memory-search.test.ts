@@ -10,6 +10,8 @@ const {
   searchMessagesSemanticallyMock,
   searchSimilarChunksMock,
   universalEmbedQueryMock,
+  createUserEmbeddingProviderMock,
+  hasUserEmbeddingProviderConfigMock,
 } = vi.hoisted(() => ({
   getRawMessageManagerMock: vi.fn(),
   isRawMessageStorageAvailableMock: vi.fn(),
@@ -20,6 +22,8 @@ const {
   searchMessagesSemanticallyMock: vi.fn(),
   searchSimilarChunksMock: vi.fn(),
   universalEmbedQueryMock: vi.fn(),
+  createUserEmbeddingProviderMock: vi.fn(),
+  hasUserEmbeddingProviderConfigMock: vi.fn(),
 }));
 
 vi.mock("@/lib/memory/raw-message-store", () => ({
@@ -32,12 +36,9 @@ vi.mock("@/lib/memory/chroma-memory-index", () => ({
   searchRawMessagesWithChroma: searchRawMessagesWithChromaMock,
 }));
 
-vi.mock("@openloomi/rag/universal-embeddings", () => ({
-  UniversalEmbeddings: vi.fn().mockImplementation(function (this: {
-    embedQuery: typeof universalEmbedQueryMock;
-  }) {
-    this.embedQuery = universalEmbedQueryMock;
-  }),
+vi.mock("@/lib/ai/user-embedding-settings", () => ({
+  createUserEmbeddingProvider: createUserEmbeddingProviderMock,
+  hasUserEmbeddingProviderConfig: hasUserEmbeddingProviderConfigMock,
 }));
 
 vi.mock("@/lib/insights/search", () => ({
@@ -68,6 +69,8 @@ describe("unified memory search", () => {
     searchMessagesSemanticallyMock.mockReset();
     searchSimilarChunksMock.mockReset();
     universalEmbedQueryMock.mockReset();
+    createUserEmbeddingProviderMock.mockReset();
+    hasUserEmbeddingProviderConfigMock.mockReset();
 
     isRawMessageStorageAvailableMock.mockReturnValue(false);
     getRawMessageManagerMock.mockResolvedValue({
@@ -81,6 +84,10 @@ describe("unified memory search", () => {
     searchMessagesSemanticallyMock.mockResolvedValue([]);
     searchSimilarChunksMock.mockResolvedValue([]);
     universalEmbedQueryMock.mockResolvedValue([0.1, 0.2]);
+    createUserEmbeddingProviderMock.mockResolvedValue({
+      embedQuery: universalEmbedQueryMock,
+    });
+    hasUserEmbeddingProviderConfigMock.mockResolvedValue(true);
   });
 
   it("normalizes sources and clamps numeric options", () => {
