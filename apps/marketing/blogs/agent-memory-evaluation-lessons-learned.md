@@ -2,6 +2,7 @@
 title: "Agent Memory Evaluation Pain Points: OpenLoomi's Memory Growth Journey"
 date: 2026-06-15
 description: Memory is the most important — and most difficult to measure — capability for AI agents. Our struggles and breakthroughs along the way.
+image: /img/blogs/agent-memory-evaluation-lessons-learned/hero.png
 ---
 
 _Memory is the most important — and most difficult to measure — capability for AI agents. Our struggles and breakthroughs along the way._
@@ -26,6 +27,8 @@ OpenLoomi was built on the premise that AI should have a persistent, evolving un
 
 We call this the **context graph**. Building it was only half the battle. The other half was figuring out whether it actually worked.
 
+![Context Window vs Persistent Memory](/img/blogs/agent-memory-evaluation-lessons-learned/context-window.png)
+
 OpenLoomi is the open-source Harness engine. Alloomi is the commercial product built on top, serving professional teams and SMBs in sales, legal, and other domains.
 
 ---
@@ -45,6 +48,8 @@ Here's what we mean. Three months ago you discussed a technical solution with a 
 So the AI gives you raw materials, not context. You think it's helping you remember — but it's actually handing you archaeology.
 
 **Fragmented information in, fragmented information out.**
+
+![Memory Brittleness vs Coherent Context](/img/blogs/agent-memory-evaluation-lessons-learned/memory-brittleness.png)
 
 A system can return technically correct documents while missing the whole point of the query. We needed metrics that captured whether the AI understood the **meaning** of what it remembered, not just keyword overlap.
 
@@ -98,6 +103,8 @@ For example, during a quarterly review when you ask "why did we choose Plan A fo
 
 The connection strength formula: `Wnew = Wold + alpha * (Wmax - Wold) * activity`, with decay following `Wdecay = w * e^(-yt)`.
 
+![Hebbian Memory Connections](/img/blogs/agent-memory-evaluation-lessons-learned/hebbian.png)
+
 ### Time-Travel API
 
 We built the ability to **query memory as of a specific point in time**:
@@ -109,6 +116,8 @@ node $SKILL_DIR/scripts/openloomi-memory.cjs get-insights-overlapping 2024-01-01
 ```
 
 This breaks the static memory time barrier, enabling "time travel" queries that see what insights were relevant at a specific point in time. Useful for both honest evaluation ("did our memory actually have this fact at that time?") and debugging how context evolved.
+
+![Time-Travel API](/img/blogs/agent-memory-evaluation-lessons-learned/time-travel.png)
 
 ### Forgetting Engine
 
@@ -200,10 +209,8 @@ Memory is the hardest unsolved problem in AI. We don't have all the answers — 
 
 **[→ LongMemEval Benchmark](https://github.com/melandlabs/openloomi/tree/main/benchmark/longmemeval)**
 
+**[→ Context Learning Benchmark](https://github.com/melandlabs/openloomi/tree/main/benchmark/clbench)**
+
 Pull requests, issues, and discussions welcome.
 
----
-
-## Try It Out
-
-Hit [GitHub](https://github.com/melandlabs/openloomi), [Documents](https://openloomi.ai/docs) or [Discord](https://discord.com/invite/xkJaJyWcsv) — we're around.
+Hit [Documents](https://openloomi.ai/docs) or [Discord](https://discord.com/invite/xkJaJyWcsv) — we're around.
