@@ -89,6 +89,32 @@ const emptyDraft: ProviderDraft = {
   enabled: false,
 };
 
+const MASKED_API_KEY_CHAR = "•";
+const DEFAULT_MASKED_API_KEY_VALUE = MASKED_API_KEY_CHAR.repeat(52);
+
+function createApiKeyMasks(settings: AiSetting[] = []) {
+  return {
+    openai_compatible: settings.find(
+      (setting) => setting.providerType === "openai_compatible",
+    )?.hasApiKey
+      ? DEFAULT_MASKED_API_KEY_VALUE
+      : "",
+    anthropic_compatible: settings.find(
+      (setting) => setting.providerType === "anthropic_compatible",
+    )?.hasApiKey
+      ? DEFAULT_MASKED_API_KEY_VALUE
+      : "",
+  };
+}
+
+function maskApiKey(apiKey: string) {
+  return MASKED_API_KEY_CHAR.repeat(apiKey.length);
+}
+
+function removeApiKeyMask(value: string) {
+  return value.replaceAll(MASKED_API_KEY_CHAR, "");
+}
+
 function createDraft(setting?: AiSetting): ProviderDraft {
   return {
     apiKey: "",
@@ -115,6 +141,8 @@ export function AiApiSettings() {
     openai_compatible: emptyDraft,
     anthropic_compatible: emptyDraft,
   });
+  const [apiKeyMasks, setApiKeyMasks] =
+    useState<Record<ProviderType, string>>(createApiKeyMasks());
   const [loading, setLoading] = useState(true);
   const [savingProvider, setSavingProvider] = useState<ProviderType | null>(
     null,
@@ -154,6 +182,7 @@ export function AiApiSettings() {
 
       setSettings(data.settings);
       setSystemDefaults(data.systemDefaults);
+      setApiKeyMasks(createApiKeyMasks(data.settings));
       setDrafts({
         openai_compatible: createDraft(
           data.settings.find(
@@ -222,8 +251,9 @@ export function AiApiSettings() {
         enabled: nextEnabled,
       };
 
-      if (draft.apiKey.trim()) {
-        payload.apiKey = draft.apiKey.trim();
+      const nextApiKey = draft.apiKey.trim();
+      if (nextApiKey) {
+        payload.apiKey = nextApiKey;
       }
 
       const response = await fetchWithAuth("/api/preferences/ai", {
@@ -237,6 +267,14 @@ export function AiApiSettings() {
       }
 
       const savedSetting = data.setting;
+      setApiKeyMasks((current) => ({
+        ...current,
+        [providerType]: nextApiKey
+          ? maskApiKey(nextApiKey)
+          : savedSetting.hasApiKey
+            ? current[providerType] || DEFAULT_MASKED_API_KEY_VALUE
+            : "",
+      }));
       setSettings((current) => [
         ...current.filter((setting) => setting.providerType !== providerType),
         savedSetting,
@@ -299,6 +337,10 @@ export function AiApiSettings() {
       setSettings((current) =>
         current.filter((setting) => setting.providerType !== providerType),
       );
+      setApiKeyMasks((current) => ({
+        ...current,
+        [providerType]: "",
+      }));
       updateDraft(providerType, createDraft());
       window.dispatchEvent(new Event(AI_SETTINGS_CHANGED_EVENT));
       toast({
@@ -431,6 +473,10 @@ export function AiApiSettings() {
               Boolean(draft.baseUrl.trim()) &&
               Boolean(draft.model.trim()) &&
               Boolean(draft.apiKey.trim() || setting?.hasApiKey);
+            const savedApiKeyMask =
+              apiKeyMasks[provider.type] || DEFAULT_MASKED_API_KEY_VALUE;
+            const apiKeyValue =
+              draft.apiKey || (setting?.hasApiKey ? savedApiKeyMask : "");
             const isRequiredConversationProvider =
               showMissingApiKeyNotice &&
               provider.type === "anthropic_compatible";
@@ -504,24 +550,28 @@ export function AiApiSettings() {
                       <Input
                         id={`${provider.type}-api-key`}
                         type="password"
-                        value={draft.apiKey}
+                        value={apiKeyValue}
                         disabled={disabled}
-                        placeholder={
-                          setting?.hasApiKey
-                            ? t(
-                                "settings.aiSettingsSavedApiKeyPlaceholder",
-                                "Saved. Leave blank to keep unchanged.",
-                              )
-                            : t(
-                                provider.apiKeyPlaceholderKey,
-                                provider.apiKeyPlaceholderFallback,
-                              )
-                        }
-                        onChange={(event) =>
+                        placeholder={t(
+                          provider.apiKeyPlaceholderKey,
+                          provider.apiKeyPlaceholderFallback,
+                        )}
+                        onFocus={(event) => {
+                          if (!draft.apiKey && setting?.hasApiKey) {
+                            event.currentTarget.select();
+                          }
+                        }}
+                        onChange={(event) => {
+                          const nextValue = event.target.value;
+                          const isEditingSavedApiKeyMask =
+                            !draft.apiKey && Boolean(setting?.hasApiKey);
+
                           updateDraft(provider.type, {
-                            apiKey: event.target.value,
-                          })
-                        }
+                            apiKey: isEditingSavedApiKeyMask
+                              ? removeApiKeyMask(nextValue)
+                              : nextValue,
+                          });
+                        }}
                       />
                       <p className="text-xs text-muted-foreground">
                         {setting?.hasApiKey
