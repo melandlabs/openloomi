@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildMemoryEvidenceClusters,
   DefaultMemoryRecordScorer,
   type MemoryRecord,
 } from "../../../../packages/ai/src/memory";
@@ -146,10 +147,6 @@ const scenarios: EvalScenario[] = [
   },
 ];
 
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
 function traceToRecord(trace: EvalTrace): MemoryRecord {
   return {
     id: trace.id,
@@ -159,6 +156,9 @@ function traceToRecord(trace: EvalTrace): MemoryRecord {
     tier: "short",
     accessCount: trace.accessCount,
     importanceScore: trace.importanceScore,
+    metadata: {
+      topic: trace.topic,
+    },
   };
 }
 
@@ -172,45 +172,16 @@ function rankSingleTraces(scenario: EvalScenario): EvalTrace[] {
 }
 
 function scoreClusters(scenario: EvalScenario): ClusterScore[] {
-  const scorer = new DefaultMemoryRecordScorer();
-  const clusters = new Map<string, EvalTrace[]>();
-
-  for (const trace of scenario.traces) {
-    const existing = clusters.get(trace.topic) ?? [];
-    existing.push(trace);
-    clusters.set(trace.topic, existing);
-  }
-
-  return [...clusters.entries()]
-    .map(([topic, traces]) => {
-      const evidenceScore = clamp01(traces.length / 4);
-      const traceScores = traces.map((trace) =>
-        scorer.score(traceToRecord(trace), { now: NOW }),
-      );
-      const meanTraceScore =
-        traceScores.reduce((sum, score) => sum + score, 0) / traceScores.length;
-      const accessCount = traces.reduce(
-        (sum, trace) => sum + (trace.accessCount ?? 0),
-        0,
-      );
-      const activationScore = clamp01(Math.log1p(accessCount) / Math.log(10));
-      const latestDay = Math.max(...traces.map((trace) => trace.day));
-      const recencyScore = clamp01(
-        1 - (NOW - latestDay * DAY_MS) / (180 * DAY_MS),
-      );
-
-      return {
-        topic,
-        evidenceCount: traces.length,
-        traceIds: traces.map((trace) => trace.id),
-        score:
-          0.45 * evidenceScore +
-          0.2 * meanTraceScore +
-          0.15 * activationScore +
-          0.1 * recencyScore,
-      };
-    })
-    .sort((a, b) => b.score - a.score);
+  return buildMemoryEvidenceClusters({
+    records: scenario.traces.map(traceToRecord),
+    now: NOW,
+    getClusterKey: (record) => String(record.metadata?.topic ?? ""),
+  }).map((cluster) => ({
+    topic: cluster.key,
+    score: cluster.score,
+    evidenceCount: cluster.evidenceCount,
+    traceIds: cluster.recordIds,
+  }));
 }
 
 function evaluateScenario(scenario: EvalScenario): ScenarioEvaluation {
