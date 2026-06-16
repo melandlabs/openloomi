@@ -903,3 +903,78 @@ jobs:
             artifacts/openloomi_${{ steps.version.outputs.version }}_amd64.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── Update Homebrew Cask ────────────────────────────────────────────────────
+  update-homebrew-cask:
+    needs: [create-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version: $VERSION"
+
+      - name: Calculate SHA256 for ARM64 DMG
+        id: sha_arm
+        run: |
+          URL="https://github.com/melandlabs/openloomi/releases/download/v${{ env.VERSION }}/openloomi_${{ env.VERSION }}_aarch64.dmg"
+          echo "Downloading from: $URL"
+          SHA=$(curl -sfL "$URL" | shasum -a 256 | cut -d ' ' -f 1)
+          if [ -z "$SHA" ]; then
+            echo "Error: Failed to download ARM64 DMG"
+            exit 1
+          fi
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "ARM64 SHA256: $SHA"
+
+      - name: Calculate SHA256 for Intel DMG
+        id: sha_intel
+        run: |
+          URL="https://github.com/melandlabs/openloomi/releases/download/v${{ env.VERSION }}/openloomi_${{ env.VERSION }}_amd64.dmg"
+          echo "Downloading from: $URL"
+          SHA=$(curl -sfL "$URL" | shasum -a 256 | cut -d ' ' -f 1)
+          if [ -z "$SHA" ]; then
+            echo "Error: Failed to download Intel DMG"
+            exit 1
+          fi
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "Intel SHA256: $SHA"
+
+      - name: Update Cask file
+        run: |
+          CASK_FILE="Casks/openloomi.rb"
+          VERSION="${{ env.VERSION }}"
+          ARM_SHA="${{ steps.sha_arm.outputs.sha }}"
+          INTEL_SHA="${{ steps.sha_intel.outputs.sha }}"
+
+          echo "Updating $CASK_FILE"
+          echo "  Version: $VERSION"
+          echo "  ARM64 SHA: $ARM_SHA"
+          echo "  Intel SHA: $INTEL_SHA"
+
+          sed -i "s/version \"[^\"]*\"/version \"$VERSION\"/" "$CASK_FILE"
+          sed -i "s/sha256 arm:   \"[^\"]*\"/sha256 arm:   \"$ARM_SHA\"/" "$CASK_FILE"
+          sed -i "s/intel: \"[^\"]*\"/intel: \"$INTEL_SHA\"/" "$CASK_FILE"
+
+          echo "Updated content:"
+          head -15 "$CASK_FILE"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/openloomi.rb
+          git commit -m "chore: update homebrew cask openloomi to v${{ env.VERSION }}"
+          git push
