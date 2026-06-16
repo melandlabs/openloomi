@@ -30,6 +30,25 @@ export interface BuildMemoryEvidenceClustersInput {
   weights?: Partial<MemoryEvidenceClusterWeights>;
 }
 
+export interface AnalyzeMemoryEvidenceClustersInput extends BuildMemoryEvidenceClustersInput {
+  lowRecordScoreThreshold?: number;
+  highClusterScoreThreshold?: number;
+}
+
+export interface MemoryEvidenceRecordSignal {
+  recordId: string;
+  clusterKey: string;
+  recordScore: number;
+  clusterScore: number;
+  clusterEvidenceCount: number;
+  lowRecordScoreHighClusterScore: boolean;
+}
+
+export interface MemoryEvidenceClusterAnalysis {
+  clusters: MemoryEvidenceCluster[];
+  recordSignals: MemoryEvidenceRecordSignal[];
+}
+
 const DEFAULT_WEIGHTS: MemoryEvidenceClusterWeights = {
   evidence: 0.45,
   recordScore: 0.2,
@@ -116,4 +135,49 @@ export function buildMemoryEvidenceClusters(
       };
     })
     .sort((a, b) => b.score - a.score);
+}
+
+export function analyzeMemoryEvidenceClusters(
+  input: AnalyzeMemoryEvidenceClustersInput,
+): MemoryEvidenceClusterAnalysis {
+  const scorer = input.scorer ?? new DefaultMemoryRecordScorer();
+  const lowRecordScoreThreshold = input.lowRecordScoreThreshold ?? 0.35;
+  const highClusterScoreThreshold = input.highClusterScoreThreshold ?? 0.65;
+  const clusters = buildMemoryEvidenceClusters({
+    ...input,
+    scorer,
+  });
+  const clusterByKey = new Map(
+    clusters.map((cluster) => [cluster.key, cluster]),
+  );
+  const recordSignals: MemoryEvidenceRecordSignal[] = [];
+
+  for (const record of input.records) {
+    const clusterKey = input.getClusterKey(record);
+    if (!clusterKey) {
+      continue;
+    }
+
+    const cluster = clusterByKey.get(clusterKey);
+    if (!cluster) {
+      continue;
+    }
+
+    const recordScore = scorer.score(record, { now: input.now });
+    recordSignals.push({
+      recordId: record.id,
+      clusterKey,
+      recordScore,
+      clusterScore: cluster.score,
+      clusterEvidenceCount: cluster.evidenceCount,
+      lowRecordScoreHighClusterScore:
+        recordScore <= lowRecordScoreThreshold &&
+        cluster.score >= highClusterScoreThreshold,
+    });
+  }
+
+  return {
+    clusters,
+    recordSignals,
+  };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  analyzeMemoryEvidenceClusters,
   buildMemoryEvidenceClusters,
   DefaultMemoryRecordScorer,
   type MemoryRecord,
@@ -259,6 +260,15 @@ function calculateConsolidationMetrics(
   };
 }
 
+function analyzeScenario(scenario: EvalScenario) {
+  return analyzeMemoryEvidenceClusters({
+    records: scenario.traces.map(traceToRecord),
+    now: NOW,
+    getClusterKey: (record) => String(record.metadata?.topic ?? ""),
+    highClusterScoreThreshold: 0.6,
+  });
+}
+
 describe("memory consolidation evaluation scenarios", () => {
   it("keeps expected long-term outcomes backed by repeated evidence", () => {
     for (const scenario of scenarios) {
@@ -304,5 +314,19 @@ describe("memory consolidation evaluation scenarios", () => {
       clusterTemporaryOverrideLeakageRate: 0,
       clusterAdaptationAccuracy: 1,
     });
+  });
+
+  it("surfaces low-record-score traces that belong to high-evidence clusters", () => {
+    const scenario = scenarios.find(
+      (item) => item.id === "one-shot-noise",
+    ) as EvalScenario;
+    const analysis = analyzeScenario(scenario);
+    const flaggedRecordIds = analysis.recordSignals
+      .filter((signal) => signal.lowRecordScoreHighClusterScore)
+      .map((signal) => signal.recordId);
+
+    expect(flaggedRecordIds).toEqual(["zh-1", "zh-2", "zh-3", "zh-4"]);
+    expect(flaggedRecordIds).not.toContain("noise-urgent");
+    expect(analysis.clusters[0]?.key).toBe("answer-language:zh");
   });
 });
