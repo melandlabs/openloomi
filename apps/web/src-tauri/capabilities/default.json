@@ -131,6 +131,8 @@
     "allow-request-accessibility-access",
     "allow-request-microphone-access",
     "allow-request-notification-access",
-    "allow-open-system-settings"
+    "allow-open-system-settings",
+    "dialog:default",
+    "dialog:allow-save"
   ]
 }

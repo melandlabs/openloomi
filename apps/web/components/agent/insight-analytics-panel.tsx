@@ -7,6 +7,9 @@ import useSWR from "swr";
 import { RemixIcon } from "@/components/remix-icon";
 import { Spinner } from "@/components/spinner";
 import { cn, fetcher } from "@/lib/utils";
+import { isTauri } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
 
 type AccessTrend = "rising" | "falling" | "stable";
 type OrganizationAction = "keep" | "archive" | "delete";
@@ -321,6 +324,30 @@ export function InsightAnalyticsPanel() {
     minute: "2-digit",
   }).format(new Date(data.generatedAt));
 
+  const exportAnalytics = async () => {
+    const isTauriApp = typeof window !== "undefined" && isTauri();
+    const exportUrl = "/api/insights/analytics/export";
+    if (!isTauriApp) {
+      window.location.href = exportUrl;
+      return;
+    }
+    const res = await fetch(exportUrl);
+    if (!res.ok) {
+      throw new Error(
+        `Failed to fetch export analytics: ${res.status} ${res.statusText}`,
+      );
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const disposition = res.headers.get("Content-Disposition");
+    const filename =
+      disposition?.split("filename=")[1]?.replace(/"/g, "") || "export.csv";
+    const path = await save({
+      defaultPath: filename,
+    });
+    if (!path) return;
+    await writeFile(path, bytes);
+  };
+
   return (
     <div className="w-full space-y-4 pb-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -338,9 +365,7 @@ export function InsightAnalyticsPanel() {
           variant="outline"
           size="sm"
           className="h-8 shrink-0"
-          onClick={() => {
-            window.location.href = "/api/insights/analytics/export";
-          }}
+          onClick={() => exportAnalytics()}
         >
           <RemixIcon name="download" size="size-4" />
           {t("common.export", "Export")}
