@@ -40,6 +40,8 @@ Summary 是稳定记忆的可读表达
 `@openloomi/memory-consolidation` 目前只提供纯函数能力：
 
 - 构建 evidence clusters。
+- 从显式 trace relation 中分配 graph clusters 和 competition groups。
+- 保留 weak related edges 作为观察信号，而不是直接参与合并。
 - 计算 cluster-level score。
 - 输出 per-record diagnostics。
 - 输出 consolidation plan，将记忆簇信号转成 `preserve`、`observe`、`decay` 建议。
@@ -62,6 +64,9 @@ Summary 是稳定记忆的可读表达
 
 这种设计的目的不是让系统判断“这是不是噪声”，而是让噪声因为没有重复证据、
 没有再激活、没有赢得竞争而无法进入长期整合。
+
+关系图层只负责输出 `tentative`、`stable` 和 `contested` 状态；`consolidated` 是
+consolidation plan 产生 `preserve` 建议之后的派生状态，不由关系图直接决定。
 
 ## 后续验证方向
 
