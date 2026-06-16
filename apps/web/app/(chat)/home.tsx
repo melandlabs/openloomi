@@ -31,7 +31,6 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { buildNavigationUrl, cn, generateUUID, fetcher } from "@/lib/utils";
 import { UserProfileSettings } from "@/components/user-profile-settings";
 import { AiApiSettings } from "@/components/ai-api-settings";
-import { ProfileOverview } from "@/components/profile-overview";
 import { StorageManagementPanel } from "@/components/storage-management-panel";
 import { useIsMobile } from "@openloomi/hooks/use-is-mobile";
 import { useChatContext } from "@/components/chat-context";
@@ -651,19 +650,16 @@ export function Home() {
       </div>
     );
 
-    if (page === "profile") {
-      return renderUtilityPanel(<ProfileOverview />, "profile");
-    }
-    if (page === "account-settings" || page === "profile-edit") {
+    if (
+      page === "account-settings" ||
+      page === "profile-edit" ||
+      page === "openloomi-soul"
+    ) {
       return renderUtilityPanel(<UserProfileSettings />, "account-settings");
     }
 
     if (page === "ai-api-settings") {
       return renderUtilityPanel(<AiApiSettings />, "ai-api-settings");
-    }
-
-    if (page === "openloomi-soul") {
-      return renderUtilityPanel(<UserProfileSettings />, "account-settings");
     }
 
     if (page === "storage-management") {

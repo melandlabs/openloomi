@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSession } from "next-auth/react";
-import { autoCleanupOldMessages } from "@openloomi/indexeddb/client";
 import { getAuthToken } from "@/lib/auth/token-manager";
 
 /**
@@ -512,8 +511,6 @@ export function useInsightRefresh(
             console.log(
               `[Raw Messages] Stored ${result.stored} raw messages for userId: ${userId}`,
             );
-            // Auto-cleanup old messages based on user entitlements
-            await autoCleanupOldMessages(userId);
           }
         } catch (error) {
           console.error("[Raw Messages] Failed to store raw messages:", error);
