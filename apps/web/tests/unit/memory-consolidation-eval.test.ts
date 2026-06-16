@@ -20,6 +20,7 @@ type EvalScenario = {
   id: string;
   description: string;
   expectedLongTermTopic: string;
+  metricTags: Array<"noise" | "temporary-override" | "adaptation">;
   traces: EvalTrace[];
 };
 
@@ -28,6 +29,25 @@ type ClusterScore = {
   score: number;
   evidenceCount: number;
   traceIds: string[];
+};
+
+type ScenarioEvaluation = {
+  scenarioId: string;
+  expectedLongTermTopic: string;
+  metricTags: EvalScenario["metricTags"];
+  singleTraceTopTopic: string | undefined;
+  clusterTopTopic: string | undefined;
+  clusterScores: ClusterScore[];
+};
+
+type ConsolidationEvalMetrics = {
+  scenarioCount: number;
+  singleTraceExpectedTopicAccuracy: number;
+  clusterExpectedTopicAccuracy: number;
+  singleTraceNoiseTopRankRate: number;
+  clusterNoiseTopRankRate: number;
+  clusterTemporaryOverrideLeakageRate: number;
+  clusterAdaptationAccuracy: number;
 };
 
 function trace(
@@ -60,6 +80,7 @@ const scenarios: EvalScenario[] = [
     description:
       "Repeated quiet preference traces should compete with a single noisy but highly activated trace.",
     expectedLongTermTopic: "answer-language:zh",
+    metricTags: ["noise"],
     traces: [
       ...traceSeries(
         "zh",
@@ -82,6 +103,7 @@ const scenarios: EvalScenario[] = [
     description:
       "A recent one-off instruction should be separable from a long-term preference.",
     expectedLongTermTopic: "answer-language:zh",
+    metricTags: ["temporary-override"],
     traces: [
       ...traceSeries(
         "pref-zh",
@@ -104,6 +126,7 @@ const scenarios: EvalScenario[] = [
     description:
       "Repeated recent evidence should be able to beat older stable evidence when a preference changes.",
     expectedLongTermTopic: "answer-language:en",
+    metricTags: ["adaptation"],
     traces: [
       ...traceSeries(
         "old-zh",
@@ -190,7 +213,7 @@ function scoreClusters(scenario: EvalScenario): ClusterScore[] {
     .sort((a, b) => b.score - a.score);
 }
 
-function evaluateScenario(scenario: EvalScenario) {
+function evaluateScenario(scenario: EvalScenario): ScenarioEvaluation {
   const singleTraceTop = rankSingleTraces(scenario)[0];
   const clusterScores = scoreClusters(scenario);
   const clusterTop = clusterScores[0];
@@ -198,9 +221,70 @@ function evaluateScenario(scenario: EvalScenario) {
   return {
     scenarioId: scenario.id,
     expectedLongTermTopic: scenario.expectedLongTermTopic,
+    metricTags: scenario.metricTags,
     singleTraceTopTopic: singleTraceTop?.topic,
     clusterTopTopic: clusterTop?.topic,
     clusterScores,
+  };
+}
+
+function hasTag(
+  result: ScenarioEvaluation,
+  tag: EvalScenario["metricTags"][number],
+): boolean {
+  return result.metricTags.includes(tag);
+}
+
+function mean(values: boolean[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  return values.filter(Boolean).length / values.length;
+}
+
+function isNoiseTopic(topic: string | undefined): boolean {
+  return topic?.startsWith("one-shot:") ?? false;
+}
+
+function calculateConsolidationMetrics(
+  results: ScenarioEvaluation[],
+): ConsolidationEvalMetrics {
+  const noiseResults = results.filter((result) => hasTag(result, "noise"));
+  const temporaryOverrideResults = results.filter((result) =>
+    hasTag(result, "temporary-override"),
+  );
+  const adaptationResults = results.filter((result) =>
+    hasTag(result, "adaptation"),
+  );
+
+  return {
+    scenarioCount: results.length,
+    singleTraceExpectedTopicAccuracy: mean(
+      results.map(
+        (result) => result.singleTraceTopTopic === result.expectedLongTermTopic,
+      ),
+    ),
+    clusterExpectedTopicAccuracy: mean(
+      results.map(
+        (result) => result.clusterTopTopic === result.expectedLongTermTopic,
+      ),
+    ),
+    singleTraceNoiseTopRankRate: mean(
+      noiseResults.map((result) => isNoiseTopic(result.singleTraceTopTopic)),
+    ),
+    clusterNoiseTopRankRate: mean(
+      noiseResults.map((result) => isNoiseTopic(result.clusterTopTopic)),
+    ),
+    clusterTemporaryOverrideLeakageRate: mean(
+      temporaryOverrideResults.map(
+        (result) => result.clusterTopTopic !== result.expectedLongTermTopic,
+      ),
+    ),
+    clusterAdaptationAccuracy: mean(
+      adaptationResults.map(
+        (result) => result.clusterTopTopic === result.expectedLongTermTopic,
+      ),
+    ),
   };
 }
 
@@ -236,11 +320,18 @@ describe("memory consolidation evaluation scenarios", () => {
     ]);
   });
 
-  it("scores the expected topic highest for every scenario", () => {
-    for (const scenario of scenarios) {
-      const result = evaluateScenario(scenario);
+  it("reports consolidation metrics for the scenario suite", () => {
+    const results = scenarios.map(evaluateScenario);
+    const metrics = calculateConsolidationMetrics(results);
 
-      expect(result.clusterTopTopic).toBe(scenario.expectedLongTermTopic);
-    }
+    expect(metrics).toEqual({
+      scenarioCount: 3,
+      singleTraceExpectedTopicAccuracy: 1 / 3,
+      clusterExpectedTopicAccuracy: 1,
+      singleTraceNoiseTopRankRate: 1,
+      clusterNoiseTopRankRate: 0,
+      clusterTemporaryOverrideLeakageRate: 0,
+      clusterAdaptationAccuracy: 1,
+    });
   });
 });
