@@ -9,7 +9,7 @@
     "test": "pnpm --filter web test",
     "tsc": "pnpm --filter web tsc",
     "build": "pnpm --filter web build",
-    "build:packages": "cross-env NODE_OPTIONS=--max-old-space-size=4096 pnpm -r --filter='./packages/*' build",
+    "build:packages": "cross-env NODE_OPTIONS=--max-old-space-size=16384 pnpm -r --filter='./packages/*' build",
     "build:all": "pnpm -r build",
     "lint": "pnpm -r lint",
     "lint:fix": "pnpm -r lint:fix",
