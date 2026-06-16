@@ -67,6 +67,20 @@ openloomi
 
 > **Note:** The symlink above is needed because of a known packaging issue where the binary looks for resources in `/usr/bin/_up_` instead of `/usr/lib/openloomi/_up_`. This will be fixed in a future release.
 
+**Linux (Fedora/RHEL)**
+
+| Option                                                                    | Notes                             |
+| ------------------------------------------------------------------------- | --------------------------------- |
+| [Download .rpm package](https://github.com/melandlabs/openloomi/releases) | For Fedora, RHEL, and derivatives |
+
+```bash
+sudo dnf install ./openloomi_<version>_x86_64.rpm
+# For ARM64 systems, use openloomi_<version>_aarch64.rpm
+
+# Start the application
+openloomi
+```
+
 **Windows**
 
 | Option                                                                                                                        | Notes                                               |

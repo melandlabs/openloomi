@@ -588,26 +588,28 @@ jobs:
 
           EOF
 
-      - name: Patch tauri.conf.json to skip AppImage on Linux
+      - name: Patch tauri.conf.json to build Linux packages
         working-directory: ./apps/web
         run: |
           node -e "
             const fs = require('fs');
             const c = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-            c.bundle.targets = ['deb'];
+            c.bundle.targets = ['deb', 'rpm'];
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(c, null, 2));
-            console.log('Patched targets to deb');
+            console.log('Patched targets to deb and rpm');
           "
 
       - name: Build Tauri app (Linux)
         working-directory: ./apps/web
         run: pnpm tauri:build
 
-      - name: Upload Linux AMD64 deb
+      - name: Upload Linux AMD64 packages
         uses: actions/upload-artifact@v4
         with:
           name: openloomi-linux-amd64
-          path: ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/deb/*.deb
+          path: |
+            ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/deb/*.deb
+            ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/rpm/*.rpm
 
   # ─── Windows CI ──────────────────────────────────────────────────────────────
   release-windows:
@@ -821,26 +823,28 @@ jobs:
 
           EOF
 
-      - name: Patch tauri.conf.json to skip AppImage on Linux ARM64
+      - name: Patch tauri.conf.json to build Linux packages
         working-directory: ./apps/web
         run: |
           node -e "
             const fs = require('fs');
             const c = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-            c.bundle.targets = ['deb'];
+            c.bundle.targets = ['deb', 'rpm'];
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(c, null, 2));
-            console.log('Patched targets to deb');
+            console.log('Patched targets to deb and rpm');
           "
 
       - name: Build Tauri app (Linux ARM64)
         working-directory: ./apps/web
         run: pnpm tauri:build
 
-      - name: Upload Linux ARM64 deb
+      - name: Upload Linux ARM64 packages
         uses: actions/upload-artifact@v4
         with:
           name: openloomi-linux-arm64
-          path: ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/deb/*.deb
+          path: |
+            ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/deb/*.deb
+            ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/rpm/*.rpm
 
   # ─── Create Release ─────────────────────────────────────────────────────────
   create-release:
@@ -872,7 +876,9 @@ jobs:
           mv openloomi-dmg-aarch64/*.dmg "openloomi_${VERSION}_aarch64.dmg"
           mv openloomi-dmg-x64/*.dmg "openloomi_${VERSION}_amd64.dmg"
           mv openloomi-linux-amd64/*.deb "openloomi_${VERSION}_amd64.deb"
+          mv openloomi-linux-amd64/*.rpm "openloomi_${VERSION}_x86_64.rpm"
           mv openloomi-linux-arm64/*.deb "openloomi_${VERSION}_arm64.deb"
+          mv openloomi-linux-arm64/*.rpm "openloomi_${VERSION}_aarch64.rpm"
           mv openloomi-windows-nsis/*.exe "openloomi_${VERSION}_amd64.exe"
           rm -rf openloomi-dmg-aarch64 openloomi-dmg-x64 openloomi-linux-amd64 openloomi-linux-arm64 openloomi-windows-nsis
           ls -la
@@ -889,7 +895,9 @@ jobs:
             artifacts/openloomi_${{ steps.version.outputs.version }}_aarch64.dmg
             artifacts/openloomi_${{ steps.version.outputs.version }}_amd64.dmg
             artifacts/openloomi_${{ steps.version.outputs.version }}_amd64.deb
+            artifacts/openloomi_${{ steps.version.outputs.version }}_x86_64.rpm
             artifacts/openloomi_${{ steps.version.outputs.version }}_arm64.deb
+            artifacts/openloomi_${{ steps.version.outputs.version }}_aarch64.rpm
             artifacts/openloomi_${{ steps.version.outputs.version }}_amd64.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
