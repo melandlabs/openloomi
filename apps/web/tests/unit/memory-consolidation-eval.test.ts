@@ -4,6 +4,8 @@ import {
   assignMemoryRelationGraph,
   buildMemoryConsolidationPlan,
   buildMemoryEvidenceClusters,
+  buildMemoryRelationCandidates,
+  buildMemoryRelationPipeline,
   deriveMemoryRelationGraphLifecycle,
 } from "@openloomi/memory-consolidation";
 import {
@@ -481,6 +483,132 @@ function findGraphCluster(
   return cluster;
 }
 
+function relationPipelineRecord(
+  id: string,
+  text: string,
+  day: number,
+  relationValue: "zh" | "en",
+  options: {
+    accessCount?: number;
+    scope?: "temporary" | "long-term";
+  } = {},
+): MemoryRecord {
+  return {
+    id,
+    userId: "eval-user",
+    timestamp: day * DAY_MS,
+    text,
+    tier: "short",
+    accessCount: options.accessCount,
+    metadata: {
+      relationGroup: "answer-language",
+      relationValue,
+      relationScope: options.scope ?? "long-term",
+    },
+  };
+}
+
+function buildRelationPipelineFixture() {
+  const records: MemoryRecord[] = [
+    relationPipelineRecord(
+      "pipe-zh-a",
+      "Use Chinese for repo work.",
+      20,
+      "zh",
+      {
+        accessCount: 1,
+      },
+    ),
+    relationPipelineRecord(
+      "pipe-zh-b",
+      "Prefer Chinese technical explanations.",
+      30,
+      "zh",
+      { accessCount: 1 },
+    ),
+    relationPipelineRecord(
+      "pipe-zh-c",
+      "Code explanations are easier in Chinese.",
+      40,
+      "zh",
+      { accessCount: 1 },
+    ),
+    relationPipelineRecord(
+      "pipe-en-a",
+      "Use English-first answers for this workspace.",
+      100,
+      "en",
+      { accessCount: 2 },
+    ),
+    relationPipelineRecord(
+      "pipe-en-b",
+      "Default to English for technical discussions.",
+      110,
+      "en",
+      { accessCount: 2 },
+    ),
+    relationPipelineRecord(
+      "pipe-en-c",
+      "English is now preferred for repo work.",
+      118,
+      "en",
+      { accessCount: 2 },
+    ),
+    relationPipelineRecord(
+      "pipe-en-d",
+      "Please keep future technical answers in English.",
+      119,
+      "en",
+      { accessCount: 2 },
+    ),
+    relationPipelineRecord(
+      "pipe-temp-en",
+      "For this one reply, use English.",
+      119,
+      "en",
+      { scope: "temporary" },
+    ),
+    {
+      id: "pipe-noise",
+      userId: "eval-user",
+      timestamp: 119 * DAY_MS,
+      text: "random scratch note",
+      tier: "short",
+    },
+  ];
+
+  return buildMemoryRelationPipeline({
+    records,
+    now: NOW,
+    candidate: {
+      maxCandidatesPerRecord: 12,
+    },
+    judgment: {
+      judgeCandidate(candidate, context) {
+        const fromScope = context.fromRecord.metadata?.relationScope;
+        const toScope = context.toRecord.metadata?.relationScope;
+
+        if (fromScope === "temporary" || toScope === "temporary") {
+          return {
+            relation: "related",
+            weight: 0.45,
+            reasonCodes: ["candidate_related"],
+          };
+        }
+
+        return context.defaultDecision;
+      },
+    },
+    plan: {
+      thresholds: {
+        preserveScore: 0.5,
+        preserveEvidence: 3,
+        competitionMargin: 0.05,
+      },
+    },
+  });
+}
+
 describe("memory consolidation evaluation scenarios", () => {
   it("keeps expected long-term outcomes backed by repeated evidence", () => {
     for (const scenario of scenarios) {
@@ -773,5 +901,175 @@ describe("memory consolidation evaluation scenarios", () => {
         reasonCodes: ["isolated_low_confidence"],
       }),
     );
+  });
+
+  it("builds relation candidates and judgments without promoting temporary traces", () => {
+    const pipeline = buildRelationPipelineFixture();
+    const supportRelations = pipeline.relations.filter(
+      (relation) => relation.relation === "support",
+    );
+    const competeRelations = pipeline.relations.filter(
+      (relation) => relation.relation === "compete",
+    );
+    const relatedRelations = pipeline.relations.filter(
+      (relation) => relation.relation === "related",
+    );
+
+    expect(pipeline.candidates.length).toBeGreaterThan(0);
+    expect(supportRelations.length).toBeGreaterThan(0);
+    expect(competeRelations.length).toBeGreaterThan(0);
+    expect(relatedRelations).toEqual([
+      expect.objectContaining({
+        fromRecordId: "pipe-en-a",
+        toRecordId: "pipe-temp-en",
+        relation: "related",
+      }),
+      expect.objectContaining({
+        fromRecordId: "pipe-en-b",
+        toRecordId: "pipe-temp-en",
+        relation: "related",
+      }),
+      expect.objectContaining({
+        fromRecordId: "pipe-en-c",
+        toRecordId: "pipe-temp-en",
+        relation: "related",
+      }),
+      expect.objectContaining({
+        fromRecordId: "pipe-en-d",
+        toRecordId: "pipe-temp-en",
+        relation: "related",
+      }),
+      expect.objectContaining({
+        fromRecordId: "pipe-temp-en",
+        toRecordId: "pipe-zh-a",
+        relation: "related",
+      }),
+      expect.objectContaining({
+        fromRecordId: "pipe-temp-en",
+        toRecordId: "pipe-zh-b",
+        relation: "related",
+      }),
+      expect.objectContaining({
+        fromRecordId: "pipe-temp-en",
+        toRecordId: "pipe-zh-c",
+        relation: "related",
+      }),
+    ]);
+    expect(pipeline.assignment.recordClusterKeys["pipe-temp-en"]).not.toBe(
+      pipeline.assignment.recordClusterKeys["pipe-en-a"],
+    );
+    expect(pipeline.assignment.recordClusterKeys["pipe-noise"]).toBeDefined();
+  });
+
+  it("keeps default candidate keys collision-safe", () => {
+    const candidates = buildMemoryRelationCandidates({
+      records: [
+        {
+          id: "colon-left",
+          userId: "eval-user",
+          timestamp: NOW,
+          text: "left",
+          tier: "short",
+          metadata: {
+            a: "b:c",
+          },
+        },
+        {
+          id: "colon-right",
+          userId: "eval-user",
+          timestamp: NOW,
+          text: "right",
+          tier: "short",
+          metadata: {
+            "a:b": "c",
+          },
+        },
+      ],
+    });
+
+    expect(candidates).toEqual([]);
+  });
+
+  it("uses the final judgment relation when resolving default edge weight", () => {
+    const pipeline = buildMemoryRelationPipeline({
+      records: [
+        {
+          id: "override-a",
+          userId: "eval-user",
+          timestamp: NOW,
+          text: "first",
+          tier: "short",
+          metadata: {
+            candidateKey: "manual-support",
+          },
+        },
+        {
+          id: "override-b",
+          userId: "eval-user",
+          timestamp: NOW,
+          text: "second",
+          tier: "short",
+          metadata: {
+            candidateKey: "manual-support",
+          },
+        },
+      ],
+      now: NOW,
+      getCandidateKeys: (record) => [
+        String(record.metadata?.candidateKey ?? ""),
+      ],
+      judgment: {
+        judgeCandidate() {
+          return {
+            relation: "support",
+          };
+        },
+      },
+    });
+    const supportRelation = pipeline.relations.find(
+      (relation) => relation.relation === "support",
+    );
+
+    expect(supportRelation?.weight).toBeGreaterThanOrEqual(0.7);
+    expect(pipeline.assignment.recordClusterKeys["override-a"]).toBe(
+      pipeline.assignment.recordClusterKeys["override-b"],
+    );
+  });
+
+  it("runs the relation pipeline through graph assignment, plan, and summary candidates", () => {
+    const pipeline = buildRelationPipelineFixture();
+    const enClusterKey = pipeline.assignment.recordClusterKeys["pipe-en-a"];
+    const zhClusterKey = pipeline.assignment.recordClusterKeys["pipe-zh-a"];
+    const tempClusterKey =
+      pipeline.assignment.recordClusterKeys["pipe-temp-en"];
+    const noiseClusterKey = pipeline.assignment.recordClusterKeys["pipe-noise"];
+
+    expect(pipeline.assignment.getCompetitionKey({ key: enClusterKey })).toBe(
+      pipeline.assignment.getCompetitionKey({ key: zhClusterKey }),
+    );
+    expect(findPlanEntry(pipeline.plan, enClusterKey)).toEqual(
+      expect.objectContaining({
+        action: "preserve",
+        reasonCodes: ["strong_repeated_evidence", "wins_competition"],
+      }),
+    );
+    expect(findPlanEntry(pipeline.plan, zhClusterKey).action).not.toBe(
+      "preserve",
+    );
+    expect(findPlanEntry(pipeline.plan, tempClusterKey).action).not.toBe(
+      "preserve",
+    );
+    expect(findPlanEntry(pipeline.plan, noiseClusterKey)).toEqual(
+      expect.objectContaining({
+        action: "decay",
+        reasonCodes: ["isolated_low_confidence"],
+      }),
+    );
+    expect(pipeline.summaryCandidates).toEqual([
+      expect.objectContaining({
+        clusterKey: enClusterKey,
+        sourceAction: "preserve",
+      }),
+    ]);
   });
 });

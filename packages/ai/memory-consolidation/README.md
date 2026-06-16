@@ -9,11 +9,14 @@ storage, retrieval, or summarization behavior.
 ## Scope
 
 - Build evidence clusters from `MemoryEvidenceRecord[]` or structurally compatible memory records.
+- Build bounded relation candidates from explicit record keys.
+- Judge relation candidates into `support`, `compete`, `related`, or `uncertain`.
 - Assign graph clusters and competition groups from explicit trace relation edges.
 - Score clusters with evidence, record score, activation, and recency signals.
 - Produce per-record diagnostics for low individual scores inside high-scoring clusters.
 - Build an explainable consolidation plan with `preserve`, `observe`, and `decay`
   recommendations.
+- Build summary candidates from preserved consolidation plan entries.
 
 ## Non-goals
 
@@ -21,6 +24,7 @@ storage, retrieval, or summarization behavior.
 - No storage schema changes.
 - No retrieval behavior changes.
 - No automatic relation generation with embeddings or LLMs.
+- No automatic summary text generation.
 
 ## Consolidation plan
 
@@ -45,3 +49,22 @@ competition groups from strong compete edges, and returns `getClusterKey` /
 `deriveMemoryRelationGraphLifecycle` can then mark preserved graph clusters as
 `consolidated` after a consolidation plan is produced. The relation graph itself
 only assigns `tentative`, `stable`, and `contested` graph states.
+
+## Relation pipeline prototype
+
+`buildMemoryRelationPipeline` wires the pure helpers into a small offline
+prototype:
+
+```text
+records
+  -> buildMemoryRelationCandidates
+  -> judgeMemoryRelationCandidates
+  -> assignMemoryRelationGraph
+  -> buildMemoryConsolidationPlan
+  -> buildMemorySummaryCandidates
+```
+
+The candidate and judgment steps are intentionally lightweight. They can use
+explicit record keys, relation groups, relation values, and caller-provided
+judgment logic, but they do not call embedding models, LLMs, storage, retrieval,
+or runtime memory behavior.

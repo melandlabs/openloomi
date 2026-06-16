@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./evidence-cluster": "./src/evidence-cluster.ts",
+    "./pipeline": "./src/pipeline.ts",
     "./relation-graph": "./src/relation-graph.ts"
   },
   "devDependencies": {

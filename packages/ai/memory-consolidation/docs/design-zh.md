@@ -40,14 +40,31 @@ Summary 是稳定记忆的可读表达
 `@openloomi/memory-consolidation` 目前只提供纯函数能力：
 
 - 构建 evidence clusters。
+- 从显式 record keys 中构建有上限的 relation candidates。
+- 将 relation candidates 裁决为 `support`、`compete`、`related` 或 `uncertain`。
 - 从显式 trace relation 中分配 graph clusters 和 competition groups。
 - 保留 weak related edges 作为观察信号，而不是直接参与合并。
 - 计算 cluster-level score。
 - 输出 per-record diagnostics。
 - 输出 consolidation plan，将记忆簇信号转成 `preserve`、`observe`、`decay` 建议。
+- 从 `preserve` plan entries 输出 summary candidates，但不生成 summary 文本。
 - 支持 eval 场景比较 trace-level signal 和 cluster-level signal。
 
 它不会修改 forgetting decision、storage schema、retrieval behavior 或 summarization behavior。
+
+当前离线原型链路可以表示为：
+
+```text
+records
+  -> buildMemoryRelationCandidates
+  -> judgeMemoryRelationCandidates
+  -> assignMemoryRelationGraph
+  -> buildMemoryConsolidationPlan
+  -> buildMemorySummaryCandidates
+```
+
+其中候选生成和候选裁决都依赖显式 key、relation group、relation value 或调用方传入的
+轻量策略；默认不接 embedding、LLM、storage 或 runtime memory 行为。
 
 ## 决策层设计
 
