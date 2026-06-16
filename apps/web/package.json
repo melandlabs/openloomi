@@ -51,6 +51,7 @@
     "@openloomi/indexeddb": "workspace:*",
     "@openloomi/insights": "workspace:*",
     "@openloomi/integrations": "workspace:*",
+    "@openloomi/memory-consolidation": "workspace:*",
     "@openloomi/rag": "workspace:*",
     "@openloomi/rss": "workspace:*",
     "@openloomi/search": "workspace:*",

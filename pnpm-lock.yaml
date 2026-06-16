@@ -239,6 +239,9 @@ importers:
       '@openloomi/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
+      '@openloomi/memory-consolidation':
+        specifier: workspace:*
+        version: link:../../packages/ai/memory-consolidation
       '@openloomi/rag':
         specifier: workspace:*
         version: link:../../packages/ai/rag
@@ -948,6 +951,9 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^1.0.0
         version: 1.0.36(zod@4.3.6)
+      '@openloomi/memory-consolidation':
+        specifier: workspace:*
+        version: link:memory-consolidation
       '@openloomi/shared':
         specifier: workspace:*
         version: link:../shared
@@ -979,6 +985,15 @@ importers:
       zod:
         specifier: ^4.3.6
         version: 4.3.6
+    devDependencies:
+      '@openloomi/config':
+        specifier: workspace:*
+        version: link:../../config
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
+  packages/ai/memory-consolidation:
     devDependencies:
       '@openloomi/config':
         specifier: workspace:*

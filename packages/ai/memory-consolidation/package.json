@@ -1,0 +1,17 @@
+{
+  "name": "@openloomi/memory-consolidation",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./evidence-cluster": "./src/evidence-cluster.ts"
+  },
+  "devDependencies": {
+    "@openloomi/config": "workspace:*",
+    "typescript": "^5.6.3"
+  },
+  "scripts": {
+    "build": "echo no build needed"
+  }
+}

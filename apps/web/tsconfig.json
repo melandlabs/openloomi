@@ -67,6 +67,8 @@
       "@openloomi/integrations/composio": ["../../packages/integrations/composio/src/index.ts"],
       "@openloomi/integrations/calendar/*": ["../../packages/integrations/calendar/src/*"],
       "@openloomi/hooks/*": ["../../packages/hooks/src/*"],
+      "@openloomi/memory-consolidation": ["../../packages/ai/memory-consolidation/src/index.ts"],
+      "@openloomi/memory-consolidation/*": ["../../packages/ai/memory-consolidation/src/*"],
       "@openloomi/mcp/*": ["../../packages/ai/mcp/src/*"],
       "@openloomi/rss/*": ["../../packages/integrations/rss/src/*"],
       "@openloomi/search/*": ["../../packages/search/src/*"],

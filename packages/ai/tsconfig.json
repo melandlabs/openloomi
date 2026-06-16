@@ -1,7 +1,14 @@
 {
   "extends": "../config/src/tsconfig.json",
   "compilerOptions": {
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@openloomi/memory-consolidation": [
+        "./memory-consolidation/src/index.ts"
+      ],
+      "@openloomi/memory-consolidation/*": ["./memory-consolidation/src/*"]
+    }
   },
   "include": ["src/**/*"]
 }

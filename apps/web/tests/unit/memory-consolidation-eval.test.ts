@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeMemoryEvidenceClusters,
   buildMemoryEvidenceClusters,
+} from "@openloomi/memory-consolidation";
+import {
   DefaultMemoryRecordScorer,
   type MemoryRecord,
 } from "../../../../packages/ai/src/memory";

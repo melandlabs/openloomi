@@ -141,6 +141,16 @@ export default defineConfig({
       },
       // Package roots
       {
+        find: "@openloomi/memory-consolidation/*",
+        replacement: alias("../../packages/ai/memory-consolidation/src/*"),
+      },
+      {
+        find: "@openloomi/memory-consolidation",
+        replacement: alias(
+          "../../packages/ai/memory-consolidation/src/index.ts",
+        ),
+      },
+      {
         find: "@openloomi/mcp",
         replacement: alias("../../packages/ai/mcp/src/index.ts"),
       },
