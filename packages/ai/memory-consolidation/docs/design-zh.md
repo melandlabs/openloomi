@@ -42,9 +42,26 @@ Summary 是稳定记忆的可读表达
 - 构建 evidence clusters。
 - 计算 cluster-level score。
 - 输出 per-record diagnostics。
+- 输出 consolidation plan，将记忆簇信号转成 `preserve`、`observe`、`decay` 建议。
 - 支持 eval 场景比较 trace-level signal 和 cluster-level signal。
 
 它不会修改 forgetting decision、storage schema、retrieval behavior 或 summarization behavior。
+
+## 决策层设计
+
+`buildMemoryConsolidationPlan` 是当前 package 内的核心决策层。它不直接删除、
+保留或写入长期记忆，而是把 cluster 信号转成可解释的候选计划：
+
+- `preserve`：重复证据足够强，可以作为后续长期整合候选。
+- `observe`：证据还不够清晰，或者竞争结果接近，需要继续观察。
+- `decay`：孤立证据或被稳定竞争簇压过的一次性证据，不应该被提升为长期记忆。
+
+竞争关系由调用方通过 `getCompetitionKey` 显式提供。例如
+`answer-language:zh` 和 `answer-language:en` 可以归入同一个
+`answer-language` 竞争组；而一次性噪声可以保持独立分组，自然因为缺少重复证据而衰减。
+
+这种设计的目的不是让系统判断“这是不是噪声”，而是让噪声因为没有重复证据、
+没有再激活、没有赢得竞争而无法进入长期整合。
 
 ## 后续验证方向
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeMemoryEvidenceClusters,
+  buildMemoryConsolidationPlan,
   buildMemoryEvidenceClusters,
 } from "@openloomi/memory-consolidation";
 import {
@@ -271,6 +272,33 @@ function analyzeScenario(scenario: EvalScenario) {
   });
 }
 
+function getCompetitionKey(clusterKey: string): string {
+  if (clusterKey.startsWith("answer-language:")) {
+    return "answer-language";
+  }
+  return clusterKey;
+}
+
+function planScenario(scenario: EvalScenario) {
+  return buildMemoryConsolidationPlan({
+    records: scenario.traces.map(traceToRecord),
+    now: NOW,
+    getClusterKey: (record) => String(record.metadata?.topic ?? ""),
+    getCompetitionKey: (cluster) => getCompetitionKey(cluster.key),
+  });
+}
+
+function findPlanEntry(
+  plan: ReturnType<typeof planScenario>,
+  clusterKey: string,
+) {
+  const entry = plan.entries.find((item) => item.clusterKey === clusterKey);
+  if (!entry) {
+    throw new Error(`Missing consolidation plan entry for ${clusterKey}`);
+  }
+  return entry;
+}
+
 describe("memory consolidation evaluation scenarios", () => {
   it("keeps expected long-term outcomes backed by repeated evidence", () => {
     for (const scenario of scenarios) {
@@ -330,5 +358,52 @@ describe("memory consolidation evaluation scenarios", () => {
     expect(flaggedRecordIds).toEqual(["zh-1", "zh-2", "zh-3", "zh-4"]);
     expect(flaggedRecordIds).not.toContain("noise-urgent");
     expect(analysis.clusters[0]?.key).toBe("answer-language:zh");
+  });
+
+  it("builds an explainable consolidation plan from cluster competition", () => {
+    const noisePlan = planScenario(
+      scenarios.find((item) => item.id === "one-shot-noise") as EvalScenario,
+    );
+    const overridePlan = planScenario(
+      scenarios.find(
+        (item) => item.id === "temporary-override",
+      ) as EvalScenario,
+    );
+    const adaptationPlan = planScenario(
+      scenarios.find(
+        (item) => item.id === "preference-adaptation",
+      ) as EvalScenario,
+    );
+
+    expect(findPlanEntry(noisePlan, "answer-language:zh")).toEqual(
+      expect.objectContaining({
+        action: "preserve",
+        winningClusterKey: "answer-language:zh",
+        reasonCodes: ["strong_repeated_evidence"],
+      }),
+    );
+    expect(findPlanEntry(noisePlan, "one-shot:noise")).toEqual(
+      expect.objectContaining({
+        action: "decay",
+        reasonCodes: ["isolated_low_confidence"],
+      }),
+    );
+    expect(findPlanEntry(overridePlan, "answer-language:en")).toEqual(
+      expect.objectContaining({
+        action: "decay",
+        winningClusterKey: "answer-language:zh",
+        reasonCodes: ["outscored_by_competitor", "isolated_low_confidence"],
+      }),
+    );
+    expect(findPlanEntry(adaptationPlan, "answer-language:en")).toEqual(
+      expect.objectContaining({
+        action: "preserve",
+        winningClusterKey: "answer-language:en",
+        reasonCodes: ["strong_repeated_evidence", "wins_competition"],
+      }),
+    );
+    expect(findPlanEntry(adaptationPlan, "answer-language:zh").action).not.toBe(
+      "preserve",
+    );
   });
 });
