@@ -135,10 +135,16 @@ async function setInsightAIUserContext({
   user: SummaryUserContext;
   userType: SummaryUserContext["type"];
 }) {
-  const openaiCompatible = await getUserLlmProviderConfig({
-    userId,
-    providerType: "openai_compatible",
-  });
+  const [openaiCompatible, anthropicCompatible] = await Promise.all([
+    getUserLlmProviderConfig({
+      userId,
+      providerType: "openai_compatible",
+    }),
+    getUserLlmProviderConfig({
+      userId,
+      providerType: "anthropic_compatible",
+    }),
+  ]);
 
   setAIUserContext({
     id: userId,
@@ -146,11 +152,10 @@ async function setInsightAIUserContext({
     name: user.name,
     type: userType,
     token: user.token,
-    llmApiSettings: openaiCompatible
-      ? {
-          openaiCompatible,
-        }
-      : undefined,
+    llmApiSettings: {
+      ...(openaiCompatible && { openaiCompatible }),
+      ...(anthropicCompatible && { anthropicCompatible }),
+    },
   });
 }
 

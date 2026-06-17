@@ -1,7 +1,13 @@
 import { customProvider } from "ai";
 import type { LanguageModel } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { DEV_PORT, PROD_PORT } from "@openloomi/shared";
+
+/**
+ * Provider type for LLM API
+ */
+export type LLMProviderType = "openai_compatible" | "anthropic_compatible";
 
 /**
  * User type - application-specific, defaults to "free" for package consumers.
@@ -30,6 +36,11 @@ export interface AIUserContext {
   token?: string; // Optional: use existing cloud auth token instead of generating new one
   llmApiSettings?: {
     openaiCompatible?: {
+      apiKey: string;
+      baseUrl: string;
+      model: string;
+    };
+    anthropicCompatible?: {
       apiKey: string;
       baseUrl: string;
       model: string;
@@ -71,6 +82,17 @@ function createKeepAliveFetch(): typeof fetch {
 }
 
 /**
+ * Determine the provider type from user context
+ */
+function getProviderType(): LLMProviderType {
+  const userAnthropic = globalUserContext?.llmApiSettings?.anthropicCompatible;
+  if (userAnthropic?.apiKey && userAnthropic?.baseUrl && userAnthropic?.model) {
+    return "anthropic_compatible";
+  }
+  return "openai_compatible";
+}
+
+/**
  * Set the global user context for AI requests
  * Call this at the beginning of bot/background operations
  */
@@ -88,7 +110,13 @@ export function setAIUserContext(context: AIUserContext | null) {
       previousContext.llmApiSettings?.openaiCompatible?.baseUrl !==
         context.llmApiSettings?.openaiCompatible?.baseUrl ||
       previousContext.llmApiSettings?.openaiCompatible?.model !==
-        context.llmApiSettings?.openaiCompatible?.model;
+        context.llmApiSettings?.openaiCompatible?.model ||
+      previousContext.llmApiSettings?.anthropicCompatible?.apiKey !==
+        context.llmApiSettings?.anthropicCompatible?.apiKey ||
+      previousContext.llmApiSettings?.anthropicCompatible?.baseUrl !==
+        context.llmApiSettings?.anthropicCompatible?.baseUrl ||
+      previousContext.llmApiSettings?.anthropicCompatible?.model !==
+        context.llmApiSettings?.anthropicCompatible?.model;
 
     if (_initialized && contextChanged) {
       console.log(
@@ -151,11 +179,11 @@ function createFetchWithContext(
 }
 
 /**
- * Get the appropriate base URL for LLM API
+ * Get the appropriate base URL for OpenAI-compatible API
  * - Native: Use local proxy (/api/ai/v1)
  * - Web (cloud + local dev): Use external AI provider directly
  */
-function getLLMBaseUrl(isNativeMode: boolean): string {
+function getOpenAICompatibleBaseUrl(isNativeMode: boolean): string {
   if (isNativeMode) {
     const isDev = process.env.NODE_ENV !== "production";
     const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -198,14 +226,109 @@ function getLLMBaseUrl(isNativeMode: boolean): string {
 }
 
 /**
+ * Get the appropriate base URL for Anthropic-compatible API
+ */
+function getAnthropicCompatibleBaseUrl(isNativeMode: boolean): string {
+  if (isNativeMode) {
+    const isDev = process.env.NODE_ENV !== "production";
+    const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const fallbackAppUrl = isDev
+      ? `http://localhost:${DEV_PORT}`
+      : `http://localhost:${PROD_PORT}`;
+    let localUrl = fallbackAppUrl;
+
+    if (configuredAppUrl) {
+      try {
+        const parsedUrl = new URL(configuredAppUrl);
+        if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+          localUrl = configuredAppUrl;
+        } else {
+          console.warn(
+            `[Anthropic Provider] Ignoring NEXT_PUBLIC_APP_URL with unsupported protocol: ${configuredAppUrl}`,
+          );
+        }
+      } catch {
+        console.warn(
+          `[Anthropic Provider] Ignoring invalid NEXT_PUBLIC_APP_URL: ${configuredAppUrl}`,
+        );
+      }
+    }
+
+    // Use /api/ai/v1 Anthropic-compatible endpoint
+    const proxyPath = "/api/ai/v1";
+    const fullLocalUrl = `${localUrl}${proxyPath}`;
+    return fullLocalUrl;
+  }
+
+  const externalUrl = process.env.ANTHROPIC_BASE_URL;
+  if (!externalUrl) {
+    throw new Error(
+      "ANTHROPIC_BASE_URL environment variable is not set (web mode)",
+    );
+  }
+  console.log(
+    "[Anthropic Provider] Using external AI provider (web mode):",
+    externalUrl,
+  );
+  return externalUrl;
+}
+
+/**
  * Validate and get required environment variables
  * @returns Validated environment variables
  * @throws Error if any required environment variable is missing
  */
 function getValidatedEnv(isNativeMode: boolean) {
+  const providerType = getProviderType();
+
+  // Handle Anthropic-compatible provider
+  if (providerType === "anthropic_compatible") {
+    const userAnthropicSettings =
+      globalUserContext?.llmApiSettings?.anthropicCompatible;
+    let baseUrl =
+      userAnthropicSettings?.baseUrl ??
+      getAnthropicCompatibleBaseUrl(isNativeMode);
+
+    // Ensure baseUrl has /v1 for Anthropic API (MiniMax and similar require this)
+    const normalizedBase = baseUrl.replace(/\/+$/, "");
+    if (!normalizedBase.endsWith("/v1")) {
+      baseUrl = `${normalizedBase}/v1`;
+    }
+
+    const apiKey =
+      userAnthropicSettings?.apiKey ??
+      (isNativeMode
+        ? "local-auth-via-jwt-token"
+        : process.env.ANTHROPIC_API_KEY);
+
+    if (!isNativeMode && !apiKey) {
+      throw new Error(
+        "ANTHROPIC_API_KEY environment variable is not set (web mode)",
+      );
+    }
+
+    const modelName =
+      userAnthropicSettings?.model ?? process.env.ANTHROPIC_MODEL;
+
+    if (!modelName) {
+      throw new Error("ANTHROPIC_MODEL environment variable is not set");
+    }
+
+    return {
+      providerType: "anthropic_compatible" as const,
+      baseUrl,
+      apiKey,
+      modelName,
+      imageModelName: undefined,
+      vlmModelName: modelName,
+    };
+  }
+
+  // Handle OpenAI-compatible provider (default)
   const userOpenAISettings =
     globalUserContext?.llmApiSettings?.openaiCompatible;
-  const baseUrl = userOpenAISettings?.baseUrl ?? getLLMBaseUrl(isNativeMode);
+  const baseUrl =
+    userOpenAISettings?.baseUrl ?? getOpenAICompatibleBaseUrl(isNativeMode);
 
   const apiKey =
     userOpenAISettings?.apiKey ??
@@ -222,6 +345,7 @@ function getValidatedEnv(isNativeMode: boolean) {
   }
 
   return {
+    providerType: "openai_compatible" as const,
     baseUrl,
     apiKey,
     modelName,
@@ -243,7 +367,14 @@ function initializeModels(isNativeMode: boolean) {
   if (_initialized) return;
 
   const env = getValidatedEnv(isNativeMode);
-  const { baseUrl, apiKey, modelName, imageModelName, vlmModelName } = env;
+  const {
+    providerType,
+    baseUrl,
+    apiKey,
+    modelName,
+    imageModelName,
+    vlmModelName,
+  } = env;
 
   const userContext = globalUserContext;
 
@@ -261,40 +392,74 @@ function initializeModels(isNativeMode: boolean) {
     );
   }
 
-  _model = createOpenAICompatible({
-    baseURL: baseUrl,
-    name: "chat-model",
-    apiKey: apiKey,
-    fetch: customFetch,
-  }).chatModel(modelName);
+  if (providerType === "anthropic_compatible") {
+    // Use createAnthropic for Anthropic-compatible providers
+    console.log(
+      `[AI Provider] Using Anthropic-compatible provider: ${baseUrl}, model: ${modelName}`,
+    );
 
-  _vlmModel = createOpenAICompatible({
-    baseURL: baseUrl,
-    name: "vlm-model",
-    apiKey: apiKey,
-    fetch: customFetch,
-  }).chatModel(vlmModelName);
+    const anthropicProvider = createAnthropic({
+      baseURL: baseUrl,
+      apiKey: apiKey,
+      fetch: customFetch,
+    });
 
-  const imageModels = imageModelName
-    ? {
-        "small-model": createOpenAICompatible({
-          baseURL: baseUrl,
-          name: "image-model",
-          apiKey: apiKey,
-          fetch: customFetch,
-        }).imageModel(imageModelName),
-      }
-    : undefined;
+    const anthropicModel = anthropicProvider.languageModel(modelName) as any;
+    const anthropicVlmModel = anthropicProvider.languageModel(
+      vlmModelName,
+    ) as any;
 
-  _modelProvider = customProvider({
-    languageModels: {
-      "chat-model": _model,
-      "vlm-model": _vlmModel,
-      "title-model": _model,
-      "artifact-model": _model,
-    },
-    imageModels,
-  });
+    _modelProvider = customProvider({
+      languageModels: {
+        "chat-model": anthropicModel,
+        "vlm-model": anthropicVlmModel,
+        "title-model": anthropicModel,
+        "artifact-model": anthropicModel,
+      },
+    });
+    _model = anthropicModel;
+    _vlmModel = anthropicVlmModel;
+  } else {
+    // Use createOpenAICompatible for OpenAI-compatible providers
+    console.log(
+      `[AI Provider] Using OpenAI-compatible provider: ${baseUrl}, model: ${modelName}`,
+    );
+
+    _model = createOpenAICompatible({
+      baseURL: baseUrl,
+      name: "chat-model",
+      apiKey: apiKey,
+      fetch: customFetch,
+    }).chatModel(modelName);
+
+    _vlmModel = createOpenAICompatible({
+      baseURL: baseUrl,
+      name: "vlm-model",
+      apiKey: apiKey,
+      fetch: customFetch,
+    }).chatModel(vlmModelName);
+
+    const imageModels = imageModelName
+      ? {
+          "small-model": createOpenAICompatible({
+            baseURL: baseUrl,
+            name: "image-model",
+            apiKey: apiKey,
+            fetch: customFetch,
+          }).imageModel(imageModelName),
+        }
+      : undefined;
+
+    _modelProvider = customProvider({
+      languageModels: {
+        "chat-model": _model,
+        "vlm-model": _vlmModel,
+        "title-model": _model,
+        "artifact-model": _model,
+      },
+      imageModels,
+    });
+  }
 
   _initialized = true;
 }
@@ -401,8 +566,16 @@ export function createDynamicModel(
     : undefined;
 
   console.log(
-    `[Dynamic Model] Creating model with name: ${actualModelName}, baseUrl: ${env.baseUrl}`,
+    `[Dynamic Model] Creating model with name: ${actualModelName}, baseUrl: ${env.baseUrl}, provider: ${env.providerType}`,
   );
+
+  if (env.providerType === "anthropic_compatible") {
+    return createAnthropic({
+      baseURL: env.baseUrl,
+      apiKey: env.apiKey,
+      fetch: debugFetch,
+    }).languageModel(actualModelName) as any;
+  }
 
   return createOpenAICompatible({
     baseURL: env.baseUrl,
