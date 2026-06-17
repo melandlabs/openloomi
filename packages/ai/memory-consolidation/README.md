@@ -6,6 +6,29 @@ cluster-level signals, and diagnostics before changing runtime memory behavior.
 This package currently provides pure helpers only. It does not modify forgetting,
 storage, retrieval, or summarization behavior.
 
+## Design position
+
+Long-term memory should not be treated as an append-only log. A practical memory
+system usually needs an online capture phase and an offline consolidation phase:
+raw events are first kept as traces, then repeated evidence, conflict, recency,
+and activation decide which traces may become stable semantic memory candidates.
+
+This package focuses on the offline consolidation phase:
+
+```text
+episodic traces
+  -> relation diagnostics
+  -> consolidation report
+  -> semantic memory candidates
+```
+
+It helps inspect whether existing traces form stable clusters, compete with
+other clusters, remain weak observations, or should decay instead of being
+promoted. The output is diagnostic: `preservedClusters` are candidates for later
+semantic consolidation, `contestedClusters` show conflicting or changing memory
+patterns, and `decayedRecords` are signals to avoid promotion rather than direct
+delete instructions.
+
 ## Scope
 
 - Build evidence clusters from `MemoryEvidenceRecord[]` or structurally compatible memory records.
@@ -17,14 +40,19 @@ storage, retrieval, or summarization behavior.
 - Build an explainable consolidation plan with `preserve`, `observe`, and `decay`
   recommendations.
 - Build summary candidates from preserved consolidation plan entries.
+- Adapt structurally compatible memory records into an offline relation pipeline
+  diagnostics view.
 
 ## Non-goals
 
 - No runtime integration with the forgetting engine.
 - No storage schema changes.
 - No retrieval behavior changes.
+- No online importance scoring at memory-ingest time.
 - No automatic relation generation with embeddings or LLMs.
 - No automatic summary text generation.
+- No final semantic memory generation.
+- No direct deletion or archival of source records.
 
 ## Consolidation plan
 
@@ -68,3 +96,47 @@ The candidate and judgment steps are intentionally lightweight. They can use
 explicit record keys, relation groups, relation values, and caller-provided
 judgment logic, but they do not call embedding models, LLMs, storage, retrieval,
 or runtime memory behavior.
+
+## Diagnostics adapter
+
+`buildMemoryRelationPipelineDiagnostics` is an adapter around the offline
+pipeline. It accepts source records with caller-provided selectors, normalizes
+them into `MemoryEvidenceRecord[]`, runs the relation pipeline, and returns
+per-record diagnostics plus aggregate counts.
+
+The adapter is intentionally observational:
+
+- It skips incomplete source records instead of inventing missing identity or
+  timestamp fields.
+- It uses explicit relation group / value selectors as conservative default
+  candidate keys.
+- It can keep temporary or ephemeral traces as `related` signals instead of
+  promoting them into support or competition edges.
+- It reports cluster keys, competition keys, graph status, plan action, relation
+  counts, and summary-candidate selection without changing runtime memory
+  behavior.
+
+`buildMemoryConsolidationDiagnosticsReport` can then format the raw diagnostics
+into a compact report with summary counts, preserved clusters, contested
+clusters, decayed records, skipped records, and per-record signals. It is a view
+over `MemoryRelationPipelineDiagnostics`; it does not rerun the pipeline or make
+new consolidation decisions.
+
+Callers can keep the full diagnostics for debugging and derive the compact
+report for review or logging:
+
+```ts
+const diagnostics = buildMemoryRelationPipelineDiagnostics({
+  records,
+  now,
+  selectors: {
+    getId: (record) => record.id,
+    getTimestamp: (record) => record.timestamp,
+    getText: (record) => record.text,
+    getRelationGroup: (record) => record.metadata?.relationGroup,
+    getRelationValue: (record) => record.metadata?.relationValue,
+    getRelationScope: (record) => record.metadata?.relationScope,
+  },
+});
+const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+```

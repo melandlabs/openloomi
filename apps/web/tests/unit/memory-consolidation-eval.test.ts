@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  adaptMemoryRecordsForConsolidation,
   analyzeMemoryEvidenceClusters,
   assignMemoryRelationGraph,
   buildMemoryConsolidationPlan,
+  buildMemoryConsolidationDiagnosticsReport,
   buildMemoryEvidenceClusters,
   buildMemoryRelationCandidates,
   buildMemoryRelationPipeline,
+  buildMemoryRelationPipelineDiagnostics,
   deriveMemoryRelationGraphLifecycle,
 } from "@openloomi/memory-consolidation";
 import {
@@ -609,6 +612,124 @@ function buildRelationPipelineFixture() {
   });
 }
 
+type AdapterSourceRecord = {
+  uid?: string;
+  owner?: string;
+  createdAt?: number;
+  body?: string;
+  reads?: number;
+  fields?: {
+    preference?: string;
+    value?: "zh" | "en";
+  };
+  meta?: {
+    scope?: "temporary" | "long-term";
+  };
+};
+
+function adapterSourceRecord(
+  uid: string,
+  body: string,
+  day: number,
+  value: "zh" | "en",
+  options: {
+    reads?: number;
+    scope?: "temporary" | "long-term";
+  } = {},
+): AdapterSourceRecord {
+  return {
+    uid,
+    owner: "adapter-user",
+    createdAt: day * DAY_MS,
+    body,
+    reads: options.reads,
+    fields: {
+      preference: "answer-language",
+      value,
+    },
+    meta: {
+      scope: options.scope ?? "long-term",
+    },
+  };
+}
+
+const adapterSelectors = {
+  getId: (record: AdapterSourceRecord) => record.uid,
+  getUserId: (record: AdapterSourceRecord) => record.owner,
+  getTimestamp: (record: AdapterSourceRecord) => record.createdAt,
+  getText: (record: AdapterSourceRecord) => record.body,
+  getAccessCount: (record: AdapterSourceRecord) => record.reads,
+  getDimensions: (record: AdapterSourceRecord) =>
+    record.fields ? { ...record.fields } : undefined,
+  getMetadata: (record: AdapterSourceRecord) =>
+    record.meta ? { ...record.meta } : undefined,
+  getRelationGroup: (record: AdapterSourceRecord) => record.fields?.preference,
+  getRelationValue: (record: AdapterSourceRecord) => record.fields?.value,
+  getRelationScope: (record: AdapterSourceRecord) => record.meta?.scope,
+};
+
+function buildAdapterDiagnosticsInput() {
+  return {
+    records: [
+      adapterSourceRecord(
+        "adapter-zh-a",
+        "Use Chinese for repo work.",
+        30,
+        "zh",
+        { reads: 1 },
+      ),
+      adapterSourceRecord(
+        "adapter-zh-b",
+        "Prefer Chinese technical explanations.",
+        45,
+        "zh",
+        { reads: 1 },
+      ),
+      adapterSourceRecord(
+        "adapter-zh-c",
+        "Code explanations are easier in Chinese.",
+        60,
+        "zh",
+        { reads: 1 },
+      ),
+      adapterSourceRecord(
+        "adapter-en-a",
+        "Use English-first answers for this workspace.",
+        115,
+        "en",
+        { reads: 1 },
+      ),
+      adapterSourceRecord(
+        "adapter-en-b",
+        "Default to English for this one discussion.",
+        118,
+        "en",
+        { reads: 1 },
+      ),
+      adapterSourceRecord(
+        "adapter-temp-en",
+        "For this one reply, use English.",
+        119,
+        "en",
+        { scope: "temporary" },
+      ),
+    ],
+    now: NOW,
+    selectors: adapterSelectors,
+    plan: {
+      thresholds: {
+        preserveScore: 0.5,
+        preserveEvidence: 3,
+        competitionMargin: 0.05,
+      },
+    },
+  };
+}
+
+function buildAdapterDiagnosticsFixture() {
+  return buildMemoryRelationPipelineDiagnostics(buildAdapterDiagnosticsInput());
+}
+
 describe("memory consolidation evaluation scenarios", () => {
   it("keeps expected long-term outcomes backed by repeated evidence", () => {
     for (const scenario of scenarios) {
@@ -1069,6 +1190,203 @@ describe("memory consolidation evaluation scenarios", () => {
       expect.objectContaining({
         clusterKey: enClusterKey,
         sourceAction: "preserve",
+      }),
+    ]);
+  });
+
+  it("adapts structural memory records into relation pipeline diagnostics", () => {
+    const diagnostics = buildAdapterDiagnosticsFixture();
+    const zhDiagnostic = diagnostics.recordDiagnostics.find(
+      (item) => item.recordId === "adapter-zh-a",
+    );
+    const tempDiagnostic = diagnostics.recordDiagnostics.find(
+      (item) => item.recordId === "adapter-temp-en",
+    );
+    const enClusterKey =
+      diagnostics.pipeline.assignment.recordClusterKeys["adapter-en-a"];
+    const tempClusterKey =
+      diagnostics.pipeline.assignment.recordClusterKeys["adapter-temp-en"];
+
+    expect(diagnostics.summary).toEqual(
+      expect.objectContaining({
+        sourceRecordCount: 6,
+        adaptedRecordCount: 6,
+        skippedRecordCount: 0,
+        recordsWithCandidateKeys: 6,
+        recordsWithRelationGroup: 6,
+        recordsWithRelationValue: 6,
+        preserveCount: 1,
+        summaryCandidateCount: 1,
+      }),
+    );
+    expect(zhDiagnostic).toEqual(
+      expect.objectContaining({
+        graphStatus: "contested",
+        planAction: "preserve",
+        selectedForSummary: true,
+      }),
+    );
+    expect(tempDiagnostic).toEqual(
+      expect.objectContaining({
+        graphStatus: "tentative",
+        planAction: "decay",
+        supportRelationCount: 0,
+        selectedForSummary: false,
+      }),
+    );
+    expect(tempDiagnostic?.relatedRelationCount).toBeGreaterThan(0);
+    expect(tempClusterKey).not.toBe(enClusterKey);
+  });
+
+  it("builds a compact diagnostics report from relation pipeline diagnostics", () => {
+    const diagnostics = buildAdapterDiagnosticsFixture();
+    const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+    const zhClusterKey =
+      diagnostics.pipeline.assignment.recordClusterKeys["adapter-zh-a"];
+    const enClusterKey =
+      diagnostics.pipeline.assignment.recordClusterKeys["adapter-en-a"];
+    const tempClusterKey =
+      diagnostics.pipeline.assignment.recordClusterKeys["adapter-temp-en"];
+
+    expect(report.summary).toEqual({
+      sourceRecordCount: 6,
+      adaptedRecordCount: 6,
+      skippedRecordCount: 0,
+      candidateCount: diagnostics.pipeline.candidates.length,
+      relationCount: diagnostics.pipeline.relations.length,
+      clusterCount: diagnostics.pipeline.assignment.clusters.length,
+      competitionGroupCount:
+        diagnostics.pipeline.assignment.competitionGroups.length,
+      preserveCount: 1,
+      observeCount: 1,
+      decayCount: 1,
+      summaryCandidateCount: 1,
+    });
+    expect(report.preservedClusters).toEqual([
+      expect.objectContaining({
+        clusterKey: zhClusterKey,
+        competitionKey:
+          diagnostics.pipeline.assignment.clusterCompetitionKeys[zhClusterKey],
+        recordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        evidenceCount: 3,
+        reasonCodes: ["strong_repeated_evidence", "wins_competition"],
+      }),
+    ]);
+    expect(report.preservedClusters[0]?.summaryPriority).toBeGreaterThan(0);
+    expect(
+      report.contestedClusters.map((cluster) => cluster.clusterKey),
+    ).toEqual([zhClusterKey, enClusterKey]);
+    expect(report.contestedClusters).toContainEqual(
+      expect.objectContaining({
+        clusterKey: enClusterKey,
+        action: "observe",
+        competingClusterKeys: [zhClusterKey],
+        winningClusterKey: zhClusterKey,
+        reasonCodes: ["outscored_by_competitor"],
+      }),
+    );
+    expect(report.decayedRecords).toEqual([
+      {
+        recordId: "adapter-temp-en",
+        sourceIndex: 5,
+        clusterKey: tempClusterKey,
+        reasonCodes: ["isolated_low_confidence"],
+      },
+    ]);
+    expect(report.skippedRecords).toEqual([]);
+    expect(report.recordSignals).toContainEqual(
+      expect.objectContaining({
+        recordId: "adapter-temp-en",
+        sourceIndex: 5,
+        clusterKey: tempClusterKey,
+        graphStatus: "tentative",
+        planAction: "decay",
+        supportRelationCount: 0,
+        selectedForSummary: false,
+      }),
+    );
+  });
+
+  it("skips incomplete source records before running diagnostics", () => {
+    const adapted = adaptMemoryRecordsForConsolidation({
+      records: [
+        {
+          owner: "adapter-user",
+          createdAt: NOW,
+          body: "Missing id.",
+        },
+        {
+          uid: "missing-time",
+          owner: "adapter-user",
+          body: "Missing timestamp.",
+        },
+        adapterSourceRecord(
+          "adapter-valid",
+          "Use Chinese for repo work.",
+          119,
+          "zh",
+        ),
+      ],
+      selectors: adapterSelectors,
+    });
+    const diagnostics = buildMemoryRelationPipelineDiagnostics({
+      records: [
+        {
+          owner: "adapter-user",
+          createdAt: NOW,
+          body: "Missing id.",
+        },
+        {
+          uid: "missing-time",
+          owner: "adapter-user",
+          body: "Missing timestamp.",
+        },
+        adapterSourceRecord(
+          "adapter-valid",
+          "Use Chinese for repo work.",
+          119,
+          "zh",
+        ),
+      ],
+      now: NOW,
+      selectors: adapterSelectors,
+    });
+    const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+
+    expect(adapted.records.map((record) => record.id)).toEqual([
+      "adapter-valid",
+    ]);
+    expect(adapted.skippedRecords).toEqual([
+      {
+        sourceIndex: 0,
+        reasonCodes: ["missing_id"],
+      },
+      {
+        sourceIndex: 1,
+        reasonCodes: ["missing_timestamp"],
+      },
+    ]);
+    expect(diagnostics.summary).toEqual(
+      expect.objectContaining({
+        sourceRecordCount: 3,
+        adaptedRecordCount: 1,
+        skippedRecordCount: 2,
+        candidateCount: 0,
+        relationCount: 0,
+      }),
+    );
+    expect(report.summary).toEqual(
+      expect.objectContaining({
+        sourceRecordCount: 3,
+        adaptedRecordCount: 1,
+        skippedRecordCount: 2,
+      }),
+    );
+    expect(report.skippedRecords).toEqual(adapted.skippedRecords);
+    expect(diagnostics.recordDiagnostics).toEqual([
+      expect.objectContaining({
+        recordId: "adapter-valid",
+        graphStatus: "tentative",
       }),
     ]);
   });

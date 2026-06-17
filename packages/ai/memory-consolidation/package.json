@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./adapter": "./src/adapter.ts",
     "./evidence-cluster": "./src/evidence-cluster.ts",
     "./pipeline": "./src/pipeline.ts",
     "./relation-graph": "./src/relation-graph.ts"
