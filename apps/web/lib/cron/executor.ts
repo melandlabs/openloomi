@@ -982,7 +982,6 @@ ${characterContextSection}`,
             currentParts.push({ type: "text", text: sanitizedText });
           }
           await saveCurrentAssistantMessage();
-          resetCurrentMessage();
         } else if (message.type === "tool_use") {
           // Don't save here - let tool calls accumulate in the same message
           // Only save when we have text content that user needs to see
