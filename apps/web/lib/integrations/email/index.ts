@@ -42,6 +42,7 @@ const logger = createLogger("EmailAdapterFetch");
 const GMAIL_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const UNBOUNDED_EMAIL_FETCH_MAX_RESULTS = Number.MAX_SAFE_INTEGER;
 const EMAIL_FETCH_BATCH_SIZE = 25;
+const EMAIL_FALLBACK_RECENT_COUNT = 10;
 type EmailFetchFolder = {
   name: string;
   isSent: boolean;
@@ -687,6 +688,99 @@ export class EmailAdapter extends MessagePlatformAdapter {
         }
       }
 
+      // Fallback: if time-filtered search yielded no results, fetch most recent emails
+      if (results.length === 0) {
+        const fallbackStartedAt = Date.now();
+        this.emitFetchTiming(
+          options.onTiming,
+          "imap_folder_fallback",
+          "start",
+          {
+            folder,
+            isSent,
+            reason: "time_filter_no_results",
+          },
+        );
+
+        const fallbackUids = await this.searchRecentEmailUids(
+          EMAIL_FALLBACK_RECENT_COUNT,
+        );
+        const fallbackResults: ExtractEmailInfo[] = [];
+        let fallbackPromotionalCount = 0;
+        let fallbackFetchedCount = 0;
+
+        for (
+          let offset = 0;
+          offset < fallbackUids.uids.length &&
+          fallbackResults.length < EMAIL_FALLBACK_RECENT_COUNT;
+          offset += EMAIL_FETCH_BATCH_SIZE
+        ) {
+          const uidBatch = fallbackUids.uids.slice(
+            offset,
+            offset + EMAIL_FETCH_BATCH_SIZE,
+          );
+          const messages = await this.client.fetchAll(
+            uidBatch,
+            { envelope: true, bodyStructure: true, source: true },
+            { uid: true },
+          );
+          fallbackFetchedCount += messages.length;
+          const messagesByUid = new Map(
+            messages.map((message) => [message.uid, message] as const),
+          );
+
+          for (const uid of uidBatch) {
+            if (fallbackResults.length >= EMAIL_FALLBACK_RECENT_COUNT) break;
+            const msg = messagesByUid.get(uid);
+            if (!msg || !msg.source) continue;
+            const parsed = await this.parseEmailFn(msg.source);
+            if (isPromotionalEmail(parsed)) {
+              fallbackPromotionalCount++;
+              continue;
+            }
+            const email = this.formatEmail(parsed, msg.uid, isSent);
+            const attachments = await this.ingestEmailAttachments(email);
+            fallbackResults.push({ ...email, attachments });
+          }
+        }
+
+        this.emitFetchTiming(
+          options.onTiming,
+          "imap_folder_fallback",
+          "success",
+          {
+            folder,
+            isSent,
+            strategy: fallbackUids.strategy,
+            fetchedCount: fallbackFetchedCount,
+            resultCount: fallbackResults.length,
+            promotionalCount: fallbackPromotionalCount,
+          },
+          fallbackStartedAt,
+        );
+
+        if (fallbackResults.length > 0) {
+          this.emitFetchTiming(
+            options.onTiming,
+            "imap_folder_fetch",
+            "success",
+            {
+              folder,
+              isSent,
+              requestedUidCount: recentUids.length,
+              fetchedMessageCount,
+              resultCount: results.length,
+              skippedOldCount,
+              promotionalCount,
+              skippedPromotionalCount: promotionalCount,
+              fallbackResultCount: fallbackResults.length,
+            },
+            fetchStartedAt,
+          );
+          return fallbackResults;
+        }
+      }
+
       this.emitFetchTiming(
         options.onTiming,
         "imap_folder_fetch",
@@ -907,6 +1001,20 @@ export class EmailAdapter extends MessagePlatformAdapter {
       uids: Array.isArray(uids) ? uids : [],
       strategy: "imap_since",
       query: `SINCE ${dayStart.toISOString()}`,
+    };
+  }
+
+  private async searchRecentEmailUids(
+    count: number,
+  ): Promise<{ uids: number[]; strategy: string }> {
+    // Search all UIDs in the mailbox, then take the highest ones (most recent)
+    const uids = await this.client.search({ all: true }, { uid: true });
+    const allUids = Array.isArray(uids) ? uids : [];
+    // UIDs from IMAP are typically in ascending order; reverse for most recent
+    const sorted = allUids.reverse();
+    return {
+      uids: sorted.slice(0, count),
+      strategy: "recent_fallback",
     };
   }
 
