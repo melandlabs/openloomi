@@ -23,9 +23,11 @@ import { createRawMessagesTools } from "./raw-messages";
 import { createUnifiedMemorySearchTool } from "./unified-memory";
 import { createMemoryPathTool } from "./memory-path";
 import { createSchedulerTools } from "./scheduler";
+import { createUserMemoryTool, type MemoryUpdateCallback } from "./user-memory";
 
 export type BusinessToolsMcpOptions = {
   excludeTools?: string[];
+  onMemoryUpdate?: MemoryUpdateCallback;
 };
 
 /**
@@ -83,6 +85,9 @@ export function createBusinessToolsMcpServer(
 
     // Scheduler tools
     ...createSchedulerTools(session, embeddingsAuthToken),
+
+    // User memory tool
+    createUserMemoryTool(session, options?.onMemoryUpdate),
   ];
 
   const excludeSet = new Set(options?.excludeTools ?? []);
@@ -104,3 +109,4 @@ export function createBusinessToolsMcpServer(
 // Re-export shared types for external use
 export type { InsightChangeCallback, TaskInput } from "./shared";
 export { INSIGHT_FILTER_KINDS } from "./shared";
+export type { MemoryUpdateCallback } from "./user-memory";
