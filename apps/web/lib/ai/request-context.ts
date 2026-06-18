@@ -67,10 +67,18 @@ export async function setAIUserContextFromRequest({
   body?: any;
 }): Promise<void> {
   const token = extractCloudAuthToken(request, body);
-  const openaiCompatible = await getUserLlmProviderConfig({
-    userId,
-    providerType: "openai_compatible",
-  });
+
+  // Load both provider configs to support anthropic or openai-compatible providers
+  const [openaiCompatible, anthropicCompatible] = await Promise.all([
+    getUserLlmProviderConfig({
+      userId,
+      providerType: "openai_compatible",
+    }),
+    getUserLlmProviderConfig({
+      userId,
+      providerType: "anthropic_compatible",
+    }),
+  ]);
 
   setAIUserContext({
     id: userId,
@@ -78,10 +86,12 @@ export async function setAIUserContextFromRequest({
     name: name || null,
     type: userType,
     token,
-    llmApiSettings: openaiCompatible
-      ? {
-          openaiCompatible,
-        }
-      : undefined,
+    llmApiSettings:
+      openaiCompatible || anthropicCompatible
+        ? {
+            ...(openaiCompatible && { openaiCompatible }),
+            ...(anthropicCompatible && { anthropicCompatible }),
+          }
+        : undefined,
   });
 }

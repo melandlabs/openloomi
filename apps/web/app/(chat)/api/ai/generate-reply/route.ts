@@ -1,7 +1,25 @@
 import { auth } from "@/app/(auth)/auth";
 import { AppError } from "@openloomi/shared/errors";
-import { extractCloudAuthToken } from "@/lib/ai/request-context";
+import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { jsonrepair } from "jsonrepair";
+
+type ProviderConfig = {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+};
+
+function buildChatCompletionsUrl(baseUrl: string) {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  if (normalized.endsWith("/v1")) {
+    return `${normalized}/chat/completions`;
+  }
+  return `${normalized}/v1/chat/completions`;
+}
+
+function buildAnthropicMessagesUrl(baseUrl: string) {
+  return `${baseUrl.replace(/\/+$/, "")}/v1/messages`;
+}
 
 /**
  * Try multiple JSON parsing strategies, including repair
@@ -77,9 +95,6 @@ export async function POST(request: Request) {
       language?: string;
       userLanguage?: string;
     };
-
-    // Extract cloud auth token for forwarding
-    const cloudAuthToken = extractCloudAuthToken(request, body);
 
     if (!insightContext) {
       return new AppError(
@@ -231,60 +246,142 @@ CRITICAL RULES:
       .replace('PLACEHOLDER_MESSAGE"""', `${truncatedMessage}"""`)
       .replace("Context: PLACEHOLDER_CONTEXT", `Context: ${truncatedContext}`);
 
-    // Call internal /api/ai/v1/chat/completions (handles auth, billing, rate limiting)
-    const internalHeaders: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (cloudAuthToken) {
-      internalHeaders.Authorization = `Bearer ${cloudAuthToken}`;
-    }
-    const cookie = request.headers.get("cookie");
-    if (cookie) {
-      internalHeaders.cookie = cookie;
-    }
+    // Fetch both provider configs to support anthropic or openai-compatible providers
+    const [anthropicConfig, openaiConfig] = await Promise.all([
+      getUserLlmProviderConfig({
+        userId: session.user.id,
+        providerType: "anthropic_compatible",
+      }),
+      getUserLlmProviderConfig({
+        userId: session.user.id,
+        providerType: "openai_compatible",
+      }),
+    ]);
 
-    const internalResponse = await fetch(
-      new URL("/api/ai/v1/chat/completions", request.url),
-      {
-        method: "POST",
-        headers: internalHeaders,
-        body: JSON.stringify({
-          model: "default",
-          messages: [
-            {
-              role: "system",
-              content: "You are a professional reply drafting assistant.",
-            },
-            { role: "user", content: finalPrompt },
-          ],
-          temperature: 0.7,
-        }),
-      },
-    );
+    // Determine which provider to use (anthropic takes priority if both exist)
+    const providerConfig: ProviderConfig | undefined =
+      anthropicConfig ?? openaiConfig;
 
-    if (!internalResponse.ok) {
-      const errorData = await internalResponse.json().catch(() => ({}));
+    if (!providerConfig) {
       throw new Error(
-        (errorData as { error?: { message?: string } }).error?.message ||
-          `AI API error: ${internalResponse.status}`,
+        "No AI provider configured. Please set up an AI provider in Preferences.",
       );
     }
 
-    const responseData = (await internalResponse.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-      error?: { message?: string; type?: string };
-    };
+    // Check if using anthropic-compatible provider
+    const isAnthropic = Boolean(anthropicConfig);
+    const maxTokens = 4096;
 
-    // Check for error response from internal API
-    if (responseData.error) {
-      throw new Error(
-        responseData.error.message ||
-          `AI API error: ${responseData.error.type || "unknown"}`,
+    let text: string;
+    if (isAnthropic) {
+      // Use Anthropic messages API
+      const response = await fetch(
+        buildAnthropicMessagesUrl(providerConfig.baseUrl),
+        {
+          method: "POST",
+          headers: {
+            "x-api-key": providerConfig.apiKey,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: providerConfig.model,
+            max_tokens: maxTokens,
+            system: "You are a professional reply drafting assistant.",
+            messages: [
+              {
+                role: "user",
+                content: finalPrompt,
+              },
+            ],
+          }),
+          signal: AbortSignal.timeout(120_000),
+        },
       );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          `Anthropic API error ${response.status}: ${errorText.slice(0, 400)}`,
+        );
+      }
+
+      const data = (await response.json()) as {
+        content?: Array<{ type?: string; text?: string }>;
+        error?: { message?: string };
+      };
+
+      if (data.error) {
+        throw new Error(`Anthropic API error: ${data.error.message}`);
+      }
+
+      // Anthropic content is an array of blocks with type and text fields
+      const textBlock = data.content?.find(
+        (block: unknown) =>
+          typeof block === "object" &&
+          block !== null &&
+          (block as { type?: string }).type === "text",
+      ) as { type?: string; text?: string } | undefined;
+      text = textBlock?.text ?? "";
+
+      if (!text) {
+        if (data.content) {
+          console.log(
+            "[GenerateReply API] Anthropic response has no text block:",
+            JSON.stringify(data.content).slice(0, 500),
+          );
+        } else {
+          console.log(
+            "[GenerateReply API] Anthropic response has no content:",
+            JSON.stringify(data).slice(0, 500),
+          );
+        }
+      }
+    } else {
+      // Use OpenAI-compatible chat completions API
+      const response = await fetch(
+        buildChatCompletionsUrl(providerConfig.baseUrl),
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${providerConfig.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: providerConfig.model,
+            messages: [
+              {
+                role: "system",
+                content: "You are a professional reply drafting assistant.",
+              },
+              { role: "user", content: finalPrompt },
+            ],
+            temperature: 0.7,
+          }),
+          signal: AbortSignal.timeout(120_000),
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          `OpenAI-compatible API error ${response.status}: ${errorText.slice(0, 400)}`,
+        );
+      }
+
+      const data = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+        error?: { message?: string };
+      };
+
+      if (data.error) {
+        throw new Error(`OpenAI-compatible API error: ${data.error.message}`);
+      }
+
+      text = data.choices?.[0]?.message?.content ?? "";
     }
 
-    const text = responseData.choices?.[0]?.message?.content ?? "";
-    console.log("[GenerateReply API] Raw AI response:", responseData);
+    console.log("[GenerateReply API] Raw AI response:", text.slice(0, 500));
 
     // Parse JSON response with multiple repair strategies
     const parseResult = tryParseJson(text);
