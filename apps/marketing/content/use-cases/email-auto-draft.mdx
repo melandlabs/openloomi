@@ -1,0 +1,72 @@
+---
+title: "Email Auto-Fetch + Context-Aware Draft Generation"
+description: "Automatically fetch emails and generate accurate, context-aware reply drafts — no more wasting time re-reading threads"
+icon: "FaEnvelopeOpenText"
+---
+
+# Email Auto-Fetch + Context-Aware Draft Generation
+
+## Never Re-Read a Thread Just to Draft a Reply Again
+
+Professionals spend an average of 2–3 hours per day on email — much of it re-reading ongoing conversations to recall context before typing a response. Most AI email tools either auto-reply blindly (low accuracy) or require you to manually paste context every time (high friction). OpenLoomi solves both: it auto-fetches your emails, understands the full conversation context, and generates accurate draft replies that you approve in seconds.
+
+**What it does:**
+
+| Step           | Action                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| 📥 Auto-Fetch  | Pull new emails from your Gmail or email account at a set schedule                             |
+| 🧠 Context Map | Analyze the full conversation thread — identify topics, decisions, and pending items           |
+| ✍️ Draft       | Generate a context-aware reply draft tailored to the conversation and your communication style |
+| ✅ One-Click   | Review and send, or edit before sending                                                        |
+
+---
+
+## The Setup
+
+### Connect Your Email
+
+Use the Gmail connector (or any email connector) to authorize OpenLoomi to read your inbox. The connector runs on your behalf — no forwarding, no copies stored outside your control.
+
+![OpenLoomi Gmail Connector](/img/use-cases/gmail-connector.png)
+
+## The Operation
+
+### Every 30 Minutes: New Emails Land and Coming into Memory
+
+OpenLoomi checks your inbox, reads new messages, and identifies threads where a reply is expected or useful — not every email gets a draft, only those that warrant a response based on your instructions.
+
+![OpenLoomi Insight](/img/use-cases/insight.png)
+
+---
+
+## Reviewing Daily Summaries
+
+In the **Insight** configuration page, you can view a daily email summary and click to preview any draft you've generated — giving you a clear picture of how much time you're saving.
+
+---
+
+## What Changed
+
+| Aspect            | Before                                   | After                                       |
+| ----------------- | ---------------------------------------- | ------------------------------------------- |
+| Email review time | 10–15 min/thread to recall context       | 30 seconds to review AI draft               |
+| Draft accuracy    | Generic auto-replies miss context        | Thread-aware drafts with 80%+ accuracy      |
+| Token usage       | Full thread pasted every time (wasteful) | Compact context summary (~60% fewer tokens) |
+| Setup friction    | Manual copy-paste every time             | One-time setup, fully automated             |
+| Control           | Full auto-send (risky) or manual only    | Human-in-the-loop approval every time       |
+
+---
+
+## Why This Works
+
+**🧠 Context, Not Just Content**
+
+Most AI email tools dump the entire email thread into the model — expensive and often counterproductive. OpenLoomi builds a compact context map first: what was decided, what's still open, what the sender actually needs. The draft is generated from that map, not raw text.
+
+**⚡ Token Efficiency = Speed + Accuracy**
+
+By condensing threads into structured context summaries before drafting, OpenLoomi uses roughly 40–60% fewer tokens than naive approaches. Less noise means faster generation and higher accuracy — drafts land closer to what you'd actually write.
+
+**✅ Human in the Loop, Every Time**
+
+Auto-send email AI tools are a liability. OpenLoomi generates drafts you own — review in seconds, send with confidence. You set the bar, not the algorithm.
