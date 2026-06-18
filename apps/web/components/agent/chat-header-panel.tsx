@@ -208,13 +208,6 @@ export function ChatHeaderPanel({
    * Handle new chat
    */
   const handleNewChat = () => {
-    if (chatContextOptional) {
-      chatContextOptional.setMessages([]);
-      chatContextOptional.clearFocusedInsights();
-      chatContextOptional.switchChatId(null);
-      setTimeout(scrollToRight, 150);
-      return;
-    }
     if (onChatIdChange) {
       onChatIdChange(null);
       setTimeout(scrollToRight, 150);
