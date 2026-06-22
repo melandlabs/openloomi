@@ -4,10 +4,19 @@ version = "0.6.1"
 description = "openloomi AI Assistant - Your Personal Productivity Tool"
 authors = ["OpenLoomi Team"]
 edition = "2021"
+autobins = false
 
 [lib]
 name = "openloomi_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "openloomi"
+path = "src/main.rs"
+
+[[bin]]
+name = "alloomi"
+path = "src/bin/openloomi.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

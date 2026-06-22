@@ -480,7 +480,7 @@ async fn run_update_preflight(
 
 async fn check_network_connectivity() -> PreflightCheck {
     let client = match reqwest::Client::builder()
-        .user_agent("alloomi-cli")
+        .user_agent("openloomi-cli")
         .timeout(std::time::Duration::from_secs(10))
         .build()
     {
@@ -591,7 +591,7 @@ async fn check_download_url(download_url: &str) -> (PreflightCheck, Option<u64>)
     }
 
     let client = match reqwest::Client::builder()
-        .user_agent("alloomi-cli")
+        .user_agent("openloomi-cli")
         .timeout(std::time::Duration::from_secs(15))
         .build()
     {
@@ -664,7 +664,7 @@ fn check_directory_writable(name: &'static str, dir: &Path) -> PreflightCheck {
     }
 
     let probe_path = dir.join(format!(
-        ".alloomi-preflight-{}-{}",
+        ".openloomi-preflight-{}-{}",
         std::process::id(),
         name
     ));
@@ -727,13 +727,13 @@ fn required_update_space_bytes(download_size: Option<u64>) -> u64 {
 #[cfg(target_os = "windows")]
 fn available_space_bytes(dir: &Path) -> Result<u64, String> {
     let script = r#"
-$path = [System.IO.Path]::GetFullPath($env:ALLOOMI_DISK_PATH)
+$path = [System.IO.Path]::GetFullPath($env:OPENLOOMI_DISK_PATH)
 $root = [System.IO.Path]::GetPathRoot($path)
 ([System.IO.DriveInfo]::new($root)).AvailableFreeSpace
 "#;
     let output = Command::new("powershell")
         .args(["-NoProfile", "-Command", script])
-        .env("ALLOOMI_DISK_PATH", dir)
+        .env("OPENLOOMI_DISK_PATH", dir)
         .output()
         .map_err(|error| format!("failed to query disk space: {}", error))?;
     if !output.status.success() {
