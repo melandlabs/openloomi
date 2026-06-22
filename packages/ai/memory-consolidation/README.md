@@ -29,6 +29,12 @@ semantic consolidation, `contestedClusters` show conflicting or changing memory
 patterns, and `decayedRecords` are signals to avoid promotion rather than direct
 delete instructions.
 
+## Roadmap
+
+See [memory consolidation roadmap](./docs/roadmap.md) for the staged plan
+from offline diagnostics to semantic memory candidates, dry-run runtime
+integration, controlled persistence, retrieval integration, and temporal memory.
+
 ## Scope
 
 - Build evidence clusters from `MemoryEvidenceRecord[]` or structurally compatible memory records.
