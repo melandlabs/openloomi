@@ -3,6 +3,7 @@
 // Note: main.rs is the binary entry point, this is for library-only exports
 
 pub mod audio_capture;
+pub mod cli;
 pub mod constants;
 pub mod js_scheduler;
 pub mod menu;
