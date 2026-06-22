@@ -55,6 +55,11 @@ export const FILE_TYPE_CONFIG = {
   txt: { mime: "text/plain", extensions: [".txt"], label: "TXT" },
   md: { mime: "text/markdown", extensions: [".md"], label: "Markdown" },
   csv: { mime: "text/csv", extensions: [".csv"], label: "CSV" },
+  tsv: {
+    mime: "text/tab-separated-values",
+    extensions: [".tsv"],
+    label: "TSV",
+  },
   json: { mime: "application/json", extensions: [".json"], label: "JSON" },
   html: { mime: "text/html", extensions: [".html", ".htm"], label: "HTML" },
   // Apple office suite formats
@@ -83,6 +88,11 @@ export const FILE_TYPE_CONFIG = {
   },
   tar: { mime: "application/x-tar", extensions: [".tar"], label: "TAR" },
   gz: { mime: "application/gzip", extensions: [".gz"], label: "GZIP" },
+  tgz: {
+    mime: "application/gzip",
+    extensions: [".tgz"],
+    label: "TGZ",
+  },
   bz2: {
     mime: "application/x-bzip2",
     extensions: [".bz2"],
@@ -149,6 +159,7 @@ export const SUPPORTED_ATTACHMENT_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "text/plain",
   "text/markdown",
+  "text/tab-separated-values",
   "text/html",
   // Apple office suite formats (new version)
   "application/vnd.apple.pages",

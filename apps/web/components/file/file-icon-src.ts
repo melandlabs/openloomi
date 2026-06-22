@@ -88,6 +88,7 @@ export function getLibraryFileIconSrc(extRaw: string): string {
     markdown: "txt",
     log: "txt",
     rtf: "txt",
+    tsv: "csv",
     ods: "spreadsheets",
     odp: "pptx",
     // Apple iWork suite - reuse the closest existing icon so users can tell
@@ -204,6 +205,7 @@ export function getUploadFileIconSrc(extRaw: string): string {
     "text/plain": "txt",
     "text/markdown": "txt",
     "text/csv": "excel",
+    "text/tab-separated-values": "excel",
     "text/html": "html",
     "application/json": "file",
     "application/zip": "zip",
@@ -255,6 +257,7 @@ export function getUploadFileIconSrc(extRaw: string): string {
     xls: "excel",
     xlsx: "excel",
     csv: "excel",
+    tsv: "excel",
     ods: "excel",
     numbers: "excel",
     ppt: "ppt",
@@ -284,6 +287,7 @@ export function getUploadFileIconSrc(extRaw: string): string {
     "7z": "zip",
     tar: "zip",
     gz: "zip",
+    tgz: "zip",
     bz2: "zip",
     json: "file",
   };
