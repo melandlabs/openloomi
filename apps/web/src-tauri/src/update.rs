@@ -87,7 +87,7 @@ fn is_newer_version(latest: &str, current: &str) -> bool {
 }
 
 /// Get download filename for the current platform/arch
-fn get_platform_download_filename(version: &str) -> Option<String> {
+pub(crate) fn get_platform_download_filename(version: &str) -> Option<String> {
     let v = version.strip_prefix('v').unwrap_or(version);
 
     #[cfg(target_os = "macos")]

@@ -7,7 +7,10 @@
 
 use std::io::Read;
 use std::path::Path;
+use std::process::Command;
 use std::process::ExitCode;
+
+const DEFAULT_UPDATE_SPACE_BYTES: u64 = 512 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CliCommand {
@@ -326,11 +329,11 @@ fn resolve_one_shot_prompt(options: &OneShotArgs) -> Result<String, CliError> {
 }
 
 async fn run_update_check(json: bool) -> ExitCode {
-    let preflight = run_update_preflight();
-    let preflight_ok = preflight.iter().all(|check| check.ok);
-
     match crate::update::do_check_for_update().await {
         Ok(result) => {
+            let preflight = run_update_preflight(Some(&result)).await;
+            let preflight_ok = preflight.iter().all(|check| check.ok);
+
             if json {
                 print_json(&UpdateCheckJsonOutput {
                     ok: preflight_ok,
@@ -370,6 +373,8 @@ async fn run_update_check(json: bool) -> ExitCode {
             }
         }
         Err(error) => {
+            let preflight = run_update_preflight(None).await;
+
             if json {
                 print_json(&UpdateCheckJsonOutput {
                     ok: false,
@@ -395,7 +400,9 @@ async fn run_update_check(json: bool) -> ExitCode {
     }
 }
 
-fn run_update_preflight() -> Vec<PreflightCheck> {
+async fn run_update_preflight(
+    update_result: Option<&crate::update::UpdateCheckResult>,
+) -> Vec<PreflightCheck> {
     let mut checks = Vec::new();
 
     checks.push(match std::env::current_exe() {
@@ -418,11 +425,233 @@ fn run_update_preflight() -> Vec<PreflightCheck> {
 
     let data_dir = crate::storage::get_data_dir();
     checks.push(check_directory_writable("data_dir_writable", &data_dir));
+    checks.push(check_directory_writable(
+        "backup_dir_writable",
+        &data_dir.join("backups").join("updates"),
+    ));
 
     let temp_dir = std::env::temp_dir();
     checks.push(check_directory_writable("temp_dir_writable", &temp_dir));
 
+    checks.push(check_network_connectivity().await);
+
+    let mut download_size = update_result.and_then(|result| {
+        if result.file_size > 0 {
+            Some(result.file_size)
+        } else {
+            None
+        }
+    });
+
+    match update_result {
+        Some(result) => {
+            checks.push(check_platform_asset(result));
+            if result.has_update {
+                let (download_url_check, measured_download_size) =
+                    check_download_url(&result.download_url).await;
+                download_size = measured_download_size.or(download_size);
+                checks.push(download_url_check);
+            } else {
+                checks.push(PreflightCheck {
+                    name: "download_url",
+                    ok: true,
+                    detail: "skipped; no newer version is available".to_string(),
+                });
+            }
+        }
+        None => {
+            checks.push(PreflightCheck {
+                name: "platform_asset",
+                ok: false,
+                detail: "update metadata unavailable; cannot resolve platform asset".to_string(),
+            });
+            checks.push(PreflightCheck {
+                name: "download_url",
+                ok: false,
+                detail: "update metadata unavailable; cannot validate download URL".to_string(),
+            });
+        }
+    }
+
+    checks.push(check_disk_space(&temp_dir, download_size));
+
     checks
+}
+
+async fn check_network_connectivity() -> PreflightCheck {
+    let client = match reqwest::Client::builder()
+        .user_agent("alloomi-cli")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            return PreflightCheck {
+                name: "network",
+                ok: false,
+                detail: format!("failed to create HTTP client: {}", error),
+            };
+        }
+    };
+
+    let r2_url = "https://pub-7f8ad94cb1444cbebae6bfd55ec52f5d.r2.dev/latest.json";
+    match client.get(r2_url).send().await {
+        Ok(response) if response.status().is_success() => {
+            return PreflightCheck {
+                name: "network",
+                ok: true,
+                detail: "R2 latest.json reachable".to_string(),
+            };
+        }
+        Ok(response) => {
+            let r2_error = format!("R2 returned HTTP {}", response.status());
+            check_github_network_fallback(&client, r2_error).await
+        }
+        Err(error) => check_github_network_fallback(&client, format!("R2 failed: {}", error)).await,
+    }
+}
+
+async fn check_github_network_fallback(
+    client: &reqwest::Client,
+    r2_error: String,
+) -> PreflightCheck {
+    let mut request = client
+        .get("https://api.github.com/repos/melandlabs/release/tags")
+        .header("Accept", "application/vnd.github+json");
+    if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+        if !token.is_empty() {
+            request = request.header("Authorization", format!("Bearer {}", token));
+        }
+    }
+
+    match request.send().await {
+        Ok(response) if response.status().is_success() => PreflightCheck {
+            name: "network",
+            ok: true,
+            detail: format!("GitHub tags reachable; {}", r2_error),
+        },
+        Ok(response) => PreflightCheck {
+            name: "network",
+            ok: false,
+            detail: format!("{}; GitHub returned HTTP {}", r2_error, response.status()),
+        },
+        Err(error) => PreflightCheck {
+            name: "network",
+            ok: false,
+            detail: format!("{}; GitHub failed: {}", r2_error, error),
+        },
+    }
+}
+
+fn check_platform_asset(result: &crate::update::UpdateCheckResult) -> PreflightCheck {
+    let latest_tag = format!("v{}", result.latest_version);
+    match crate::update::get_platform_download_filename(&latest_tag) {
+        Some(filename) if result.download_url.contains(&filename) => PreflightCheck {
+            name: "platform_asset",
+            ok: true,
+            detail: filename,
+        },
+        Some(filename) if result.download_url.is_empty() => PreflightCheck {
+            name: "platform_asset",
+            ok: false,
+            detail: format!(
+                "expected {}, but update check returned no download URL",
+                filename
+            ),
+        },
+        Some(filename) => PreflightCheck {
+            name: "platform_asset",
+            ok: false,
+            detail: format!(
+                "expected asset {}, but download URL was {}",
+                filename, result.download_url
+            ),
+        },
+        None => PreflightCheck {
+            name: "platform_asset",
+            ok: false,
+            detail: format!(
+                "unsupported platform or architecture for {}",
+                result.latest_version
+            ),
+        },
+    }
+}
+
+async fn check_download_url(download_url: &str) -> (PreflightCheck, Option<u64>) {
+    if download_url.trim().is_empty() {
+        return (
+            PreflightCheck {
+                name: "download_url",
+                ok: false,
+                detail: "download URL is empty".to_string(),
+            },
+            None,
+        );
+    }
+
+    let client = match reqwest::Client::builder()
+        .user_agent("alloomi-cli")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            return (
+                PreflightCheck {
+                    name: "download_url",
+                    ok: false,
+                    detail: format!("failed to create HTTP client: {}", error),
+                },
+                None,
+            );
+        }
+    };
+
+    let mut request = client.head(download_url);
+    if download_url.contains("github.com") {
+        request = request.header("Accept", "application/octet-stream");
+        if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+            if !token.is_empty() {
+                request = request.header("Authorization", format!("Bearer {}", token));
+            }
+        }
+    }
+
+    match request.send().await {
+        Ok(response) if response.status().is_success() => {
+            let size = response.content_length();
+            (
+                PreflightCheck {
+                    name: "download_url",
+                    ok: true,
+                    detail: match size {
+                        Some(size) => {
+                            format!("{} reachable ({})", download_url, format_bytes(size))
+                        }
+                        None => format!("{} reachable (size unknown)", download_url),
+                    },
+                },
+                size,
+            )
+        }
+        Ok(response) => (
+            PreflightCheck {
+                name: "download_url",
+                ok: false,
+                detail: format!("{} returned HTTP {}", download_url, response.status()),
+            },
+            None,
+        ),
+        Err(error) => (
+            PreflightCheck {
+                name: "download_url",
+                ok: false,
+                detail: format!("{} failed: {}", download_url, error),
+            },
+            None,
+        ),
+    }
 }
 
 fn check_directory_writable(name: &'static str, dir: &Path) -> PreflightCheck {
@@ -454,6 +683,123 @@ fn check_directory_writable(name: &'static str, dir: &Path) -> PreflightCheck {
                 detail: format!("{} is not writable: {}", dir.display(), error),
             }
         }
+    }
+}
+
+fn check_disk_space(dir: &Path, download_size: Option<u64>) -> PreflightCheck {
+    let required = required_update_space_bytes(download_size);
+    match available_space_bytes(dir) {
+        Ok(available) if available >= required => PreflightCheck {
+            name: "disk_space",
+            ok: true,
+            detail: format!(
+                "{} available in {}; requires at least {}",
+                format_bytes(available),
+                dir.display(),
+                format_bytes(required)
+            ),
+        },
+        Ok(available) => PreflightCheck {
+            name: "disk_space",
+            ok: false,
+            detail: format!(
+                "{} available in {}; requires at least {}",
+                format_bytes(available),
+                dir.display(),
+                format_bytes(required)
+            ),
+        },
+        Err(error) => PreflightCheck {
+            name: "disk_space",
+            ok: false,
+            detail: error,
+        },
+    }
+}
+
+fn required_update_space_bytes(download_size: Option<u64>) -> u64 {
+    download_size
+        .unwrap_or(DEFAULT_UPDATE_SPACE_BYTES)
+        .saturating_mul(2)
+        .max(DEFAULT_UPDATE_SPACE_BYTES)
+}
+
+#[cfg(target_os = "windows")]
+fn available_space_bytes(dir: &Path) -> Result<u64, String> {
+    let script = r#"
+$path = [System.IO.Path]::GetFullPath($env:ALLOOMI_DISK_PATH)
+$root = [System.IO.Path]::GetPathRoot($path)
+([System.IO.DriveInfo]::new($root)).AvailableFreeSpace
+"#;
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-Command", script])
+        .env("ALLOOMI_DISK_PATH", dir)
+        .output()
+        .map_err(|error| format!("failed to query disk space: {}", error))?;
+    if !output.status.success() {
+        return Err(format!(
+            "failed to query disk space: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    parse_u64_output(&output.stdout, "disk space")
+}
+
+#[cfg(unix)]
+fn available_space_bytes(dir: &Path) -> Result<u64, String> {
+    let output = Command::new("df")
+        .args(["-Pk"])
+        .arg(dir)
+        .output()
+        .map_err(|error| format!("failed to query disk space: {}", error))?;
+    if !output.status.success() {
+        return Err(format!(
+            "failed to query disk space: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout
+        .lines()
+        .nth(1)
+        .ok_or_else(|| "failed to parse disk space: missing df output".to_string())?;
+    let available_kb = line
+        .split_whitespace()
+        .nth(3)
+        .ok_or_else(|| "failed to parse disk space: missing available column".to_string())?
+        .parse::<u64>()
+        .map_err(|error| format!("failed to parse disk space: {}", error))?;
+    Ok(available_kb.saturating_mul(1024))
+}
+
+#[cfg(not(any(unix, target_os = "windows")))]
+fn available_space_bytes(_dir: &Path) -> Result<u64, String> {
+    Err("disk space check is not supported on this platform".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn parse_u64_output(output: &[u8], label: &str) -> Result<u64, String> {
+    String::from_utf8_lossy(output)
+        .trim()
+        .parse::<u64>()
+        .map_err(|error| format!("failed to parse {}: {}", label, error))
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const KIB: f64 = 1024.0;
+    const MIB: f64 = 1024.0 * 1024.0;
+    const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+
+    let bytes = bytes as f64;
+    if bytes >= GIB {
+        format!("{:.1} GiB", bytes / GIB)
+    } else if bytes >= MIB {
+        format!("{:.1} MiB", bytes / MIB)
+    } else if bytes >= KIB {
+        format!("{:.1} KiB", bytes / KIB)
+    } else {
+        format!("{} B", bytes as u64)
     }
 }
 
@@ -553,5 +899,24 @@ mod tests {
     #[test]
     fn rejects_update_without_check() {
         assert!(parse_args(&args(&["update"])).is_err());
+    }
+
+    #[test]
+    fn calculates_required_update_space() {
+        assert_eq!(
+            required_update_space_bytes(Some(10 * 1024 * 1024)),
+            DEFAULT_UPDATE_SPACE_BYTES
+        );
+        assert_eq!(
+            required_update_space_bytes(Some(600 * 1024 * 1024)),
+            1200 * 1024 * 1024
+        );
+    }
+
+    #[test]
+    fn formats_bytes_for_preflight_details() {
+        assert_eq!(format_bytes(42), "42 B");
+        assert_eq!(format_bytes(1024), "1.0 KiB");
+        assert_eq!(format_bytes(1024 * 1024), "1.0 MiB");
     }
 }
