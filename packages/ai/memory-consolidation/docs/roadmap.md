@@ -112,9 +112,13 @@ interface SemanticMemoryDraftSummarizer {
 Possible output:
 
 ```ts
-{
-  (type, content, sourceRecordIds, confidence, metadata);
-}
+const draft: SemanticMemoryDraft = {
+  type,
+  content,
+  sourceRecordIds,
+  confidence,
+  metadata,
+};
 ```
 
 Boundaries:

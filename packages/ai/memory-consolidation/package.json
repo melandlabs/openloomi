@@ -6,9 +6,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./adapter": "./src/adapter.ts",
+    "./evaluation": "./src/evaluation.ts",
     "./evidence-cluster": "./src/evidence-cluster.ts",
+    "./persistence": "./src/persistence.ts",
     "./pipeline": "./src/pipeline.ts",
-    "./relation-graph": "./src/relation-graph.ts"
+    "./relation-graph": "./src/relation-graph.ts",
+    "./runtime": "./src/runtime.ts",
+    "./semantic-draft": "./src/semantic-draft.ts"
   },
   "devDependencies": {
     "@openloomi/config": "workspace:*",

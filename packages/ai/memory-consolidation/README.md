@@ -128,6 +128,30 @@ clusters, decayed records, skipped records, and per-record signals. It is a view
 over `MemoryRelationPipelineDiagnostics`; it does not rerun the pipeline or make
 new consolidation decisions.
 
+`buildSemanticMemoryDraftCandidates` can then turn preserved clusters from the
+compact report into semantic draft candidates for a later summarizer boundary.
+It keeps the package observational: it does not generate summary text, call an
+LLM, write storage, or change retrieval behavior.
+
+`summarizeSemanticMemoryDraftCandidate` defines the next boundary by delegating a
+single draft candidate and its source records to a caller-provided summarizer.
+The package still does not provide a concrete LLM summarizer or persist the
+result.
+
+`calculateMemoryConsolidationEvalMetrics` provides a small scenario metrics
+helper for comparing expected preservation, temporary/noise leakage, contested
+cluster coverage, and decay precision proxies in focused eval suites.
+
+`runMemoryConsolidationDiagnostics` is an opt-in dry-run runner. Callers provide
+a record reader, and the runner returns diagnostics, a compact report, and draft
+candidates without writing semantic memory, archiving source records, or changing
+retrieval behavior.
+
+`persistSemanticMemoryDrafts` defines a controlled persistence boundary for
+semantic drafts. It only writes through a caller-provided draft store when
+explicitly enabled with `dryRun: false`; otherwise it returns the planned draft
+artifacts for review without changing storage or retrieval behavior.
+
 Callers can keep the full diagnostics for debugging and derive the compact
 report for review or logging:
 

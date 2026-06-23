@@ -3,13 +3,20 @@ import {
   adaptMemoryRecordsForConsolidation,
   analyzeMemoryEvidenceClusters,
   assignMemoryRelationGraph,
+  calculateMemoryConsolidationEvalMetrics,
   buildMemoryConsolidationPlan,
   buildMemoryConsolidationDiagnosticsReport,
   buildMemoryEvidenceClusters,
   buildMemoryRelationCandidates,
   buildMemoryRelationPipeline,
   buildMemoryRelationPipelineDiagnostics,
+  buildSemanticMemoryDraftCandidates,
   deriveMemoryRelationGraphLifecycle,
+  persistSemanticMemoryDrafts,
+  runMemoryConsolidationDiagnostics,
+  summarizeSemanticMemoryDraftCandidate,
+  type SemanticMemoryDraftStore,
+  type SemanticMemoryDraftSummarizer,
 } from "@openloomi/memory-consolidation";
 import {
   DefaultMemoryRecordScorer,
@@ -620,7 +627,7 @@ type AdapterSourceRecord = {
   reads?: number;
   fields?: {
     preference?: string;
-    value?: "zh" | "en";
+    value?: string;
   };
   meta?: {
     scope?: "temporary" | "long-term";
@@ -631,9 +638,10 @@ function adapterSourceRecord(
   uid: string,
   body: string,
   day: number,
-  value: "zh" | "en",
+  value: string,
   options: {
     reads?: number;
+    preference?: string;
     scope?: "temporary" | "long-term";
   } = {},
 ): AdapterSourceRecord {
@@ -644,13 +652,29 @@ function adapterSourceRecord(
     body,
     reads: options.reads,
     fields: {
-      preference: "answer-language",
+      preference: options.preference ?? "answer-language",
       value,
     },
     meta: {
       scope: options.scope ?? "long-term",
     },
   };
+}
+
+type AdapterSourceRecordSpec = [
+  uid: string,
+  body: string,
+  day: number,
+  value: string,
+  options?: Parameters<typeof adapterSourceRecord>[4],
+];
+
+function adapterSourceRecords(
+  specs: AdapterSourceRecordSpec[],
+): AdapterSourceRecord[] {
+  return specs.map(([uid, body, day, value, options]) =>
+    adapterSourceRecord(uid, body, day, value, options),
+  );
 }
 
 const adapterSelectors = {
@@ -730,6 +754,210 @@ function buildAdapterDiagnosticsFixture() {
   return buildMemoryRelationPipelineDiagnostics(buildAdapterDiagnosticsInput());
 }
 
+function buildAdapterDiagnosticsForRecords(records: AdapterSourceRecord[]) {
+  return buildMemoryRelationPipelineDiagnostics({
+    ...buildAdapterDiagnosticsInput(),
+    records,
+  });
+}
+
+function clusterKeyForRecord(
+  diagnostics: ReturnType<typeof buildAdapterDiagnosticsFixture>,
+  recordId: string,
+): string {
+  const clusterKey =
+    diagnostics.pipeline.assignment.recordClusterKeys[recordId];
+
+  if (!clusterKey) {
+    throw new Error(`Missing cluster key for ${recordId}`);
+  }
+
+  return clusterKey;
+}
+
+function uniqueClusterKeys(keys: Array<string | undefined>): string[] {
+  return [...new Set(keys.filter((key): key is string => Boolean(key)))].sort();
+}
+
+function reportClusterKeys(
+  diagnostics: ReturnType<typeof buildAdapterDiagnosticsFixture>,
+) {
+  const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+
+  return {
+    report,
+    preservedClusterKeys: report.preservedClusters
+      .map((cluster) => cluster.clusterKey)
+      .sort(),
+    contestedClusterKeys: report.contestedClusters
+      .map((cluster) => cluster.clusterKey)
+      .sort(),
+    decayedClusterKeys: uniqueClusterKeys(
+      report.decayedRecords.map((record) => record.clusterKey),
+    ),
+  };
+}
+
+function buildExpandedEvalDiagnosticsFixtures() {
+  return {
+    projectDiagnostics: buildAdapterDiagnosticsForRecords(
+      adapterSourceRecords([
+        [
+          "project-ready-a",
+          "Project state is ready for release.",
+          92,
+          "ready",
+          { preference: "project-state", reads: 1 },
+        ],
+        [
+          "project-ready-b",
+          "The release checklist is ready.",
+          105,
+          "ready",
+          { preference: "project-state", reads: 1 },
+        ],
+        [
+          "project-ready-c",
+          "Current project status remains ready.",
+          118,
+          "ready",
+          { preference: "project-state", reads: 1 },
+        ],
+        [
+          "project-blocked-old",
+          "The project was blocked during setup.",
+          12,
+          "blocked",
+          { preference: "project-state" },
+        ],
+      ]),
+    ),
+    conflictDiagnostics: buildAdapterDiagnosticsForRecords(
+      adapterSourceRecords([
+        [
+          "conflict-oauth-a",
+          "Use OAuth for API authentication.",
+          95,
+          "oauth",
+          { preference: "auth-decision", reads: 1 },
+        ],
+        [
+          "conflict-oauth-b",
+          "OAuth remains the selected auth direction.",
+          106,
+          "oauth",
+          { preference: "auth-decision", reads: 1 },
+        ],
+        [
+          "conflict-oauth-c",
+          "The integration notes mention OAuth.",
+          117,
+          "oauth",
+          { preference: "auth-decision", reads: 1 },
+        ],
+        [
+          "conflict-key-a",
+          "Use API keys for service authentication.",
+          95,
+          "api-key",
+          { preference: "auth-decision", reads: 1 },
+        ],
+        [
+          "conflict-key-b",
+          "API keys remain the selected auth direction.",
+          106,
+          "api-key",
+          { preference: "auth-decision", reads: 1 },
+        ],
+        [
+          "conflict-key-c",
+          "The integration notes mention API keys.",
+          117,
+          "api-key",
+          { preference: "auth-decision", reads: 1 },
+        ],
+      ]),
+    ),
+    staleDiagnostics: buildAdapterDiagnosticsForRecords(
+      adapterSourceRecords([
+        [
+          "stage-active-a",
+          "The current project phase is implementation.",
+          95,
+          "implementation",
+          { preference: "project-phase", reads: 1 },
+        ],
+        [
+          "stage-active-b",
+          "Implementation is the active project phase.",
+          108,
+          "implementation",
+          { preference: "project-phase", reads: 1 },
+        ],
+        [
+          "stage-active-c",
+          "Continue treating implementation as current.",
+          119,
+          "implementation",
+          { preference: "project-phase", reads: 1 },
+        ],
+        [
+          "stage-stale-planning",
+          "The project was in planning.",
+          5,
+          "planning",
+          { preference: "project-phase" },
+        ],
+      ]),
+    ),
+  };
+}
+
+function buildSemanticDraftPersistenceFixture() {
+  const diagnostics = buildAdapterDiagnosticsFixture();
+  const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+  const candidate = buildSemanticMemoryDraftCandidates({
+    report,
+    records: diagnostics.records,
+  })[0];
+
+  if (!candidate) {
+    throw new Error("Expected a semantic draft candidate");
+  }
+
+  return {
+    diagnostics,
+    candidate,
+    item: {
+      candidate,
+      draft: {
+        type: candidate.suggestedType,
+        content: "User prefers Chinese explanations for technical repo work.",
+        sourceRecordIds: [...candidate.sourceRecordIds],
+        confidence: candidate.confidence,
+        metadata: {
+          sourceClusterKey: candidate.sourceClusterKey,
+          competitionKey: candidate.competitionKey,
+        },
+      },
+    },
+  };
+}
+
+function recordingSemanticDraftStore() {
+  const calls: Array<Parameters<SemanticMemoryDraftStore["saveDrafts"]>[0]> =
+    [];
+
+  return {
+    calls,
+    store: {
+      async saveDrafts(input) {
+        calls.push(input);
+      },
+    } satisfies SemanticMemoryDraftStore,
+  };
+}
+
 describe("memory consolidation evaluation scenarios", () => {
   it("keeps expected long-term outcomes backed by repeated evidence", () => {
     for (const scenario of scenarios) {
@@ -774,6 +1002,82 @@ describe("memory consolidation evaluation scenarios", () => {
       clusterNoiseTopRankRate: 0,
       clusterTemporaryOverrideLeakageRate: 0,
       clusterAdaptationAccuracy: 1,
+    });
+  });
+
+  it("reports expanded eval metrics for project state, conflict, and stale memory", () => {
+    const { projectDiagnostics, conflictDiagnostics, staleDiagnostics } =
+      buildExpandedEvalDiagnosticsFixtures();
+    const projectKeys = reportClusterKeys(projectDiagnostics);
+    const conflictKeys = reportClusterKeys(conflictDiagnostics);
+    const staleKeys = reportClusterKeys(staleDiagnostics);
+    const projectReadyKey = clusterKeyForRecord(
+      projectDiagnostics,
+      "project-ready-a",
+    );
+    const projectBlockedKey = clusterKeyForRecord(
+      projectDiagnostics,
+      "project-blocked-old",
+    );
+    const conflictOauthKey = clusterKeyForRecord(
+      conflictDiagnostics,
+      "conflict-oauth-a",
+    );
+    const conflictApiKey = clusterKeyForRecord(
+      conflictDiagnostics,
+      "conflict-key-a",
+    );
+    const staleActiveKey = clusterKeyForRecord(
+      staleDiagnostics,
+      "stage-active-a",
+    );
+    const stalePlanningKey = clusterKeyForRecord(
+      staleDiagnostics,
+      "stage-stale-planning",
+    );
+    const metrics = calculateMemoryConsolidationEvalMetrics([
+      {
+        scenarioId: "project-state-update",
+        metricTags: ["project-state"],
+        expectedPreservedClusterKey: projectReadyKey,
+        preservedClusterKeys: projectKeys.preservedClusterKeys,
+        decayedClusterKeys: projectKeys.decayedClusterKeys,
+        expectedDecayedClusterKeys: [projectBlockedKey],
+      },
+      {
+        scenarioId: "conflicting-auth-facts",
+        metricTags: ["conflict"],
+        preservedClusterKeys: conflictKeys.preservedClusterKeys,
+        contestedClusterKeys: conflictKeys.contestedClusterKeys,
+        expectedContestedClusterKeys: [conflictOauthKey, conflictApiKey],
+      },
+      {
+        scenarioId: "stale-project-phase",
+        metricTags: ["stale"],
+        expectedPreservedClusterKey: staleActiveKey,
+        preservedClusterKeys: staleKeys.preservedClusterKeys,
+        decayedClusterKeys: staleKeys.decayedClusterKeys,
+        expectedDecayedClusterKeys: [stalePlanningKey],
+      },
+    ]);
+
+    expect(projectKeys.preservedClusterKeys).toContain(projectReadyKey);
+    expect(projectKeys.decayedClusterKeys).toContain(projectBlockedKey);
+    expect(conflictKeys.preservedClusterKeys).toEqual([]);
+    expect(conflictKeys.contestedClusterKeys).toEqual(
+      expect.arrayContaining([conflictOauthKey, conflictApiKey]),
+    );
+    expect(staleKeys.preservedClusterKeys).toContain(staleActiveKey);
+    expect(staleKeys.decayedClusterKeys).toContain(stalePlanningKey);
+    expect(metrics).toEqual({
+      scenarioCount: 3,
+      expectedCandidateAccuracy: 1,
+      noisePromotionRate: 0,
+      temporaryOverrideLeakageRate: 0,
+      adaptationAccuracy: 0,
+      projectStateAccuracy: 1,
+      contestedClusterCoverage: 1,
+      decayPrecisionProxy: 1,
     });
   });
 
@@ -1305,6 +1609,304 @@ describe("memory consolidation evaluation scenarios", () => {
         selectedForSummary: false,
       }),
     );
+  });
+
+  it("builds semantic draft candidates from preserved diagnostics clusters", () => {
+    const diagnostics = buildAdapterDiagnosticsFixture();
+    const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+    const zhClusterKey =
+      diagnostics.pipeline.assignment.recordClusterKeys["adapter-zh-a"];
+    const tempClusterKey =
+      diagnostics.pipeline.assignment.recordClusterKeys["adapter-temp-en"];
+    const candidates = buildSemanticMemoryDraftCandidates({
+      report,
+      records: diagnostics.records,
+    });
+
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        draftId: `semantic-draft:${encodeURIComponent(zhClusterKey)}`,
+        sourceClusterKey: zhClusterKey,
+        competitionKey:
+          diagnostics.pipeline.assignment.clusterCompetitionKeys[zhClusterKey],
+        sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        suggestedType: "preference",
+        confidence: report.preservedClusters[0]?.score,
+        evidenceCount: 3,
+        score: report.preservedClusters[0]?.score,
+        reasonCodes: ["strong_repeated_evidence", "wins_competition"],
+        needsSummary: true,
+        summaryPriority: report.preservedClusters[0]?.summaryPriority,
+      }),
+    ]);
+    expect(candidates[0]?.sourceRecordIds).not.toContain("adapter-temp-en");
+    expect(candidates[0]?.sourceClusterKey).not.toBe(tempClusterKey);
+  });
+
+  it("keeps semantic draft candidates limited to preserved clusters", () => {
+    const diagnostics = buildAdapterDiagnosticsFixture();
+    const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+
+    expect(
+      buildSemanticMemoryDraftCandidates({
+        report: {
+          ...report,
+          preservedClusters: [],
+        },
+        records: diagnostics.records,
+      }),
+    ).toEqual([]);
+  });
+
+  it("summarizes semantic draft candidates through a caller-provided summarizer", async () => {
+    const diagnostics = buildAdapterDiagnosticsFixture();
+    const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+    const candidate = buildSemanticMemoryDraftCandidates({
+      report,
+      records: diagnostics.records,
+    })[0];
+    const receivedRecordIds: string[] = [];
+    const summarizer: SemanticMemoryDraftSummarizer = {
+      async summarizeDraft(candidate, records, context) {
+        receivedRecordIds.push(...records.map((record) => record.id));
+
+        return {
+          type: candidate.suggestedType,
+          content: records
+            .map((record) => record.text)
+            .filter((text): text is string => Boolean(text))
+            .join("\n"),
+          sourceRecordIds: [...candidate.sourceRecordIds],
+          confidence: candidate.confidence,
+          metadata: {
+            sourceClusterKey: candidate.sourceClusterKey,
+            competitionKey: candidate.competitionKey,
+            sourceRecordCount: records.length,
+            now: context?.now,
+          },
+        };
+      },
+    };
+
+    if (!candidate) {
+      throw new Error("Expected a semantic draft candidate");
+    }
+
+    const draft = await summarizeSemanticMemoryDraftCandidate({
+      candidate,
+      records: diagnostics.records,
+      summarizer,
+      context: {
+        now: NOW,
+      },
+    });
+
+    expect(receivedRecordIds).toEqual([
+      "adapter-zh-a",
+      "adapter-zh-b",
+      "adapter-zh-c",
+    ]);
+    expect(receivedRecordIds).not.toContain("adapter-temp-en");
+    expect(draft).toEqual(
+      expect.objectContaining({
+        type: "preference",
+        sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        confidence: candidate.confidence,
+        metadata: expect.objectContaining({
+          sourceClusterKey: candidate.sourceClusterKey,
+          competitionKey: candidate.competitionKey,
+          sourceRecordCount: 3,
+          now: NOW,
+        }),
+      }),
+    );
+  });
+
+  it("does not persist semantic drafts when persistence is disabled", async () => {
+    const { item } = buildSemanticDraftPersistenceFixture();
+    const result = await persistSemanticMemoryDrafts({
+      userId: "adapter-user",
+      now: NOW,
+      enabled: false,
+      dryRun: false,
+      items: [item],
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "disabled",
+        userId: "adapter-user",
+        dryRun: false,
+        persistedCount: 0,
+        skippedReason: "persistence_disabled",
+      }),
+    );
+    expect(result.plannedDrafts).toEqual([
+      expect.objectContaining({
+        draftId: item.candidate.draftId,
+        sourceRecordIds: item.candidate.sourceRecordIds,
+        sourceClusterKey: item.candidate.sourceClusterKey,
+        competitionKey: item.candidate.competitionKey,
+        createdAt: NOW,
+      }),
+    ]);
+  });
+
+  it("keeps semantic draft persistence as a dry-run by default", async () => {
+    const { item } = buildSemanticDraftPersistenceFixture();
+    const result = await persistSemanticMemoryDrafts({
+      userId: "adapter-user",
+      now: NOW,
+      enabled: true,
+      items: [item],
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "dry-run",
+        dryRun: true,
+        persistedCount: 0,
+        skippedReason: "dry_run",
+      }),
+    );
+    expect(result.plannedDrafts[0]).toEqual(
+      expect.objectContaining({
+        type: "preference",
+        content: item.draft.content,
+        confidence: item.draft.confidence,
+        evidenceCount: item.candidate.evidenceCount,
+        reasonCodes: item.candidate.reasonCodes,
+      }),
+    );
+  });
+
+  it("requires a caller-provided store for non-dry-run persistence", async () => {
+    const { item } = buildSemanticDraftPersistenceFixture();
+
+    await expect(
+      persistSemanticMemoryDrafts({
+        userId: "adapter-user",
+        now: NOW,
+        enabled: true,
+        dryRun: false,
+        items: [item],
+      }),
+    ).rejects.toThrow("requires a store");
+  });
+
+  it("persists semantic drafts only through a caller-provided store", async () => {
+    const { diagnostics, item } = buildSemanticDraftPersistenceFixture();
+    const originalRecordIds = diagnostics.records.map((record) => record.id);
+    const { calls, store } = recordingSemanticDraftStore();
+    const result = await persistSemanticMemoryDrafts({
+      userId: "adapter-user",
+      now: NOW,
+      enabled: true,
+      dryRun: false,
+      items: [item],
+      store,
+    });
+
+    expect(calls).toEqual([
+      {
+        userId: "adapter-user",
+        now: NOW,
+        dryRun: false,
+        drafts: [
+          expect.objectContaining({
+            draftId: item.candidate.draftId,
+            type: "preference",
+            content: item.draft.content,
+            sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+            metadata: expect.objectContaining({
+              sourceClusterKey: item.candidate.sourceClusterKey,
+              competitionKey: item.candidate.competitionKey,
+            }),
+            sourceClusterKey: item.candidate.sourceClusterKey,
+            competitionKey: item.candidate.competitionKey,
+          }),
+        ],
+      },
+    ]);
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "persisted",
+        dryRun: false,
+        persistedCount: 1,
+      }),
+    );
+    expect(diagnostics.records.map((record) => record.id)).toEqual(
+      originalRecordIds,
+    );
+  });
+
+  it("runs opt-in memory consolidation diagnostics as a dry-run", async () => {
+    const input = buildAdapterDiagnosticsInput();
+    const readerCalls: Array<{
+      userId: string;
+      now: number;
+      limit: number;
+    }> = [];
+    const result = await runMemoryConsolidationDiagnostics({
+      userId: "adapter-user",
+      now: NOW,
+      dryRun: true,
+      limit: 25,
+      reader: {
+        async listCandidateRecords(request) {
+          readerCalls.push(request);
+          return input.records;
+        },
+      },
+      selectors: adapterSelectors,
+      plan: input.plan,
+    });
+
+    expect(readerCalls).toEqual([
+      {
+        userId: "adapter-user",
+        now: NOW,
+        limit: 25,
+      },
+    ]);
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "success",
+        dryRun: true,
+        userId: "adapter-user",
+        scannedRecords: input.records.length,
+      }),
+    );
+    expect(result.report.summary).toEqual(
+      expect.objectContaining({
+        sourceRecordCount: input.records.length,
+        preserveCount: 1,
+        decayCount: 1,
+      }),
+    );
+    expect(result.semanticDraftCandidates).toEqual([
+      expect.objectContaining({
+        suggestedType: "preference",
+        sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        needsSummary: true,
+      }),
+    ]);
+  });
+
+  it("rejects non-dry-run memory consolidation diagnostics", async () => {
+    await expect(
+      runMemoryConsolidationDiagnostics({
+        userId: "adapter-user",
+        now: NOW,
+        dryRun: false,
+        reader: {
+          async listCandidateRecords() {
+            return buildAdapterDiagnosticsInput().records;
+          },
+        },
+        selectors: adapterSelectors,
+      }),
+    ).rejects.toThrow("only supports dryRun");
   });
 
   it("skips incomplete source records before running diagnostics", () => {
