@@ -17,7 +17,20 @@ const mkdir = (p) => {
 };
 
 mkdir(".next/standalone/apps/web");
+mkdir(".next/standalone/apps/web/.next");
+mkdir(".next/standalone/apps/web/public");
+mkdir(".next/standalone/apps/web/lib");
+mkdir(".next/standalone/apps/web/cli-bundle");
 mkdir(".next/standalone/node_modules");
+
+fs.writeFileSync(
+  ".next/standalone/apps/web/server.js",
+  "// Dev placeholder. Next.js serves from source during tauri dev.\n",
+);
+fs.writeFileSync(".next/standalone/apps/web/.next/.placeholder", "");
+fs.writeFileSync(".next/standalone/apps/web/public/.placeholder", "");
+fs.writeFileSync(".next/standalone/apps/web/lib/.placeholder", "");
+fs.writeFileSync(".next/standalone/apps/web/cli-bundle/.placeholder", "");
 
 console.log("Copying native modules for standalone mode...");
 
