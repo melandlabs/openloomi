@@ -5,6 +5,7 @@
  */
 
 import type { NextRequest } from "next/server";
+import type { Session } from "next-auth";
 import { getAgentRegistry } from "@openloomi/ai/agent/registry";
 import { claudePlugin } from "@/lib/ai/extensions";
 
@@ -21,6 +22,7 @@ import type {
 } from "@openloomi/ai/agent/types";
 import type { SandboxConfig } from "@openloomi/ai/agent/sandbox/types";
 import { auth } from "@/app/(auth)/auth";
+import { getAuthUser, type AuthUser } from "@/lib/auth/dual-auth";
 import { promises as fs } from "node:fs";
 import { getUserInsightSettings } from "@/lib/db/queries";
 import path from "node:path";
@@ -39,6 +41,7 @@ interface AgentRequest {
   prompt: string;
   sessionId?: string;
   conversation?: Array<{ role: "user" | "assistant"; content: string }>;
+  platform?: string;
   phase?: "plan" | "execute";
   planId?: string;
   workDir?: string;
@@ -168,6 +171,21 @@ const SSE_HEADERS = {
   Connection: "keep-alive",
   "X-Accel-Buffering": "no",
 };
+
+// Bearer-token callers, such as the one-shot CLI, do not have a full NextAuth
+// session object. Business tools still expect session.user.id/type, so provide
+// the smallest compatible shape here.
+function createSessionFromAuthUser(authUser: AuthUser): Session {
+  return {
+    user: {
+      id: authUser.id,
+      email: authUser.email ?? undefined,
+      name: authUser.name ?? undefined,
+      type: (authUser.type ?? "regular") as Session["user"]["type"],
+    },
+    expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  } as Session;
+}
 
 /**
  * Convert home directory tilde path to absolute path
@@ -338,17 +356,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get user session for business tools
-    const session = await auth();
+    // Authenticate with Bearer token first, then fall back to session cookies.
+    const authUser = await getAuthUser(req);
 
     // Check authentication - unauthenticated users cannot run the agent
-    if (!session?.user?.id) {
+    if (!authUser?.id) {
       console.error("[AgentAPI] ERROR: Unauthorized access attempt");
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Preserve the full NextAuth session for web requests; Bearer-token requests
+    // get a minimal compatible session for business tools.
+    const webSession = await auth();
+    const session: Session & { platform?: string } =
+      webSession?.user?.id === authUser.id
+        ? webSession
+        : createSessionFromAuthUser(authUser);
+    const requestPlatform = body.platform?.trim();
+    if (requestPlatform) {
+      // Let CLI and other scripted callers identify their source to downstream
+      // business tools without changing the web session contract.
+      session.platform = requestPlatform;
+    }
+
     // Get user insight settings (including aiSoulPrompt and language)
-    const userSettings = await getUserInsightSettings(session.user.id);
+    const userSettings = await getUserInsightSettings(authUser.id);
 
     if (!body.prompt) {
       console.error("[AgentAPI] ERROR: prompt is missing or empty!");

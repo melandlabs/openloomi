@@ -5,6 +5,7 @@ description = "openloomi AI Assistant - Your Personal Productivity Tool"
 authors = ["OpenLoomi Team"]
 edition = "2021"
 autobins = false
+default-run = "openloomi"
 
 [lib]
 name = "openloomi_lib"
