@@ -6,22 +6,7 @@
 
 import type { NextRequest } from "next/server";
 import { auth } from "@/app/(auth)/auth";
-
-// Import the shared permission responses map
-// Note: In a real implementation, this would need to be in a shared module
-// For now, we'll use a simple in-memory storage
-const permissionResponses = new Map<
-  string,
-  {
-    resolve: (result: {
-      behavior: "allow" | "deny";
-      updatedInput?: Record<string, unknown>;
-    }) => void;
-    reject: (error: Error) => void;
-  }
->();
-
-export { permissionResponses };
+import { permissionResponses } from "@/lib/ai/native-agent/permissions";
 
 // POST /api/native/agent/permission - Handle permission response from frontend
 export async function POST(req: NextRequest) {

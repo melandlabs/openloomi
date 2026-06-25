@@ -9,6 +9,10 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/app/(auth)/auth";
 import { getAgentRegistry } from "@openloomi/ai/agent/registry";
 import { claudePlugin } from "@/lib/ai/extensions";
+import {
+  detectSudoPasswordPrompt,
+  transformSudoCommand,
+} from "@/lib/ai/native-agent/sudo";
 
 // Register Claude Agent plugin
 getAgentRegistry().register(claudePlugin);
@@ -30,30 +34,7 @@ const passwordResponses = new Map<
 >();
 
 export { passwordResponses };
-
-// Patterns that indicate sudo password is required
-const SUDO_PASSWORD_PATTERNS = [
-  /\[sudo\] password for .+:/,
-  /^password:.*$/m,
-  /sudo: \[sudo\] password for/,
-  /sudo: a password is required/,
-];
-
-export function detectSudoPasswordPrompt(output: string): boolean {
-  return SUDO_PASSWORD_PATTERNS.some((pattern) => pattern.test(output));
-}
-
-// Transform sudo command to accept password from stdin
-export function transformSudoCommand(command: string): string {
-  // Match sudo at the beginning of a command (with possible leading whitespace)
-  // and optionally capture any arguments that follow
-  return command.replace(
-    /(\s*)sudo(\s+)/g,
-    (_, leadingSpace, trailingSpace) => {
-      return `${leadingSpace}sudo -S -p ''${trailingSpace}`;
-    },
-  );
-}
+export { detectSudoPasswordPrompt, transformSudoCommand };
 
 // Execute a command with password via stdin
 async function executeCommandWithPassword(
