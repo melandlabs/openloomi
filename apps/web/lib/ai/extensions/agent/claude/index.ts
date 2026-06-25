@@ -11,7 +11,6 @@ import { arch, homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import {
   createSdkMcpServer,
-  type Options,
   query,
   tool,
   type SDKUserMessage,
@@ -42,7 +41,6 @@ import type {
   McpConfig,
   PDFAttachment,
   PlanOptions,
-  SkillsConfig,
 } from "@openloomi/ai/agent/types";
 import { MAX_CONVERSATION_HISTORY_TOKENS } from "@/lib/ai/runtime/shared";
 import {
@@ -50,7 +48,6 @@ import {
   DEFAULT_API_PORT,
   DEFAULT_WORK_DIR,
 } from "@/lib/env/config/constants";
-import { DEFAULT_AI_MODEL } from "@/lib/env/constants";
 import {
   PDF_MAX_PAGES,
   PDF_MAX_SIZE_MB,
@@ -59,11 +56,7 @@ import {
 import { filterToolCallText } from "@openloomi/shared";
 import { generateUUID } from "@/lib/utils";
 import { estimateTokens } from "@/lib/ai";
-import {
-  loadMcpServers,
-  createBusinessToolsMcpServer,
-  type McpServerConfig,
-} from "@/lib/ai/mcp";
+import { loadMcpServers } from "@/lib/ai/mcp";
 
 // Skills are loaded directly by Claude SDK from ~/.openloomi/skills/ via settingSources: ['user']
 // No custom loading needed
@@ -71,6 +64,23 @@ import {
 // Logging - uses shared logger (writes to ~/.openloomi/logs/openloomi.log)
 // ============================================================================
 import { createLogger, LOG_FILE_PATH } from "@/lib/utils/logger";
+import {
+  buildClaudeEnvConfig,
+  buildClaudeSettingsConfig,
+  getExtendedPath,
+  isUsingCustomApi,
+} from "./env";
+import { convertClaudeSdkMessage } from "./message-converter";
+import {
+  attachClaudeMcpServers,
+  createClaudeQueryOptions,
+  DEFAULT_ALLOWED_TOOLS,
+} from "./query-options";
+import {
+  buildClaudeSettingSources,
+  clearSkillsForClaudeSession,
+  syncSkillsForClaudeSession,
+} from "./skills";
 
 const logger = createLogger("ClaudeAgent");
 
@@ -549,54 +559,6 @@ endlocal`;
       return wrapperScriptPath;
     }
   }
-}
-
-/**
- * Build extended PATH that includes common package manager bin locations
- */
-function getExtendedPath(): string {
-  const home = homedir();
-  const os = platform();
-  const isWindows = os === "win32";
-  const pathSeparator = isWindows ? ";" : ":";
-
-  const paths = [process.env.PATH || ""];
-
-  if (isWindows) {
-    // Windows paths
-    paths.push(
-      join(home, "AppData", "Roaming", "npm"),
-      join(home, "AppData", "Local", "Programs", "nodejs"),
-      join(home, ".volta", "bin"),
-      "C:\\Program Files\\nodejs",
-      "C:\\Program Files (x86)\\nodejs",
-    );
-  } else {
-    // Unix paths
-    paths.push(
-      "/usr/local/bin",
-      "/opt/homebrew/bin",
-      `${home}/.local/bin`,
-      `${home}/.npm-global/bin`,
-      `${home}/.volta/bin`,
-      `${home}/code/node/npm_global/bin`,
-    );
-
-    // Add nvm paths (Unix only)
-    const nvmDir = join(home, ".nvm", "versions", "node");
-    try {
-      if (existsSync(nvmDir)) {
-        const versions = readdirSync(nvmDir);
-        for (const version of versions) {
-          paths.push(join(nvmDir, version, "bin"));
-        }
-      }
-    } catch {
-      // nvm not installed
-    }
-  }
-
-  return paths.join(pathSeparator);
 }
 
 /**
@@ -1214,24 +1176,6 @@ DO NOT use file system tools to query user's tasks or chat history.
 }
 
 /**
- * Default allowed tools for execution
- */
-const ALLOWED_TOOLS = [
-  "Read",
-  "Edit",
-  "Write",
-  "Glob",
-  "Grep",
-  "Bash",
-  "WebSearch",
-  "WebFetch",
-  "Skill",
-  "Task",
-  "LSP",
-  "TodoWrite",
-];
-
-/**
  * Create sandbox MCP server with inline tools
  * @param sandboxProvider - The sandbox provider to use (e.g., 'codex', 'claude', 'native')
  */
@@ -1480,174 +1424,6 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   /**
-   * Build settingSources for Claude SDK
-   *
-   * IMPORTANT: Claude SDK loads skills from ~/.claude/skills/ when 'user' source is enabled.
-   * We sync ~/.openloomi/skills/ to ~/.claude/skills/ on agent creation via syncSkillsToClaude().
-   *
-   * IMPORTANT: When using custom API (baseUrl + apiKey configured), we MUST NOT use 'user'
-   * source because SDK reads ~/.claude/settings.json which takes priority over environment variables.
-   * In this case, we use 'project' only to bypass the user settings file.
-   */
-  private buildSettingSources(
-    skillsConfig?: SkillsConfig,
-  ): ("user" | "project")[] {
-    // Default case: only use the project settings
-    return ["project"];
-  }
-
-  /**
-   * Check if using custom (non-Anthropic) API
-   */
-  private isUsingCustomApi(): boolean {
-    return !!this.config.baseUrl;
-  }
-
-  /**
-   * Build environment variables for the SDK query
-   * Supports custom API endpoint and API key (including OpenRouter)
-   * Also includes extended PATH for packaged app compatibility
-   *
-   * NOTE: SDK expects Record<string, string>, so we filter out undefined values
-   */
-  private buildEnvConfig(): Record<string, string> {
-    const env: Record<string, string | undefined> = { ...process.env };
-
-    // IMPORTANT: Remove CLAUDECODE environment variable to allow nested sessions
-    // This is necessary when openloomi itself is running inside a Claude Code environment
-    // Without this, the child Claude Code process will detect the nested session
-    // and exit with error "Claude Code cannot be launched inside another Claude Code session"
-    // Use delete operator to completely remove the key
-    env.CLAUDECODE = undefined;
-
-    // Extend PATH for packaged app to find node and other binaries
-    env.PATH = getExtendedPath();
-
-    // When user configures custom API in settings, we need to ensure it takes priority
-    // over any config from ~/.claude/settings.json (which is read via settingSources: ['user'])
-    // Delete env vars to prevent them from being overridden by ~/.claude/settings.json
-    if (this.config.apiKey) {
-      // Use ANTHROPIC_AUTH_TOKEN for custom API key
-      env.ANTHROPIC_AUTH_TOKEN = this.config.apiKey;
-      // Delete ANTHROPIC_API_KEY to ensure AUTH_TOKEN takes priority
-      env.ANTHROPIC_API_KEY = undefined;
-
-      // Handle base URL: set if configured, delete if not (to use default Anthropic API)
-      if (this.config.baseUrl) {
-        env.ANTHROPIC_BASE_URL = this.config.baseUrl;
-      } else {
-        // Delete to ensure default Anthropic API is used, not from ~/.claude/settings.json
-        env.ANTHROPIC_BASE_URL = undefined;
-        logger.info(
-          "[ClaudeAgent] Using custom API key with default Anthropic base URL",
-        );
-      }
-    } else {
-      // No API key provided in modelConfig, use environment variables
-      // Check if ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY is set
-      const envKey = env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY;
-      if (envKey) {
-        logger.info(
-          "[ClaudeAgent] Using API config from environment: key present",
-        );
-      } else {
-        logger.warn(
-          "[ClaudeAgent] No API key configured in modelConfig or environment variables",
-        );
-        logger.warn(
-          "[ClaudeAgent] Set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN in environment, or provide apiKey in modelConfig",
-        );
-      }
-    }
-
-    // Set model configuration
-    if (this.config.model) {
-      env.ANTHROPIC_MODEL = this.config.model;
-      // Also set default models for different tiers (useful for OpenRouter model names)
-      env.ANTHROPIC_DEFAULT_SONNET_MODEL = this.config.model;
-      env.ANTHROPIC_DEFAULT_HAIKU_MODEL = this.config.model;
-      env.ANTHROPIC_DEFAULT_OPUS_MODEL = this.config.model;
-    } else if (this.config.apiKey) {
-      // When using custom API but no model specified, use LLM_MODEL environment variable
-      const llmModel = process.env.LLM_MODEL;
-      if (llmModel) {
-        env.ANTHROPIC_MODEL = llmModel;
-        env.ANTHROPIC_DEFAULT_SONNET_MODEL = llmModel;
-        env.ANTHROPIC_DEFAULT_HAIKU_MODEL = llmModel;
-        env.ANTHROPIC_DEFAULT_OPUS_MODEL = llmModel;
-      } else {
-        // to let the third-party API use its default model
-        env.ANTHROPIC_MODEL = undefined;
-        env.ANTHROPIC_DEFAULT_SONNET_MODEL = undefined;
-        env.ANTHROPIC_DEFAULT_HAIKU_MODEL = undefined;
-        env.ANTHROPIC_DEFAULT_OPUS_MODEL = undefined;
-      }
-    } else {
-      // When neither model nor apiKey is specified, use the default AI model
-      // to prevent SDK from reading invalid model from ~/.claude/settings.json
-      env.ANTHROPIC_MODEL = DEFAULT_AI_MODEL;
-      env.ANTHROPIC_DEFAULT_SONNET_MODEL = DEFAULT_AI_MODEL;
-      env.ANTHROPIC_DEFAULT_HAIKU_MODEL = DEFAULT_AI_MODEL;
-      env.ANTHROPIC_DEFAULT_OPUS_MODEL = DEFAULT_AI_MODEL;
-    }
-
-    // Set thinking configuration based on thinkingLevel
-    // Maps to ANTHROPIC_THINKING_BUDGET env var for extended thinking
-    if (this.config.thinkingLevel === "disabled") {
-      env.ANTHROPIC_THINKING_BUDGET = undefined;
-    } else if (this.config.thinkingLevel === "low") {
-      env.ANTHROPIC_THINKING_BUDGET = "2048";
-    } else if (this.config.thinkingLevel === "adaptive") {
-      env.ANTHROPIC_THINKING_BUDGET = "32000";
-    }
-    // If thinkingLevel is not set, leave undefined (SDK default)
-
-    // When using custom API, disable telemetry and non-essential traffic
-    // This helps avoid potential issues with third-party API compatibility
-    if (this.isUsingCustomApi()) {
-      env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-    }
-
-    // IMPORTANT: Set IS_SANDBOX=1 to bypass the root/sudo security check
-    // when using --allow-dangerously-skip-permissions in Linux/Unix environments
-    // This is needed for Tauri development which often runs as root
-    if (process.platform !== "win32") {
-      env.IS_SANDBOX = "1";
-    }
-
-    // Filter out undefined values - SDK expects Record<string, string>
-    const filteredEnv: Record<string, string> = {};
-    for (const [key, value] of Object.entries(env)) {
-      if (value !== undefined) {
-        filteredEnv[key] = value;
-      }
-    }
-
-    // CRITICAL: Set global process.env so child process inherits it
-    // The SDK spawns Claude Code CLI as a child process, which needs
-    // to inherit these environment variables
-    if (filteredEnv.ANTHROPIC_BASE_URL) {
-      process.env.ANTHROPIC_BASE_URL = filteredEnv.ANTHROPIC_BASE_URL;
-    }
-    if (filteredEnv.ANTHROPIC_AUTH_TOKEN) {
-      process.env.ANTHROPIC_AUTH_TOKEN = filteredEnv.ANTHROPIC_AUTH_TOKEN;
-    }
-    if (filteredEnv.ANTHROPIC_MODEL) {
-      process.env.ANTHROPIC_MODEL = filteredEnv.ANTHROPIC_MODEL;
-    }
-    if (filteredEnv.ANTHROPIC_THINKING_BUDGET !== undefined) {
-      process.env.ANTHROPIC_THINKING_BUDGET =
-        filteredEnv.ANTHROPIC_THINKING_BUDGET;
-    }
-    // CRITICAL: Also remove CLAUDECODE from global process.env
-    if (!filteredEnv.CLAUDECODE) {
-      process.env.CLAUDECODE = undefined;
-    }
-
-    return filteredEnv;
-  }
-
-  /**
    * Estimate token count for a text string.
    * Delegates to the shared estimateTokens utility which correctly handles
    * CJK characters (1 char ≈ 1 token) vs Latin text (5 chars ≈ 1 token).
@@ -1775,33 +1551,15 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
     // Ensure the working directory exists before calling SDK
     await ensureDir(sessionCwd);
 
-    // Sync skills to sessionCwd for 'project' settingSource (always runs)
-    try {
-      const { syncSkillsToClaude } = require("@/lib/ai/skills/loader");
-      const syncStart = Date.now();
-      syncSkillsToClaude(sessionCwd);
-      logger.info(
-        `[Claude ${session.id}] Synced skills to session directory: ${sessionCwd} (${Date.now() - syncStart}ms)`,
-      );
-      // Also sync to bundled CLI directory on Windows
-      // The Skills tool may resolve skill scripts relative to where Claude Code is located
-      const bundledCliPath = getClaudeCodePath();
-      if (bundledCliPath) {
-        const bundleDir = dirname(bundledCliPath);
-        if (bundleDir !== sessionCwd) {
-          const bundleSyncStart = Date.now();
-          syncSkillsToClaude(bundleDir);
-          logger.info(
-            `[Claude ${session.id}] Synced skills to CLI bundle directory: ${bundleDir} (${Date.now() - bundleSyncStart}ms)`,
-          );
-        }
-      }
-    } catch (error) {
-      logger.error(
-        `[Claude ${session.id}] Failed to sync skills to session:`,
-        error,
-      );
-    }
+    // Keep skills available from both the session workspace and bundled Claude
+    // Code location before the SDK starts resolving Skill tool files.
+    syncSkillsForClaudeSession({
+      sessionId: session.id,
+      sessionCwd,
+      bundledCliPath: getClaudeCodePath(),
+      logger,
+      includeTimings: true,
+    });
 
     const sentTextHashes = new Set<string>();
     const sentToolIds = new Set<string>();
@@ -1998,227 +1756,47 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       options?.mcpConfig as McpConfig | undefined,
     );
 
-    // Build query options
-    // Use settingSources based on skillsConfig to control skill loading
-    // - 'user' source loads from ~/.claude directory (User skills)
-    // - 'project' source loads from project/.claude directory
-    // User's custom API settings from openloomi settings page are passed via env config
-    // which takes priority over ~/.claude/settings.json because we set ANTHROPIC_API_KEY directly
-    const settingSources: ("user" | "project")[] = this.buildSettingSources(
-      options?.skillsConfig,
-    );
-
-    // Build environment variables
-    const envConfig = this.buildEnvConfig();
-
-    // When using custom API, pass custom settings with env vars to override user settings
-    // This ensures our config takes priority over ~/.claude/settings.json
-    let settingsConfig: string | undefined;
-    if (this.isUsingCustomApi()) {
-      const customSettings = {
-        env: {
-          ANTHROPIC_BASE_URL: this.config.baseUrl || "",
-          ANTHROPIC_AUTH_TOKEN: this.config.apiKey || "",
-          ANTHROPIC_MODEL: this.config.model || "",
-          ...(this.config.thinkingLevel === "disabled"
-            ? { ANTHROPIC_THINKING_BUDGET: "" }
-            : this.config.thinkingLevel === "low"
-              ? { ANTHROPIC_THINKING_BUDGET: "2048" }
-              : this.config.thinkingLevel === "adaptive"
-                ? { ANTHROPIC_THINKING_BUDGET: "32000" }
-                : {}),
-        },
-        skipWebFetchPreflight: true,
-      };
-      settingsConfig = JSON.stringify(customSettings);
-    }
-
-    const queryOptions = {
+    // Centralize Claude SDK environment/settings assembly so run/plan/execute
+    // share the same API key, model, permission, and custom endpoint behavior.
+    const settingSources = buildClaudeSettingSources(options?.skillsConfig);
+    const envConfig = buildClaudeEnvConfig(this.config);
+    const settingsConfig = buildClaudeSettingsConfig(this.config, {
+      skipWebFetchPreflight: true,
+    });
+    const runtimeOptions: AgentOptions = options ?? {};
+    const queryOptions = createClaudeQueryOptions({
+      sessionId: session.id,
       cwd: sessionCwd,
       tools: { type: "preset", preset: "claude_code" },
-      allowedTools: options?.allowedTools || ALLOWED_TOOLS,
+      allowedTools: options?.allowedTools || DEFAULT_ALLOWED_TOOLS,
       settingSources,
       settings: settingsConfig,
-      // Use permissionMode from options, default to "bypassPermissions" for backward compatibility
-      permissionMode: options?.permissionMode || "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-      // session.abortController now directly uses the externally passed abortController
+      agentOptions: options,
+      permissionMode: options?.permissionMode,
       abortController: session.abortController,
       env: envConfig,
-      model: this.config.model,
-      pathToClaudeCodeExecutable: claudeCodePath,
-      maxTurns: 1000, // Allow more agentic turns before stopping
-      // Enable includePartialMessages for streaming output (disabled by default, used for Telegram/WhatsApp)
-      includePartialMessages: options?.stream ?? false,
-      // Enable debug mode (only in development)
-      ...(isDev ? { debug: true, debugFile: LOG_FILE_PATH } : {}),
-      // Capture stderr for debugging
-      stderr: (data: string) => {
-        logger.error(`[Claude ${session.id}] STDERR: ${data}`);
-      },
+      config: this.config,
+      claudeCodePath,
+      isDev,
+      debugFilePath: LOG_FILE_PATH,
+      logger,
       spawnClaudeCodeProcess,
-
-      // Enable Anthropic prompt caching for system prompt to reduce redundant input token costs
-      // cache_control: { type: "ephemeral" } caches the static business tools instruction block
-      // with a 5-minute TTL, saving 60-90% of input tokens for repeated turns (#1496)
       systemPrompt: getBusinessToolsInstruction(options?.excludeTools),
-
-      // Add canUseTool callback if permissionMode is not bypassPermissions
-      ...(options?.permissionMode &&
-      options.permissionMode !== "bypassPermissions" &&
-      options.onPermissionRequest
-        ? {
-            canUseTool: async (toolName, toolInput, canUseToolOptions) => {
-              logger.info(
-                `[Claude ${session.id}] Permission request: ${toolName}`,
-                { toolInput, decisionReason: canUseToolOptions.decisionReason },
-              );
-
-              try {
-                const result = await options.onPermissionRequest?.({
-                  toolName,
-                  toolInput,
-                  toolUseID: canUseToolOptions.toolUseID,
-                  decisionReason: canUseToolOptions.decisionReason,
-                  blockedPath: canUseToolOptions.blockedPath,
-                });
-
-                // If no permission handler, deny by default
-                if (!result) {
-                  logger.warn(
-                    `[Claude ${session.id}] No permission handler, denying ${toolName}`,
-                  );
-                  return {
-                    behavior: "deny",
-                    message: "Permission check not available",
-                    toolUseID: canUseToolOptions.toolUseID,
-                  };
-                }
-
-                logger.info(
-                  `[Claude ${session.id}] Permission decision: ${result.behavior}`,
-                );
-
-                // Transform to SDK's PermissionResult type
-                if (result.behavior === "allow") {
-                  return {
-                    behavior: "allow",
-                    updatedInput: result.updatedInput,
-                    toolUseID: canUseToolOptions.toolUseID,
-                  };
-                }
-                return {
-                  behavior: "deny",
-                  message: result.message || "Permission denied by user",
-                  toolUseID: canUseToolOptions.toolUseID,
-                };
-              } catch (error) {
-                logger.error(
-                  `[Claude ${session.id}] Permission request error:`,
-                  error,
-                );
-                // Deny on error
-                return {
-                  behavior: "deny",
-                  message:
-                    error instanceof Error
-                      ? error.message
-                      : "Permission check failed",
-                  toolUseID: canUseToolOptions.toolUseID,
-                };
-              }
-            },
-          }
-        : {}),
-    } as Options;
-
-    // Initialize MCP servers with user-configured servers
-    const mcpServers: Record<
-      string,
-      McpServerConfig | ReturnType<typeof createSandboxMcpServer>
-    > = {
-      ...userMcpServers,
-    };
-
-    // Add sandbox MCP server if sandbox is enabled
-    if (options?.sandbox?.enabled) {
-      mcpServers.sandbox = createSandboxMcpServer(options.sandbox.provider);
-      // Add sandbox tools to allowed tools
-      queryOptions.allowedTools = [
-        ...(options?.allowedTools || ALLOWED_TOOLS),
-        "sandbox_run_script",
-        "sandbox_run_command",
-      ];
-    }
-
-    // Add business tools MCP server if user session is provided
-    if (options?.session) {
-      try {
-        mcpServers["business-tools"] = createBusinessToolsMcpServer(
-          options.session,
-          options.authToken, // Pass cloud auth token for embeddings API
-          options?.onInsightChange,
-          options.sessionId, // Pass sessionId as chatId for insight association
-          {
-            excludeTools: options?.excludeTools,
-          },
-        );
-        // Add business tools to allowed tools
-        queryOptions.allowedTools = [
-          ...(queryOptions.allowedTools || ALLOWED_TOOLS),
-          "chatInsight",
-          "modifyInsight",
-          "createInsight",
-          "deleteInsight",
-          "createScheduledJob",
-          "listScheduledJobs",
-          "deleteScheduledJob",
-          "toggleScheduledJob",
-          "updateScheduledJob",
-          "executeScheduledJob",
-          "sendReply",
-          "queryContacts",
-          "queryIntegrations",
-          "searchKnowledgeBase",
-          "searchUnifiedMemory",
-          "searchMemoryPath",
-          "getRawMessages",
-          "searchRawMessages",
-          "getFullDocumentContent",
-          "listKnowledgeBaseDocuments",
-          "downloadInsightAttachment",
-          "time",
-        ];
-      } catch (error) {
-        logger.error(
-          `[Claude ${session.id}] Failed to create business tools MCP server:`,
-          error,
-        );
-      }
-    }
-
-    // Apply excludeTools filter if specified (must be after all allowedTools modifications)
-    if (options?.excludeTools && options.excludeTools.length > 0) {
-      const excludeSet = new Set(options.excludeTools);
-      queryOptions.allowedTools = (queryOptions.allowedTools || []).filter(
-        (tool: string) => !excludeSet.has(tool),
-      );
-      logger.info(
-        `[Claude ${session.id}] Excluded tools: ${options.excludeTools.join(", ")}`,
-      );
-    }
-
-    // Only add mcpServers to options if there are any configured
-    if (Object.keys(mcpServers).length > 0) {
-      queryOptions.mcpServers = mcpServers;
-    } else {
-      logger.warn(
-        `[Claude ${session.id}] No MCP servers configured (sandbox disabled or no user MCP servers)`,
-      );
-    }
-
-    // Log detailed query options for debugging
-    const envConfigForLogging = queryOptions.env || {};
+      maxTurns: 1000,
+      includePartialMessages: options?.stream ?? false,
+      permissionLogMode: "run",
+    });
+    // MCP servers can expand the allowed tool set, so attach them after the
+    // base query options are created.
+    attachClaudeMcpServers({
+      queryOptions,
+      userMcpServers,
+      agentOptions: runtimeOptions,
+      createSandboxMcpServer,
+      logger,
+      sessionId: session.id,
+      mode: "run",
+    });
 
     try {
       // Determine whether to send images/PDFs directly or use text-only prompt
@@ -2247,15 +1825,16 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
           break;
         }
 
-        for (const agentMessage of this.processMessage(
+        for (const agentMessage of convertClaudeSdkMessage({
           message,
-          session.id,
           sentTextHashes,
           sentToolIds,
           hasStreamedText,
-        )) {
+          createMessageId: () => this.generateMessageId(),
+        })) {
           yield agentMessage;
-          // Track if we just sent text from stream_event
+          // Track streamed text so the converter can ignore duplicated final
+          // assistant text while still recovering final-message tool calls.
           if (
             (message as { type?: string }).type === "stream_event" &&
             agentMessage.type === "text"
@@ -2294,9 +1873,11 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
         },
         env: {
           ANTHROPIC_BASE_URL:
-            this.buildEnvConfig().ANTHROPIC_BASE_URL || "(not set)",
-          ANTHROPIC_MODEL: this.buildEnvConfig().ANTHROPIC_MODEL || "(not set)",
-          hasAuthToken: !!this.buildEnvConfig().ANTHROPIC_AUTH_TOKEN,
+            buildClaudeEnvConfig(this.config).ANTHROPIC_BASE_URL || "(not set)",
+          ANTHROPIC_MODEL:
+            buildClaudeEnvConfig(this.config).ANTHROPIC_MODEL || "(not set)",
+          hasAuthToken: !!buildClaudeEnvConfig(this.config)
+            .ANTHROPIC_AUTH_TOKEN,
         },
       });
 
@@ -2311,7 +1892,7 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
         errorMessage.includes("killed") || errorMessage.includes("OOM");
 
       // Check if using custom API - process exit with custom API is likely API compatibility issue
-      const usingCustomApi = this.isUsingCustomApi();
+      const usingCustomApi = isUsingCustomApi(this.config);
 
       // Cloud proxy / domestic API common Chinese authentication errors (must be grouped with 401, otherwise falls to __INTERNAL_ERROR__)
       const isCloudProxyAuthShape =
@@ -2408,18 +1989,12 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       }
     } finally {
       this.sessions.delete(session.id);
-      // Windows-only: clear skills to prevent stale state between sessions
-      if (process.platform === "win32") {
-        try {
-          const { clearSkillsFromClaude } = require("@/lib/ai/skills/loader");
-          clearSkillsFromClaude(sessionCwd);
-          const bundledCliPath = getClaudeCodePath();
-          if (bundledCliPath) {
-            const bundleDir = dirname(bundledCliPath);
-            if (bundleDir !== sessionCwd) clearSkillsFromClaude(bundleDir);
-          }
-        } catch {}
-      }
+      // Windows cleanup prevents skill files generated for this session from
+      // leaking into the next Claude Code run.
+      clearSkillsForClaudeSession({
+        sessionCwd,
+        bundledCliPath: getClaudeCodePath(),
+      });
       yield { type: "done", messageId: this.generateMessageId() };
     }
   }
@@ -2450,30 +2025,14 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
     // Ensure the working directory exists before calling SDK
     await ensureDir(sessionCwd);
 
-    // Sync skills to sessionCwd for 'project' settingSource (always runs)
-    try {
-      const { syncSkillsToClaude } = require("@/lib/ai/skills/loader");
-      syncSkillsToClaude(sessionCwd);
-      logger.info(
-        `[Claude ${session.id}] Synced skills to session directory: ${sessionCwd}`,
-      );
-      // Also sync to bundled CLI directory on Windows
-      const bundledCliPath = getClaudeCodePath();
-      if (bundledCliPath) {
-        const bundleDir = dirname(bundledCliPath);
-        if (bundleDir !== sessionCwd) {
-          syncSkillsToClaude(bundleDir);
-          logger.info(
-            `[Claude ${session.id}] Synced skills to CLI bundle directory: ${bundleDir}`,
-          );
-        }
-      }
-    } catch (error) {
-      logger.error(
-        `[Claude ${session.id}] Failed to sync skills to session:`,
-        error,
-      );
-    }
+    // Planning can still invoke Skill lookup, so sync skills even though the
+    // allowed tool list below is intentionally empty.
+    syncSkillsForClaudeSession({
+      sessionId: session.id,
+      sessionCwd,
+      bundledCliPath: getClaudeCodePath(),
+      logger,
+    });
     console.log(`[Claude ${session.id}] Working directory: ${sessionCwd}`);
     console.log(`[Claude ${session.id}] Planning phase started`);
 
@@ -2515,58 +2074,31 @@ If you need to create any files during planning, use this directory.
       return;
     }
 
-    // Use settingSources based on skillsConfig and custom API config
-    const planSettingSources: ("user" | "project")[] = this.buildSettingSources(
-      options?.skillsConfig,
-    );
-
-    const envConfig = this.buildEnvConfig();
-
-    // When using custom API, pass custom settings with env vars to override user settings
-    let planSettingsConfig: string | undefined;
-    if (this.isUsingCustomApi()) {
-      const customSettings = {
-        env: {
-          ANTHROPIC_BASE_URL: this.config.baseUrl || "",
-          ANTHROPIC_AUTH_TOKEN: this.config.apiKey || "",
-          ANTHROPIC_MODEL: this.config.model || "",
-          ...(this.config.thinkingLevel === "disabled"
-            ? { ANTHROPIC_THINKING_BUDGET: "" }
-            : this.config.thinkingLevel === "low"
-              ? { ANTHROPIC_THINKING_BUDGET: "2048" }
-              : this.config.thinkingLevel === "adaptive"
-                ? { ANTHROPIC_THINKING_BUDGET: "32000" }
-                : {}),
-        },
-      };
-      planSettingsConfig = JSON.stringify(customSettings);
-    }
-
-    const queryOptions = {
-      cwd: sessionCwd, // Set working directory for planning phase
+    // Planning uses the same env/settings builder as normal runs, but does not
+    // expose tools because it should only produce a plan or direct answer.
+    const planSettingSources = buildClaudeSettingSources(options?.skillsConfig);
+    const envConfig = buildClaudeEnvConfig(this.config);
+    const planSettingsConfig = buildClaudeSettingsConfig(this.config);
+    const queryOptions = createClaudeQueryOptions({
+      sessionId: session.id,
+      cwd: sessionCwd,
       settingSources: planSettingSources,
       settings: planSettingsConfig,
-      allowedTools: [], // No tools in planning phase
-      // Use permissionMode from options, default to "bypassPermissions"
-      permissionMode: options?.permissionMode || "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-      // session.abortController now directly uses the externally passed abortController
+      allowedTools: [],
+      agentOptions: options,
+      permissionMode: options?.permissionMode,
       abortController: session.abortController,
       env: envConfig,
-      model: this.config.model,
-      pathToClaudeCodeExecutable: claudeCodePath,
-      // Enable debug mode for planning (only in development)
-      ...(isDev ? { debug: true, debugFile: LOG_FILE_PATH } : {}),
+      config: this.config,
+      claudeCodePath,
+      isDev,
+      debugFilePath: LOG_FILE_PATH,
+      logger,
       spawnClaudeCodeProcess,
-      stderr: (data: string) => {
-        logger.error(`[Claude ${session.id}] [PLAN] STDERR: ${data}`);
-      },
-
-      // Enable Anthropic prompt caching for system prompt to reduce redundant input token costs
-      // cache_control: { type: "ephemeral" } caches the static planning instruction block
-      // with a 5-minute TTL, saving 60-90% of input tokens for repeated turns (#1496)
+      stderrLabel: "[PLAN]",
       systemPrompt: PLANNING_INSTRUCTION(options?.timezone ?? undefined),
-    } as Options;
+      permissionLogMode: "run",
+    });
 
     logger.info(
       `[Claude ${session.id}] [PLAN] about to call query() with cwd=${sessionCwd}, settingSources=${planSettingSources.join(",")}`,
@@ -2648,18 +2180,12 @@ If you need to create any files during planning, use this directory.
         message: error instanceof Error ? error.message : String(error),
       };
     } finally {
-      // Windows-only: clear skills to prevent stale state between sessions
-      if (process.platform === "win32") {
-        try {
-          const { clearSkillsFromClaude } = require("@/lib/ai/skills/loader");
-          clearSkillsFromClaude(sessionCwd);
-          const bundledCliPath = getClaudeCodePath();
-          if (bundledCliPath) {
-            const bundleDir = dirname(bundledCliPath);
-            if (bundleDir !== sessionCwd) clearSkillsFromClaude(bundleDir);
-          }
-        } catch {}
-      }
+      // Cleanup mirrors run/execute so repeated planning sessions do not reuse
+      // stale Windows skill sync output.
+      clearSkillsForClaudeSession({
+        sessionCwd,
+        bundledCliPath: getClaudeCodePath(),
+      });
       yield { type: "done", messageId: this.generateMessageId() };
     }
   }
@@ -2884,30 +2410,14 @@ If you need to create any files during planning, use this directory.
     // Ensure the working directory exists before calling SDK
     await ensureDir(sessionCwd);
 
-    // Sync skills to sessionCwd for 'project' settingSource (always runs)
-    try {
-      const { syncSkillsToClaude } = require("@/lib/ai/skills/loader");
-      syncSkillsToClaude(sessionCwd);
-      logger.info(
-        `[Claude ${session.id}] Synced skills to session directory: ${sessionCwd}`,
-      );
-      // Also sync to bundled CLI directory on Windows
-      const bundledCliPath = getClaudeCodePath();
-      if (bundledCliPath) {
-        const bundleDir = dirname(bundledCliPath);
-        if (bundleDir !== sessionCwd) {
-          syncSkillsToClaude(bundleDir);
-          logger.info(
-            `[Claude ${session.id}] Synced skills to CLI bundle directory: ${bundleDir}`,
-          );
-        }
-      }
-    } catch (error) {
-      logger.error(
-        `[Claude ${session.id}] Failed to sync skills to session:`,
-        error,
-      );
-    }
+    // Execution runs after plan approval but still needs the same skill
+    // projection that normal runs use.
+    syncSkillsForClaudeSession({
+      sessionId: session.id,
+      sessionCwd,
+      bundledCliPath: getClaudeCodePath(),
+      logger,
+    });
 
     logger.info(`[Claude ${session.id}] Working directory: ${sessionCwd}`);
     // Log sandbox config for debugging
@@ -2974,11 +2484,7 @@ If you need to create any files during planning, use this directory.
       `[Claude ${session.id}] [EXEC] loadMcpServers done, servers: ${Object.keys(userMcpServers).join(",") || "(none)"}`,
     );
 
-    // Build query options
-    // Use settingSources based on skillsConfig to control skill loading
-    const execSettingSources: ("user" | "project")[] = this.buildSettingSources(
-      options.skillsConfig,
-    );
+    const execSettingSources = buildClaudeSettingSources(options.skillsConfig);
     logger.info(
       `[Claude ${session.id}] Execute skills config:`,
       options.skillsConfig,
@@ -2987,213 +2493,44 @@ If you need to create any files during planning, use this directory.
       `[Claude ${session.id}] Execute setting sources: ${execSettingSources.join(", ")}`,
     );
 
-    const envConfig = this.buildEnvConfig();
-
-    // When using custom API, pass custom settings with env vars to override user settings
-    let execSettingsConfig: string | undefined;
-    if (this.isUsingCustomApi()) {
-      const customSettings = {
-        env: {
-          ANTHROPIC_BASE_URL: this.config.baseUrl || "",
-          ANTHROPIC_AUTH_TOKEN: this.config.apiKey || "",
-          ANTHROPIC_MODEL: this.config.model || "",
-          ...(this.config.thinkingLevel === "disabled"
-            ? { ANTHROPIC_THINKING_BUDGET: "" }
-            : this.config.thinkingLevel === "low"
-              ? { ANTHROPIC_THINKING_BUDGET: "2048" }
-              : this.config.thinkingLevel === "adaptive"
-                ? { ANTHROPIC_THINKING_BUDGET: "32000" }
-                : {}),
-        },
-      };
-      execSettingsConfig = JSON.stringify(customSettings);
-    }
-
-    const queryOptions = {
+    // Execute reuses the common SDK option builder, then adds MCP servers so
+    // plan execution has the same tool surface as normal agent runs.
+    const envConfig = buildClaudeEnvConfig(this.config);
+    const execSettingsConfig = buildClaudeSettingsConfig(this.config);
+    const queryOptions = createClaudeQueryOptions({
+      sessionId: session.id,
       cwd: sessionCwd,
       tools: { type: "preset", preset: "claude_code" },
-      allowedTools: options.allowedTools || ALLOWED_TOOLS,
+      allowedTools: options.allowedTools || DEFAULT_ALLOWED_TOOLS,
       settings: execSettingsConfig,
       settingSources: execSettingSources,
-      // Use permissionMode from options, default to "bypassPermissions"
-      permissionMode: options.permissionMode || "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-      // session.abortController now directly uses the externally passed abortController
+      agentOptions: options,
+      permissionMode: options.permissionMode,
       abortController: session.abortController,
       env: envConfig,
-      model: this.config.model,
-      pathToClaudeCodeExecutable: claudeCodePath,
-      maxTurns: 1000, // Allow more agentic turns before stopping
-      // Enable includePartialMessages for streaming output
-      includePartialMessages: true,
-      // Capture stderr for debugging
-      stderr: (data: string) => {
-        logger.error(`[Claude ${session.id}] STDERR: ${data}`);
-      },
-      // Enable debug mode for execution (only in development)
-      ...(isDev ? { debug: true, debugFile: LOG_FILE_PATH } : {}),
+      config: this.config,
+      claudeCodePath,
+      isDev,
+      debugFilePath: LOG_FILE_PATH,
+      logger,
       spawnClaudeCodeProcess,
-
-      // Enable Anthropic prompt caching for system prompt to reduce redundant input token costs
-      // cache_control: { type: "ephemeral" } caches the static execution role instruction block
-      // with a 5-minute TTL, saving 60-90% of input tokens for repeated turns (#1496)
       systemPrompt:
         "You are executing a pre-approved plan with full permissions to use all available tools.",
-
-      // Add canUseTool callback if permissionMode is not bypassPermissions
-      ...(options.permissionMode &&
-      options.permissionMode !== "bypassPermissions" &&
-      options.onPermissionRequest
-        ? {
-            canUseTool: async (toolName, toolInput, canUseToolOptions) => {
-              logger.info(
-                `[Claude ${session.id}] Permission request (execute): ${toolName}`,
-                { toolInput, decisionReason: canUseToolOptions.decisionReason },
-              );
-
-              try {
-                const result = await options.onPermissionRequest?.({
-                  toolName,
-                  toolInput,
-                  toolUseID: canUseToolOptions.toolUseID,
-                  decisionReason: canUseToolOptions.decisionReason,
-                  blockedPath: canUseToolOptions.blockedPath,
-                });
-
-                // If no permission handler, deny by default
-                if (!result) {
-                  logger.warn(
-                    `[Claude ${session.id}] No permission handler (execute), denying ${toolName}`,
-                  );
-                  return {
-                    behavior: "deny",
-                    message: "Permission check not available",
-                    toolUseID: canUseToolOptions.toolUseID,
-                  };
-                }
-
-                logger.info(
-                  `[Claude ${session.id}] Permission decision (execute): ${result.behavior}`,
-                );
-
-                // Transform to SDK's PermissionResult type
-                if (result.behavior === "allow") {
-                  return {
-                    behavior: "allow",
-                    updatedInput: result.updatedInput,
-                    toolUseID: canUseToolOptions.toolUseID,
-                  };
-                }
-                return {
-                  behavior: "deny",
-                  message: result.message || "Permission denied by user",
-                  toolUseID: canUseToolOptions.toolUseID,
-                };
-              } catch (error) {
-                logger.error(
-                  `[Claude ${session.id}] Permission request error (execute):`,
-                  error,
-                );
-                // Deny on error
-                return {
-                  behavior: "deny",
-                  message:
-                    error instanceof Error
-                      ? error.message
-                      : "Permission check failed",
-                  toolUseID: canUseToolOptions.toolUseID,
-                };
-              }
-            },
-          }
-        : {}),
-    } as Options;
-
-    // Initialize MCP servers with user-configured servers
-    const mcpServers: Record<
-      string,
-      McpServerConfig | ReturnType<typeof createSandboxMcpServer>
-    > = {
-      ...userMcpServers,
-    };
-
-    // Add sandbox MCP server if sandbox is enabled
-    if (options.sandbox?.enabled) {
-      mcpServers.sandbox = createSandboxMcpServer(options.sandbox.provider);
-      // Add sandbox tools to allowed tools
-      queryOptions.allowedTools = [
-        ...(options.allowedTools || ALLOWED_TOOLS),
-        "sandbox_run_script",
-        "sandbox_run_command",
-      ];
-    }
-
-    // Add business tools MCP server if user session is provided
-    if (options.session) {
-      try {
-        mcpServers["business-tools"] = createBusinessToolsMcpServer(
-          options.session,
-          options.authToken,
-          options?.onInsightChange,
-          options.sessionId, // Pass sessionId as chatId for insight association
-          {
-            excludeTools: options.excludeTools,
-          },
-        );
-        // Add business tools to allowed tools
-        queryOptions.allowedTools = [
-          ...(queryOptions.allowedTools || ALLOWED_TOOLS),
-          "chatInsight",
-          "modifyInsight",
-          "createInsight",
-          "deleteInsight",
-          "createScheduledJob",
-          "listScheduledJobs",
-          "deleteScheduledJob",
-          "toggleScheduledJob",
-          "updateScheduledJob",
-          "executeScheduledJob",
-          "sendReply",
-          "queryContacts",
-          "queryIntegrations",
-          "searchKnowledgeBase",
-          "searchUnifiedMemory",
-          "searchMemoryPath",
-          "getRawMessages",
-          "searchRawMessages",
-          "getFullDocumentContent",
-          "listKnowledgeBaseDocuments",
-          "downloadInsightAttachment",
-          "time",
-        ];
-        logger.info(
-          `[Claude ${session.id}] Execute: Business tools MCP server loaded with user session`,
-        );
-      } catch (error) {
-        logger.error(
-          `[Claude ${session.id}] Execute: Failed to create business tools MCP server:`,
-          error,
-        );
-      }
-    }
-
-    // Apply excludeTools filter if specified (must be after all allowedTools modifications)
-    if (options.excludeTools && options.excludeTools.length > 0) {
-      const excludeSet = new Set(options.excludeTools);
-      queryOptions.allowedTools = (queryOptions.allowedTools || []).filter(
-        (tool: string) => !excludeSet.has(tool),
-      );
-      logger.info(
-        `[Claude ${session.id}] Execute: Excluded tools: ${options.excludeTools.join(", ")}`,
-      );
-    }
-
-    // Only add mcpServers to options if there are any configured
-    if (Object.keys(mcpServers).length > 0) {
-      queryOptions.mcpServers = mcpServers;
-    } else {
-      logger.warn(`[Claude ${session.id}] Execute: No MCP servers configured`);
-    }
+      maxTurns: 1000,
+      includePartialMessages: true,
+      permissionLogMode: "execute",
+    });
+    // Attach sandbox/business/user MCP servers after base options so each
+    // server can append or filter allowed tools in one place.
+    attachClaudeMcpServers({
+      queryOptions,
+      userMcpServers,
+      agentOptions: options,
+      createSandboxMcpServer,
+      logger,
+      sessionId: session.id,
+      mode: "execute",
+    });
 
     try {
       // Track whether we've sent text via stream_event to avoid duplication
@@ -3208,15 +2545,16 @@ If you need to create any files during planning, use this directory.
       })) {
         if (session.abortController.signal.aborted) break;
 
-        for (const agentMessage of this.processMessage(
+        for (const agentMessage of convertClaudeSdkMessage({
           message,
-          session.id,
           sentTextHashes,
           sentToolIds,
           hasStreamedText,
-        )) {
+          createMessageId: () => this.generateMessageId(),
+        })) {
           yield agentMessage;
-          // Track if we just sent text from stream_event
+          // Track streamed text so final assistant replay does not duplicate
+          // the same content in execution streams.
           if (
             (message as { type?: string }).type === "stream_event" &&
             agentMessage.type === "text"
@@ -3241,282 +2579,13 @@ If you need to create any files during planning, use this directory.
       console.log(`[Claude ${session.id}] Execution done`);
       this.deletePlan(options.planId);
       this.sessions.delete(session.id);
-      // Windows-only: clear skills to prevent stale state between sessions
-      if (process.platform === "win32") {
-        try {
-          const { clearSkillsFromClaude } = require("@/lib/ai/skills/loader");
-          clearSkillsFromClaude(sessionCwd);
-          const bundledCliPath = getClaudeCodePath();
-          if (bundledCliPath) {
-            const bundleDir = dirname(bundledCliPath);
-            if (bundleDir !== sessionCwd) clearSkillsFromClaude(bundleDir);
-          }
-        } catch {}
-      }
+      // Execution may write generated skill state on Windows; clear it before
+      // yielding the terminal done message.
+      clearSkillsForClaudeSession({
+        sessionCwd,
+        bundledCliPath: getClaudeCodePath(),
+      });
       yield { type: "done", messageId: this.generateMessageId() };
-    }
-  }
-
-  /**
-   * Sanitize text content to remove internal implementation details
-   * that should not be exposed to users
-   *
-   * IMPROVED: More precise error detection to avoid false positives
-   */
-  private sanitizeText(text: string): string {
-    let sanitized = text;
-
-    // IMPROVED: More precise API key error patterns
-    // Only match EXPLICIT authentication errors
-    const apiKeyErrorPatterns = [
-      /Invalid API key/i,
-      /invalid_api_key/i,
-      /API key.*invalid/i,
-      /authentication failed/i,
-      /Unauthorized/i,
-      /AUTH_KEY_UNREGISTERED/,
-      /AUTH_BYTES_INVALID/,
-    ];
-
-    // Check if error message contains process crash or timeout keywords
-    const hasProcessCrash = /killed|OOM|SIGKILL|code 137/i.test(sanitized);
-    const hasTimeout = /timeout|TIMEDOUT|ETIMEDOUT/i.test(sanitized);
-    const hasProcessExit = /Process|exited with code/i.test(sanitized);
-
-    // Only check for API key errors if NOT related to process crash/timeout
-    const hasApiKeyError =
-      !hasProcessCrash &&
-      !hasTimeout &&
-      !hasProcessExit &&
-      apiKeyErrorPatterns.some((pattern) => pattern.test(sanitized));
-
-    // Replace "Claude Code process exited with code X" with a special marker
-    // The marker will be replaced with localized text on the frontend
-    sanitized = sanitized.replace(
-      /Claude Code process exited with code \d+/gi,
-      "__AGENT_PROCESS_ERROR__",
-    );
-
-    // Remove "Please run /login" messages - not relevant for custom API users
-    sanitized = sanitized.replace(/\s*[·•\-–—]\s*Please run \/login\.?/gi, "");
-    sanitized = sanitized.replace(/Please run \/login\.?/gi, "");
-
-    // If API key error detected, replace entire message with special marker
-    // This ensures frontend shows the config prompt instead of raw error
-    if (hasApiKeyError) {
-      return "__API_KEY_ERROR__";
-    }
-
-    return sanitized;
-  }
-
-  /**
-   * Process SDK messages and convert to AgentMessage format
-   */
-  private *processMessage(
-    message: unknown,
-    sessionId: string,
-    sentTextHashes: Set<string>,
-    sentToolIds: Set<string>,
-    hasStreamedText: boolean,
-  ): Generator<AgentMessage> {
-    const msg = message as {
-      type: string;
-      message?: { content?: unknown[] };
-      subtype?: string;
-      total_cost_usd?: number;
-      duration_ms?: number;
-      event?: {
-        type: string;
-        delta?: { type?: string; text?: string };
-        content_block?: Record<string, unknown>;
-      };
-    };
-
-    let currentHasStreamedText = hasStreamedText;
-
-    // Handle streaming partial messages (when includePartialMessages is enabled)
-    if (msg.type === "stream_event" && msg.event) {
-      const event = msg.event;
-
-      // content_block_delta contains incremental text
-      if (
-        event.type === "content_block_delta" &&
-        event.delta &&
-        event.delta.type === "text_delta" &&
-        event.delta.text
-      ) {
-        const textDelta = event.delta.text;
-        if (textDelta) {
-          currentHasStreamedText = true;
-          yield {
-            type: "text",
-            content: textDelta,
-            messageId: this.generateMessageId(),
-          };
-        }
-      }
-
-      // Handle thinking delta (extended thinking)
-      // Note: SDK uses "thinking_delta" type, not "reasoning_delta"
-      if (
-        event.type === "content_block_delta" &&
-        (event.delta as { type?: string; thinking?: string })?.type ===
-          "thinking_delta" &&
-        (event.delta as { thinking?: string }).thinking
-      ) {
-        yield {
-          type: "reasoning",
-          content: (event.delta as { thinking?: string }).thinking,
-          messageId: this.generateMessageId(),
-        };
-      }
-
-      // content_block_start -- tool_use starts streaming
-      if (event.type === "content_block_start" && event.content_block) {
-        const block = event.content_block;
-        if ("name" in block && "id" in block) {
-          const toolId = block.id as string;
-          const toolName = block.name as string;
-          if (!sentToolIds.has(toolId)) {
-            sentToolIds.add(toolId);
-            yield {
-              type: "tool_use",
-              id: toolId,
-              name: toolName,
-              input: block.input,
-              messageId: this.generateMessageId(),
-            };
-          }
-        }
-      }
-
-      // content_block_delta -- streaming tool input (input_json_delta)
-      if (
-        event.type === "content_block_delta" &&
-        event.delta?.type === "input_json_delta"
-      ) {
-        // The full input is already provided in content_block_start.
-        // Subsequent input_json_delta events just stream the input parameters.
-        // The tool_use event was already emitted with the initial input in content_block_start.
-      }
-    }
-
-    if (msg.type === "assistant" && msg.message?.content) {
-      // Skip entire assistant message text if we've already sent it via stream_event
-      // This prevents duplicate text when includePartialMessages is enabled
-      if (currentHasStreamedText) {
-        // Skip all text blocks in this assistant message
-        // But still process tool blocks if any
-        for (const block of msg.message.content as Record<string, unknown>[]) {
-          if ("name" in block && "id" in block) {
-            const toolId = block.id as string;
-            const toolName = block.name as string;
-            if (!sentToolIds.has(toolId)) {
-              sentToolIds.add(toolId);
-              yield {
-                type: "tool_use",
-                id: toolId,
-                name: toolName,
-                input: block.input,
-                messageId: this.generateMessageId(),
-              };
-            }
-          }
-        }
-        // Early return - skip yielding any text from this assistant message
-        return;
-      }
-
-      // No streaming happened, yield text blocks normally
-      for (const block of msg.message.content as Record<string, unknown>[]) {
-        if ("text" in block) {
-          const sanitizedText = this.sanitizeText(block.text as string);
-          const textHash = sanitizedText.slice(0, 100);
-
-          if (!sentTextHashes.has(textHash)) {
-            sentTextHashes.add(textHash);
-            yield {
-              type: "text",
-              content: sanitizedText,
-              messageId: this.generateMessageId(),
-            };
-          }
-        } else if ("name" in block && "id" in block) {
-          const toolId = block.id as string;
-          const toolName = block.name as string;
-
-          // Special handling for AskUserQuestion tool
-          if (toolName === "AskUserQuestion" && !sentToolIds.has(toolId)) {
-            sentToolIds.add(toolId);
-            // Extract question data from tool input
-            const toolInput = block.input as {
-              questions?: Array<{
-                question: string;
-                header: string;
-                options: Array<{ label: string; description?: string }>;
-                multiSelect?: boolean;
-              }>;
-            };
-
-            if (toolInput.questions && toolInput.questions.length > 0) {
-              yield {
-                type: "question",
-                question: {
-                  id: toolId,
-                  questions: toolInput.questions,
-                  status: "pending",
-                },
-                messageId: this.generateMessageId(),
-              };
-            }
-          } else if (!sentToolIds.has(toolId)) {
-            sentToolIds.add(toolId);
-            yield {
-              type: "tool_use",
-              id: toolId,
-              name: toolName,
-              input: block.input,
-              messageId: this.generateMessageId(),
-            };
-          }
-        }
-      }
-    }
-
-    if (msg.type === "user" && msg.message?.content) {
-      for (const block of msg.message.content as Record<string, unknown>[]) {
-        if ("type" in block && block.type === "tool_result") {
-          const toolUseIdSnake = (block as { tool_use_id?: unknown })
-            .tool_use_id;
-          const toolUseIdCamel = (block as { toolUseId?: unknown }).toolUseId;
-          const isErrorSnake = (block as { is_error?: unknown }).is_error;
-          const isErrorCamel = (block as { isError?: unknown }).isError;
-          const toolUseId = toolUseIdSnake ?? toolUseIdCamel;
-          const rawIsError = isErrorSnake ?? isErrorCamel;
-          const isError = typeof rawIsError === "boolean" ? rawIsError : false;
-
-          yield {
-            type: "tool_result",
-            toolUseId: (toolUseId ?? "") as string,
-            output:
-              typeof block.content === "string"
-                ? block.content
-                : JSON.stringify(block.content),
-            isError,
-            messageId: this.generateMessageId(),
-          };
-        }
-      }
-    }
-
-    if (msg.type === "result") {
-      yield {
-        type: "result",
-        content: msg.subtype,
-        cost: msg.total_cost_usd,
-        duration: msg.duration_ms,
-      };
     }
   }
 }
