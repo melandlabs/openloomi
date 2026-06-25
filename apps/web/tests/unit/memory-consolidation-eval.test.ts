@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   adaptMemoryRecordsForConsolidation,
+  analyzeSemanticMemoryDraftReadiness,
   analyzeMemoryEvidenceClusters,
   assignMemoryRelationGraph,
   calculateMemoryConsolidationEvalMetrics,
@@ -10,11 +11,20 @@ import {
   buildMemoryRelationCandidates,
   buildMemoryRelationPipeline,
   buildMemoryRelationPipelineDiagnostics,
+  buildMemorySemanticRetrievalDryRunReport,
+  buildMemorySemanticRetrievalPlan,
   buildSemanticMemoryDraftCandidates,
   deriveMemoryRelationGraphLifecycle,
   persistSemanticMemoryDrafts,
   runMemoryConsolidationDiagnostics,
   summarizeSemanticMemoryDraftCandidate,
+  type MemorySemanticRetrievalCandidate,
+  type MemorySemanticRetrievalDryRunReport,
+  type MemorySemanticRetrievalDraft,
+  type MemorySemanticRetrievalPlanningInput,
+  type MemorySemanticRetrievalPlanningResult,
+  type SemanticMemoryArtifactStorageAdapter,
+  type SemanticMemoryArtifactStorageRecord,
   type SemanticMemoryDraftStore,
   type SemanticMemoryDraftSummarizer,
 } from "@openloomi/memory-consolidation";
@@ -1722,6 +1732,489 @@ describe("memory consolidation evaluation scenarios", () => {
     );
   });
 
+  it("reports when a semantic draft candidate is ready for summarization", () => {
+    const { diagnostics, candidate } = buildSemanticDraftPersistenceFixture();
+    const readiness = analyzeSemanticMemoryDraftReadiness({
+      candidate,
+      records: diagnostics.records,
+      minConfidence: 0.5,
+    });
+
+    expect(readiness).toEqual({
+      draftId: candidate.draftId,
+      ready: true,
+      confidence: candidate.confidence,
+      minConfidence: 0.5,
+      sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+      availableSourceRecordIds: [
+        "adapter-zh-a",
+        "adapter-zh-b",
+        "adapter-zh-c",
+      ],
+      missingSourceRecordIds: [],
+      recordsMissingTextIds: [],
+      reasonCodes: [],
+    });
+  });
+
+  it("explains why a semantic draft candidate is not ready for summarization", () => {
+    const { diagnostics, candidate } = buildSemanticDraftPersistenceFixture();
+    const incompleteCandidate = {
+      ...candidate,
+      confidence: 0.2,
+      sourceClusterKey: "",
+      sourceRecordIds: ["adapter-zh-a", "missing-source", "adapter-no-text"],
+      reasonCodes: [],
+    };
+    const readiness = analyzeSemanticMemoryDraftReadiness({
+      candidate: incompleteCandidate,
+      records: [
+        ...diagnostics.records,
+        {
+          id: "adapter-no-text",
+          userId: "adapter-user",
+          timestamp: NOW,
+          tier: "short",
+        },
+      ],
+      minConfidence: 0.5,
+    });
+
+    expect(readiness).toEqual(
+      expect.objectContaining({
+        ready: false,
+        confidence: 0.2,
+        availableSourceRecordIds: ["adapter-zh-a", "adapter-no-text"],
+        missingSourceRecordIds: ["missing-source"],
+        recordsMissingTextIds: ["adapter-no-text"],
+        reasonCodes: [
+          "low_confidence",
+          "missing_provenance",
+          "missing_source_records",
+          "missing_source_text",
+        ],
+      }),
+    );
+  });
+
+  it("rejects semantic draft readiness when confidence is not finite", () => {
+    const { diagnostics, candidate } = buildSemanticDraftPersistenceFixture();
+    const readiness = analyzeSemanticMemoryDraftReadiness({
+      candidate: {
+        ...candidate,
+        confidence: Number.NaN,
+      },
+      records: diagnostics.records,
+      minConfidence: 0.5,
+    });
+
+    expect(readiness).toEqual(
+      expect.objectContaining({
+        ready: false,
+        confidence: Number.NaN,
+        reasonCodes: ["invalid_confidence"],
+      }),
+    );
+  });
+
+  it("documents fake summarizer failure cases without adding a real provider", async () => {
+    const { diagnostics, candidate } = buildSemanticDraftPersistenceFixture();
+    const fakeSummarizer: SemanticMemoryDraftSummarizer = {
+      async summarizeDraft(candidate, records, context) {
+        if (context?.metadata?.emptyOutput === true) {
+          return {
+            type: candidate.suggestedType,
+            content: "",
+            sourceRecordIds: [...candidate.sourceRecordIds],
+            confidence: candidate.confidence,
+          };
+        }
+
+        if (records.length === 0) {
+          throw new Error("missing source records");
+        }
+
+        if (candidate.confidence < 0.5) {
+          throw new Error("low confidence draft");
+        }
+
+        if (context?.metadata?.graphStatus === "contested") {
+          throw new Error("contested draft");
+        }
+
+        return {
+          type: candidate.suggestedType,
+          content: records
+            .map((record) => record.text)
+            .filter((text): text is string => Boolean(text))
+            .join("\n"),
+          sourceRecordIds: [...candidate.sourceRecordIds],
+          confidence: candidate.confidence,
+        };
+      },
+    };
+
+    await expect(
+      summarizeSemanticMemoryDraftCandidate({
+        candidate: {
+          ...candidate,
+          sourceRecordIds: ["missing-source"],
+        },
+        records: diagnostics.records,
+        summarizer: fakeSummarizer,
+      }),
+    ).rejects.toThrow("missing source records");
+    await expect(
+      summarizeSemanticMemoryDraftCandidate({
+        candidate: {
+          ...candidate,
+          confidence: 0.2,
+        },
+        records: diagnostics.records,
+        summarizer: fakeSummarizer,
+      }),
+    ).rejects.toThrow("low confidence draft");
+    await expect(
+      summarizeSemanticMemoryDraftCandidate({
+        candidate,
+        records: diagnostics.records,
+        summarizer: fakeSummarizer,
+        context: {
+          metadata: {
+            graphStatus: "contested",
+          },
+        },
+      }),
+    ).rejects.toThrow("contested draft");
+
+    const emptyDraft = await summarizeSemanticMemoryDraftCandidate({
+      candidate,
+      records: diagnostics.records,
+      summarizer: fakeSummarizer,
+      context: {
+        metadata: {
+          emptyOutput: true,
+        },
+      },
+    });
+
+    expect(emptyDraft).toEqual(
+      expect.objectContaining({
+        content: "",
+        sourceRecordIds: candidate.sourceRecordIds,
+      }),
+    );
+  });
+
+  it("describes semantic draft retrieval candidates without planning logic", () => {
+    const draft = {
+      draftId: "semantic-draft:answer-language-zh",
+      type: "preference",
+      content: "User prefers Chinese explanations for technical repo work.",
+      sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+      confidence: 0.82,
+      metadata: {
+        sourceClusterKey: "answer-language:zh",
+      },
+    } satisfies MemorySemanticRetrievalDraft;
+    const planningInput = {
+      query: "How should replies be written?",
+      drafts: [draft],
+      existingRecordIds: ["adapter-zh-a"],
+      now: NOW,
+    } satisfies MemorySemanticRetrievalPlanningInput;
+    const retrievalCandidate = {
+      ...draft,
+      queryRelevance: 0.7,
+      draftStatus: "active",
+      status: "eligible",
+      reasonCodes: ["semantic_draft_candidate"],
+    } satisfies MemorySemanticRetrievalCandidate;
+    const planningResult = {
+      query: planningInput.query,
+      candidates: [retrievalCandidate],
+      fallbackRecordIds: planningInput.existingRecordIds,
+    } satisfies MemorySemanticRetrievalPlanningResult;
+
+    expect(planningResult).toEqual({
+      query: "How should replies be written?",
+      candidates: [
+        expect.objectContaining({
+          draftId: "semantic-draft:answer-language-zh",
+          queryRelevance: 0.7,
+          draftStatus: "active",
+          status: "eligible",
+          reasonCodes: ["semantic_draft_candidate"],
+          sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        }),
+      ],
+      fallbackRecordIds: ["adapter-zh-a"],
+    });
+  });
+
+  it("plans semantic draft retrieval candidates with caller-provided relevance", () => {
+    const drafts: MemorySemanticRetrievalDraft[] = [
+      {
+        draftId: "semantic-draft:low-relevance",
+        type: "preference",
+        content: "User prefers compact answers.",
+        sourceRecordIds: ["adapter-style-a"],
+        confidence: 0.99,
+      },
+      {
+        draftId: "semantic-draft:answer-language-zh",
+        type: "preference",
+        content: "User prefers Chinese explanations for technical repo work.",
+        sourceRecordIds: ["adapter-zh-a", "adapter-zh-b"],
+        confidence: 0.82,
+      },
+      {
+        draftId: "semantic-draft:answer-language-en",
+        type: "preference",
+        content: "User once asked for English in one reply.",
+        sourceRecordIds: ["adapter-en-a"],
+        confidence: 0.72,
+      },
+    ];
+    const result = buildMemorySemanticRetrievalPlan({
+      query: "What language should technical replies use?",
+      drafts,
+      existingRecordIds: ["adapter-zh-a"],
+      now: NOW,
+      getDraftRelevance({ draft }) {
+        if (draft.draftId.endsWith("answer-language-zh")) {
+          return 0.9;
+        }
+
+        if (draft.draftId.endsWith("answer-language-en")) {
+          return 0.9;
+        }
+
+        return 0.2;
+      },
+    });
+
+    expect(result.candidates.map((candidate) => candidate.draftId)).toEqual([
+      "semantic-draft:answer-language-zh",
+      "semantic-draft:answer-language-en",
+      "semantic-draft:low-relevance",
+    ]);
+    expect(result.candidates[0]).toEqual(
+      expect.objectContaining({
+        queryRelevance: 0.9,
+        confidence: 0.82,
+        status: "eligible",
+        reasonCodes: ["semantic_draft_candidate", "query_relevance"],
+      }),
+    );
+    expect(result.fallbackRecordIds).toEqual(["adapter-zh-a"]);
+    expect(drafts[0]?.sourceRecordIds).toEqual(["adapter-style-a"]);
+  });
+
+  it("suppresses semantic retrieval candidates conservatively", () => {
+    const result = buildMemorySemanticRetrievalPlan({
+      query: "What should be recalled?",
+      minConfidence: 0.7,
+      maxCandidates: 1,
+      drafts: [
+        {
+          draftId: "semantic-draft:strong",
+          type: "preference",
+          content: "User prefers Chinese technical explanations.",
+          sourceRecordIds: ["adapter-zh-a"],
+          confidence: 0.9,
+          status: "active",
+        },
+        {
+          draftId: "semantic-draft:contested",
+          type: "preference",
+          content: "User may prefer English.",
+          sourceRecordIds: ["adapter-en-a"],
+          confidence: 0.95,
+          status: "contested",
+        },
+        {
+          draftId: "semantic-draft:low-confidence",
+          type: "preference",
+          content: "User may prefer very short answers.",
+          sourceRecordIds: ["adapter-style-a"],
+          confidence: 0.4,
+          status: "active",
+        },
+        {
+          draftId: "semantic-draft:extra",
+          type: "preference",
+          content: "User prefers detailed citations.",
+          sourceRecordIds: ["adapter-citation-a"],
+          confidence: 0.85,
+          status: "active",
+        },
+      ],
+      getDraftRelevance({ draft }) {
+        return draft.draftId === "semantic-draft:low-confidence" ? 0.6 : 0.9;
+      },
+    });
+
+    expect(result.candidates).toEqual([
+      expect.objectContaining({
+        draftId: "semantic-draft:contested",
+        status: "suppressed",
+        reasonCodes: [
+          "semantic_draft_candidate",
+          "query_relevance",
+          "contested_memory",
+        ],
+      }),
+      expect.objectContaining({
+        draftId: "semantic-draft:strong",
+        status: "eligible",
+      }),
+      expect.objectContaining({
+        draftId: "semantic-draft:extra",
+        status: "suppressed",
+        reasonCodes: [
+          "semantic_draft_candidate",
+          "query_relevance",
+          "max_candidates",
+        ],
+      }),
+      expect.objectContaining({
+        draftId: "semantic-draft:low-confidence",
+        status: "suppressed",
+        reasonCodes: [
+          "semantic_draft_candidate",
+          "query_relevance",
+          "low_confidence",
+        ],
+      }),
+    ]);
+  });
+
+  it("covers semantic retrieval eval scenarios for selected, suppressed, contested, and fallback candidates", () => {
+    const result = buildMemorySemanticRetrievalPlan({
+      query: "Which long-term preference should guide this answer?",
+      minConfidence: 0.7,
+      existingRecordIds: ["raw-trace:zh-a", "raw-trace:zh-b"],
+      drafts: [
+        {
+          draftId: "semantic-draft:selected",
+          type: "preference",
+          content: "User prefers Chinese for technical explanations.",
+          sourceRecordIds: ["raw-trace:zh-a", "raw-trace:zh-b"],
+          confidence: 0.88,
+          status: "active",
+        },
+        {
+          draftId: "semantic-draft:low-confidence",
+          type: "preference",
+          content: "User might prefer terse answers.",
+          sourceRecordIds: ["raw-trace:style-a"],
+          confidence: 0.4,
+          status: "active",
+        },
+        {
+          draftId: "semantic-draft:contested",
+          type: "preference",
+          content: "User may prefer English now.",
+          sourceRecordIds: ["raw-trace:en-a"],
+          confidence: 0.91,
+          status: "contested",
+        },
+      ],
+      getDraftRelevance({ draft }) {
+        return draft.draftId === "semantic-draft:selected" ? 0.9 : 0.8;
+      },
+    });
+    const candidatesById = new Map(
+      result.candidates.map((candidate) => [candidate.draftId, candidate]),
+    );
+
+    expect(candidatesById.get("semantic-draft:selected")).toEqual(
+      expect.objectContaining({
+        status: "eligible",
+        reasonCodes: ["semantic_draft_candidate", "query_relevance"],
+      }),
+    );
+    expect(candidatesById.get("semantic-draft:low-confidence")).toEqual(
+      expect.objectContaining({
+        status: "suppressed",
+        reasonCodes: [
+          "semantic_draft_candidate",
+          "query_relevance",
+          "low_confidence",
+        ],
+      }),
+    );
+    expect(candidatesById.get("semantic-draft:contested")).toEqual(
+      expect.objectContaining({
+        status: "suppressed",
+        reasonCodes: [
+          "semantic_draft_candidate",
+          "query_relevance",
+          "contested_memory",
+        ],
+      }),
+    );
+    expect(result.fallbackRecordIds).toEqual([
+      "raw-trace:zh-a",
+      "raw-trace:zh-b",
+    ]);
+  });
+
+  it("builds a semantic retrieval dry-run report without changing retrieval results", () => {
+    const result = buildMemorySemanticRetrievalPlan({
+      query: "Which preference is relevant?",
+      existingRecordIds: ["raw-trace:zh-a"],
+      minConfidence: 0.7,
+      drafts: [
+        {
+          draftId: "semantic-draft:selected",
+          type: "preference",
+          content: "User prefers Chinese technical explanations.",
+          sourceRecordIds: ["raw-trace:zh-a"],
+          confidence: 0.88,
+        },
+        {
+          draftId: "semantic-draft:low-confidence",
+          type: "preference",
+          content: "User may prefer terse answers.",
+          sourceRecordIds: ["raw-trace:style-a"],
+          confidence: 0.4,
+        },
+      ],
+      getDraftRelevance: () => 0.8,
+    });
+    const report = buildMemorySemanticRetrievalDryRunReport({
+      plan: result,
+      existingRecordIds: ["raw-trace:zh-a"],
+    }) satisfies MemorySemanticRetrievalDryRunReport;
+
+    expect(report).toEqual(
+      expect.objectContaining({
+        summary: {
+          query: "Which preference is relevant?",
+          existingRecordCount: 1,
+          draftCandidateCount: 2,
+          addedDraftCount: 1,
+          suppressedDraftCount: 1,
+          fallbackRecordCount: 1,
+        },
+        existingRecordIds: ["raw-trace:zh-a"],
+        draftCandidateIds: [
+          "semantic-draft:selected",
+          "semantic-draft:low-confidence",
+        ],
+        reasonCodes: expect.arrayContaining([
+          "semantic_draft_candidate",
+          "query_relevance",
+          "low_confidence",
+          "source_trace_fallback",
+        ]),
+      }),
+    );
+    expect(result.fallbackRecordIds).toEqual(["raw-trace:zh-a"]);
+  });
+
   it("does not persist semantic drafts when persistence is disabled", async () => {
     const { item } = buildSemanticDraftPersistenceFixture();
     const result = await persistSemanticMemoryDrafts({
@@ -1838,6 +2331,71 @@ describe("memory consolidation evaluation scenarios", () => {
     expect(diagnostics.records.map((record) => record.id)).toEqual(
       originalRecordIds,
     );
+  });
+
+  it("describes a caller-provided semantic memory artifact storage adapter contract", async () => {
+    const artifact = {
+      artifactId: "artifact:semantic-draft:answer-language-zh",
+      userId: "adapter-user",
+      type: "preference",
+      content: "User prefers Chinese explanations for technical repo work.",
+      status: "draft",
+      confidence: 0.82,
+      sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+      sourceClusterKey: "answer-language:zh",
+      competitionKey: "answer-language",
+      reasonCodes: ["strong_repeated_evidence", "wins_competition"],
+      createdAt: NOW,
+      updatedAt: NOW,
+      rollback: {
+        operationId: "memory-consolidation-dry-run",
+        reason: "semantic draft storage contract test",
+      },
+      metadata: {
+        packageLocal: true,
+      },
+    } satisfies SemanticMemoryArtifactStorageRecord;
+    const saveCalls: Array<{
+      userId: string;
+      artifacts: SemanticMemoryArtifactStorageRecord[];
+      now: number;
+      dryRun: boolean;
+    }> = [];
+    const adapter = {
+      async saveArtifacts(input) {
+        saveCalls.push(input);
+
+        return {
+          artifactIds: input.artifacts.map((artifact) => artifact.artifactId),
+          dryRun: input.dryRun,
+        };
+      },
+    } satisfies SemanticMemoryArtifactStorageAdapter;
+    const result = await adapter.saveArtifacts({
+      userId: "adapter-user",
+      artifacts: [artifact],
+      now: NOW,
+      dryRun: true,
+    });
+
+    expect(result).toEqual({
+      artifactIds: ["artifact:semantic-draft:answer-language-zh"],
+      dryRun: true,
+    });
+    expect(saveCalls).toEqual([
+      expect.objectContaining({
+        userId: "adapter-user",
+        dryRun: true,
+        artifacts: [
+          expect.objectContaining({
+            sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+            rollback: expect.objectContaining({
+              operationId: "memory-consolidation-dry-run",
+            }),
+          }),
+        ],
+      }),
+    ]);
   });
 
   it("runs opt-in memory consolidation diagnostics as a dry-run", async () => {

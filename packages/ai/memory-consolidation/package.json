@@ -11,6 +11,7 @@
     "./persistence": "./src/persistence.ts",
     "./pipeline": "./src/pipeline.ts",
     "./relation-graph": "./src/relation-graph.ts",
+    "./retrieval": "./src/retrieval.ts",
     "./runtime": "./src/runtime.ts",
     "./semantic-draft": "./src/semantic-draft.ts"
   },

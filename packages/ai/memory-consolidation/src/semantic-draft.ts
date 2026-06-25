@@ -65,6 +65,32 @@ export interface SummarizeSemanticMemoryDraftCandidateInput {
   context?: SemanticMemoryDraftSummarizerContext;
 }
 
+export type SemanticMemoryDraftReadinessReasonCode =
+  | "invalid_confidence"
+  | "low_confidence"
+  | "missing_provenance"
+  | "missing_source_records"
+  | "missing_source_text"
+  | (string & {});
+
+export interface AnalyzeSemanticMemoryDraftReadinessInput {
+  candidate: MemorySemanticDraftCandidate;
+  records: MemoryEvidenceRecord[];
+  minConfidence?: number;
+}
+
+export interface SemanticMemoryDraftReadinessDiagnostics {
+  draftId: string;
+  ready: boolean;
+  confidence: number;
+  minConfidence: number;
+  sourceRecordIds: string[];
+  availableSourceRecordIds: string[];
+  missingSourceRecordIds: string[];
+  recordsMissingTextIds: string[];
+  reasonCodes: SemanticMemoryDraftReadinessReasonCode[];
+}
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -257,4 +283,67 @@ export async function summarizeSemanticMemoryDraftCandidate(
     sourceRecords,
     input.context,
   );
+}
+
+export function analyzeSemanticMemoryDraftReadiness(
+  input: AnalyzeSemanticMemoryDraftReadinessInput,
+): SemanticMemoryDraftReadinessDiagnostics {
+  const recordsById = new Map(
+    input.records.map((record) => [record.id, record]),
+  );
+  const minConfidence = clamp01(input.minConfidence ?? 0);
+  const sourceRecordIds = [...input.candidate.sourceRecordIds];
+  const availableSourceRecordIds: string[] = [];
+  const missingSourceRecordIds: string[] = [];
+  const recordsMissingTextIds: string[] = [];
+  const reasonCodes: SemanticMemoryDraftReadinessReasonCode[] = [];
+
+  for (const recordId of sourceRecordIds) {
+    const record = recordsById.get(recordId);
+
+    if (!record) {
+      missingSourceRecordIds.push(recordId);
+      continue;
+    }
+
+    availableSourceRecordIds.push(recordId);
+
+    if (!record.text?.trim()) {
+      recordsMissingTextIds.push(recordId);
+    }
+  }
+
+  if (!Number.isFinite(input.candidate.confidence)) {
+    reasonCodes.push("invalid_confidence");
+  } else if (input.candidate.confidence < minConfidence) {
+    reasonCodes.push("low_confidence");
+  }
+
+  if (
+    !input.candidate.sourceClusterKey ||
+    !input.candidate.competitionKey ||
+    input.candidate.reasonCodes.length === 0
+  ) {
+    reasonCodes.push("missing_provenance");
+  }
+
+  if (missingSourceRecordIds.length > 0 || sourceRecordIds.length === 0) {
+    reasonCodes.push("missing_source_records");
+  }
+
+  if (recordsMissingTextIds.length > 0) {
+    reasonCodes.push("missing_source_text");
+  }
+
+  return {
+    draftId: input.candidate.draftId,
+    ready: reasonCodes.length === 0,
+    confidence: input.candidate.confidence,
+    minConfidence,
+    sourceRecordIds,
+    availableSourceRecordIds,
+    missingSourceRecordIds,
+    recordsMissingTextIds,
+    reasonCodes,
+  };
 }

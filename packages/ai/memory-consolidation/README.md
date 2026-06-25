@@ -138,6 +138,10 @@ single draft candidate and its source records to a caller-provided summarizer.
 The package still does not provide a concrete LLM summarizer or persist the
 result.
 
+`analyzeSemanticMemoryDraftReadiness` can inspect whether a draft candidate has
+enough source records, text, confidence, and provenance before it is sent to a
+summarizer.
+
 `calculateMemoryConsolidationEvalMetrics` provides a small scenario metrics
 helper for comparing expected preservation, temporary/noise leakage, contested
 cluster coverage, and decay precision proxies in focused eval suites.
@@ -151,6 +155,10 @@ retrieval behavior.
 semantic drafts. It only writes through a caller-provided draft store when
 explicitly enabled with `dryRun: false`; otherwise it returns the planned draft
 artifacts for review without changing storage or retrieval behavior.
+
+`buildMemorySemanticRetrievalPlan` and
+`buildMemorySemanticRetrievalDryRunReport` describe how semantic drafts can be
+inspected for retrieval impact without changing production retrieval ranking.
 
 Callers can keep the full diagnostics for debugging and derive the compact
 report for review or logging:

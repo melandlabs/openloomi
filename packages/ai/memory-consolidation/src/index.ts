@@ -5,5 +5,6 @@ export * from "./plan";
 export * from "./persistence";
 export * from "./pipeline";
 export * from "./relation-graph";
+export * from "./retrieval";
 export * from "./runtime";
 export * from "./semantic-draft";

@@ -23,6 +23,56 @@ export interface PersistedSemanticMemoryDraft {
   createdAt: number;
 }
 
+export type SemanticMemoryArtifactStatus =
+  | "draft"
+  | "consolidated"
+  | "deprecated"
+  | "conflicted"
+  | (string & {});
+
+export interface SemanticMemoryArtifactRollbackMetadata {
+  sourceArtifactId?: string;
+  operationId?: string;
+  createdBy?: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SemanticMemoryArtifactStorageRecord {
+  artifactId: string;
+  userId: string;
+  type: SemanticMemoryDraft["type"];
+  content: string;
+  status: SemanticMemoryArtifactStatus;
+  confidence: number;
+  sourceRecordIds: string[];
+  sourceClusterKey: string;
+  competitionKey: string;
+  reasonCodes: MemorySemanticDraftCandidate["reasonCodes"];
+  createdAt: number;
+  updatedAt: number;
+  rollback: SemanticMemoryArtifactRollbackMetadata;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SemanticMemoryArtifactStorageAdapterSaveInput {
+  userId: string;
+  artifacts: SemanticMemoryArtifactStorageRecord[];
+  now: number;
+  dryRun: boolean;
+}
+
+export interface SemanticMemoryArtifactStorageAdapterSaveResult {
+  artifactIds: string[];
+  dryRun: boolean;
+}
+
+export interface SemanticMemoryArtifactStorageAdapter {
+  saveArtifacts(
+    input: SemanticMemoryArtifactStorageAdapterSaveInput,
+  ): Promise<SemanticMemoryArtifactStorageAdapterSaveResult>;
+}
+
 export interface SemanticMemoryDraftStoreSaveInput {
   userId: string;
   drafts: PersistedSemanticMemoryDraft[];
