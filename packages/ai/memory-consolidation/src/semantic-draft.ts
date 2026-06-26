@@ -91,6 +91,119 @@ export interface SemanticMemoryDraftReadinessDiagnostics {
   reasonCodes: SemanticMemoryDraftReadinessReasonCode[];
 }
 
+export interface SemanticMemoryDraftSummarizerRequestDiagnostics {
+  draftId: string;
+  sourceClusterKey: string;
+  competitionKey: string;
+  suggestedType: MemorySemanticDraftSuggestedType;
+  confidence: number;
+  sourceRecordIds: string[];
+  availableSourceRecordIds: string[];
+  missingSourceRecordIds: string[];
+  recordsMissingTextIds: string[];
+  ready: boolean;
+  reasonCodes: SemanticMemoryDraftReadinessReasonCode[];
+}
+
+export type SemanticMemoryDraftSummarizerResponseReasonCode =
+  | "missing_output_content"
+  | "output_source_record_mismatch"
+  | "output_type_mismatch"
+  | "invalid_output_confidence"
+  | (string & {});
+
+export interface SemanticMemoryDraftSummarizerResponseDiagnostics {
+  draftId: string;
+  outputType: MemorySemanticDraftSuggestedType;
+  outputConfidence: number;
+  outputSourceRecordIds: string[];
+  preservesType: boolean;
+  preservesSourceRecordIds: boolean;
+  hasContent: boolean;
+  reasonCodes: SemanticMemoryDraftSummarizerResponseReasonCode[];
+}
+
+export interface SemanticMemoryDraftSummarizerDiagnostics {
+  request: SemanticMemoryDraftSummarizerRequestDiagnostics;
+  response?: SemanticMemoryDraftSummarizerResponseDiagnostics;
+}
+
+export interface SemanticMemoryDraftSummarizerSourceRecordInput {
+  recordId: string;
+  text: string;
+  timestamp: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SemanticMemoryDraftSummarizerCandidateInput {
+  draftId: string;
+  sourceClusterKey: string;
+  competitionKey: string;
+  suggestedType: MemorySemanticDraftSuggestedType;
+  confidence: number;
+  sourceRecordIds: string[];
+  reasonCodes: MemoryConsolidationReasonCode[];
+  needsSummary: true;
+  summaryPriority?: number;
+}
+
+export interface SemanticMemoryDraftSummarizerInputContract {
+  candidate: SemanticMemoryDraftSummarizerCandidateInput;
+  request: SemanticMemoryDraftSummarizerRequestDiagnostics;
+  sourceRecords: SemanticMemoryDraftSummarizerSourceRecordInput[];
+  context?: SemanticMemoryDraftSummarizerContext;
+}
+
+export interface SemanticMemoryDraftSummarizerProviderInvoke {
+  (
+    input: SemanticMemoryDraftSummarizerInputContract,
+  ): Promise<SemanticMemoryDraft>;
+}
+
+export type SemanticMemoryDraftSummarizerProviderAdapterStatus =
+  | "summarized"
+  | "skipped"
+  | "failed";
+
+export type SemanticMemoryDraftSummarizerProviderAdapterReasonCode =
+  | "request_not_ready"
+  | "provider_error"
+  | SemanticMemoryDraftReadinessReasonCode
+  | SemanticMemoryDraftSummarizerResponseReasonCode
+  | (string & {});
+
+export interface SemanticMemoryDraftSummarizerProviderAdapterError {
+  name?: string;
+  message: string;
+}
+
+export interface SemanticMemoryDraftSummarizerProviderAdapterResult {
+  status: SemanticMemoryDraftSummarizerProviderAdapterStatus;
+  input: SemanticMemoryDraftSummarizerInputContract;
+  diagnostics: SemanticMemoryDraftSummarizerDiagnostics;
+  draft?: SemanticMemoryDraft;
+  error?: SemanticMemoryDraftSummarizerProviderAdapterError;
+  reasonCodes: SemanticMemoryDraftSummarizerProviderAdapterReasonCode[];
+}
+
+export interface BuildSemanticMemoryDraftSummarizerDiagnosticsInput {
+  candidate: MemorySemanticDraftCandidate;
+  records: MemoryEvidenceRecord[];
+  minConfidence?: number;
+  draft?: SemanticMemoryDraft;
+}
+
+export interface BuildSemanticMemoryDraftSummarizerInputContractInput {
+  candidate: MemorySemanticDraftCandidate;
+  records: MemoryEvidenceRecord[];
+  context?: SemanticMemoryDraftSummarizerContext;
+  minConfidence?: number;
+}
+
+export interface InvokeSemanticMemoryDraftSummarizerProviderInput extends BuildSemanticMemoryDraftSummarizerInputContractInput {
+  invoke: SemanticMemoryDraftSummarizerProviderInvoke;
+}
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -224,6 +337,85 @@ function resolveMaxCandidates(value: number | undefined): number {
   return Math.max(0, Math.floor(value));
 }
 
+function sameStringSet(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
+
+  return sortedLeft.every((value, index) => value === sortedRight[index]);
+}
+
+function copyContext(
+  context: SemanticMemoryDraftSummarizerContext | undefined,
+): SemanticMemoryDraftSummarizerContext | undefined {
+  if (!context) {
+    return undefined;
+  }
+
+  return {
+    now: context.now,
+    metadata: context.metadata ? { ...context.metadata } : undefined,
+  };
+}
+
+function toProviderAdapterError(
+  error: unknown,
+): SemanticMemoryDraftSummarizerProviderAdapterError {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+
+  return {
+    message: String(error),
+  };
+}
+
+function buildSummarizerResponseDiagnostics(
+  candidate: MemorySemanticDraftCandidate,
+  draft: SemanticMemoryDraft,
+): SemanticMemoryDraftSummarizerResponseDiagnostics {
+  const hasContent = draft.content.trim().length > 0;
+  const preservesType = draft.type === candidate.suggestedType;
+  const preservesSourceRecordIds = sameStringSet(
+    draft.sourceRecordIds,
+    candidate.sourceRecordIds,
+  );
+  const reasonCodes: SemanticMemoryDraftSummarizerResponseReasonCode[] = [];
+
+  if (!hasContent) {
+    reasonCodes.push("missing_output_content");
+  }
+
+  if (!preservesSourceRecordIds) {
+    reasonCodes.push("output_source_record_mismatch");
+  }
+
+  if (!preservesType) {
+    reasonCodes.push("output_type_mismatch");
+  }
+
+  if (!Number.isFinite(draft.confidence)) {
+    reasonCodes.push("invalid_output_confidence");
+  }
+
+  return {
+    draftId: candidate.draftId,
+    outputType: draft.type,
+    outputConfidence: draft.confidence,
+    outputSourceRecordIds: [...draft.sourceRecordIds],
+    preservesType,
+    preservesSourceRecordIds,
+    hasContent,
+    reasonCodes,
+  };
+}
+
 export function buildSemanticMemoryDraftCandidates(
   input: BuildSemanticMemoryDraftCandidatesInput,
 ): MemorySemanticDraftCandidate[] {
@@ -346,4 +538,128 @@ export function analyzeSemanticMemoryDraftReadiness(
     recordsMissingTextIds,
     reasonCodes,
   };
+}
+
+export function buildSemanticMemoryDraftSummarizerDiagnostics(
+  input: BuildSemanticMemoryDraftSummarizerDiagnosticsInput,
+): SemanticMemoryDraftSummarizerDiagnostics {
+  const readiness = analyzeSemanticMemoryDraftReadiness({
+    candidate: input.candidate,
+    records: input.records,
+    minConfidence: input.minConfidence,
+  });
+  const request: SemanticMemoryDraftSummarizerRequestDiagnostics = {
+    draftId: input.candidate.draftId,
+    sourceClusterKey: input.candidate.sourceClusterKey,
+    competitionKey: input.candidate.competitionKey,
+    suggestedType: input.candidate.suggestedType,
+    confidence: input.candidate.confidence,
+    sourceRecordIds: [...readiness.sourceRecordIds],
+    availableSourceRecordIds: [...readiness.availableSourceRecordIds],
+    missingSourceRecordIds: [...readiness.missingSourceRecordIds],
+    recordsMissingTextIds: [...readiness.recordsMissingTextIds],
+    ready: readiness.ready,
+    reasonCodes: [...readiness.reasonCodes],
+  };
+
+  return {
+    request,
+    response: input.draft
+      ? buildSummarizerResponseDiagnostics(input.candidate, input.draft)
+      : undefined,
+  };
+}
+
+export function buildSemanticMemoryDraftSummarizerInputContract(
+  input: BuildSemanticMemoryDraftSummarizerInputContractInput,
+): SemanticMemoryDraftSummarizerInputContract {
+  const recordsById = new Map(
+    input.records.map((record) => [record.id, record]),
+  );
+  const diagnostics = buildSemanticMemoryDraftSummarizerDiagnostics({
+    candidate: input.candidate,
+    records: input.records,
+    minConfidence: input.minConfidence,
+  });
+  const sourceRecords =
+    diagnostics.request.sourceRecordIds.flatMap<SemanticMemoryDraftSummarizerSourceRecordInput>(
+      (recordId) => {
+        const record = recordsById.get(recordId);
+
+        if (!record) {
+          return [];
+        }
+
+        return [
+          {
+            recordId,
+            text: record.text ?? "",
+            timestamp: record.timestamp,
+            metadata: record.metadata ? { ...record.metadata } : undefined,
+          },
+        ];
+      },
+    );
+
+  return {
+    candidate: {
+      draftId: input.candidate.draftId,
+      sourceClusterKey: input.candidate.sourceClusterKey,
+      competitionKey: input.candidate.competitionKey,
+      suggestedType: input.candidate.suggestedType,
+      confidence: input.candidate.confidence,
+      sourceRecordIds: [...input.candidate.sourceRecordIds],
+      reasonCodes: [...input.candidate.reasonCodes],
+      needsSummary: true,
+      summaryPriority: input.candidate.summaryPriority,
+    },
+    request: diagnostics.request,
+    sourceRecords,
+    context: copyContext(input.context),
+  };
+}
+
+export async function invokeSemanticMemoryDraftSummarizerProvider(
+  input: InvokeSemanticMemoryDraftSummarizerProviderInput,
+): Promise<SemanticMemoryDraftSummarizerProviderAdapterResult> {
+  const inputContract = buildSemanticMemoryDraftSummarizerInputContract(input);
+
+  if (!inputContract.request.ready) {
+    return {
+      status: "skipped",
+      input: inputContract,
+      diagnostics: {
+        request: inputContract.request,
+      },
+      reasonCodes: ["request_not_ready", ...inputContract.request.reasonCodes],
+    };
+  }
+
+  try {
+    const draft = await input.invoke(inputContract);
+    const diagnostics = buildSemanticMemoryDraftSummarizerDiagnostics({
+      candidate: input.candidate,
+      records: input.records,
+      minConfidence: input.minConfidence,
+      draft,
+    });
+
+    return {
+      status: "summarized",
+      input: inputContract,
+      diagnostics,
+      draft,
+      reasonCodes: [...(diagnostics.response?.reasonCodes ?? [])],
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      input: inputContract,
+      diagnostics: {
+        request: inputContract.request,
+      },
+      error: toProviderAdapterError(error),
+      reasonCodes: ["provider_error"],
+    };
+  }
 }

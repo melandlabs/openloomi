@@ -13,10 +13,16 @@ import {
   buildMemoryRelationPipelineDiagnostics,
   buildMemorySemanticRetrievalDryRunReport,
   buildMemorySemanticRetrievalPlan,
+  buildSemanticMemoryArtifactStorageDryRunReport,
+  buildSemanticMemoryDraftSummarizerInputContract,
+  buildSemanticMemoryDraftSummarizerDiagnostics,
   buildSemanticMemoryDraftCandidates,
+  deserializeSemanticMemoryArtifactStorageRecord,
   deriveMemoryRelationGraphLifecycle,
+  invokeSemanticMemoryDraftSummarizerProvider,
   persistSemanticMemoryDrafts,
   runMemoryConsolidationDiagnostics,
+  serializeSemanticMemoryArtifactStorageRecord,
   summarizeSemanticMemoryDraftCandidate,
   type MemorySemanticRetrievalCandidate,
   type MemorySemanticRetrievalDryRunReport,
@@ -26,6 +32,7 @@ import {
   type SemanticMemoryArtifactStorageAdapter,
   type SemanticMemoryArtifactStorageRecord,
   type SemanticMemoryDraftStore,
+  type SemanticMemoryDraftSummarizerProviderInvoke,
   type SemanticMemoryDraftSummarizer,
 } from "@openloomi/memory-consolidation";
 import {
@@ -954,6 +961,10 @@ function buildSemanticDraftPersistenceFixture() {
   };
 }
 
+function buildSemanticDraftSummarizerFixture() {
+  return buildSemanticDraftPersistenceFixture();
+}
+
 function recordingSemanticDraftStore() {
   const calls: Array<Parameters<SemanticMemoryDraftStore["saveDrafts"]>[0]> =
     [];
@@ -966,6 +977,34 @@ function recordingSemanticDraftStore() {
       },
     } satisfies SemanticMemoryDraftStore,
   };
+}
+
+function semanticArtifactStorageFixture() {
+  return {
+    artifactId: "artifact:semantic-draft:answer-language-zh",
+    userId: "adapter-user",
+    type: "preference",
+    content: "User prefers Chinese explanations for technical repo work.",
+    status: "draft",
+    confidence: 0.82,
+    sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+    sourceClusterKey: "answer-language:zh",
+    competitionKey: "answer-language",
+    reasonCodes: ["strong_repeated_evidence", "wins_competition"],
+    createdAt: NOW,
+    updatedAt: NOW,
+    rollback: {
+      operationId: "memory-consolidation-dry-run",
+      sourceArtifactId: "artifact:previous",
+      reason: "semantic artifact storage test",
+      metadata: {
+        packageLocal: true,
+      },
+    },
+    metadata: {
+      dryRun: true,
+    },
+  } satisfies SemanticMemoryArtifactStorageRecord;
 }
 
 describe("memory consolidation evaluation scenarios", () => {
@@ -1817,6 +1856,333 @@ describe("memory consolidation evaluation scenarios", () => {
     );
   });
 
+  it("builds summarizer request diagnostics from semantic draft readiness", () => {
+    const { diagnostics, candidate } = buildSemanticDraftSummarizerFixture();
+    const report = buildSemanticMemoryDraftSummarizerDiagnostics({
+      candidate,
+      records: diagnostics.records,
+      minConfidence: 0.5,
+    });
+
+    expect(report).toEqual({
+      request: {
+        draftId: candidate.draftId,
+        sourceClusterKey: candidate.sourceClusterKey,
+        competitionKey: candidate.competitionKey,
+        suggestedType: candidate.suggestedType,
+        confidence: candidate.confidence,
+        sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        availableSourceRecordIds: [
+          "adapter-zh-a",
+          "adapter-zh-b",
+          "adapter-zh-c",
+        ],
+        missingSourceRecordIds: [],
+        recordsMissingTextIds: [],
+        ready: true,
+        reasonCodes: [],
+      },
+      response: undefined,
+    });
+  });
+
+  it("reports summarizer response provenance mismatches without provider calls", () => {
+    const { diagnostics, candidate } = buildSemanticDraftSummarizerFixture();
+    const report = buildSemanticMemoryDraftSummarizerDiagnostics({
+      candidate,
+      records: diagnostics.records,
+      draft: {
+        type: "unknown",
+        content: "",
+        sourceRecordIds: ["adapter-zh-a"],
+        confidence: Number.NaN,
+      },
+    });
+
+    expect(report.response).toEqual({
+      draftId: candidate.draftId,
+      outputType: "unknown",
+      outputConfidence: Number.NaN,
+      outputSourceRecordIds: ["adapter-zh-a"],
+      preservesType: false,
+      preservesSourceRecordIds: false,
+      hasContent: false,
+      reasonCodes: [
+        "missing_output_content",
+        "output_source_record_mismatch",
+        "output_type_mismatch",
+        "invalid_output_confidence",
+      ],
+    });
+    expect(report.request.ready).toBe(true);
+
+    const duplicateSourceReport = buildSemanticMemoryDraftSummarizerDiagnostics(
+      {
+        candidate,
+        records: diagnostics.records,
+        draft: {
+          type: candidate.suggestedType,
+          content: "Duplicated source ids should not hide missing provenance.",
+          sourceRecordIds: ["adapter-zh-a", "adapter-zh-a", "adapter-zh-b"],
+          confidence: candidate.confidence,
+        },
+      },
+    );
+
+    expect(duplicateSourceReport.response).toEqual(
+      expect.objectContaining({
+        preservesSourceRecordIds: false,
+        reasonCodes: ["output_source_record_mismatch"],
+      }),
+    );
+  });
+
+  it("builds a stable summarizer input contract from candidate source records", () => {
+    const { diagnostics, candidate } = buildSemanticDraftSummarizerFixture();
+    const inputContract = buildSemanticMemoryDraftSummarizerInputContract({
+      candidate,
+      records: diagnostics.records,
+      context: {
+        now: NOW,
+        metadata: {
+          locale: "zh-CN",
+        },
+      },
+      minConfidence: 0.5,
+    });
+
+    expect(inputContract).toEqual({
+      candidate: {
+        draftId: candidate.draftId,
+        sourceClusterKey: candidate.sourceClusterKey,
+        competitionKey: candidate.competitionKey,
+        suggestedType: "preference",
+        confidence: candidate.confidence,
+        sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        reasonCodes: ["strong_repeated_evidence", "wins_competition"],
+        needsSummary: true,
+        summaryPriority: candidate.summaryPriority,
+      },
+      request: {
+        draftId: candidate.draftId,
+        sourceClusterKey: candidate.sourceClusterKey,
+        competitionKey: candidate.competitionKey,
+        suggestedType: "preference",
+        confidence: candidate.confidence,
+        sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        availableSourceRecordIds: [
+          "adapter-zh-a",
+          "adapter-zh-b",
+          "adapter-zh-c",
+        ],
+        missingSourceRecordIds: [],
+        recordsMissingTextIds: [],
+        ready: true,
+        reasonCodes: [],
+      },
+      sourceRecords: [
+        {
+          recordId: "adapter-zh-a",
+          text: "Use Chinese for repo work.",
+          timestamp: 30 * DAY_MS,
+          metadata: {
+            relationGroup: "answer-language",
+            relationScope: "long-term",
+            relationValue: "zh",
+            scope: "long-term",
+          },
+        },
+        {
+          recordId: "adapter-zh-b",
+          text: "Prefer Chinese technical explanations.",
+          timestamp: 45 * DAY_MS,
+          metadata: {
+            relationGroup: "answer-language",
+            relationScope: "long-term",
+            relationValue: "zh",
+            scope: "long-term",
+          },
+        },
+        {
+          recordId: "adapter-zh-c",
+          text: "Code explanations are easier in Chinese.",
+          timestamp: 60 * DAY_MS,
+          metadata: {
+            relationGroup: "answer-language",
+            relationScope: "long-term",
+            relationValue: "zh",
+            scope: "long-term",
+          },
+        },
+      ],
+      context: {
+        now: NOW,
+        metadata: {
+          locale: "zh-CN",
+        },
+      },
+    });
+    expect(
+      inputContract.sourceRecords.map((record) => record.recordId),
+    ).toEqual(candidate.sourceRecordIds);
+  });
+
+  it("lets a fake provider consume the summarizer input contract deterministically", async () => {
+    const { diagnostics, candidate } = buildSemanticDraftSummarizerFixture();
+    const inputContract = buildSemanticMemoryDraftSummarizerInputContract({
+      candidate,
+      records: diagnostics.records,
+      context: {
+        metadata: {
+          source: "golden-test",
+        },
+      },
+    });
+    const fakeProvider = async (
+      input: ReturnType<typeof buildSemanticMemoryDraftSummarizerInputContract>,
+    ) => ({
+      type: input.candidate.suggestedType,
+      content: input.sourceRecords.map((record) => record.text).join(" "),
+      sourceRecordIds: [...input.candidate.sourceRecordIds],
+      confidence: input.candidate.confidence,
+      metadata: {
+        sourceClusterKey: input.candidate.sourceClusterKey,
+        competitionKey: input.candidate.competitionKey,
+        reasonCodes: [...input.candidate.reasonCodes],
+        requestReady: input.request.ready,
+        source: input.context?.metadata?.source,
+      },
+    });
+
+    const draft = await fakeProvider(inputContract);
+
+    expect(draft).toEqual({
+      type: "preference",
+      content:
+        "Use Chinese for repo work. Prefer Chinese technical explanations. Code explanations are easier in Chinese.",
+      sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+      confidence: candidate.confidence,
+      metadata: {
+        sourceClusterKey: candidate.sourceClusterKey,
+        competitionKey: candidate.competitionKey,
+        reasonCodes: ["strong_repeated_evidence", "wins_competition"],
+        requestReady: true,
+        source: "golden-test",
+      },
+    });
+    expect(draft.sourceRecordIds).not.toContain("adapter-temp-en");
+  });
+
+  it("invokes a caller-provided summarizer provider through the adapter boundary", async () => {
+    const { diagnostics, candidate } = buildSemanticDraftSummarizerFixture();
+    const receivedDraftIds: string[] = [];
+    const invoke: SemanticMemoryDraftSummarizerProviderInvoke = async (
+      input,
+    ) => {
+      receivedDraftIds.push(input.candidate.draftId);
+
+      return {
+        type: input.candidate.suggestedType,
+        content: input.sourceRecords.map((record) => record.text).join(" "),
+        sourceRecordIds: [...input.candidate.sourceRecordIds],
+        confidence: input.candidate.confidence,
+        metadata: {
+          sourceClusterKey: input.candidate.sourceClusterKey,
+          competitionKey: input.candidate.competitionKey,
+          inputReady: input.request.ready,
+          sourceRecordCount: input.sourceRecords.length,
+        },
+      };
+    };
+
+    const result = await invokeSemanticMemoryDraftSummarizerProvider({
+      candidate,
+      records: diagnostics.records,
+      invoke,
+      minConfidence: 0.5,
+    });
+
+    expect(receivedDraftIds).toEqual([candidate.draftId]);
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "summarized",
+        reasonCodes: [],
+        draft: expect.objectContaining({
+          type: "preference",
+          sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+          confidence: candidate.confidence,
+          metadata: expect.objectContaining({
+            sourceClusterKey: candidate.sourceClusterKey,
+            competitionKey: candidate.competitionKey,
+            inputReady: true,
+            sourceRecordCount: 3,
+          }),
+        }),
+      }),
+    );
+    expect(result.input.sourceRecords.map((record) => record.recordId)).toEqual(
+      ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+    );
+    expect(result.diagnostics.response).toEqual(
+      expect.objectContaining({
+        preservesType: true,
+        preservesSourceRecordIds: true,
+        hasContent: true,
+        reasonCodes: [],
+      }),
+    );
+  });
+
+  it("keeps provider adapter failure paths observable without real provider calls", async () => {
+    const { diagnostics, candidate } = buildSemanticDraftSummarizerFixture();
+    let skippedInvokeCount = 0;
+    const skipped = await invokeSemanticMemoryDraftSummarizerProvider({
+      candidate: {
+        ...candidate,
+        confidence: 0.2,
+      },
+      records: diagnostics.records,
+      minConfidence: 0.5,
+      invoke: async () => {
+        skippedInvokeCount += 1;
+        throw new Error("should not be called");
+      },
+    });
+
+    expect(skippedInvokeCount).toBe(0);
+    expect(skipped).toEqual(
+      expect.objectContaining({
+        status: "skipped",
+        reasonCodes: ["request_not_ready", "low_confidence"],
+      }),
+    );
+    expect(skipped.draft).toBeUndefined();
+    expect(skipped.error).toBeUndefined();
+    expect(skipped.diagnostics.request.ready).toBe(false);
+
+    const failed = await invokeSemanticMemoryDraftSummarizerProvider({
+      candidate,
+      records: diagnostics.records,
+      invoke: async () => {
+        throw new Error("fake provider unavailable");
+      },
+    });
+
+    expect(failed).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        error: {
+          name: "Error",
+          message: "fake provider unavailable",
+        },
+        reasonCodes: ["provider_error"],
+      }),
+    );
+    expect(failed.draft).toBeUndefined();
+    expect(failed.diagnostics.request.ready).toBe(true);
+    expect(failed.diagnostics.response).toBeUndefined();
+  });
+
   it("documents fake summarizer failure cases without adding a real provider", async () => {
     const { diagnostics, candidate } = buildSemanticDraftPersistenceFixture();
     const fakeSummarizer: SemanticMemoryDraftSummarizer = {
@@ -2396,6 +2762,158 @@ describe("memory consolidation evaluation scenarios", () => {
         ],
       }),
     ]);
+  });
+
+  it("serializes and deserializes semantic memory artifacts with rollback provenance", () => {
+    const artifact = semanticArtifactStorageFixture();
+    artifact.confidence = 1.4;
+    const serialized = serializeSemanticMemoryArtifactStorageRecord(artifact);
+    const deserialized =
+      deserializeSemanticMemoryArtifactStorageRecord(serialized);
+
+    artifact.sourceRecordIds.push("mutated-after-serialize");
+    artifact.rollback.metadata = {
+      packageLocal: false,
+    };
+
+    expect(serialized).toEqual({
+      schemaVersion: 1,
+      artifact: expect.objectContaining({
+        artifactId: "artifact:semantic-draft:answer-language-zh",
+        userId: "adapter-user",
+        status: "draft",
+        confidence: 1,
+        sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        rollback: expect.objectContaining({
+          operationId: "memory-consolidation-dry-run",
+          sourceArtifactId: "artifact:previous",
+          metadata: {
+            packageLocal: true,
+          },
+        }),
+      }),
+    });
+    expect(deserialized).toEqual({
+      valid: true,
+      artifact: expect.objectContaining({
+        artifactId: "artifact:semantic-draft:answer-language-zh",
+        userId: "adapter-user",
+        status: "draft",
+        confidence: 1,
+        sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        rollback: expect.objectContaining({
+          operationId: "memory-consolidation-dry-run",
+          sourceArtifactId: "artifact:previous",
+          metadata: {
+            packageLocal: true,
+          },
+        }),
+      }),
+      reasonCodes: [],
+    });
+  });
+
+  it("reports invalid semantic memory artifact payloads without storage writes", () => {
+    const result = deserializeSemanticMemoryArtifactStorageRecord({
+      schemaVersion: 1,
+      artifact: {
+        artifactId: "",
+        userId: "",
+        type: "",
+        content: "",
+        status: "",
+        confidence: Number.NaN,
+        sourceRecordIds: [],
+        sourceClusterKey: "",
+        competitionKey: "",
+        reasonCodes: [],
+      },
+    });
+
+    expect(result).toEqual({
+      valid: false,
+      reasonCodes: [
+        "missing_artifact_id",
+        "missing_user_id",
+        "missing_type",
+        "missing_content",
+        "missing_status",
+        "invalid_confidence",
+        "missing_source_record_ids",
+        "missing_source_cluster_key",
+        "missing_competition_key",
+        "missing_timestamps",
+        "missing_rollback_metadata",
+      ],
+    });
+    expect(
+      deserializeSemanticMemoryArtifactStorageRecord({
+        schemaVersion: 2,
+        artifact: {},
+      }),
+    ).toEqual({
+      valid: false,
+      reasonCodes: ["unsupported_schema_version"],
+    });
+  });
+
+  it("builds semantic artifact storage write reports without performing writes", () => {
+    const disabledArtifact = semanticArtifactStorageFixture();
+    const disabledReport = buildSemanticMemoryArtifactStorageDryRunReport({
+      userId: "adapter-user",
+      artifacts: [disabledArtifact],
+      enabled: false,
+      dryRun: false,
+    });
+    const writeReadyArtifact = semanticArtifactStorageFixture();
+    const writeReadyReport = buildSemanticMemoryArtifactStorageDryRunReport({
+      userId: "adapter-user",
+      artifacts: [writeReadyArtifact],
+      enabled: true,
+      dryRun: false,
+    });
+
+    disabledArtifact.sourceRecordIds.push("mutated-after-report");
+    writeReadyArtifact.sourceRecordIds.push("mutated-after-report");
+
+    expect(disabledReport.summary).toEqual({
+      userId: "adapter-user",
+      status: "disabled",
+      dryRun: true,
+      artifactCount: 1,
+      wouldWriteCount: 1,
+      actualWriteCount: 0,
+      skippedWriteCount: 1,
+    });
+    expect(disabledReport.reasonCodes).toEqual([
+      "artifact_storage_candidate",
+      "persistence_disabled",
+    ]);
+    expect(disabledReport.artifacts[0]).toEqual(
+      expect.objectContaining({
+        artifactId: "artifact:semantic-draft:answer-language-zh",
+        sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+        rollbackOperationId: "memory-consolidation-dry-run",
+        rollbackSourceArtifactId: "artifact:previous",
+        reasonCodes: ["artifact_storage_candidate", "persistence_disabled"],
+      }),
+    );
+    expect(writeReadyReport.summary).toEqual({
+      userId: "adapter-user",
+      status: "write-ready",
+      dryRun: false,
+      artifactCount: 1,
+      wouldWriteCount: 1,
+      actualWriteCount: 0,
+      skippedWriteCount: 0,
+    });
+    expect(writeReadyReport.reasonCodes).toEqual([
+      "artifact_storage_candidate",
+      "write_ready",
+    ]);
+    expect(
+      writeReadyReport.serializedArtifacts[0]?.artifact.sourceRecordIds,
+    ).toEqual(["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"]);
   });
 
   it("runs opt-in memory consolidation diagnostics as a dry-run", async () => {

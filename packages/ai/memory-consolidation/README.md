@@ -142,6 +142,10 @@ result.
 enough source records, text, confidence, and provenance before it is sent to a
 summarizer.
 
+The summarizer provider boundary can format request/response diagnostics, build a
+stable caller-provided input contract, and wrap fake or external adapters with
+readiness checks. It still does not ship or call a concrete model provider.
+
 `calculateMemoryConsolidationEvalMetrics` provides a small scenario metrics
 helper for comparing expected preservation, temporary/noise leakage, contested
 cluster coverage, and decay precision proxies in focused eval suites.
@@ -155,6 +159,13 @@ retrieval behavior.
 semantic drafts. It only writes through a caller-provided draft store when
 explicitly enabled with `dryRun: false`; otherwise it returns the planned draft
 artifacts for review without changing storage or retrieval behavior.
+
+`serializeSemanticMemoryArtifactStorageRecord` and
+`deserializeSemanticMemoryArtifactStorageRecord` provide a package-local artifact
+round-trip boundary for future storage adapters.
+
+`buildSemanticMemoryArtifactStorageDryRunReport` describes planned semantic
+artifact writes without calling a storage adapter.
 
 `buildMemorySemanticRetrievalPlan` and
 `buildMemorySemanticRetrievalDryRunReport` describe how semantic drafts can be
