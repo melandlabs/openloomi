@@ -102,7 +102,6 @@ export async function proxy(request: NextRequest) {
 
   // ========== Original permission logic (compatible with file-read token) ==========
   const publicPaths = new Set([
-    "/",
     "/login",
     "/guest-login",
     "/register",

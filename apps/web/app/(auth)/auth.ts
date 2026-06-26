@@ -248,7 +248,6 @@ function createProductionAuthModule() {
                   ? `https://avatar.vercel.sh/${latestUser.email}`
                   : null);
               token.avatarUrl = resolvedAvatar;
-              token.sessionVersion = latestUser.sessionVersion ?? 1;
             }
             const latestSurvey = await getLatestSurveyByUserId(token.id);
             if (latestSurvey) {
