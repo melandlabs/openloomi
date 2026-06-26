@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  openloomi-loop · references/index.html
+
+  Pure style showcase for the Ink & Circuit design language.
+  This file is a *reference*, not a working app:
+    - no JS
+    - no canvas / graph
+    - no real data — every value shown is a placeholder
+
+  Open this in a browser to see typography, color tokens, and
+  component patterns at a glance. Pair with references/DESIGN.md
+  for the written source-of-truth.
+-->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Ink & Circuit · Style Showcase</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#111008;--bg2:#1a1610;--bg3:#201e14;
+  --amber:#e8a020;--amber2:#c8880e;--amber3:#f0b840;
+  --text:#f0ead8;--text2:#a09880;--text3:#706850;
+  --green:#4a7c59;
+  --person:#f0c070;--institution:#5ba8d4;--venture:#7ed488;--discourse:#c87de8;--chronicle:#e87070;
+  --rsvp:#f0b840;--draft_reply:#7ed488;--review_pr:#5ba8d4;--slack_reply:#c87de8;--todo:#e87070;
+  --panel-w:340px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh;overflow-x:hidden;cursor:crosshair}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:repeating-linear-gradient(45deg,rgba(200,160,80,.06) 0,rgba(200,160,80,.06) 1px,transparent 1px,transparent 40px),
+  repeating-linear-gradient(-45deg,rgba(200,160,80,.06) 0,rgba(200,160,80,.06) 1px,transparent 1px,transparent 40px)}
+
+/* PAGE WRAP */
+.page{max-width:1180px;margin:0 auto;padding:0 32px 80px;position:relative;z-index:1}
+
+/* HEADER */
+header{display:flex;align-items:center;gap:12px;padding:24px 0 18px;border-bottom:1px solid rgba(232,160,32,.2);flex-wrap:wrap}
+.hd-title{font-family:'Syne',sans-serif;font-weight:800;font-size:22px;letter-spacing:.12em;color:var(--amber);text-transform:uppercase;position:relative;white-space:nowrap}
+.hd-title::after{content:'';position:absolute;bottom:-4px;left:0;width:100%;height:1px;background:var(--amber);animation:pulse-line 2.4s ease-in-out infinite}
+.hd-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase}
+.hd-meta{margin-left:auto;display:flex;align-items:center;gap:14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:.08em}
+.live{display:inline-flex;align-items:center;gap:5px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 1.6s ease-in-out infinite}
+
+/* SECTION */
+section{padding:32px 0;border-bottom:1px dashed rgba(232,160,32,.12)}
+sec-title{font-family:'Syne',sans-serif;font-weight:700;font-size:11px;letter-spacing:.18em;color:var(--amber);text-transform:uppercase;display:flex;align-items:center;gap:10px;margin-bottom:18px}
+sec-title::before{content:'';width:24px;height:1px;background:var(--amber)}
+.sec-desc{font-size:12px;color:var(--text2);line-height:1.6;max-width:680px;margin:-8px 0 22px 34px}
+
+/* COLOR SWATCHES */
+.swatch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-left:34px}
+.sw{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);padding:10px}
+.sw-color{height:48px;margin-bottom:8px;border:1px solid rgba(255,255,255,.08)}
+.sw-name{font-family:'Syne',sans-serif;font-weight:700;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text)}
+.sw-hex{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:.06em;margin-top:2px}
+.sw-var{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text2);margin-top:2px}
+
+/* TYPOGRAPHY */
+.type-row{display:grid;grid-template-columns:140px 1fr;gap:18px;align-items:baseline;padding:10px 0;margin-left:34px;border-bottom:1px solid rgba(255,255,255,.04)}
+.type-row:last-child{border-bottom:none}
+.type-label{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding-top:6px}
+.t-display{font-family:'Syne',sans-serif;font-weight:800;font-size:32px;letter-spacing:.08em;text-transform:uppercase;color:var(--text);line-height:1.1}
+.t-section{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.t-body{font-family:'Space Grotesk',sans-serif;font-size:13px;color:var(--text);line-height:1.5}
+.t-body em{color:var(--text2);font-style:normal}
+.t-mono{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:var(--text2);text-transform:uppercase}
+.t-code{font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(0,0,0,.4);padding:2px 6px;color:var(--amber3);border:1px solid rgba(255,255,255,.04);display:inline-block}
+
+/* VIEW TABS (sample) */
+.vtab-row{display:flex;gap:6px;margin-left:34px}
+.vtab{font-family:'Syne',sans-serif;font-weight:700;font-size:10px;letter-spacing:.1em;padding:5px 11px;border:1px solid rgba(232,160,32,.25);background:transparent;color:var(--text3);text-transform:uppercase}
+.vtab.on{background:rgba(232,160,32,.15);color:var(--amber);border-color:var(--amber)}
+
+/* CHIPS */
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-left:34px}
+.chip{font-family:'JetBrains Mono',monospace;font-size:9px;padding:4px 8px;border:1px solid rgba(255,255,255,.12);opacity:.55;text-transform:uppercase;letter-spacing:.06em;display:inline-flex;align-items:center;gap:6px}
+.chip.on{opacity:1;border-color:rgba(232,160,32,.5)}
+.chip-hex{width:7px;height:7px;clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);flex-shrink:0}
+
+/* BUTTONS */
+.btn-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:34px}
+.sbtn{font-family:'JetBrains Mono',monospace;font-size:9px;padding:5px 11px;border:1px solid rgba(232,160,32,.35);background:transparent;color:var(--amber);text-transform:uppercase;letter-spacing:.1em}
+.dp-close{background:none;border:1px solid rgba(255,255,255,.18);color:var(--text3);font-size:10px;padding:3px 8px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.1em}
+
+/* BADGES */
+.badge-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-left:34px}
+.dbadge{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 6px;background:rgba(255,255,255,.07);color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+.nbadge{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 6px;background:rgba(232,160,32,.18);color:var(--amber);text-transform:uppercase;letter-spacing:.06em}
+
+/* KANBAN CARD SAMPLE */
+.kcard-sample{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-left:3px solid var(--rsvp);padding:9px 11px;margin:8px 0 0 34px;max-width:340px}
+.kcard-sample.draft_reply{border-left-color:var(--draft_reply)}
+.kcard-sample.review_pr{border-left-color:var(--review_pr)}
+.kcard-sample.slack_reply{border-left-color:var(--slack_reply)}
+.kcard-sample.todo{border-left-color:var(--todo)}
+.kcard-name{font-weight:600;font-size:12px;margin-bottom:4px;line-height:1.3}
+.kcard-desc{font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:6px}
+.kcard-ft{display:flex;align-items:center;justify-content:space-between}
+
+/* DETAIL SECTION LABELS */
+.dp-sl-sample{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);display:flex;align-items:center;gap:6px;margin:10px 0 4px 34px}
+.dp-sl-sample::before{content:'';width:8px;height:1px;background:var(--amber)}
+
+/* SEARCH BOX (static) */
+.sbox-static{width:100%;max-width:480px;background:#191710;border:1px solid rgba(232,160,32,.4);margin-left:34px}
+.s-row{display:flex;align-items:center;padding:11px 14px;gap:10px;border-bottom:1px solid rgba(232,160,32,.12)}
+.s-ico{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--amber)}
+.s-input{font-family:'Space Grotesk',sans-serif;font-size:13px;color:var(--text3)}
+.s-item{padding:8px 14px;display:flex;align-items:center;gap:9px;border-bottom:1px solid rgba(255,255,255,.03);font-size:11px}
+.s-hex{width:9px;height:9px;flex-shrink:0;clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%)}
+
+/* ANIMATION ROWS */
+.anim-row{display:flex;align-items:center;gap:24px;padding:12px 0;margin-left:34px;border-bottom:1px solid rgba(255,255,255,.04)}
+.anim-row:last-child{border-bottom:none}
+.anim-label{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;width:160px;flex-shrink:0}
+.anim-demo{flex:1;display:flex;align-items:center;gap:14px}
+.sonar{position:relative;width:48px;height:48px;display:flex;align-items:center;justify-content:center}
+.sonar-dot{width:8px;height:8px;background:var(--amber);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%)}
+.sonar-ring{position:absolute;inset:0;border:1px solid var(--amber);border-radius:50%;animation:sonar 2.2s linear infinite}
+.sonar-ring.r2{animation-delay:.7s}.sonar-ring.r3{animation-delay:1.4s}
+@keyframes sonar{0%{transform:scale(.3);opacity:1}100%{transform:scale(1.2);opacity:0}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes pulse-line{0%,100%{opacity:1;box-shadow:0 0 6px var(--amber)}50%{opacity:.3;box-shadow:none}}
+
+/* CIRCUIT CORNERS */
+.cc{position:fixed;pointer-events:none;opacity:.45;z-index:2}
+.cc.tl{top:0;left:0}.cc.tr{top:0;right:0;transform:scaleX(-1)}.cc.bl{bottom:0;left:0;transform:scaleY(-1)}.cc.br{bottom:0;right:0;transform:scale(-1)}
+
+/* FOOTNOTE */
+.foot{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:.08em;text-align:right;padding:24px 0 0;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HEADER -->
+<header>
+  <div class="hd-title">Ink &amp; Circuit</div>
+  <div class="hd-sub">style showcase · v41</div>
+  <div class="hd-meta">
+    <span class="live"><span class="live-dot"></span> REFERENCE</span>
+    <span>openloomi-loop</span>
+  </div>
+</header>
+
+<!-- COLOR TOKENS -->
+<section>
+  <sec-title>Color tokens</sec-title>
+  <div class="sec-desc">Every surface in the loop uses one of these CSS variables. The decision-type colors (rsvp / draft_reply / review_pr / slack_reply / todo) are the openloomi-loop adaptation of the original knowledge-graph palette.</div>
+  <div class="swatch-grid">
+    <div class="sw"><div class="sw-color" style="background:var(--bg)"></div><div class="sw-name">canvas · deepest</div><div class="sw-hex">#111008</div><div class="sw-var">--bg</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--bg2)"></div><div class="sw-name">canvas · mid</div><div class="sw-hex">#1a1610</div><div class="sw-var">--bg2</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--bg3)"></div><div class="sw-name">canvas · lifted</div><div class="sw-hex">#201e14</div><div class="sw-var">--bg3</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--amber)"></div><div class="sw-name">amber · primary</div><div class="sw-hex">#e8a020</div><div class="sw-var">--amber</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--amber2)"></div><div class="sw-name">amber · deep</div><div class="sw-hex">#c8880e</div><div class="sw-var">--amber2</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--amber3)"></div><div class="sw-name">amber · bright</div><div class="sw-hex">#f0b840</div><div class="sw-var">--amber3</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--text)"></div><div class="sw-name">text · body</div><div class="sw-hex">#f0ead8</div><div class="sw-var">--text</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--text2)"></div><div class="sw-name">text · secondary</div><div class="sw-hex">#a09880</div><div class="sw-var">--text2</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--text3)"></div><div class="sw-name">text · hint</div><div class="sw-hex">#706850</div><div class="sw-var">--text3</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--green)"></div><div class="sw-name">live indicator</div><div class="sw-hex">#4a7c59</div><div class="sw-var">--green</div></div>
+  </div>
+
+  <sec-title style="margin-top:28px">Decision types</sec-title>
+  <div class="swatch-grid">
+    <div class="sw"><div class="sw-color" style="background:var(--rsvp)"></div><div class="sw-name">rsvp</div><div class="sw-hex">#f0b840</div><div class="sw-var">calendar RSVP</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--draft_reply)"></div><div class="sw-name">draft_reply</div><div class="sw-hex">#7ed488</div><div class="sw-var">email reply</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--review_pr)"></div><div class="sw-name">review_pr</div><div class="sw-hex">#5ba8d4</div><div class="sw-var">github review</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--slack_reply)"></div><div class="sw-name">slack_reply</div><div class="sw-hex">#c87de8</div><div class="sw-var">slack reply</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--todo)"></div><div class="sw-name">todo</div><div class="sw-hex">#e87070</div><div class="sw-var">task / follow-up</div></div>
+  </div>
+</section>
+
+<!-- TYPOGRAPHY -->
+<section>
+  <sec-title>Typography</sec-title>
+  <div class="type-row">
+    <div class="type-label">display<br>syne 800</div>
+    <div class="t-display">Display title</div>
+  </div>
+  <div class="type-row">
+    <div class="type-label">section<br>syne 700</div>
+    <div><span class="t-section">Section header</span></div>
+  </div>
+  <div class="type-row">
+    <div class="type-label">body<br>space grotesk</div>
+    <div class="t-body">Body copy uses Space Grotesk for <em>secondary text</em> and emphasis. Multi-line descriptions and cards read at this size with comfortable leading.</div>
+  </div>
+  <div class="type-row">
+    <div class="type-label">mono hint<br>jetbrains</div>
+    <div class="t-mono">metadata · status · keybind</div>
+  </div>
+  <div class="type-row">
+    <div class="type-label">code<br>jetbrains</div>
+    <div><span class="t-code">node scripts/openloomi-loop.cjs tick</span></div>
+  </div>
+</section>
+
+<!-- COMPONENTS -->
+<section>
+  <sec-title>View tabs</sec-title>
+  <div class="vtab-row">
+    <div class="vtab">Q Queue</div>
+    <div class="vtab on">T Timeline</div>
+    <div class="vtab">A Activity</div>
+  </div>
+
+  <sec-title style="margin-top:28px">Filter chips</sec-title>
+  <div class="chip-row">
+    <div class="chip"><span class="chip-hex" style="background:var(--rsvp)"></span>rsvp</div>
+    <div class="chip on"><span class="chip-hex" style="background:var(--draft_reply)"></span>draft_reply</div>
+    <div class="chip"><span class="chip-hex" style="background:var(--review_pr)"></span>review_pr</div>
+    <div class="chip"><span class="chip-hex" style="background:var(--slack_reply)"></span>slack_reply</div>
+    <div class="chip"><span class="chip-hex" style="background:var(--todo)"></span>todo</div>
+  </div>
+
+  <sec-title style="margin-top:28px">Buttons</sec-title>
+  <div class="btn-row">
+    <div class="sbtn">Run</div>
+    <div class="sbtn">DRY</div>
+    <div class="sbtn">Dismiss</div>
+    <div class="dp-close">Close ×</div>
+  </div>
+
+  <sec-title style="margin-top:28px">Badges</sec-title>
+  <div class="badge-row">
+    <div class="dbadge">9 open</div>
+    <div class="dbadge">2 dismissed</div>
+    <div class="nbadge">NOW</div>
+    <div class="nbadge">HIGH CONF</div>
+  </div>
+</section>
+
+<!-- KANBAN CARD PATTERN -->
+<section>
+  <sec-title>Kanban card</sec-title>
+  <div class="sec-desc">Cards use a 3px left border in the decision-type color and a translucent background that brightens on hover. The badge row at the bottom carries date + confidence.</div>
+  <div class="kcard-sample">
+    <div class="kcard-name">Lorem ipsum dolor sit amet placeholder</div>
+    <div class="kcard-desc">Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</div>
+    <div class="kcard-ft"><span class="dbadge">3 min ago</span><span class="nbadge">conf 0.85</span></div>
+  </div>
+  <div class="kcard-sample draft_reply">
+    <div class="kcard-name">Placeholder draft reply card</div>
+    <div class="kcard-desc">Sample description text shown here for visual reference of layout density.</div>
+    <div class="kcard-ft"><span class="dbadge">12 min ago</span><span class="nbadge">conf 0.72</span></div>
+  </div>
+  <div class="kcard-sample review_pr">
+    <div class="kcard-name">Placeholder PR review card</div>
+    <div class="kcard-desc">Demonstrates the second type color applied to the left border.</div>
+    <div class="kcard-ft"><span class="dbadge">1 hr ago</span><span class="nbadge">conf 0.66</span></div>
+  </div>
+  <div class="kcard-sample slack_reply">
+    <div class="kcard-name">Placeholder slack mention card</div>
+    <div class="kcard-desc">Three-line clamp for description; longer copy truncates with ellipsis.</div>
+    <div class="kcard-ft"><span class="dbadge">2 hr ago</span><span class="nbadge">conf 0.58</span></div>
+  </div>
+  <div class="kcard-sample todo">
+    <div class="kcard-name">Placeholder todo follow-up card</div>
+    <div class="kcard-desc">The fifth type color for tasks and follow-ups that need tracking.</div>
+    <div class="kcard-ft"><span class="dbadge">5 hr ago</span><span class="nbadge">conf 0.49</span></div>
+  </div>
+</section>
+
+<!-- DETAIL PANEL LABELS -->
+<section>
+  <sec-title>Detail panel · section labels</sec-title>
+  <div class="sec-desc">Inside the right slide-in detail panel, sections are introduced by an amber divider line + uppercase mono label.</div>
+  <div class="dp-sl-sample">Context</div>
+  <div style="margin-left:34px;font-size:11px;color:var(--text2);line-height:1.6">Sample body text under a section label.</div>
+  <div class="dp-sl-sample">Source signal</div>
+  <div style="margin-left:34px;font-size:11px;color:var(--text2);line-height:1.6">Another section body, same pattern.</div>
+  <div class="dp-sl-sample">Suggested action</div>
+  <div style="margin-left:34px;font-size:11px;color:var(--text2);line-height:1.6">Third section repeats the rhythm.</div>
+</section>
+
+<!-- SEARCH OVERLAY -->
+<section>
+  <sec-title>Search overlay</sec-title>
+  <div class="sec-desc">Command-K or / opens a centered search box with translucent backdrop. Below is the static skeleton for visual reference.</div>
+  <div class="sbox-static">
+    <div class="s-row">
+      <span class="s-ico">⌕</span>
+      <span class="s-input">Search entities, topics, people…</span>
+    </div>
+    <div class="s-item">
+      <span class="s-hex" style="background:var(--rsvp)"></span>
+      <span>Sample result row · placeholder title</span>
+    </div>
+    <div class="s-item">
+      <span class="s-hex" style="background:var(--draft_reply)"></span>
+      <span>Second sample result · placeholder title</span>
+    </div>
+    <div class="s-item">
+      <span class="s-hex" style="background:var(--review_pr)"></span>
+      <span>Third sample result · placeholder title</span>
+    </div>
+  </div>
+</section>
+
+<!-- ANIMATIONS -->
+<section>
+  <sec-title>Animation patterns</sec-title>
+
+  <div class="anim-row">
+    <div class="anim-label">blink<br>1.6s infinite</div>
+    <div class="anim-demo">
+      <span class="live-dot"></span>
+      <span class="t-mono" style="font-size:10px">live indicator dot</span>
+    </div>
+  </div>
+
+  <div class="anim-row">
+    <div class="anim-label">pulse-line<br>2.4s infinite</div>
+    <div class="anim-demo">
+      <span class="hd-title" style="font-size:14px">Header title</span>
+      <span class="t-mono" style="font-size:10px">underline opacity 1↔.3 + 6px amber glow</span>
+    </div>
+  </div>
+
+  <div class="anim-row">
+    <div class="anim-label">sonar<br>2.2s linear</div>
+    <div class="anim-demo">
+      <div class="sonar">
+        <div class="sonar-dot"></div>
+        <div class="sonar-ring"></div>
+        <div class="sonar-ring r2"></div>
+        <div class="sonar-ring r3"></div>
+      </div>
+      <span class="t-mono" style="font-size:10px">expanding rings on node select</span>
+    </div>
+  </div>
+</section>
+
+<div class="foot">references/index.html · placeholder showcase</div>
+</div>
+
+<!-- CIRCUIT CORNERS -->
+<svg class="cc tl" width="72" height="72" viewBox="0 0 72 72">
+  <path d="M2,62 L2,18 Q2,2 18,2 L62,2" stroke="#e8a020" stroke-width="1.2" fill="none"/>
+  <circle cx="2" cy="62" r="3" fill="#e8a020"/>
+  <circle cx="62" cy="2" r="3" fill="#e8a020"/>
+  <path d="M12,52 L12,28 L28,12" stroke="#4a7c59" stroke-width=".7" fill="none"/>
+  <circle cx="12" cy="52" r="2" fill="#4a7c59"/>
+  <circle cx="28" cy="12" r="2" fill="#4a7c59"/>
+  <rect x="0" y="28" width="4" height="4" fill="none" stroke="#e8a020" stroke-width=".8"/>
+</svg>
+<svg class="cc tr" width="72" height="72" viewBox="0 0 72 72">
+  <path d="M2,62 L2,18 Q2,2 18,2 L62,2" stroke="#e8a020" stroke-width="1.2" fill="none"/>
+  <circle cx="2" cy="62" r="3" fill="#e8a020"/>
+  <circle cx="62" cy="2" r="3" fill="#e8a020"/>
+  <path d="M12,52 L12,28 L28,12" stroke="#4a7c59" stroke-width=".7" fill="none"/>
+  <circle cx="12" cy="52" r="2" fill="#4a7c59"/>
+  <circle cx="28" cy="12" r="2" fill="#4a7c59"/>
+  <rect x="0" y="28" width="4" height="4" fill="none" stroke="#e8a020" stroke-width=".8"/>
+</svg>
+<svg class="cc bl" width="72" height="72" viewBox="0 0 72 72">
+  <path d="M2,62 L2,18 Q2,2 18,2 L62,2" stroke="#e8a020" stroke-width="1.2" fill="none"/>
+  <circle cx="2" cy="62" r="3" fill="#e8a020"/>
+  <circle cx="62" cy="2" r="3" fill="#e8a020"/>
+  <path d="M12,52 L12,28 L28,12" stroke="#4a7c59" stroke-width=".7" fill="none"/>
+  <circle cx="12" cy="52" r="2" fill="#4a7c59"/>
+  <circle cx="28" cy="12" r="2" fill="#4a7c59"/>
+  <rect x="0" y="28" width="4" height="4" fill="none" stroke="#e8a020" stroke-width=".8"/>
+</svg>
+<svg class="cc br" width="72" height="72" viewBox="0 0 72 72">
+  <path d="M2,62 L2,18 Q2,2 18,2 L62,2" stroke="#e8a020" stroke-width="1.2" fill="none"/>
+  <circle cx="2" cy="62" r="3" fill="#e8a020"/>
+  <circle cx="62" cy="2" r="3" fill="#e8a020"/>
+  <path d="M12,52 L12,28 L28,12" stroke="#4a7c59" stroke-width=".7" fill="none"/>
+  <circle cx="12" cy="52" r="2" fill="#4a7c59"/>
+  <circle cx="28" cy="12" r="2" fill="#4a7c59"/>
+  <rect x="0" y="28" width="4" height="4" fill="none" stroke="#e8a020" stroke-width=".8"/>
+</svg>
+</body>
+</html>
