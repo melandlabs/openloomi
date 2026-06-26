@@ -155,6 +155,17 @@ a record reader, and the runner returns diagnostics, a compact report, and draft
 candidates without writing semantic memory, archiving source records, or changing
 retrieval behavior.
 
+`adaptRuntimeMemoryRecordsForConsolidation` and
+`buildMemoryConsolidationRuntimeRecordSelectors` adapt structurally compatible
+runtime memory records into the dry-run diagnostics pipeline.
+
+`buildMemoryConsolidationDiagnosticsRunReport` turns a diagnostics dry-run
+result into a compact batch report for skipped, preserved, and suppressed
+records.
+
+`logMemoryConsolidationDiagnosticsRun` can pass that report to a caller-provided
+log sink only when explicitly enabled.
+
 `persistSemanticMemoryDrafts` defines a controlled persistence boundary for
 semantic drafts. It only writes through a caller-provided draft store when
 explicitly enabled with `dryRun: false`; otherwise it returns the planned draft
@@ -170,6 +181,9 @@ artifact writes without calling a storage adapter.
 `buildMemorySemanticRetrievalPlan` and
 `buildMemorySemanticRetrievalDryRunReport` describe how semantic drafts can be
 inspected for retrieval impact without changing production retrieval ranking.
+Opt-in retrieval helpers can merge raw trace fallback with eligible semantic
+drafts, evaluate selected or suppressed drafts, and produce log-only comparison
+reports without injecting results into runtime context.
 
 Callers can keep the full diagnostics for debugging and derive the compact
 report for review or logging:

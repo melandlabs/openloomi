@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   adaptMemoryRecordsForConsolidation,
+  adaptRuntimeMemoryRecordsForConsolidation,
   analyzeSemanticMemoryDraftReadiness,
   analyzeMemoryEvidenceClusters,
   assignMemoryRelationGraph,
@@ -8,10 +9,15 @@ import {
   buildMemoryConsolidationPlan,
   buildMemoryConsolidationDiagnosticsReport,
   buildMemoryEvidenceClusters,
+  buildMemoryConsolidationDiagnosticsRunReport,
+  buildMemoryConsolidationRuntimeRecordSelectors,
   buildMemoryRelationCandidates,
   buildMemoryRelationPipeline,
   buildMemoryRelationPipelineDiagnostics,
+  buildMemorySemanticRetrievalComparisonReport,
   buildMemorySemanticRetrievalDryRunReport,
+  buildMemorySemanticRetrievalEvalScenarioReport,
+  buildMemorySemanticRetrievalMergedResults,
   buildMemorySemanticRetrievalPlan,
   buildSemanticMemoryArtifactStorageDryRunReport,
   buildSemanticMemoryDraftSummarizerInputContract,
@@ -20,13 +26,19 @@ import {
   deserializeSemanticMemoryArtifactStorageRecord,
   deriveMemoryRelationGraphLifecycle,
   invokeSemanticMemoryDraftSummarizerProvider,
+  logMemoryConsolidationDiagnosticsRun,
   persistSemanticMemoryDrafts,
   runMemoryConsolidationDiagnostics,
   serializeSemanticMemoryArtifactStorageRecord,
   summarizeSemanticMemoryDraftCandidate,
+  resolveMemorySemanticRetrievalConfig,
+  type MemorySemanticRetrievalConfig,
   type MemorySemanticRetrievalCandidate,
+  type MemorySemanticRetrievalComparisonReport,
   type MemorySemanticRetrievalDryRunReport,
   type MemorySemanticRetrievalDraft,
+  type MemorySemanticRetrievalEvalScenarioReport,
+  type MemorySemanticRetrievalMergedResultSet,
   type MemorySemanticRetrievalPlanningInput,
   type MemorySemanticRetrievalPlanningResult,
   type SemanticMemoryArtifactStorageAdapter,
@@ -1005,6 +1017,24 @@ function semanticArtifactStorageFixture() {
       dryRun: true,
     },
   } satisfies SemanticMemoryArtifactStorageRecord;
+}
+
+async function buildDiagnosticsRunFixture() {
+  const input = buildAdapterDiagnosticsInput();
+
+  return runMemoryConsolidationDiagnostics({
+    userId: "adapter-user",
+    now: NOW,
+    dryRun: true,
+    limit: 25,
+    reader: {
+      async listCandidateRecords() {
+        return input.records;
+      },
+    },
+    selectors: adapterSelectors,
+    plan: input.plan,
+  });
 }
 
 describe("memory consolidation evaluation scenarios", () => {
@@ -2318,6 +2348,367 @@ describe("memory consolidation evaluation scenarios", () => {
     });
   });
 
+  it("keeps semantic retrieval integration disabled by default", () => {
+    const config =
+      resolveMemorySemanticRetrievalConfig() satisfies MemorySemanticRetrievalConfig;
+
+    expect(config).toEqual({
+      enabled: false,
+      status: "disabled",
+      minConfidence: 0,
+      allowContested: false,
+      maxCandidates: undefined,
+      reasonCodes: ["semantic_retrieval_disabled"],
+      metadata: undefined,
+    });
+  });
+
+  it("resolves explicit semantic retrieval opt-in config without ranking changes", () => {
+    const config = resolveMemorySemanticRetrievalConfig({
+      enabled: true,
+      minConfidence: 1.5,
+      allowContested: true,
+      maxCandidates: 2.8,
+      reasonCodes: ["semantic_draft_candidate"],
+      metadata: {
+        source: "unit-test",
+      },
+    });
+
+    expect(config).toEqual({
+      enabled: true,
+      status: "enabled",
+      minConfidence: 1,
+      allowContested: true,
+      maxCandidates: 2,
+      reasonCodes: ["semantic_draft_candidate", "semantic_retrieval_enabled"],
+      metadata: {
+        source: "unit-test",
+      },
+    });
+  });
+
+  it("keeps raw trace fallback when semantic retrieval merge is disabled", () => {
+    const plan = buildMemorySemanticRetrievalPlan({
+      query: "Which preference is relevant?",
+      drafts: [
+        {
+          draftId: "semantic-draft:selected",
+          type: "preference",
+          content: "User prefers Chinese technical explanations.",
+          sourceRecordIds: ["raw-trace:zh-a", "raw-trace:zh-b"],
+          confidence: 0.88,
+        },
+      ],
+      existingRecordIds: ["raw-trace:zh-a"],
+      getDraftRelevance: () => 0.9,
+    });
+    const merged = buildMemorySemanticRetrievalMergedResults({
+      plan,
+      sourceResults: [
+        {
+          recordId: "raw-trace:zh-a",
+          content: "Prefer Chinese technical explanations.",
+          reasonCodes: ["query_relevance"],
+        },
+      ],
+    }) satisfies MemorySemanticRetrievalMergedResultSet;
+
+    expect(merged.enabled).toBe(false);
+    expect(merged.results).toEqual([
+      expect.objectContaining({
+        resultId: "raw-trace:zh-a",
+        kind: "source-trace",
+        status: "fallback",
+        sourceRecordIds: ["raw-trace:zh-a"],
+        reasonCodes: [
+          "source_trace_fallback",
+          "semantic_retrieval_disabled",
+          "query_relevance",
+        ],
+      }),
+    ]);
+    expect(merged.semanticResults).toEqual([]);
+    expect(merged.suppressedDrafts).toEqual([
+      expect.objectContaining({
+        draftId: "semantic-draft:selected",
+        status: "suppressed",
+        reasonCodes: [
+          "semantic_draft_candidate",
+          "query_relevance",
+          "semantic_retrieval_disabled",
+        ],
+      }),
+    ]);
+  });
+
+  it("merges raw trace fallback with eligible semantic drafts only after opt-in", () => {
+    const plan = buildMemorySemanticRetrievalPlan({
+      query: "Which long-term preference should guide this answer?",
+      minConfidence: 0.7,
+      drafts: [
+        {
+          draftId: "semantic-draft:selected",
+          type: "preference",
+          content: "User prefers Chinese technical explanations.",
+          sourceRecordIds: ["raw-trace:zh-a", "raw-trace:zh-b"],
+          confidence: 0.88,
+          metadata: {
+            sourceClusterKey: "answer-language:zh",
+          },
+        },
+        {
+          draftId: "semantic-draft:low-confidence",
+          type: "preference",
+          content: "User might prefer terse answers.",
+          sourceRecordIds: ["raw-trace:style-a"],
+          confidence: 0.4,
+        },
+      ],
+      existingRecordIds: ["raw-trace:zh-a"],
+      getDraftRelevance: () => 0.9,
+    });
+    const merged = buildMemorySemanticRetrievalMergedResults({
+      plan,
+      config: {
+        enabled: true,
+        reasonCodes: ["semantic_draft_candidate"],
+      },
+    });
+
+    expect(merged.enabled).toBe(true);
+    expect(merged.results).toEqual([
+      expect.objectContaining({
+        resultId: "raw-trace:zh-a",
+        kind: "source-trace",
+        status: "fallback",
+        sourceRecordIds: ["raw-trace:zh-a"],
+        reasonCodes: expect.arrayContaining([
+          "source_trace_fallback",
+          "semantic_retrieval_enabled",
+        ]),
+      }),
+      expect.objectContaining({
+        resultId: "semantic-draft:selected",
+        kind: "semantic-draft",
+        draftId: "semantic-draft:selected",
+        status: "eligible",
+        confidence: 0.88,
+        queryRelevance: 0.9,
+        sourceRecordIds: ["raw-trace:zh-a", "raw-trace:zh-b"],
+        reasonCodes: expect.arrayContaining([
+          "semantic_draft_candidate",
+          "query_relevance",
+          "semantic_retrieval_enabled",
+        ]),
+        metadata: {
+          sourceClusterKey: "answer-language:zh",
+        },
+      }),
+    ]);
+    expect(merged.suppressedDrafts).toEqual([
+      expect.objectContaining({
+        draftId: "semantic-draft:low-confidence",
+        status: "suppressed",
+        reasonCodes: expect.arrayContaining([
+          "semantic_draft_candidate",
+          "query_relevance",
+          "low_confidence",
+          "semantic_retrieval_enabled",
+        ]),
+      }),
+    ]);
+    expect(plan.fallbackRecordIds).toEqual(["raw-trace:zh-a"]);
+  });
+
+  it("reports opt-in semantic retrieval eval scenarios for selected, suppressed, and fallback results", () => {
+    const plan = buildMemorySemanticRetrievalPlan({
+      query: "Which language preference should guide this answer?",
+      minConfidence: 0.7,
+      drafts: [
+        {
+          draftId: "semantic-draft:selected-zh",
+          type: "preference",
+          content: "User prefers Chinese for technical explanations.",
+          sourceRecordIds: ["raw-trace:zh-a", "raw-trace:zh-b"],
+          confidence: 0.9,
+        },
+        {
+          draftId: "semantic-draft:temporary-en",
+          type: "preference",
+          content: "User once asked for English in a temporary reply.",
+          sourceRecordIds: ["raw-trace:en-temp"],
+          confidence: 0.5,
+        },
+      ],
+      existingRecordIds: ["raw-trace:zh-a"],
+      getDraftRelevance({ draft }) {
+        return draft.draftId === "semantic-draft:selected-zh" ? 0.95 : 0.8;
+      },
+    });
+    const merged = buildMemorySemanticRetrievalMergedResults({
+      plan,
+      config: {
+        enabled: true,
+      },
+      sourceResults: [
+        {
+          recordId: "raw-trace:zh-a",
+          content: "Prefer Chinese technical explanations.",
+          reasonCodes: ["query_relevance"],
+        },
+      ],
+    });
+    const report = buildMemorySemanticRetrievalEvalScenarioReport({
+      scenarioId: "retrieval-opt-in-language-preference",
+      merged,
+      expectations: {
+        selectedDraftIds: ["semantic-draft:selected-zh"],
+        suppressedDraftIds: ["semantic-draft:temporary-en"],
+        fallbackRecordIds: ["raw-trace:zh-a"],
+      },
+      metadata: {
+        category: "opt-in-retrieval",
+      },
+    }) satisfies MemorySemanticRetrievalEvalScenarioReport;
+
+    expect(report).toEqual({
+      scenarioId: "retrieval-opt-in-language-preference",
+      query: "Which language preference should guide this answer?",
+      enabled: true,
+      selectedDraftIds: ["semantic-draft:selected-zh"],
+      suppressedDraftIds: ["semantic-draft:temporary-en"],
+      fallbackRecordIds: ["raw-trace:zh-a"],
+      missingSelectedDraftIds: [],
+      missingSuppressedDraftIds: [],
+      missingFallbackRecordIds: [],
+      selectedPassed: true,
+      suppressedPassed: true,
+      fallbackPassed: true,
+      passed: true,
+      reasonCodes: expect.arrayContaining([
+        "semantic_retrieval_enabled",
+        "semantic_draft_candidate",
+        "query_relevance",
+        "source_trace_fallback",
+        "low_confidence",
+      ]),
+      metadata: {
+        category: "opt-in-retrieval",
+      },
+    });
+    expect(merged.results.map((result) => result.kind)).toEqual([
+      "source-trace",
+      "semantic-draft",
+    ]);
+  });
+
+  it("builds a log-only semantic retrieval comparison report without mutating snapshots", () => {
+    const plan = buildMemorySemanticRetrievalPlan({
+      query: "Which language preference should guide this answer?",
+      minConfidence: 0.7,
+      drafts: [
+        {
+          draftId: "semantic-draft:selected-zh",
+          type: "preference",
+          content: "User prefers Chinese for technical explanations.",
+          sourceRecordIds: ["raw-trace:zh-a", "raw-trace:zh-b"],
+          confidence: 0.9,
+        },
+        {
+          draftId: "semantic-draft:low-confidence",
+          type: "preference",
+          content: "User might prefer terse answers.",
+          sourceRecordIds: ["raw-trace:style-a"],
+          confidence: 0.4,
+        },
+      ],
+      existingRecordIds: ["raw-trace:zh-a"],
+      getDraftRelevance: () => 0.9,
+    });
+    const baseline = buildMemorySemanticRetrievalMergedResults({
+      plan,
+      sourceResults: [
+        {
+          recordId: "raw-trace:zh-a",
+          content: "Prefer Chinese technical explanations.",
+        },
+      ],
+    });
+    const candidate = buildMemorySemanticRetrievalMergedResults({
+      plan,
+      config: {
+        enabled: true,
+      },
+      sourceResults: [
+        {
+          recordId: "raw-trace:zh-a",
+          content: "Prefer Chinese technical explanations.",
+        },
+      ],
+    });
+    const baselineSnapshot = JSON.stringify(baseline);
+    const candidateSnapshot = JSON.stringify(candidate);
+    const report = buildMemorySemanticRetrievalComparisonReport({
+      baseline,
+      candidate,
+      metadata: {
+        mode: "log-only",
+      },
+    }) satisfies MemorySemanticRetrievalComparisonReport;
+
+    expect(report).toEqual({
+      summary: {
+        query: "Which language preference should guide this answer?",
+        baselineResultCount: 1,
+        candidateResultCount: 2,
+        addedSemanticDraftCount: 1,
+        retainedFallbackRecordCount: 1,
+        suppressedDraftCount: 1,
+      },
+      query: "Which language preference should guide this answer?",
+      baselineEnabled: false,
+      candidateEnabled: true,
+      baselineResultIds: ["raw-trace:zh-a"],
+      candidateResultIds: ["raw-trace:zh-a", "semantic-draft:selected-zh"],
+      retainedFallbackRecordIds: ["raw-trace:zh-a"],
+      addedSemanticDrafts: [
+        {
+          draftId: "semantic-draft:selected-zh",
+          sourceRecordIds: ["raw-trace:zh-a", "raw-trace:zh-b"],
+          reasonCodes: [
+            "semantic_draft_candidate",
+            "query_relevance",
+            "semantic_retrieval_enabled",
+          ],
+        },
+      ],
+      suppressedDrafts: [
+        {
+          draftId: "semantic-draft:low-confidence",
+          sourceRecordIds: ["raw-trace:style-a"],
+          reasonCodes: [
+            "semantic_draft_candidate",
+            "query_relevance",
+            "low_confidence",
+            "semantic_retrieval_enabled",
+          ],
+        },
+      ],
+      reasonCodes: expect.arrayContaining([
+        "semantic_retrieval_comparison",
+        "semantic_retrieval_log_only",
+        "semantic_retrieval_disabled",
+        "semantic_retrieval_enabled",
+      ]),
+      metadata: {
+        mode: "log-only",
+      },
+    });
+    expect(JSON.stringify(baseline)).toBe(baselineSnapshot);
+    expect(JSON.stringify(candidate)).toBe(candidateSnapshot);
+  });
+
   it("plans semantic draft retrieval candidates with caller-provided relevance", () => {
     const drafts: MemorySemanticRetrievalDraft[] = [
       {
@@ -2965,6 +3356,280 @@ describe("memory consolidation evaluation scenarios", () => {
         suggestedType: "preference",
         sourceRecordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
         needsSummary: true,
+      }),
+    ]);
+  });
+
+  it("adapts structurally compatible runtime memory records for consolidation", () => {
+    const records: MemoryRecord[] = [
+      {
+        ...relationPipelineRecord(
+          "runtime-zh-a",
+          "Use Chinese for repo work.",
+          119,
+          "zh",
+          { accessCount: 2 },
+        ),
+        importanceScore: 0.8,
+        dimensions: {
+          project: "openloomi",
+        },
+      },
+    ];
+    const adapted = adaptRuntimeMemoryRecordsForConsolidation({ records });
+
+    expect(adapted).toEqual({
+      records: [
+        expect.objectContaining({
+          id: "runtime-zh-a",
+          userId: "eval-user",
+          timestamp: 119 * DAY_MS,
+          text: "Use Chinese for repo work.",
+          tier: "short",
+          accessCount: 2,
+          importanceScore: 0.8,
+          dimensions: {
+            project: "openloomi",
+          },
+          metadata: expect.objectContaining({
+            relationGroup: "answer-language",
+            relationValue: "zh",
+            relationScope: "long-term",
+          }),
+        }),
+      ],
+      skippedRecords: [],
+      sourceIndexesByRecordId: {
+        "runtime-zh-a": 0,
+      },
+    });
+  });
+
+  it("uses runtime memory record selectors in diagnostics without storage writes", () => {
+    const records: MemoryRecord[] = [
+      relationPipelineRecord(
+        "runtime-zh-a",
+        "Use Chinese for repo work.",
+        30,
+        "zh",
+        { accessCount: 1 },
+      ),
+      relationPipelineRecord(
+        "runtime-zh-b",
+        "Prefer Chinese technical explanations.",
+        45,
+        "zh",
+        { accessCount: 1 },
+      ),
+      relationPipelineRecord(
+        "runtime-zh-c",
+        "Code explanations are easier in Chinese.",
+        60,
+        "zh",
+        { accessCount: 1 },
+      ),
+      relationPipelineRecord(
+        "runtime-temp-en",
+        "Use English for this one reply.",
+        119,
+        "en",
+        { scope: "temporary" },
+      ),
+    ];
+    const diagnostics = buildMemoryRelationPipelineDiagnostics({
+      records,
+      now: NOW,
+      selectors: buildMemoryConsolidationRuntimeRecordSelectors<MemoryRecord>(),
+      plan: {
+        thresholds: {
+          preserveScore: 0.5,
+          preserveEvidence: 3,
+          competitionMargin: 0.05,
+        },
+      },
+    });
+    const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+
+    expect(report.summary).toEqual(
+      expect.objectContaining({
+        sourceRecordCount: 4,
+        adaptedRecordCount: 4,
+        skippedRecordCount: 0,
+        preserveCount: 1,
+        decayCount: 1,
+      }),
+    );
+    expect(report.preservedClusters).toEqual([
+      expect.objectContaining({
+        recordIds: ["runtime-zh-a", "runtime-zh-b", "runtime-zh-c"],
+        reasonCodes: ["strong_repeated_evidence"],
+      }),
+    ]);
+    expect(report.decayedRecords).toEqual([
+      expect.objectContaining({
+        recordId: "runtime-temp-en",
+      }),
+    ]);
+  });
+
+  it("builds a compact diagnostics run report for real-record batches", async () => {
+    const records = [
+      {
+        owner: "adapter-user",
+        createdAt: NOW,
+        body: "Missing id.",
+      },
+      adapterSourceRecord(
+        "runtime-report-zh-a",
+        "Use Chinese for repo work.",
+        30,
+        "zh",
+        { reads: 1 },
+      ),
+      adapterSourceRecord(
+        "runtime-report-zh-b",
+        "Prefer Chinese technical explanations.",
+        45,
+        "zh",
+        { reads: 1 },
+      ),
+      adapterSourceRecord(
+        "runtime-report-zh-c",
+        "Code explanations are easier in Chinese.",
+        60,
+        "zh",
+        { reads: 1 },
+      ),
+      adapterSourceRecord(
+        "runtime-report-temp-en",
+        "Use English for this one reply.",
+        119,
+        "en",
+        { scope: "temporary" },
+      ),
+    ];
+    const result = await runMemoryConsolidationDiagnostics({
+      userId: "adapter-user",
+      now: NOW,
+      dryRun: true,
+      reader: {
+        async listCandidateRecords() {
+          return records;
+        },
+      },
+      selectors: adapterSelectors,
+      plan: {
+        thresholds: {
+          preserveScore: 0.5,
+          preserveEvidence: 3,
+          competitionMargin: 0.05,
+        },
+      },
+    });
+    const report = buildMemoryConsolidationDiagnosticsRunReport(result);
+
+    expect(report.summary).toEqual(
+      expect.objectContaining({
+        status: "success",
+        dryRun: true,
+        userId: "adapter-user",
+        scannedRecordCount: 5,
+        adaptedRecordCount: 4,
+        skippedRecordCount: 1,
+        preservedClusterCount: 1,
+        suppressedRecordCount: 1,
+        semanticDraftCandidateCount: 1,
+      }),
+    );
+    expect(report.skippedRecords).toEqual([
+      {
+        sourceIndex: 0,
+        reasonCodes: ["missing_id"],
+      },
+    ]);
+    expect(report.preservedClusters).toEqual([
+      expect.objectContaining({
+        recordIds: [
+          "runtime-report-zh-a",
+          "runtime-report-zh-b",
+          "runtime-report-zh-c",
+        ],
+        reasonCodes: ["strong_repeated_evidence"],
+        semanticDraftCandidateIds: [expect.stringContaining("semantic-draft:")],
+      }),
+    ]);
+    expect(report.suppressedRecords).toEqual([
+      expect.objectContaining({
+        recordId: "runtime-report-temp-en",
+        reasonCodes: ["isolated_low_confidence"],
+      }),
+    ]);
+    expect(report.semanticDraftCandidateIds).toEqual([
+      expect.stringContaining("semantic-draft:"),
+    ]);
+  });
+
+  it("logs diagnostics run reports only through an explicitly enabled caller sink", async () => {
+    const result = await buildDiagnosticsRunFixture();
+    const disabledSinkCalls: unknown[] = [];
+    const disabled = await logMemoryConsolidationDiagnosticsRun({
+      result,
+      sink: {
+        logDiagnosticsRun(report) {
+          disabledSinkCalls.push(report);
+        },
+      },
+    });
+    const enabledSinkCalls: ReturnType<
+      typeof buildMemoryConsolidationDiagnosticsRunReport
+    >[] = [];
+    const logged = await logMemoryConsolidationDiagnosticsRun({
+      result,
+      enabled: true,
+      sink: {
+        logDiagnosticsRun(report) {
+          enabledSinkCalls.push(report);
+        },
+      },
+    });
+
+    expect(disabledSinkCalls).toEqual([]);
+    expect(disabled).toEqual(
+      expect.objectContaining({
+        status: "disabled",
+        reasonCodes: ["log_disabled"],
+      }),
+    );
+    await expect(
+      logMemoryConsolidationDiagnosticsRun({
+        result,
+        enabled: true,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        status: "disabled",
+        reasonCodes: ["log_sink_missing"],
+      }),
+    );
+    expect(logged).toEqual(
+      expect.objectContaining({
+        status: "logged",
+        reasonCodes: ["log_only"],
+      }),
+    );
+    expect(enabledSinkCalls).toEqual([
+      expect.objectContaining({
+        summary: expect.objectContaining({
+          dryRun: true,
+          userId: "adapter-user",
+          preservedClusterCount: 1,
+          suppressedRecordCount: 1,
+        }),
+        preservedClusters: [
+          expect.objectContaining({
+            recordIds: ["adapter-zh-a", "adapter-zh-b", "adapter-zh-c"],
+          }),
+        ],
       }),
     ]);
   });
