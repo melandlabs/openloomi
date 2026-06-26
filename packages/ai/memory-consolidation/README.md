@@ -185,6 +185,13 @@ Opt-in retrieval helpers can merge raw trace fallback with eligible semantic
 drafts, evaluate selected or suppressed drafts, and produce log-only comparison
 reports without injecting results into runtime context.
 
+Revision helpers model active, deprecated, and conflicted semantic memories as
+diagnostic artifacts. They can explain supersedes / deprecated-by relations and
+recency-aware competition without applying replacements or changing retrieval.
+
+Governance helpers turn revision signals into explanation reports, correction
+command dry-runs, and polluted-memory audit fixtures without applying changes.
+
 Callers can keep the full diagnostics for debugging and derive the compact
 report for review or logging:
 

@@ -6,6 +6,9 @@ import {
   analyzeMemoryEvidenceClusters,
   assignMemoryRelationGraph,
   calculateMemoryConsolidationEvalMetrics,
+  buildMemoryGovernanceAuditScenarioReport,
+  buildMemoryGovernanceCommandDryRunReport,
+  buildMemoryGovernanceExplanationReport,
   buildMemoryConsolidationPlan,
   buildMemoryConsolidationDiagnosticsReport,
   buildMemoryEvidenceClusters,
@@ -20,6 +23,10 @@ import {
   buildMemorySemanticRetrievalMergedResults,
   buildMemorySemanticRetrievalPlan,
   buildSemanticMemoryArtifactStorageDryRunReport,
+  buildSemanticMemoryRevisionCompetitionDiagnostics,
+  buildSemanticMemoryRevisionExplanationReport,
+  buildSemanticMemoryRevisionRelationPlan,
+  buildSemanticMemoryRevisionStatusSignal,
   buildSemanticMemoryDraftSummarizerInputContract,
   buildSemanticMemoryDraftSummarizerDiagnostics,
   buildSemanticMemoryDraftCandidates,
@@ -41,6 +48,10 @@ import {
   type MemorySemanticRetrievalMergedResultSet,
   type MemorySemanticRetrievalPlanningInput,
   type MemorySemanticRetrievalPlanningResult,
+  type SemanticMemoryRevisionCompetitionDiagnostics,
+  type SemanticMemoryRevisionExplanationReport,
+  type SemanticMemoryRevisionRelationPlan,
+  type SemanticMemoryRevisionStatusSignal,
   type SemanticMemoryArtifactStorageAdapter,
   type SemanticMemoryArtifactStorageRecord,
   type SemanticMemoryDraftStore,
@@ -3732,5 +3743,802 @@ describe("memory consolidation evaluation scenarios", () => {
         graphStatus: "tentative",
       }),
     ]);
+  });
+
+  it("normalizes semantic memory revision statuses without applying replacements", () => {
+    const active = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:active",
+      artifactStatus: "consolidated",
+      sourceRecordIds: ["trace-a", "trace-b"],
+      confidence: 1.2,
+      metadata: {
+        scope: "long-term",
+      },
+    }) satisfies SemanticMemoryRevisionStatusSignal;
+    const deprecated = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:deprecated",
+      artifactStatus: "deprecated",
+      sourceRecordIds: ["trace-old"],
+      confidence: 0.8,
+      reasonCodes: ["manual_review"],
+      rollback: {
+        operationId: "revision-dry-run",
+        sourceArtifactId: "artifact:active",
+        metadata: {
+          reversible: true,
+        },
+      },
+    });
+    const conflicted = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:conflicted",
+      artifactStatus: "conflicted",
+      sourceRecordIds: ["trace-conflict-a", "trace-conflict-b"],
+      confidence: Number.NaN,
+    });
+
+    expect(active).toEqual({
+      artifactId: "artifact:active",
+      artifactStatus: "consolidated",
+      revisionStatus: "active",
+      sourceRecordIds: ["trace-a", "trace-b"],
+      confidence: 1,
+      reasonCodes: ["active_memory"],
+      rollback: undefined,
+      metadata: {
+        scope: "long-term",
+      },
+    });
+    expect(deprecated).toEqual(
+      expect.objectContaining({
+        revisionStatus: "deprecated",
+        reasonCodes: ["deprecated_memory", "manual_review"],
+        sourceRecordIds: ["trace-old"],
+        rollback: {
+          operationId: "revision-dry-run",
+          sourceArtifactId: "artifact:active",
+          metadata: {
+            reversible: true,
+          },
+        },
+      }),
+    );
+    expect(conflicted).toEqual(
+      expect.objectContaining({
+        revisionStatus: "conflicted",
+        confidence: 0,
+        reasonCodes: ["conflicted_memory"],
+        sourceRecordIds: ["trace-conflict-a", "trace-conflict-b"],
+      }),
+    );
+
+    deprecated.sourceRecordIds.push("mutated");
+    deprecated.rollback!.metadata = {
+      reversible: false,
+    };
+    expect(active.sourceRecordIds).toEqual(["trace-a", "trace-b"]);
+    expect(conflicted.sourceRecordIds).toEqual([
+      "trace-conflict-a",
+      "trace-conflict-b",
+    ]);
+  });
+
+  it("builds explicit supersedes and deprecated-by revision relations without applying them", () => {
+    const oldMemory = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:english",
+      artifactStatus: "deprecated",
+      sourceRecordIds: ["trace-en-old"],
+      confidence: 0.72,
+      reasonCodes: ["manual_review"],
+    });
+    const newMemory = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:chinese",
+      artifactStatus: "consolidated",
+      sourceRecordIds: ["trace-zh-a", "trace-zh-b"],
+      confidence: 0.93,
+    });
+    const plan = buildSemanticMemoryRevisionRelationPlan({
+      oldMemory,
+      newMemory,
+      reasonCodes: ["preference_changed"],
+      rollback: {
+        operationId: "revision-relation-dry-run",
+        sourceArtifactId: oldMemory.artifactId,
+      },
+      metadata: {
+        relationGroup: "answer-language",
+      },
+    }) satisfies SemanticMemoryRevisionRelationPlan;
+
+    expect(plan).toEqual({
+      oldArtifactId: "artifact:preference:english",
+      newArtifactId: "artifact:preference:chinese",
+      relations: [
+        {
+          type: "supersedes",
+          sourceArtifactId: "artifact:preference:chinese",
+          targetArtifactId: "artifact:preference:english",
+          sourceRecordIds: ["trace-en-old", "trace-zh-a", "trace-zh-b"],
+          confidence: 0.72,
+          reasonCodes: ["supersedes_memory", "preference_changed"],
+          rollback: {
+            operationId: "revision-relation-dry-run",
+            sourceArtifactId: "artifact:preference:english",
+          },
+          metadata: {
+            relationGroup: "answer-language",
+          },
+        },
+        {
+          type: "deprecated-by",
+          sourceArtifactId: "artifact:preference:english",
+          targetArtifactId: "artifact:preference:chinese",
+          sourceRecordIds: ["trace-en-old", "trace-zh-a", "trace-zh-b"],
+          confidence: 0.72,
+          reasonCodes: ["deprecated_by_memory", "preference_changed"],
+          rollback: {
+            operationId: "revision-relation-dry-run",
+            sourceArtifactId: "artifact:preference:english",
+          },
+          metadata: {
+            relationGroup: "answer-language",
+          },
+        },
+      ],
+      reasonCodes: [
+        "supersedes_memory",
+        "deprecated_by_memory",
+        "preference_changed",
+      ],
+      rollback: {
+        operationId: "revision-relation-dry-run",
+        sourceArtifactId: "artifact:preference:english",
+      },
+      metadata: {
+        relationGroup: "answer-language",
+      },
+    });
+    expect(oldMemory.revisionStatus).toBe("deprecated");
+    expect(newMemory.revisionStatus).toBe("active");
+  });
+
+  it("uses recent repeated evidence for temporal competition diagnostics without retrieval activation", () => {
+    const oldEnglish = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:english",
+      artifactStatus: "consolidated",
+      sourceRecordIds: ["trace-en-a", "trace-en-b", "trace-en-c"],
+      confidence: 0.95,
+    });
+    const recentChinese = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:chinese",
+      artifactStatus: "consolidated",
+      sourceRecordIds: ["trace-zh-a", "trace-zh-b", "trace-zh-c"],
+      confidence: 0.82,
+    });
+    const diagnostics = buildSemanticMemoryRevisionCompetitionDiagnostics({
+      competitionKey: "answer-language",
+      now: NOW,
+      recentWindowMs: 14 * DAY_MS,
+      minRecentEvidence: 2,
+      candidates: [
+        {
+          memory: oldEnglish,
+          evidenceTimestamps: [20 * DAY_MS, 30 * DAY_MS, 40 * DAY_MS],
+        },
+        {
+          memory: recentChinese,
+          evidenceTimestamps: [NOW - 5 * DAY_MS, NOW - 2 * DAY_MS, NOW],
+        },
+      ],
+      metadata: {
+        mode: "diagnostic-only",
+      },
+    }) satisfies SemanticMemoryRevisionCompetitionDiagnostics;
+
+    expect(diagnostics.summary).toEqual({
+      competitionKey: "answer-language",
+      now: NOW,
+      candidateCount: 2,
+      leadingArtifactId: "artifact:preference:chinese",
+      recentWindowMs: 14 * DAY_MS,
+      minRecentEvidence: 2,
+    });
+    expect(diagnostics.diagnostics).toEqual([
+      expect.objectContaining({
+        artifactId: "artifact:preference:chinese",
+        revisionStatus: "active",
+        role: "leading",
+        sourceRecordIds: ["trace-zh-a", "trace-zh-b", "trace-zh-c"],
+        confidence: 0.82,
+        evidenceCount: 3,
+        recentEvidenceCount: 3,
+        latestEvidenceTimestamp: NOW,
+        recencyScore: 1,
+        reasonCodes: expect.arrayContaining([
+          "recency_competition_observation",
+          "recent_repeated_evidence",
+          "active_memory",
+        ]),
+      }),
+      expect.objectContaining({
+        artifactId: "artifact:preference:english",
+        revisionStatus: "active",
+        role: "competing",
+        sourceRecordIds: ["trace-en-a", "trace-en-b", "trace-en-c"],
+        confidence: 0.95,
+        evidenceCount: 3,
+        recentEvidenceCount: 0,
+        reasonCodes: expect.arrayContaining([
+          "recency_competition_observation",
+          "older_competing_memory",
+          "active_memory",
+        ]),
+      }),
+    ]);
+    expect(diagnostics.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "recency_competition_observation",
+        "recent_repeated_evidence",
+        "older_competing_memory",
+      ]),
+    );
+    expect(oldEnglish.revisionStatus).toBe("active");
+    expect(recentChinese.revisionStatus).toBe("active");
+  });
+
+  it("builds a revision explanation report that preserves sources and reasons", () => {
+    const oldEnglish = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:english",
+      artifactStatus: "deprecated",
+      sourceRecordIds: ["trace-en-a", "trace-en-b"],
+      confidence: 0.74,
+      reasonCodes: ["manual_review"],
+      rollback: {
+        operationId: "revision-explanation-dry-run",
+      },
+    });
+    const recentChinese = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:chinese",
+      artifactStatus: "consolidated",
+      sourceRecordIds: ["trace-zh-a", "trace-zh-b", "trace-zh-c"],
+      confidence: 0.9,
+    });
+    const relationPlan = buildSemanticMemoryRevisionRelationPlan({
+      oldMemory: oldEnglish,
+      newMemory: recentChinese,
+      reasonCodes: ["preference_changed"],
+    });
+    const competitionDiagnostics =
+      buildSemanticMemoryRevisionCompetitionDiagnostics({
+        competitionKey: "answer-language",
+        now: NOW,
+        recentWindowMs: 14 * DAY_MS,
+        candidates: [
+          {
+            memory: oldEnglish,
+            evidenceTimestamps: [20 * DAY_MS, 30 * DAY_MS],
+          },
+          {
+            memory: recentChinese,
+            evidenceTimestamps: [NOW - DAY_MS, NOW],
+          },
+        ],
+      });
+    const report = buildSemanticMemoryRevisionExplanationReport({
+      memories: [oldEnglish, recentChinese],
+      relationPlan,
+      competitionDiagnostics,
+      metadata: {
+        mode: "review-only",
+      },
+    }) satisfies SemanticMemoryRevisionExplanationReport;
+
+    expect(report.summary).toEqual({
+      memoryCount: 2,
+      relationCount: 2,
+      competitionDiagnosticCount: 2,
+      activeCount: 1,
+      deprecatedCount: 1,
+      conflictedCount: 0,
+      leadingArtifactId: "artifact:preference:chinese",
+    });
+    expect(report.memories).toEqual([
+      expect.objectContaining({
+        artifactId: "artifact:preference:english",
+        revisionStatus: "deprecated",
+        sourceRecordIds: ["trace-en-a", "trace-en-b"],
+        reasonCodes: ["deprecated_memory", "manual_review"],
+        rollback: {
+          operationId: "revision-explanation-dry-run",
+        },
+      }),
+      expect.objectContaining({
+        artifactId: "artifact:preference:chinese",
+        revisionStatus: "active",
+        sourceRecordIds: ["trace-zh-a", "trace-zh-b", "trace-zh-c"],
+        reasonCodes: ["active_memory"],
+      }),
+    ]);
+    expect(report.relations).toEqual([
+      expect.objectContaining({
+        type: "supersedes",
+        sourceArtifactId: "artifact:preference:chinese",
+        targetArtifactId: "artifact:preference:english",
+        sourceRecordIds: [
+          "trace-en-a",
+          "trace-en-b",
+          "trace-zh-a",
+          "trace-zh-b",
+          "trace-zh-c",
+        ],
+        reasonCodes: ["supersedes_memory", "preference_changed"],
+      }),
+      expect.objectContaining({
+        type: "deprecated-by",
+        sourceArtifactId: "artifact:preference:english",
+        targetArtifactId: "artifact:preference:chinese",
+        reasonCodes: ["deprecated_by_memory", "preference_changed"],
+      }),
+    ]);
+    expect(report.competitionDiagnostics[0]).toEqual(
+      expect.objectContaining({
+        artifactId: "artifact:preference:chinese",
+        role: "leading",
+        sourceRecordIds: ["trace-zh-a", "trace-zh-b", "trace-zh-c"],
+        reasonCodes: expect.arrayContaining([
+          "recency_competition_observation",
+          "recent_repeated_evidence",
+        ]),
+      }),
+    );
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "deprecated_memory",
+        "active_memory",
+        "supersedes_memory",
+        "deprecated_by_memory",
+        "preference_changed",
+        "recency_competition_observation",
+        "recent_repeated_evidence",
+      ]),
+    );
+    expect(report.metadata).toEqual({
+      mode: "review-only",
+    });
+  });
+
+  it("builds a governance explanation report with supporting traces and rollback", () => {
+    const oldEnglish = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:english",
+      artifactStatus: "deprecated",
+      sourceRecordIds: ["trace-en-a", "trace-en-missing"],
+      confidence: 0.74,
+      reasonCodes: ["manual_review"],
+      rollback: {
+        operationId: "governance-explanation-dry-run",
+        sourceArtifactId: "artifact:preference:chinese",
+      },
+    });
+    const recentChinese = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:chinese",
+      artifactStatus: "consolidated",
+      sourceRecordIds: ["trace-zh-a", "trace-zh-b"],
+      confidence: 0.9,
+      metadata: {
+        relationGroup: "answer-language",
+      },
+    });
+    const relationPlan = buildSemanticMemoryRevisionRelationPlan({
+      oldMemory: oldEnglish,
+      newMemory: recentChinese,
+      reasonCodes: ["preference_changed"],
+    });
+    const competitionDiagnostics =
+      buildSemanticMemoryRevisionCompetitionDiagnostics({
+        competitionKey: "answer-language",
+        now: NOW,
+        recentWindowMs: 14 * DAY_MS,
+        candidates: [
+          {
+            memory: oldEnglish,
+            evidenceTimestamps: [20 * DAY_MS],
+          },
+          {
+            memory: recentChinese,
+            evidenceTimestamps: [NOW - DAY_MS, NOW],
+          },
+        ],
+      });
+    const report = buildMemoryGovernanceExplanationReport({
+      memories: [oldEnglish, recentChinese],
+      sourceRecords: [
+        {
+          id: "trace-en-a",
+          userId: "eval-user",
+          timestamp: 20 * DAY_MS,
+          text: "Use English for technical replies.",
+          tier: "long",
+        },
+        {
+          id: "trace-zh-a",
+          userId: "eval-user",
+          timestamp: NOW - DAY_MS,
+          text: "Use Chinese for repo work.",
+          tier: "short",
+          metadata: {
+            source: "chat",
+          },
+        },
+        {
+          id: "trace-zh-b",
+          userId: "eval-user",
+          timestamp: NOW,
+          text: "Chinese explanations are easier.",
+          tier: "short",
+        },
+      ],
+      relations: relationPlan.relations,
+      competitionDiagnostics: competitionDiagnostics.diagnostics,
+      metadata: {
+        mode: "governance-review",
+      },
+    });
+
+    expect(report.summary).toEqual({
+      memoryCount: 2,
+      sourceRecordCount: 3,
+      missingSourceRecordCount: 1,
+      relationCount: 2,
+      activeCount: 1,
+      deprecatedCount: 1,
+      conflictedCount: 0,
+      rollbackAvailableCount: 1,
+    });
+    expect(report.memories[0]).toEqual(
+      expect.objectContaining({
+        artifactId: "artifact:preference:english",
+        revisionStatus: "deprecated",
+        sourceRecordIds: ["trace-en-a", "trace-en-missing"],
+        rollbackAvailable: true,
+        rollback: {
+          operationId: "governance-explanation-dry-run",
+          sourceArtifactId: "artifact:preference:chinese",
+        },
+        supportingTraces: [
+          expect.objectContaining({
+            recordId: "trace-en-a",
+            found: true,
+            text: "Use English for technical replies.",
+          }),
+          {
+            recordId: "trace-en-missing",
+            found: false,
+          },
+        ],
+        relations: [
+          expect.objectContaining({
+            type: "supersedes",
+            sourceArtifactId: "artifact:preference:chinese",
+            targetArtifactId: "artifact:preference:english",
+            reasonCodes: ["supersedes_memory", "preference_changed"],
+          }),
+          expect.objectContaining({
+            type: "deprecated-by",
+            sourceArtifactId: "artifact:preference:english",
+            targetArtifactId: "artifact:preference:chinese",
+            reasonCodes: ["deprecated_by_memory", "preference_changed"],
+          }),
+        ],
+        reasonCodes: expect.arrayContaining([
+          "memory_explanation",
+          "source_trace_found",
+          "source_trace_missing",
+          "rollback_available",
+          "deprecated_memory",
+          "manual_review",
+        ]),
+      }),
+    );
+    expect(report.memories[1]).toEqual(
+      expect.objectContaining({
+        artifactId: "artifact:preference:chinese",
+        revisionStatus: "active",
+        rollbackAvailable: false,
+        competitionDiagnostic: expect.objectContaining({
+          artifactId: "artifact:preference:chinese",
+          role: "leading",
+          reasonCodes: expect.arrayContaining([
+            "recency_competition_observation",
+            "recent_repeated_evidence",
+          ]),
+        }),
+        supportingTraces: [
+          expect.objectContaining({
+            recordId: "trace-zh-a",
+            found: true,
+            metadata: {
+              source: "chat",
+            },
+          }),
+          expect.objectContaining({
+            recordId: "trace-zh-b",
+            found: true,
+          }),
+        ],
+      }),
+    );
+    expect(report.missingSourceRecordIds).toEqual(["trace-en-missing"]);
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "memory_explanation",
+        "source_trace_missing",
+        "rollback_available",
+        "supersedes_memory",
+        "deprecated_by_memory",
+        "recency_competition_observation",
+      ]),
+    );
+    expect(report.metadata).toEqual({
+      mode: "governance-review",
+    });
+  });
+
+  it("builds governance correction and rollback command dry-runs without applying changes", () => {
+    const oldEnglish = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:english",
+      artifactStatus: "deprecated",
+      sourceRecordIds: ["trace-en-a"],
+      confidence: 0.74,
+      rollback: {
+        operationId: "governance-command-dry-run",
+        sourceArtifactId: "artifact:preference:chinese",
+      },
+    });
+    const recentChinese = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:chinese",
+      artifactStatus: "consolidated",
+      sourceRecordIds: ["trace-zh-a", "trace-zh-b"],
+      confidence: 0.9,
+    });
+    const explanation = buildMemoryGovernanceExplanationReport({
+      memories: [oldEnglish, recentChinese],
+      sourceRecords: [
+        {
+          id: "trace-en-a",
+          userId: "eval-user",
+          timestamp: 20 * DAY_MS,
+          text: "Use English for technical replies.",
+          tier: "long",
+        },
+        {
+          id: "trace-zh-a",
+          userId: "eval-user",
+          timestamp: NOW - DAY_MS,
+          text: "Use Chinese for repo work.",
+          tier: "short",
+        },
+        {
+          id: "trace-zh-b",
+          userId: "eval-user",
+          timestamp: NOW,
+          text: "Chinese explanations are easier.",
+          tier: "short",
+        },
+      ],
+    });
+    const report = buildMemoryGovernanceCommandDryRunReport({
+      explanationReport: explanation,
+      commands: [
+        {
+          commandId: "cmd:correct-chinese",
+          type: "correct-content",
+          artifactId: "artifact:preference:chinese",
+          correctedContent: "User prefers Chinese for technical repo work.",
+          requestedBy: "reviewer",
+          reasonCodes: ["manual_review"],
+          metadata: {
+            source: "unit-test",
+          },
+        },
+        {
+          commandId: "cmd:rollback-english",
+          type: "rollback-artifact",
+          artifactId: "artifact:preference:english",
+        },
+        {
+          commandId: "cmd:missing-artifact",
+          type: "change-status",
+          artifactId: "artifact:missing",
+          targetStatus: "conflicted",
+        },
+        {
+          commandId: "cmd:empty-correction",
+          type: "correct-content",
+          artifactId: "artifact:preference:chinese",
+          correctedContent: " ",
+        },
+      ],
+      metadata: {
+        mode: "command-review",
+      },
+    });
+
+    expect(report.summary).toEqual({
+      commandCount: 4,
+      validCommandCount: 2,
+      invalidCommandCount: 2,
+      dryRun: true,
+    });
+    expect(report.commands).toEqual([
+      expect.objectContaining({
+        commandId: "cmd:correct-chinese",
+        type: "correct-content",
+        artifactId: "artifact:preference:chinese",
+        valid: true,
+        dryRun: true,
+        currentRevisionStatus: "active",
+        correctedContent: "User prefers Chinese for technical repo work.",
+        sourceRecordIds: ["trace-zh-a", "trace-zh-b"],
+        rollbackAvailable: false,
+        reasonCodes: ["command_valid", "dry_run_only", "manual_review"],
+        requestedBy: "reviewer",
+        metadata: {
+          source: "unit-test",
+        },
+      }),
+      expect.objectContaining({
+        commandId: "cmd:rollback-english",
+        type: "rollback-artifact",
+        artifactId: "artifact:preference:english",
+        valid: true,
+        dryRun: true,
+        currentRevisionStatus: "deprecated",
+        sourceRecordIds: ["trace-en-a"],
+        rollbackAvailable: true,
+        rollback: {
+          operationId: "governance-command-dry-run",
+          sourceArtifactId: "artifact:preference:chinese",
+        },
+        reasonCodes: ["command_valid", "dry_run_only", "rollback_available"],
+      }),
+      expect.objectContaining({
+        commandId: "cmd:missing-artifact",
+        type: "change-status",
+        artifactId: "artifact:missing",
+        valid: false,
+        dryRun: true,
+        targetRevisionStatus: "conflicted",
+        sourceRecordIds: [],
+        reasonCodes: ["dry_run_only", "missing_artifact"],
+      }),
+      expect.objectContaining({
+        commandId: "cmd:empty-correction",
+        type: "correct-content",
+        artifactId: "artifact:preference:chinese",
+        valid: false,
+        dryRun: true,
+        correctedContent: " ",
+        reasonCodes: ["dry_run_only", "missing_corrected_content"],
+      }),
+    ]);
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "command_valid",
+        "dry_run_only",
+        "rollback_available",
+        "missing_artifact",
+        "missing_corrected_content",
+      ]),
+    );
+    expect(report.metadata).toEqual({
+      mode: "command-review",
+    });
+    expect(recentChinese.revisionStatus).toBe("active");
+    expect(oldEnglish.revisionStatus).toBe("deprecated");
+  });
+
+  it("summarizes polluted memory governance audit scenarios as dry-run fixtures", () => {
+    const pollutedEnglish = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:english",
+      artifactStatus: "deprecated",
+      sourceRecordIds: ["trace-en-a"],
+      confidence: 0.62,
+      reasonCodes: ["manual_review"],
+      rollback: {
+        operationId: "polluted-memory-audit",
+        sourceArtifactId: "artifact:preference:chinese",
+      },
+      metadata: {
+        pollutionType: "stale-preference",
+      },
+    });
+    const explanation = buildMemoryGovernanceExplanationReport({
+      memories: [pollutedEnglish],
+      sourceRecords: [
+        {
+          id: "trace-en-a",
+          userId: "eval-user",
+          timestamp: 20 * DAY_MS,
+          text: "Use English for technical replies.",
+          tier: "long",
+        },
+      ],
+    });
+    const commands = buildMemoryGovernanceCommandDryRunReport({
+      explanationReport: explanation,
+      commands: [
+        {
+          commandId: "cmd:rollback-polluted-english",
+          type: "rollback-artifact",
+          artifactId: "artifact:preference:english",
+        },
+      ],
+    });
+    const report = buildMemoryGovernanceAuditScenarioReport({
+      scenarioId: "polluted-language-preference",
+      pollutedArtifactIds: [
+        "artifact:preference:english",
+        "artifact:preference:missing",
+      ],
+      explanationReport: explanation,
+      commandReport: commands,
+      metadata: {
+        mode: "fixture-only",
+      },
+    });
+
+    expect(report.summary).toEqual({
+      scenarioId: "polluted-language-preference",
+      pollutedArtifactCount: 2,
+      explainedPollutedArtifactCount: 1,
+      validCommandCount: 1,
+      unresolvedPollutedArtifactCount: 1,
+      dryRun: true,
+    });
+    expect(report.pollutedMemories).toEqual([
+      expect.objectContaining({
+        artifactId: "artifact:preference:english",
+        explained: true,
+        unresolved: false,
+        revisionStatus: "deprecated",
+        sourceRecordIds: ["trace-en-a"],
+        rollbackAvailable: true,
+        commandIds: ["cmd:rollback-polluted-english"],
+        validCommandIds: ["cmd:rollback-polluted-english"],
+        reasonCodes: expect.arrayContaining([
+          "polluted_memory_observed",
+          "polluted_memory_explained",
+          "dry_run_command_available",
+          "rollback_available",
+          "manual_review",
+        ]),
+        metadata: {
+          pollutionType: "stale-preference",
+        },
+      }),
+      expect.objectContaining({
+        artifactId: "artifact:preference:missing",
+        explained: false,
+        unresolved: true,
+        sourceRecordIds: [],
+        rollbackAvailable: false,
+        commandIds: [],
+        validCommandIds: [],
+        reasonCodes: ["polluted_memory_observed", "polluted_memory_unresolved"],
+      }),
+    ]);
+    expect(report.unresolvedArtifactIds).toEqual([
+      "artifact:preference:missing",
+    ]);
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "polluted_memory_observed",
+        "polluted_memory_explained",
+        "dry_run_command_available",
+        "polluted_memory_unresolved",
+      ]),
+    );
+    expect(report.metadata).toEqual({
+      mode: "fixture-only",
+    });
   });
 });

@@ -8,10 +8,12 @@
     "./adapter": "./src/adapter.ts",
     "./evaluation": "./src/evaluation.ts",
     "./evidence-cluster": "./src/evidence-cluster.ts",
+    "./governance": "./src/governance.ts",
     "./persistence": "./src/persistence.ts",
     "./pipeline": "./src/pipeline.ts",
     "./relation-graph": "./src/relation-graph.ts",
     "./retrieval": "./src/retrieval.ts",
+    "./revision": "./src/revision.ts",
     "./runtime": "./src/runtime.ts",
     "./semantic-draft": "./src/semantic-draft.ts"
   },
