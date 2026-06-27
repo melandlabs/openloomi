@@ -4,7 +4,7 @@
  * Implementation of the IAgent interface using @anthropic-ai/claude-agent-sdk
  */
 
-import { execSync } from "node:child_process";
+import { exec, execSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { arch, homedir, platform } from "node:os";
@@ -57,6 +57,7 @@ import { filterToolCallText } from "@openloomi/shared";
 import { generateUUID } from "@/lib/utils";
 import { estimateTokens } from "@/lib/ai";
 import { loadMcpServers } from "@/lib/ai/mcp";
+import { syncSkillsToClaude } from "@/lib/ai/skills/loader";
 
 // Skills are loaded directly by Claude SDK from ~/.openloomi/skills/ via settingSources: ['user']
 // No custom loading needed
@@ -104,7 +105,6 @@ function spawnClaudeCodeProcess(options: {
   env: Record<string, string | undefined>;
   signal?: AbortSignal;
 }) {
-  const { spawn, exec } = require("node:child_process");
   const os = platform();
 
   // Kill the entire process tree on Windows when abort is signaled.
@@ -112,9 +112,9 @@ function spawnClaudeCodeProcess(options: {
   // cmd.exe does not propagate SIGTERM/SIGKILL to its children — the grandchild
   // CLI process can outlive the abort. Using taskkill /F /T /PID ensures all
   // descendants are terminated.
-  const registerWindowsTreeKill = (childProcess: ReturnType<typeof spawn>) => {
+  const registerWindowsTreeKill = (childProcess: ChildProcess) => {
     if (os === "win32" && childProcess.pid) {
-      childProcess.signal?.addEventListener("abort", () => {
+      options.signal?.addEventListener("abort", () => {
         exec(
           `taskkill /F /T /PID ${childProcess.pid}`,
           { windowsHide: true },
@@ -125,6 +125,9 @@ function spawnClaudeCodeProcess(options: {
       });
     }
   };
+  const asProcessEnv = (
+    env: Record<string, string | undefined>,
+  ): NodeJS.ProcessEnv => env as NodeJS.ProcessEnv;
 
   // Resolve cwd to an absolute path on Windows to prevent spawn() from
   // falling back to process.cwd() when given a relative or invalid path.
@@ -169,7 +172,7 @@ function spawnClaudeCodeProcess(options: {
 
     const childProcess = spawn(nodeToUse, [cliJsPath, ...options.args], {
       cwd: resolvedCwd,
-      env: { ...options.env, CLAUDECODE: "" },
+      env: asProcessEnv({ ...options.env, CLAUDECODE: "" }),
       stdio: ["pipe", "pipe", "pipe"],
       signal: options.signal,
       windowsHide: true,
@@ -195,7 +198,7 @@ function spawnClaudeCodeProcess(options: {
         ["/c", options.command, ...options.args],
         {
           cwd: resolvedCwd,
-          env: options.env,
+          env: asProcessEnv(options.env),
           stdio: ["pipe", "pipe", "pipe"],
           signal: options.signal,
           windowsHide: true,
@@ -217,7 +220,7 @@ function spawnClaudeCodeProcess(options: {
       ],
       {
         cwd: resolvedCwd,
-        env: options.env,
+        env: asProcessEnv(options.env),
         stdio: ["pipe", "pipe", "pipe"],
         signal: options.signal,
         windowsHide: true,
@@ -230,7 +233,7 @@ function spawnClaudeCodeProcess(options: {
   // Direct spawn for executables
   const childProcess = spawn(options.command, options.args, {
     cwd: resolvedCwd,
-    env: options.env,
+    env: asProcessEnv(options.env),
     stdio: ["pipe", "pipe", "pipe"],
     signal: options.signal,
     windowsHide: true,
@@ -2597,7 +2600,6 @@ export function createClaudeAgent(config: AgentConfig): ClaudeAgent {
   // Sync ~/.openloomi/skills/ to project .claude/skills/ for Claude SDK to load them
   // When using custom API, we use 'project' source which reads from .claude/skills/ in the working directory
   try {
-    const { syncSkillsToClaude } = require("@/lib/ai/skills/loader");
     syncSkillsToClaude(config.workDir);
   } catch (error) {
     // Don't fail agent creation if skills sync fails

@@ -1,6 +1,10 @@
 import { dirname } from "node:path";
 
 import type { SkillsConfig } from "@openloomi/ai/agent/types";
+import {
+  clearSkillsFromClaude,
+  syncSkillsToClaude,
+} from "@/lib/ai/skills/loader";
 
 export interface ClaudeRuntimeLogger {
   info(message: string, ...args: unknown[]): void;
@@ -39,9 +43,6 @@ export function syncSkillsForClaudeSession({
   includeTimings?: boolean;
 }) {
   try {
-    // Require lazily so non-Claude paths do not pull the skills loader into
-    // module initialization.
-    const { syncSkillsToClaude } = require("@/lib/ai/skills/loader");
     const syncStart = Date.now();
     syncSkillsToClaude(sessionCwd);
     const timing = includeTimings ? ` (${Date.now() - syncStart}ms)` : "";
@@ -90,7 +91,6 @@ export function clearSkillsForClaudeSession({
   try {
     // Cleanup is best-effort; failing to remove generated skill files should not
     // hide the actual agent result from the caller.
-    const { clearSkillsFromClaude } = require("@/lib/ai/skills/loader");
     clearSkillsFromClaude(sessionCwd);
     if (bundledCliPath) {
       const bundleDir = dirname(bundledCliPath);

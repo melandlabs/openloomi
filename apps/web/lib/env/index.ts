@@ -3,6 +3,8 @@
  * Automatically switches configuration based on deployment mode
  */
 
+import { existsSync, mkdirSync } from "node:fs";
+
 export * from "./constants";
 
 // Server-only path constants (node:os / node:path)
@@ -43,9 +45,6 @@ export function initTauriDirs(): void {
 
   // Lazy import fs only when needed (server-side only)
   if (typeof window !== "undefined") return;
-
-  const { mkdirSync } = require("node:fs");
-  const { existsSync } = require("node:fs");
 
   const dirs = [TAURI_DATA_DIR, TAURI_STORAGE_PATH, TAURI_LOGS_PATH];
 

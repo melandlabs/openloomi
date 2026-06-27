@@ -3,6 +3,7 @@
  * This file imports node: modules and must not be imported by client components.
  */
 
+import { join } from "node:path";
 import { DEV_PORT, PROD_PORT } from "@openloomi/shared";
 
 // Re-export deployment mode and database type from constants
@@ -11,11 +12,7 @@ export { isTauriMode, isServerMode } from "@/lib/env/client-constants";
 
 // SQLite database path for development mode (USE_SQLITE=true)
 export const SQLITE_DB_PATH =
-  process.env.SQLITE_DB_PATH ||
-  (() => {
-    const { join } = require("node:path");
-    return join(process.cwd(), "data", "sqlite.db");
-  })();
+  process.env.SQLITE_DB_PATH || join(process.cwd(), "data", "sqlite.db");
 
 // Server port configuration
 const isDevelopment = process.env.NODE_ENV === "development";

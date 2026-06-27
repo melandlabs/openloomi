@@ -8,6 +8,9 @@
  * Note: This module is for server-side only
  */
 
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 /**
  * Get Tauri data directory (server-side)
  */
@@ -24,8 +27,6 @@ export function getTauriDataDir(): string {
         : `${process.env.HOME}/.config/openloomi`;
   }
 
-  const { homedir } = require("node:os");
-  const { join } = require("node:path");
   const home = homedir();
 
   if (process.platform === "win32") {

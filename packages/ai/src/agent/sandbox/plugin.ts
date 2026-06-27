@@ -6,6 +6,7 @@
 
 import { execSync } from "node:child_process";
 import { extname, join } from "node:path";
+import { z } from "zod";
 
 import type {
   ISandboxProvider,
@@ -144,8 +145,6 @@ export function defineSandboxPlugin(plugin: SandboxPlugin): SandboxPlugin {
  * Get Native Provider config schema
  */
 export function getNativeConfigSchema() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { z } = require("zod");
   return z.object({
     allowedDirectories: z.array(z.string()).optional(),
     shell: z.string().default("/bin/bash"),
@@ -157,8 +156,6 @@ export function getNativeConfigSchema() {
  * Get Claude Provider config schema
  */
 export function getClaudeConfigSchema() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { z } = require("zod");
   return z.object({
     srtPath: z.string().optional(),
     defaultTimeout: z.number().default(120000),
@@ -169,8 +166,6 @@ export function getClaudeConfigSchema() {
  * Get Codex Provider config schema
  */
 export function getCodexConfigSchema() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { z } = require("zod");
   return z.object({
     codexPath: z.string().optional(),
     defaultTimeout: z.number().default(120000),

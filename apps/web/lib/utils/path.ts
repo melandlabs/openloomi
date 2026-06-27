@@ -6,6 +6,8 @@
  */
 
 import "server-only";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { APP_DIR_NAME } from "@/lib/env/config/constants";
 
 /**
@@ -14,7 +16,6 @@ import { APP_DIR_NAME } from "@/lib/env/config/constants";
  * Note: This function is only available in Node.js environment
  */
 export function getHomeDir(): string {
-  const { homedir } = require("node:os");
   return homedir();
 }
 
@@ -23,7 +24,6 @@ export function getHomeDir(): string {
  * @param paths Path segments
  */
 export function joinPath(...paths: string[]): string {
-  const { join } = require("node:path");
   return join(...paths);
 }
 
@@ -36,8 +36,6 @@ export function joinPath(...paths: string[]): string {
  * Note: This function is only available in Node.js environment
  */
 export function getAppDataDir(): string {
-  const { homedir } = require("node:os");
-  const { join } = require("node:path");
   const home = homedir();
 
   if (process.platform === "win32") {

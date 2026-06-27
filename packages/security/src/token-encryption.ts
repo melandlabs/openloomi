@@ -1,8 +1,11 @@
 import * as crypto from "node:crypto";
-import * as Fernet from "fernet";
+import * as FernetImport from "fernet";
+
+const Fernet = ((FernetImport as unknown as { default?: typeof FernetImport })
+  .default ?? FernetImport) as typeof FernetImport;
 
 export class TokenEncryption {
-  private fernetSecret?: Fernet.Secret;
+  private fernetSecret?: FernetImport.Secret;
   private encryptionKey?: Buffer;
   private ttl: number;
 
@@ -61,7 +64,7 @@ export class TokenEncryption {
    * Gets the Fernet Secret instance (cached)
    * @returns Fernet Secret instance
    */
-  private getFernetSecret(): Fernet.Secret {
+  private getFernetSecret(): FernetImport.Secret {
     if (!this.fernetSecret) {
       const keyBytes = this.getEncryptionKey();
       this.fernetSecret = new Fernet.Secret(keyBytes.toString("base64"));

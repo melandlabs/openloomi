@@ -5,17 +5,25 @@
 
 //! Non-interactive command-line entry point.
 
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::process::ExitCode;
-use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
+#[cfg(debug_assertions)]
+use std::fs::OpenOptions;
+use std::io::Read;
+#[cfg(debug_assertions)]
+use std::io::Write;
+use std::path::Path;
+#[cfg(debug_assertions)]
+use std::path::PathBuf;
+#[cfg(debug_assertions)]
+use std::process::{Child, Stdio};
+use std::process::{Command, ExitCode};
+use std::time::Duration;
+#[cfg(debug_assertions)]
+use std::time::Instant;
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", debug_assertions))]
 use std::os::windows::process::CommandExt;
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", debug_assertions))]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // Conservative fallback used when update metadata does not include a file size.
@@ -24,13 +32,14 @@ const DEFAULT_UPDATE_SPACE_BYTES: u64 = 512 * 1024 * 1024;
 const DEFAULT_ONE_SHOT_PLATFORM: &str = "cli";
 // One-shot agent runs can legitimately take minutes when tools are involved.
 const ONE_SHOT_TIMEOUT_SECS: u64 = 600;
-// Cold-starting Next.js in development can include runtime bundling.
-const ONE_SHOT_SERVER_START_TIMEOUT_SECS: u64 = 300;
-const ONE_SHOT_SERVER_HEALTH_TIMEOUT_SECS: u64 = 2;
+const ONE_SHOT_API_HEALTH_TIMEOUT_SECS: u64 = 2;
 // Test and CI callers can point the CLI at a non-default local API server.
 const OPENLOOMI_API_URL_ENV: &str = "OPENLOOMI_API_URL";
 // CI can provide auth without relying on the desktop token file.
 const OPENLOOMI_AUTH_TOKEN_ENV: &str = "OPENLOOMI_AUTH_TOKEN";
+// Set to 0/false/off to force the older local HTTP route path in debug builds.
+#[cfg(debug_assertions)]
+const OPENLOOMI_CLI_DIRECT_ENV: &str = "OPENLOOMI_CLI_DIRECT";
 // Development and tests can point the CLI at a checked-out web app directory.
 #[cfg(debug_assertions)]
 const OPENLOOMI_WEB_DIR_ENV: &str = "OPENLOOMI_WEB_DIR";
@@ -145,7 +154,8 @@ struct OneShotFeatureConfig {
 }
 
 // Accumulated result from the agent SSE stream.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default)]
 struct OneShotStreamResult {
     response: String,
     session_id: Option<String>,
@@ -156,36 +166,6 @@ struct OneShotStreamResult {
     cost: Option<f64>,
     duration_ms: Option<f64>,
     error: Option<String>,
-}
-
-// Owns a headless server process only when the CLI had to start one.
-// If an OpenLoomi server was already running, the guard is empty and drop is a
-// no-op, so a one-shot invocation never shuts down the user's app.
-#[derive(Default)]
-struct OneShotServerGuard {
-    child: Option<Child>,
-    log_path: Option<PathBuf>,
-}
-
-impl OneShotServerGuard {
-    fn started(child: Child, log_path: PathBuf) -> Self {
-        Self {
-            child: Some(child),
-            log_path: Some(log_path),
-        }
-    }
-
-    fn log_path(&self) -> Option<&Path> {
-        self.log_path.as_deref()
-    }
-}
-
-impl Drop for OneShotServerGuard {
-    fn drop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            terminate_child_process(&mut child);
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -509,18 +489,41 @@ async fn execute_one_shot(
     platform: &str,
     auth_token: &str,
 ) -> Result<OneShotStreamResult, CliError> {
-    let base_url = one_shot_base_url();
-    // One-shot mode should work without opening the desktop UI. Reuse an
-    // already-running local backend when present; otherwise start a headless one
-    // for the lifetime of this command.
-    let _server_guard = ensure_one_shot_server(&base_url).await?;
-    let endpoint = format!("{}/api/native/agent", base_url.trim_end_matches('/'));
+    let request_body = build_one_shot_agent_request(prompt, options, platform, auth_token);
+
+    #[cfg(debug_assertions)]
+    if should_try_direct_one_shot_runner() {
+        // Development builds can execute the native-agent runner directly, so
+        // one-shot does not need to open the desktop app or start a hidden
+        // Next.js service. The HTTP path below is kept as an explicit fallback.
+        match execute_one_shot_with_node_runner(&request_body).await {
+            Ok(result) => return Ok(result),
+            Err(error) if is_direct_runner_fallback_error(&error) => {
+                eprintln!(
+                    "warning: direct native-agent runner unavailable ({}); falling back to local API.",
+                    error.message
+                );
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    execute_one_shot_via_http(&request_body, auth_token).await
+}
+
+fn build_one_shot_agent_request<'a>(
+    prompt: &'a str,
+    options: &'a OneShotArgs,
+    platform: &'a str,
+    auth_token: &'a str,
+) -> OneShotAgentRequest<'a> {
     // Use the caller's current directory as the agent workspace so commands
     // launched from CI or scripts operate in the expected project folder.
     let work_dir = std::env::current_dir()
         .ok()
         .map(|path| path.display().to_string());
-    let request_body = OneShotAgentRequest {
+
+    OneShotAgentRequest {
         prompt,
         provider: options.provider.as_deref(),
         platform,
@@ -545,8 +548,18 @@ async fn execute_one_shot(
             app_dir_enabled: false,
         },
         auth_token: Some(auth_token),
-    };
+    }
+}
 
+async fn execute_one_shot_via_http(
+    request_body: &OneShotAgentRequest<'_>,
+    auth_token: &str,
+) -> Result<OneShotStreamResult, CliError> {
+    let base_url = one_shot_base_url();
+    // HTTP mode is now only a compatibility path for an already-running API.
+    // The CLI's primary path is the direct native-agent runner above.
+    ensure_one_shot_api_ready(&base_url).await?;
+    let endpoint = format!("{}/api/native/agent", base_url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
         .user_agent("openloomi-ctl")
         .timeout(Duration::from_secs(ONE_SHOT_TIMEOUT_SECS))
@@ -584,6 +597,310 @@ async fn execute_one_shot(
     parse_agent_sse(&response_text)
 }
 
+#[cfg(debug_assertions)]
+fn should_try_direct_one_shot_runner() -> bool {
+    // OPENLOOMI_API_URL is an explicit request to use the HTTP API path, usually
+    // for integration tests or a manually managed local server.
+    if std::env::var(OPENLOOMI_API_URL_ENV)
+        .ok()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+    {
+        return false;
+    }
+
+    // OPENLOOMI_CLI_DIRECT=0 is a debugging escape hatch for comparing the
+    // direct runner with the older API route behavior.
+    !matches!(
+        std::env::var(OPENLOOMI_CLI_DIRECT_ENV)
+            .ok()
+            .map(|value| value.to_ascii_lowercase()),
+        Some(value) if matches!(value.as_str(), "0" | "false" | "off")
+    )
+}
+
+#[cfg(debug_assertions)]
+fn is_direct_runner_fallback_error(error: &CliError) -> bool {
+    matches!(
+        error.code,
+        "direct_runner_unavailable" | "direct_runner_start" | "direct_runner_output"
+    )
+}
+
+#[cfg(debug_assertions)]
+async fn execute_one_shot_with_node_runner(
+    request_body: &OneShotAgentRequest<'_>,
+) -> Result<OneShotStreamResult, CliError> {
+    let web_dir = find_web_dir()?;
+    let script = web_dir.join("scripts").join("native-agent-cli.ts");
+    if !script.exists() {
+        return Err(CliError::new(
+            "direct_runner_unavailable",
+            format!("native agent CLI runner not found at {}", script.display()),
+        ));
+    }
+
+    let tsx_cli = find_dev_tsx_cli(&web_dir)?;
+    let log_path = prepare_one_shot_runner_log()?;
+    let stderr = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|error| {
+            CliError::new(
+                "direct_runner_start",
+                format!("failed to open direct runner log: {}", error),
+            )
+        })?;
+    let input_json = serde_json::to_string(request_body).map_err(|error| {
+        CliError::new(
+            "direct_runner_start",
+            format!("failed to serialize direct runner input: {}", error),
+        )
+    })?;
+
+    let data_dir = one_shot_web_data_dir();
+    let db_path = data_dir.join("data.db");
+    let base_url = crate::constants::nextjs_url();
+    let mut command = Command::new("node");
+    // Rust owns CLI parsing, auth-token loading, process timeout, and final
+    // JSON output. The TypeScript shim owns application runtime setup and calls
+    // the shared native-agent runner directly.
+    command
+        .arg(&tsx_cli)
+        .arg(&script)
+        .current_dir(&web_dir)
+        .env("NODE_OPTIONS", node_options_with_react_server())
+        .env("IS_TAURI", "true")
+        .env("TAURI_MODE", "1")
+        .env("DEPLOYMENT_MODE", "tauri")
+        .env("TAURI_DATA_DIR", data_dir.to_string_lossy().to_string())
+        .env("PORT", crate::constants::NEXTJS_PORT.to_string())
+        .env(
+            "TAURI_SERVER_PORT",
+            crate::constants::NEXTJS_PORT.to_string(),
+        )
+        .env("TAURI_DB_PATH", db_path.to_string_lossy().to_string())
+        .env("NEXTAUTH_URL", &base_url)
+        .env("NEXT_PUBLIC_APP_URL", &base_url)
+        .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::from(stderr));
+
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let mut child = command.spawn().map_err(|error| {
+        CliError::new(
+            "direct_runner_start",
+            format!(
+                "failed to start direct native-agent runner with {}: {}. See log: {}",
+                tsx_cli.display(),
+                error,
+                log_path.display()
+            ),
+        )
+    })?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        if let Err(error) = stdin.write_all(input_json.as_bytes()) {
+            terminate_child_process(&mut child);
+            return Err(CliError::new(
+                "direct_runner_start",
+                format!("failed to write direct runner input: {}", error),
+            ));
+        }
+    }
+
+    let status = wait_for_direct_runner(&mut child, &log_path)?;
+    let mut stdout = String::new();
+    if let Some(mut child_stdout) = child.stdout.take() {
+        child_stdout.read_to_string(&mut stdout).map_err(|error| {
+            CliError::new(
+                "direct_runner_output",
+                format!("failed to read direct runner output: {}", error),
+            )
+        })?;
+    }
+
+    let trimmed = stdout.trim();
+    if trimmed.is_empty() {
+        return Err(CliError::new(
+            "direct_runner_output",
+            format!(
+                "direct native-agent runner produced no JSON output. See log: {}",
+                log_path.display()
+            ),
+        ));
+    }
+
+    match serde_json::from_str::<OneShotStreamResult>(trimmed) {
+        Ok(result) => Ok(result),
+        Err(error) => {
+            if !status.success() {
+                return Err(CliError::new(
+                    "direct_runner_output",
+                    format!(
+                        "direct native-agent runner exited with status {} and invalid JSON output: {}. See log: {}",
+                        status,
+                        error,
+                        log_path.display()
+                    ),
+                ));
+            }
+            Err(CliError::new(
+                "direct_runner_output",
+                format!(
+                    "failed to parse direct native-agent runner JSON output: {}. See log: {}",
+                    error,
+                    log_path.display()
+                ),
+            ))
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+fn one_shot_web_data_dir() -> PathBuf {
+    // The direct runner runs outside the Tauri process, so it needs the same
+    // data.db location that the desktop/web runtime expects in development.
+    if let Ok(path) = std::env::var("TAURI_DATA_DIR") {
+        let path = path.trim();
+        if !path.is_empty() {
+            return PathBuf::from(path);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(home) = std::env::var("USERPROFILE") {
+            return PathBuf::from(home).join(".openloomi").join("data");
+        }
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return PathBuf::from(appdata).join("openloomi").join("data");
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home).join(".openloomi").join("data");
+        }
+    }
+
+    crate::storage::get_data_dir()
+}
+
+#[cfg(debug_assertions)]
+fn wait_for_direct_runner(
+    child: &mut Child,
+    log_path: &Path,
+) -> Result<std::process::ExitStatus, CliError> {
+    let started_at = Instant::now();
+    while started_at.elapsed() < Duration::from_secs(ONE_SHOT_TIMEOUT_SECS) {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok(status),
+            Ok(None) => std::thread::sleep(Duration::from_millis(200)),
+            Err(error) => {
+                return Err(CliError::new(
+                    "direct_runner_output",
+                    format!(
+                        "failed to monitor direct native-agent runner: {}. See log: {}",
+                        error,
+                        log_path.display()
+                    ),
+                ));
+            }
+        }
+    }
+
+    terminate_child_process(child);
+    Err(CliError::new(
+        "direct_runner_timeout",
+        format!(
+            "timed out after {} seconds waiting for direct native-agent runner. See log: {}",
+            ONE_SHOT_TIMEOUT_SECS,
+            log_path.display()
+        ),
+    ))
+}
+
+#[cfg(debug_assertions)]
+fn find_dev_tsx_cli(web_dir: &Path) -> Result<PathBuf, CliError> {
+    let mut candidates = Vec::new();
+    candidates.push(
+        web_dir
+            .join("node_modules")
+            .join("tsx")
+            .join("dist")
+            .join("cli.mjs"),
+    );
+    if let Some(root) = web_dir.parent().and_then(Path::parent) {
+        candidates.push(
+            root.join("node_modules")
+                .join("tsx")
+                .join("dist")
+                .join("cli.mjs"),
+        );
+    }
+
+    candidates
+        .into_iter()
+        .find(|path| path.exists())
+        .ok_or_else(|| {
+            CliError::new(
+                "direct_runner_unavailable",
+                "tsx CLI was not found in node_modules; run pnpm install, or set OPENLOOMI_CLI_DIRECT=0 with a reachable OPENLOOMI_API_URL.",
+            )
+        })
+}
+
+#[cfg(debug_assertions)]
+fn prepare_one_shot_runner_log() -> Result<PathBuf, CliError> {
+    let log_dir = crate::storage::get_data_dir().join("logs");
+    std::fs::create_dir_all(&log_dir).map_err(|error| {
+        CliError::new(
+            "direct_runner_start",
+            format!("failed to create CLI runner log directory: {}", error),
+        )
+    })?;
+
+    let log_path = log_dir.join("cli-native-agent-runner.log");
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|error| {
+            CliError::new(
+                "direct_runner_start",
+                format!("failed to open CLI runner log: {}", error),
+            )
+        })?;
+    let _ = writeln!(
+        file,
+        "\n=== openloomi-ctl one-shot direct native-agent runner start: {:?} ===",
+        std::time::SystemTime::now()
+    );
+    Ok(log_path)
+}
+
+#[cfg(debug_assertions)]
+fn node_options_with_react_server() -> String {
+    let current = std::env::var("NODE_OPTIONS").unwrap_or_default();
+    if current.contains("--conditions=react-server")
+        || current.contains("--conditions react-server")
+    {
+        return current;
+    }
+    let condition = "--conditions=react-server";
+    if current.trim().is_empty() {
+        condition.to_string()
+    } else {
+        format!("{} {}", current, condition)
+    }
+}
+
 fn one_shot_base_url() -> String {
     // Debug builds default to localhost:3515 and release builds to 3414 through
     // constants::nextjs_url(); env override makes integration tests flexible.
@@ -594,31 +911,25 @@ fn one_shot_base_url() -> String {
         .unwrap_or_else(crate::constants::nextjs_url)
 }
 
-async fn ensure_one_shot_server(base_url: &str) -> Result<OneShotServerGuard, CliError> {
-    if is_one_shot_server_ready(base_url).await {
-        return Ok(OneShotServerGuard::default());
+async fn ensure_one_shot_api_ready(base_url: &str) -> Result<(), CliError> {
+    if is_one_shot_api_ready(base_url).await {
+        return Ok(());
     }
 
-    if !should_auto_start_server(base_url) {
-        return Err(CliError::new(
-            "service_unavailable",
-            format!(
-                "OpenLoomi agent API is not reachable at {} and auto-start is only supported for local OpenLoomi URLs.",
-                base_url
-            ),
-        ));
-    }
-
-    let mut guard = start_one_shot_server()?;
-    wait_for_one_shot_server(base_url, &mut guard).await?;
-    Ok(guard)
+    Err(CliError::new(
+        "service_unavailable",
+        format!(
+            "OpenLoomi agent API is not reachable at {}. Start OpenLoomi, set {} to a reachable API, or use the direct native-agent runner.",
+            base_url, OPENLOOMI_API_URL_ENV
+        ),
+    ))
 }
 
-async fn is_one_shot_server_ready(base_url: &str) -> bool {
+async fn is_one_shot_api_ready(base_url: &str) -> bool {
     let health_url = format!("{}/api/native/agent", base_url.trim_end_matches('/'));
     let client = match reqwest::Client::builder()
         .user_agent("openloomi-ctl")
-        .timeout(Duration::from_secs(ONE_SHOT_SERVER_HEALTH_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(ONE_SHOT_API_HEALTH_TIMEOUT_SECS))
         .build()
     {
         Ok(client) => client,
@@ -631,186 +942,10 @@ async fn is_one_shot_server_ready(base_url: &str) -> bool {
     }
 }
 
-fn should_auto_start_server(base_url: &str) -> bool {
-    let Ok(url) = url::Url::parse(base_url) else {
-        return false;
-    };
-    if url.scheme() != "http" {
-        return false;
-    }
-    let Some(host) = url.host_str() else {
-        return false;
-    };
-    matches!(host, "localhost" | "127.0.0.1" | "::1")
-        && url.port_or_known_default() == Some(crate::constants::NEXTJS_PORT)
-}
-
-async fn wait_for_one_shot_server(
-    base_url: &str,
-    guard: &mut OneShotServerGuard,
-) -> Result<(), CliError> {
-    let started_at = Instant::now();
-    while started_at.elapsed() < Duration::from_secs(ONE_SHOT_SERVER_START_TIMEOUT_SECS) {
-        if let Some(child) = guard.child.as_mut() {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    return Err(CliError::new(
-                        "service_unavailable",
-                        format!(
-                            "headless OpenLoomi server exited during startup with status {}. See log: {}",
-                            status,
-                            display_log_path(guard.log_path())
-                        ),
-                    ));
-                }
-                Ok(None) => {}
-                Err(error) => {
-                    return Err(CliError::new(
-                        "service_unavailable",
-                        format!(
-                            "failed to monitor headless OpenLoomi server during startup: {}. See log: {}",
-                            error,
-                            display_log_path(guard.log_path())
-                        ),
-                    ));
-                }
-            }
-        }
-
-        if is_one_shot_server_ready(base_url).await {
-            return Ok(());
-        }
-
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    }
-
-    Err(CliError::new(
-        "service_unavailable",
-        format!(
-            "timed out after {} seconds waiting for headless OpenLoomi server at {}. See log: {}",
-            ONE_SHOT_SERVER_START_TIMEOUT_SECS,
-            base_url,
-            display_log_path(guard.log_path())
-        ),
-    ))
-}
-
-fn start_one_shot_server() -> Result<OneShotServerGuard, CliError> {
-    let log_path = prepare_one_shot_server_log()?;
-
-    #[cfg(debug_assertions)]
-    let child = spawn_dev_one_shot_server(&log_path)?;
-
-    #[cfg(not(debug_assertions))]
-    let child = spawn_packaged_one_shot_server(&log_path)?;
-
-    Ok(OneShotServerGuard::started(child, log_path))
-}
-
-fn prepare_one_shot_server_log() -> Result<PathBuf, CliError> {
-    let log_dir = crate::storage::get_data_dir().join("logs");
-    std::fs::create_dir_all(&log_dir).map_err(|error| {
-        CliError::new(
-            "service_unavailable",
-            format!("failed to create CLI server log directory: {}", error),
-        )
-    })?;
-
-    let log_path = log_dir.join("cli-headless-server.log");
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .map_err(|error| {
-            CliError::new(
-                "service_unavailable",
-                format!("failed to open CLI server log: {}", error),
-            )
-        })?;
-    let _ = writeln!(
-        file,
-        "\n=== openloomi-ctl one-shot headless server start: {:?} ===",
-        std::time::SystemTime::now()
-    );
-    Ok(log_path)
-}
-
-fn open_log_stdio(log_path: &Path) -> Result<(File, File), CliError> {
-    let stdout = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log_path)
-        .map_err(|error| {
-            CliError::new(
-                "service_unavailable",
-                format!("failed to open CLI server stdout log: {}", error),
-            )
-        })?;
-    let stderr = stdout.try_clone().map_err(|error| {
-        CliError::new(
-            "service_unavailable",
-            format!("failed to clone CLI server log handle: {}", error),
-        )
-    })?;
-    Ok((stdout, stderr))
-}
-
-fn display_log_path(path: Option<&Path>) -> String {
-    path.map(|path| path.display().to_string())
-        .unwrap_or_else(|| "(log unavailable)".to_string())
-}
-
-#[cfg(debug_assertions)]
-fn spawn_dev_one_shot_server(log_path: &Path) -> Result<Child, CliError> {
-    let web_dir = find_web_dir()?;
-    let script = web_dir.join("scripts").join("run-tauri-dev.js");
-    if !script.exists() {
-        return Err(CliError::new(
-            "service_unavailable",
-            format!("dev server script not found at {}", script.display()),
-        ));
-    }
-
-    let (stdout, stderr) = open_log_stdio(log_path)?;
-    let base_url = crate::constants::nextjs_url();
-    let mut command = Command::new("node");
-    command
-        .arg(&script)
-        .current_dir(&web_dir)
-        .env("IS_TAURI", "true")
-        .env("TAURI_MODE", "1")
-        .env("DEPLOYMENT_MODE", "tauri")
-        .env("PORT", crate::constants::NEXTJS_PORT.to_string())
-        .env(
-            "TAURI_SERVER_PORT",
-            crate::constants::NEXTJS_PORT.to_string(),
-        )
-        .env("NEXTAUTH_URL", &base_url)
-        .env("NEXT_PUBLIC_APP_URL", &base_url)
-        .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr));
-
-    #[cfg(target_os = "windows")]
-    command.creation_flags(CREATE_NO_WINDOW);
-
-    command.spawn().map_err(|error| {
-        CliError::new(
-            "service_unavailable",
-            format!(
-                "failed to start development OpenLoomi server with {}: {}. Set {} to the apps/web directory if the repo cannot be found. See log: {}",
-                script.display(),
-                error,
-                OPENLOOMI_WEB_DIR_ENV,
-                log_path.display()
-            ),
-        )
-    })
-}
-
 #[cfg(debug_assertions)]
 fn find_web_dir() -> Result<PathBuf, CliError> {
+    // openloomi-ctl may be launched from the repo root, apps/web, or
+    // target/debug. Walk ancestors before asking the user for OPENLOOMI_WEB_DIR.
     if let Ok(path) = std::env::var(OPENLOOMI_WEB_DIR_ENV) {
         let path = PathBuf::from(path.trim());
         if path.join("package.json").exists() && path.join("scripts").exists() {
@@ -855,521 +990,13 @@ fn find_web_dir() -> Result<PathBuf, CliError> {
     Err(CliError::new(
         "service_unavailable",
         format!(
-            "could not locate apps/web for development headless startup. Set {} to the apps/web directory.",
+            "could not locate apps/web for the direct native-agent runner. Set {} to the apps/web directory.",
             OPENLOOMI_WEB_DIR_ENV
         ),
     ))
 }
 
-#[cfg(not(debug_assertions))]
-fn spawn_packaged_one_shot_server(log_path: &Path) -> Result<Child, CliError> {
-    let resource_dir = packaged_resource_dir();
-    let standalone_dir = [
-        resource_dir.join("_up_").join(".next").join("standalone"),
-        resource_dir.join(".next").join("standalone"),
-    ]
-    .into_iter()
-    .find(|path| path.exists())
-    .ok_or_else(|| {
-        CliError::new(
-            "service_unavailable",
-            format!(
-                "packaged Next.js standalone directory not found near {}. See log: {}",
-                resource_dir.display(),
-                log_path.display()
-            ),
-        )
-    })?;
-
-    let server_script = standalone_dir.join("apps").join("web").join("server.js");
-    if !server_script.exists() {
-        return Err(CliError::new(
-            "service_unavailable",
-            format!(
-                "packaged Next.js server not found at {}. See log: {}",
-                server_script.display(),
-                log_path.display()
-            ),
-        ));
-    }
-
-    let env_home = env_home_dir();
-    let node_cmd = find_or_install_node_quiet(&env_home, log_path)?;
-    run_packaged_db_init(&node_cmd, &standalone_dir, log_path);
-
-    let boot_script = standalone_dir
-        .join("apps")
-        .join("web")
-        .join("scripts")
-        .join("boot-with-secrets.js");
-    let use_boot_script = boot_script.exists();
-    let mut args = Vec::new();
-    if use_boot_script {
-        args.push(boot_script);
-        args.push(server_script);
-    } else {
-        args.push(server_script);
-    }
-
-    let (stdout, stderr) = open_log_stdio(log_path)?;
-    let base_url = crate::constants::nextjs_url();
-    let data_dir = crate::storage::get_data_dir();
-    let db_path = data_dir.join("data.db");
-    let code_tmpdir = PathBuf::from(&env_home)
-        .join(".cache")
-        .join("openloomi-tmp");
-    let effective_path = effective_path_with_node(&node_cmd);
-    let mut command = Command::new(&node_cmd);
-    command
-        .args(args)
-        .current_dir(&standalone_dir)
-        .env("PATH", effective_path)
-        .env("HOME", &env_home)
-        .env("USER", std::env::var("USER").unwrap_or_default())
-        .env("SHELL", std::env::var("SHELL").unwrap_or_default())
-        .env("NODE_ENV", "production")
-        .env("WORKERS", "1")
-        .env("PORT", crate::constants::NEXTJS_PORT.to_string())
-        .env("IS_TAURI", "true")
-        .env("TAURI_MODE", "1")
-        .env("DEPLOYMENT_MODE", "tauri")
-        .env("TAURI_DB_PATH", db_path.to_string_lossy().to_string())
-        .env("NEXTAUTH_URL", &base_url)
-        .env("NEXT_PUBLIC_APP_URL", &base_url)
-        .env("API_TIMEOUT_MS", "3000000")
-        .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
-        .env(
-            "CLAUDE_CODE_TMPDIR",
-            code_tmpdir.to_string_lossy().to_string(),
-        )
-        .env("CLAUDE_DISABLE_URL_SAFETY_CHECK", "true")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr));
-
-    #[cfg(target_os = "windows")]
-    command.creation_flags(CREATE_NO_WINDOW);
-
-    let mut child = command.spawn().map_err(|error| {
-        CliError::new(
-            "service_unavailable",
-            format!(
-                "failed to start packaged OpenLoomi server with {}: {}. See log: {}",
-                node_cmd,
-                error,
-                log_path.display()
-            ),
-        )
-    })?;
-
-    if use_boot_script {
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(b"{}");
-        }
-    }
-
-    Ok(child)
-}
-
-#[cfg(not(debug_assertions))]
-fn effective_path_with_node(node_cmd: &str) -> String {
-    let current_path = std::env::var("PATH").unwrap_or_default();
-    let Some(parent) = Path::new(node_cmd).parent() else {
-        return current_path;
-    };
-    let parent = parent.to_string_lossy();
-    if parent.is_empty() {
-        return current_path;
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        format!("{};{}", parent, current_path)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        format!("{}:{}", parent, current_path)
-    }
-}
-
-#[cfg(not(debug_assertions))]
-fn packaged_resource_dir() -> PathBuf {
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|path| path.parent().map(Path::to_path_buf))
-        .unwrap_or_else(|| PathBuf::from("."));
-
-    if exe_dir.ends_with("MacOS") {
-        exe_dir
-            .parent()
-            .map(|path| path.join("Resources"))
-            .unwrap_or(exe_dir)
-    } else {
-        exe_dir
-    }
-}
-
-#[cfg(not(debug_assertions))]
-fn run_packaged_db_init(node_cmd: &str, standalone_dir: &Path, log_path: &Path) {
-    let init_db_script = standalone_dir
-        .join("apps")
-        .join("web")
-        .join("scripts")
-        .join("init-db.cjs");
-    if !init_db_script.exists() {
-        return;
-    }
-
-    let Ok((stdout, stderr)) = open_log_stdio(log_path) else {
-        return;
-    };
-    let data_dir = crate::storage::get_data_dir();
-    let db_path = data_dir.join("data.db");
-    let migrations_dir = standalone_dir
-        .join("apps")
-        .join("web")
-        .join("lib")
-        .join("db")
-        .join("migrations-sqlite");
-
-    let mut command = Command::new(node_cmd);
-    command
-        .arg(init_db_script)
-        .current_dir(standalone_dir.join("apps").join("web"))
-        .env("TAURI_DB_PATH", db_path.to_string_lossy().to_string())
-        .env(
-            "TAURI_MIGRATIONS_DIR",
-            migrations_dir.to_string_lossy().to_string(),
-        )
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr));
-
-    #[cfg(target_os = "windows")]
-    command.creation_flags(CREATE_NO_WINDOW);
-
-    let _ = command.status();
-}
-
-#[cfg(not(debug_assertions))]
-fn env_home_dir() -> String {
-    #[cfg(windows)]
-    {
-        std::env::var("USERPROFILE")
-            .or_else(|_| std::env::var("APPDATA"))
-            .unwrap_or_default()
-    }
-
-    #[cfg(not(windows))]
-    {
-        std::env::var("HOME").unwrap_or_default()
-    }
-}
-
-#[cfg(not(debug_assertions))]
-fn find_or_install_node_quiet(env_home: &str, log_path: &Path) -> Result<String, CliError> {
-    for candidate in node_candidates(env_home) {
-        if is_cli_node_version_valid(&candidate) {
-            return Ok(candidate);
-        }
-    }
-
-    install_node_quiet(env_home, log_path)?;
-    let installed = downloaded_node_path(env_home);
-    if is_cli_node_version_valid(&installed) {
-        return Ok(installed);
-    }
-
-    Err(CliError::new(
-        "service_unavailable",
-        format!(
-            "Node.js v22 is required for packaged one-shot mode but was not found or installed. See log: {}",
-            log_path.display()
-        ),
-    ))
-}
-
-#[cfg(not(debug_assertions))]
-fn node_candidates(env_home: &str) -> Vec<String> {
-    let mut candidates = vec![downloaded_node_path(env_home), "node".to_string()];
-
-    #[cfg(target_os = "windows")]
-    {
-        candidates.extend([
-            format!(r"{}\AppData\Roaming\nvm\v22.17.0\node.exe", env_home),
-            r"C:\Program Files\nodejs\node.exe".to_string(),
-            r"C:\Program Files (x86)\nodejs\node.exe".to_string(),
-        ]);
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        candidates.extend([
-            "/usr/local/bin/node".to_string(),
-            "/opt/homebrew/bin/node".to_string(),
-            format!("{}/.nvm/versions/node/v22.17.0/bin/node", env_home),
-            format!(
-                "{}/.local/share/fnm/node-versions/v22.17.0/installation/bin/node",
-                env_home
-            ),
-        ]);
-    }
-
-    candidates
-}
-
-#[cfg(not(debug_assertions))]
-fn downloaded_node_path(env_home: &str) -> String {
-    #[cfg(target_os = "windows")]
-    {
-        PathBuf::from(env_home)
-            .join(".openloomi")
-            .join("node")
-            .join("node.exe")
-            .to_string_lossy()
-            .to_string()
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        PathBuf::from(env_home)
-            .join(".openloomi")
-            .join("node")
-            .join("bin")
-            .join("node")
-            .to_string_lossy()
-            .to_string()
-    }
-}
-
-#[cfg(not(debug_assertions))]
-fn is_cli_node_version_valid(node_path: &str) -> bool {
-    let output = Command::new(node_path).arg("--version").output();
-    let Ok(output) = output else {
-        return false;
-    };
-    if !output.status.success() {
-        return false;
-    }
-    let version = String::from_utf8_lossy(&output.stdout);
-    let Some(version) = version.trim().strip_prefix('v') else {
-        return false;
-    };
-    let Some(major) = version.split('.').next() else {
-        return false;
-    };
-    major == "22"
-}
-
-#[cfg(not(debug_assertions))]
-fn install_node_quiet(env_home: &str, log_path: &Path) -> Result<(), CliError> {
-    let install_dir = PathBuf::from(env_home).join(".openloomi").join("node");
-    let node_exe = PathBuf::from(downloaded_node_path(env_home));
-    if node_exe.exists() {
-        return Ok(());
-    }
-    std::fs::create_dir_all(&install_dir).map_err(|error| {
-        CliError::new(
-            "service_unavailable",
-            format!("failed to create Node.js install directory: {}", error),
-        )
-    })?;
-
-    let (url, archive_name) = node_download_spec();
-    append_log_line(log_path, &format!("Downloading Node.js from {}", url));
-    let archive_path = std::env::temp_dir().join(archive_name);
-    let mut response = reqwest::blocking::Client::new()
-        .get(url)
-        .send()
-        .map_err(|error| {
-            CliError::new(
-                "service_unavailable",
-                format!(
-                    "failed to download Node.js for headless one-shot mode: {}. See log: {}",
-                    error,
-                    log_path.display()
-                ),
-            )
-        })?;
-    if !response.status().is_success() {
-        return Err(CliError::new(
-            "service_unavailable",
-            format!(
-                "failed to download Node.js: HTTP {}. See log: {}",
-                response.status(),
-                log_path.display()
-            ),
-        ));
-    }
-
-    let mut file = File::create(&archive_path).map_err(|error| {
-        CliError::new(
-            "service_unavailable",
-            format!("failed to create Node.js archive file: {}", error),
-        )
-    })?;
-    std::io::copy(&mut response, &mut file).map_err(|error| {
-        CliError::new(
-            "service_unavailable",
-            format!("failed to write Node.js archive file: {}", error),
-        )
-    })?;
-
-    let result = extract_node_archive_quiet(&archive_path, &install_dir, log_path);
-    let _ = std::fs::remove_file(&archive_path);
-    result
-}
-
-#[cfg(all(not(debug_assertions), target_os = "windows"))]
-fn node_download_spec() -> (&'static str, &'static str) {
-    (
-        "https://nodejs.org/dist/v22.17.0/node-v22.17.0-win-x64.zip",
-        "node-v22.17.0-win-x64.zip",
-    )
-}
-
-#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "aarch64"))]
-fn node_download_spec() -> (&'static str, &'static str) {
-    (
-        "https://nodejs.org/dist/v22.17.0/node-v22.17.0-darwin-arm64.tar.gz",
-        "node-v22.17.0-darwin-arm64.tar.gz",
-    )
-}
-
-#[cfg(all(
-    not(debug_assertions),
-    target_os = "macos",
-    not(target_arch = "aarch64")
-))]
-fn node_download_spec() -> (&'static str, &'static str) {
-    (
-        "https://nodejs.org/dist/v22.17.0/node-v22.17.0-darwin-x64.tar.gz",
-        "node-v22.17.0-darwin-x64.tar.gz",
-    )
-}
-
-#[cfg(all(not(debug_assertions), target_os = "linux", target_arch = "aarch64"))]
-fn node_download_spec() -> (&'static str, &'static str) {
-    (
-        "https://nodejs.org/dist/v22.17.0/node-v22.17.0-linux-arm64.tar.gz",
-        "node-v22.17.0-linux-arm64.tar.gz",
-    )
-}
-
-#[cfg(all(
-    not(debug_assertions),
-    target_os = "linux",
-    not(target_arch = "aarch64")
-))]
-fn node_download_spec() -> (&'static str, &'static str) {
-    (
-        "https://nodejs.org/dist/v22.17.0/node-v22.17.0-linux-x64.tar.gz",
-        "node-v22.17.0-linux-x64.tar.gz",
-    )
-}
-
-#[cfg(all(not(debug_assertions), target_os = "windows"))]
-fn extract_node_archive_quiet(
-    archive_path: &Path,
-    install_dir: &Path,
-    log_path: &Path,
-) -> Result<(), CliError> {
-    let output = Command::new("powershell")
-        .args([
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            &format!(
-                "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
-                archive_path.to_string_lossy(),
-                install_dir.to_string_lossy()
-            ),
-        ])
-        .output()
-        .map_err(|error| {
-            CliError::new(
-                "service_unavailable",
-                format!("failed to run PowerShell for Node.js extraction: {}", error),
-            )
-        })?;
-
-    if !output.status.success() {
-        append_log_line(
-            log_path,
-            &String::from_utf8_lossy(&output.stderr).to_string(),
-        );
-        return Err(CliError::new(
-            "service_unavailable",
-            format!(
-                "failed to extract Node.js archive. See log: {}",
-                log_path.display()
-            ),
-        ));
-    }
-
-    let extracted_node = install_dir.join("node-v22.17.0-win-x64").join("node.exe");
-    let final_node = install_dir.join("node.exe");
-    if extracted_node.exists() && !final_node.exists() {
-        std::fs::copy(&extracted_node, &final_node).map_err(|error| {
-            CliError::new(
-                "service_unavailable",
-                format!("failed to install Node.js binary: {}", error),
-            )
-        })?;
-    }
-    Ok(())
-}
-
-#[cfg(all(not(debug_assertions), not(target_os = "windows")))]
-fn extract_node_archive_quiet(
-    archive_path: &Path,
-    install_dir: &Path,
-    log_path: &Path,
-) -> Result<(), CliError> {
-    let Ok((stdout, stderr)) = open_log_stdio(log_path) else {
-        return Err(CliError::new(
-            "service_unavailable",
-            "failed to open log for Node.js extraction",
-        ));
-    };
-    let status = Command::new("tar")
-        .args([
-            "-xzf",
-            archive_path.to_string_lossy().as_ref(),
-            "-C",
-            install_dir.to_string_lossy().as_ref(),
-            "--strip-components=1",
-        ])
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr))
-        .status()
-        .map_err(|error| {
-            CliError::new(
-                "service_unavailable",
-                format!("failed to run tar for Node.js extraction: {}", error),
-            )
-        })?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(CliError::new(
-            "service_unavailable",
-            format!(
-                "failed to extract Node.js archive with tar. See log: {}",
-                log_path.display()
-            ),
-        ))
-    }
-}
-
-#[cfg(not(debug_assertions))]
-fn append_log_line(log_path: &Path, line: &str) {
-    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
-        let _ = writeln!(file, "{}", line);
-    }
-}
-
+#[cfg(debug_assertions)]
 fn terminate_child_process(child: &mut Child) {
     if matches!(child.try_wait(), Ok(Some(_))) {
         return;
