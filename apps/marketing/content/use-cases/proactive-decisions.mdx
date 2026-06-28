@@ -219,6 +219,10 @@ The local web UI's **Queue** view (the `Q` tab at `http://127.0.0.1:3614/`) show
 
 ![OpenLoomi Loop web UI — Queue view (PENDING / DONE / DISMISSED kanban)](/img/use-cases/proactive-decisions-kanban.png)
 
+Click any card and the detail panel slides in from the right with the suggested action (e.g. `calendar_rsvp` with `response: "accepted"`) and four explicit buttons — **▶ RUN** spawns the Claude session with the decision prompt, **DRY RUN** previews the prompt without executing, **✓ MARK DONE** records it as handled, **✕ DISMISS** drops it. Nothing fires automatically; you always pick the action.
+
+![OpenLoomi Loop Kanban with action buttons](/img/use-cases/proactive-decisions-kanban-actions.png)
+
 ---
 
 ### Use the Right Skills
