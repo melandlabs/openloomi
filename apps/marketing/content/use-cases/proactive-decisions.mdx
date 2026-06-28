@@ -149,7 +149,16 @@ Both keys live in **Settings → API Settings**. OpenLoomi uses them in tandem �
 | **OpenLoomi API Key** | Auto-generated on first sign-in; reset via **Settings → Account → Reset Local Token**      | Authenticates requests to the local OpenLoomi server (`http://127.0.0.1:3414/api/`) that the Loop reads/writes memory and insights through |
 | **COMPOSIO_API_KEY**  | Sign up at [composio.dev](https://composio.dev), then **Settings → API Keys → Create Key** | Authenticates the Composio MCP toolkit that fetches signals from Gmail, Calendar, GitHub, Slack                                            |
 
-After pasting both keys, click **Test Connection** on each — OpenLoomi will confirm both endpoints are reachable before you move on.
+> **💡 Prefer the terminal? Use the Composio CLI instead.** Recommended for headless servers, CI, and local debugging — install the CLI, log in, and the Loop picks the key up automatically (no need to paste it in **Settings → API Settings**):
+>
+> ```bash
+> curl -fsSL https://composio.dev/install | bash
+> composio login
+> ```
+>
+> The CLI writes the key to `~/.composio/.env`; OpenLoomi's Loop reads it from there on the next tick. Use `composio whoami` to confirm you're authenticated, and `composio logout` to clear it.
+
+After pasting both keys (or after `composio login`), click **Test Connection** in **Settings → API Settings** — OpenLoomi will confirm both endpoints are reachable before you move on.
 
 ---
 
