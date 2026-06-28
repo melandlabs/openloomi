@@ -72,21 +72,21 @@ For day-to-day use, prefer the bundled `loop-ctl.sh` helper over running the CLI
 
 ```bash
 # Start schedule + web (defaults: INTERVAL=600s, PORT=3614)
-./loop-ctl.sh start
+$SKILL_DIR/loop-ctl.sh start
 
 # Check what's running
-./loop-ctl.sh status
+$SKILL_DIR/loop-ctl.sh status
 #   schedule: pid=6948 uptime=18m05s
 #   web:      pid=6949 http://127.0.0.1:3614/
 
 # Restart (e.g. after editing scripts/)
-./loop-ctl.sh restart
+$SKILL_DIR/loop-ctl.sh restart
 
 # Stop both
-./loop-ctl.sh stop
+$SKILL_DIR/loop-ctl.sh stop
 
 # Override defaults
-PORT=4000 INTERVAL=300 ./loop-ctl.sh start
+PORT=4000 INTERVAL=300 $SKILL_DIR/loop-ctl.sh start
 ```
 
 What it does:
@@ -196,7 +196,7 @@ composio on/off between ticks does not double-insert.
 | `config [get\|set k v]` | Read/edit config. |
 | `logs [-n N]` | Tail the loop log. |
 | `serve` | REPL: `list`, `run <id>`, `dismiss <id>`, `analyze`, `status`, `quit`. |
-| `web [--port N] [--no-open]` | Start HTTP server with REST API + Ink & Circuit style UI at `http://127.0.0.1:N/`. Auto-opens browser. CLI default port **3414** — **collides with the openloomi desktop app**, which binds 3414. When the app is running, use `--port 3614` (or any other free port), or run via `./loop-ctl.sh start` which defaults to 3614 to avoid the clash. |
+| `web [--port N] [--no-open]` | Start HTTP server with REST API + Ink & Circuit style UI at `http://127.0.0.1:N/`. Auto-opens browser. CLI default port **3414** — **collides with the openloomi desktop app**, which binds 3414. When the app is running, use `--port 3614` (or any other free port), or run via `$SKILL_DIR/loop-ctl.sh start` which defaults to 3614 to avoid the clash. |
 
 ### Notification channels
 
@@ -214,7 +214,7 @@ All commands operate on `$SKILL_DIR/data/` for the signal/decision store. Memory
 
 ## Web UI — `loop web`
 
-`loop web` (or `node scripts/loop-web.cjs <port>`) starts an HTTP server (override with `--port N` or `LOOP_WEB_PORT`). The CLI default is **3414**, but the **openloomi desktop app also binds 3414** — if both run on the same machine, the second one to start will fail with `EADDRINUSE`. The bundled `./loop-ctl.sh start` defaults to **3614** to sidestep the conflict. Auto-opens the default browser.
+`loop web` (or `node scripts/loop-web.cjs <port>`) starts an HTTP server (override with `--port N` or `LOOP_WEB_PORT`). The CLI default is **3414**, but the **openloomi desktop app also binds 3414** — if both run on the same machine, the second one to start will fail with `EADDRINUSE`. The bundled `$SKILL_DIR/loop-ctl.sh start` defaults to **3614** to sidestep the conflict. Auto-opens the default browser.
 
 **Ink & Circuit** themed UI (amber/dark, Syne + Space Grotesk + JetBrains Mono, hex markers, circuit corners) with three views:
 
