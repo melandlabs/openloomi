@@ -103,41 +103,6 @@ The Loop never leaves you with an empty queue. When a Composio toolkit isn't con
 
 ## How to Set Up
 
-**Option 1: Copy & Paste (Easiest)**
-
-Open OpenLoomi and paste this — it walks through every step end-to-end:
-
-```
-Please help me set up the openloomi-loop proactive execution brain inside OpenLoomi.
-
-1. Configure the two API keys in OpenLoomi's API Settings:
-   - OpenLoomi API Key: my local token (auto-generated; if missing, sign out and back in)
-   - COMPOSIO_API_KEY: paste the API key I just created at composio.dev → Settings → API Keys
-
-2. Connect the four toolkits the Loop watches:
-   - Open Settings → Connectors, click "+ Add New Connector"
-   - Add Gmail, Google Calendar, GitHub, and Slack (each uses Composio OAuth under the hood)
-   - Verify all four show status "Connected"
-
-3. Install the openloomi-loop skill:
-   - Open Settings → Skills, search for "openloomi-loop"
-   - Click Install (or, if not in the marketplace, point it at the bundled skills/openloomi-loop/ folder)
-
-4. Start the Loop as a scheduled task:
-   - Go to Agent → Automation → New Task
-   - Task Name: "Proactive Execution Loop"
-   - Task Description: "Run openloomi-loop tick to pull signals from Gmail/Calendar/GitHub/Slack, enrich via openloomi-memory, classify into typed decisions, and queue them"
-   - Schedule: Every 10 minutes
-
-5. Open the Loop panel in OpenLoomi's sidebar to see the decision queue
-```
-
-OpenLoomi will configure the keys, connect the toolkits, install the skill, and start the scheduler for you.
-
----
-
-**Option 2: Manual Setup**
-
 ### Step 1: Configure your API keys in OpenLoomi
 
 > **Prerequisite:** Before this step, finish the AI Configuration in [Getting Started → AI Configuration](/docs/getting-started#ai-configuration) — the OpenLoomi app needs your AI provider's `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_MODEL` set in `~/.claude/settings.json` (or via the on-screen **Settings → API Settings** panel). The Loop builds on top of that foundation.
@@ -164,49 +129,48 @@ After pasting both keys (or after `composio login`), click **Test Connection** i
 
 ### Step 2: Connect the four toolkits
 
-Each toolkit OpenLoomi exposes for the Loop routes through Composio under the hood. You only need OAuth once.
+Each toolkit OpenLoomi exposes for the Loop routes through Composio under the hood. You only need OAuth once. We recommend doing this through the **Composio CLI** (or the `composio-cli` skill from inside OpenLoomi chat) — it handles the OAuth browser flow, persists refresh tokens locally to `~/.composio/`, and is scriptable for headless servers.
 
-1. Open **Settings → Connectors**
-2. Click **+ Add New Connector**
-3. Add each of the four in turn:
+1. Log in (skip if you already ran `composio login` in Step 1):
 
-| Connector           | What it powers          | OAuth scope                                    |
-| ------------------- | ----------------------- | ---------------------------------------------- |
-| **Gmail**           | `draft_reply` decisions | Read inbox metadata, send on your behalf       |
-| **Google Calendar** | `rsvp` decisions        | Read events, patch event responses             |
-| **GitHub**          | `review_pr` decisions   | Read PRs where you're a reviewer, post reviews |
-| **Slack**           | `slack_reply` decisions | Read channels you're in, post replies          |
+   ```bash
+   curl -fsSL https://composio.dev/install | bash
+   composio login
+   ```
 
-After all four are added, the Connectors page should show each as **Connected**. If any show "Not Connected," click into them and re-run the OAuth flow.
+2. Add each of the four toolkits in turn — the CLI opens the OAuth browser flow for each one and writes the resulting refresh token to `~/.composio/`:
+
+   ```bash
+   composio add gmail
+   composio add googlecalendar
+   composio add github
+   composio add slack
+   ```
+
+   | Toolkit             | CLI command                   | What it powers          | OAuth scope                                    |
+   | ------------------- | ----------------------------- | ----------------------- | ---------------------------------------------- |
+   | **Gmail**           | `composio add gmail`          | `draft_reply` decisions | Read inbox metadata, send on your behalf       |
+   | **Google Calendar** | `composio add googlecalendar` | `rsvp` decisions        | Read events, patch event responses             |
+   | **GitHub**          | `composio add github`         | `review_pr` decisions   | Read PRs where you're a reviewer, post reviews |
+   | **Slack**           | `composio add slack`          | `slack_reply` decisions | Read channels you're in, post replies          |
+
+3. Confirm all four are connected:
+
+   ```bash
+   composio connections list
+   ```
+
+   Each toolkit should show a status of `ACTIVE`. If any show `INACTIVE` or are missing, re-run `composio add <toolkit>` to redo the OAuth flow. You can also run `composio whoami` at any time to confirm your overall auth state.
+
+> **💡 Prefer to stay inside OpenLoomi?** Invoke the `composio-cli` skill from chat — "connect gmail, googlecalendar, github, and slack for the Loop" — and it drives the same login + OAuth flow without leaving the app. Both the CLI and the skill write to the same `~/.composio/` store the Loop reads from, so they stay in sync.
 
 > **Tip:** The Loop degrades gracefully — you can start with just one toolkit connected. Missing toolkits fall back to `openloomi-memory list-insights` so the queue still produces decisions.
 
----
-
-### Step 3: Install the openloomi-loop skill
-
-OpenLoomi's Loop is the `openloomi-loop` skill. Install it via one of two paths:
-
-**Path A — From OpenLoomi's Skills panel:**
-
-1. Open **Settings → Skills**
-2. Search for **`openloomi-loop`**
-3. Click **Install**
-
-**Path B — From a local checkout:**
-
-If you're running OpenLoomi against a local monorepo checkout, point Skills at the bundled folder:
-
-```text
-Settings → Skills → Add Local Skill
-Path: <repo-root>/skills/openloomi-loop
-```
-
-Once installed, the skill registers its data directory at `~/.openloomi/skills/openloomi-loop/data/` and is available from the Agent sidebar as **Loop**.
+> **🔧 Extensible by design.** The four typed actions above (`rsvp`, `draft_reply`, `review_pr`, `slack_reply`) are just the defaults — `openloomi-loop` is a normal skill directory at `~/.openloomi/skills/openloomi-loop/`, so you can iterate on it like any other OpenLoomi skill. Add new decision types, swap in custom classifiers, point at additional toolkits (`composio add linear`, `composio add notion`, `composio add jira`, …), or teach the Loop to handle a brand-new channel by editing the skill's classify / enrich code and reloading. Ask OpenLoomi in chat to evolve it — _"extend openloomi-loop to also classify Linear issues into `linear_review` decisions"_ — and it handles the edit + reload for you.
 
 ---
 
-### Step 4: Start the Loop — just ask OpenLoomi
+### Step 3: Start the Loop — just ask OpenLoomi
 
 The Loop is a **continuously running execution brain** — it needs a scheduled task to tick on a regular interval. The fastest way to start it is to simply ask OpenLoomi in chat:
 
@@ -239,7 +203,7 @@ The web UI binds `127.0.0.1:3614` (not the OpenLoomi app's `3414`) so both can r
 
 ---
 
-### Step 5: Browse the decision queue
+### Step 4: Browse the decision queue
 
 Three ways to inspect what the Loop has queued:
 
