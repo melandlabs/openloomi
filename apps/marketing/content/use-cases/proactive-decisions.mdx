@@ -1,0 +1,278 @@
+---
+title: "Proactive Execution Brain — Decisions Surface Before You Ask"
+description: "Let OpenLoomi watch Gmail, Calendar, GitHub, and Slack 24/7 and surface typed decisions (RSVPs, draft replies, PR reviews) the moment they appear — you only act when it matters."
+icon: "FaBrain"
+---
+
+# Proactive Execution Brain — Decisions Surface Before You Ask
+
+## Four Streams of Inbound, One Decision Queue
+
+The average professional has 4 streams of inbound — Gmail, Calendar, GitHub, Slack — and no single place where "what should I do next" lives. You tab-switch all day, re-read the same thread three times, and miss the calendar RSVP until it's already started. OpenLoomi's **Proactive Execution Brain** (`openloomi-loop`) runs inside the desktop app, watches all four in the background, enriches every new signal through your local memory, and turns each one into a typed decision card ready for a one-keystroke action.
+
+**What it does:**
+
+| Step            | Action                                                                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 👀 **Watch**    | Pulls new signals from Gmail, Calendar, GitHub, and Slack via Composio MCP — every tick, in parallel              |
+| 🧠 **Enrich**   | Looks up each sender / organizer / repo through `openloomi-memory` so the card arrives with full context attached |
+| 🏷️ **Classify** | Maps each signal to a typed decision: `rsvp`, `draft_reply`, `review_pr`, `todo`, `slack_reply`                   |
+| ✅ **Pick**     | Review the queue in OpenLoomi's Loop panel, the local web UI, or the REPL — one keystroke to execute              |
+
+---
+
+## See It in Action
+
+### Decisions Land in OpenLoomi's Loop Panel
+
+Once started, the Loop writes new decisions to `~/.openloomi/skills/openloomi-loop/data/decisions.json`. OpenLoomi's own Loop panel surfaces them as cards — type badge, confidence bar, triggering context, memory refs, suggested action — and lets you `▶ RUN`, `✓ DONE`, or `✕ DISMISS` without leaving the app.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Q · Queue                                3 pending · 1 done   │
+├─────────────────────────────────────────────────────────────────┤
+│  🟠 rsvp           0.85     ⏰ Tomorrow 15:00                    │
+│     RSVP: Q2 Roadmap Review                                     │
+│     👤 Sarah Chen  🧠 people/sarah_chen.md, projects/q2.md      │
+│     → calendar_rsvp · accepted                                  │
+│     [ ▶ RUN ]  [ ✓ DONE ]  [ ✕ DISMISS ]                       │
+├─────────────────────────────────────────────────────────────────┤
+│  🟢 draft_reply    0.85     ✉️ 2h ago                           │
+│     Reply: Q2 review tomorrow please RSVP                       │
+│     👤 Sarah Chen  🧠 people/sarah_chen.md                      │
+│     → email_reply · thread_id=t1                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Continuous Background Watch
+
+The Loop is a scheduled task that ticks every 10 minutes by default. Every tick pulls fresh signals, enriches them through your OpenLoomi memory, and appends typed decisions to the queue. Nothing fires automatically — you stay in control of execution.
+
+```text
+tick 1  →  Pull (Composio MCP)  →  4 gmail + 1 calendar + 2 PRs + 1 slack
+       →  Enrich (openloomi-memory)  →  sender / org / repo lookup
+       →  Filter hard rules  →  noreply@*, Gmail Promotions, already-replied
+       →  Classify  →  rsvp ×1 · draft_reply ×2 · review_pr ×1 · slack_reply ×1
+       →  Queue  →  data/decisions.json (pending bucket)
+```
+
+---
+
+### Typed Decisions, Not Raw Noise
+
+The Loop never surfaces raw emails or PRs — every signal becomes a typed decision with a confidence score and the memory refs that explain why it surfaced:
+
+```json
+{
+  "id": "dec_a1b2c3d4",
+  "type": "rsvp",
+  "title": "RSVP: Q2 Roadmap Review (Sarah's invite)",
+  "confidence": 0.85,
+  "memory_refs": ["people/sarah_chen.md", "projects/q2_roadmap.md"],
+  "action": {
+    "kind": "calendar_rsvp",
+    "params": { "event_id": "evt_42", "response": "accepted" }
+  }
+}
+```
+
+`rsvp` from Calendar, `draft_reply` from Gmail, `review_pr` from GitHub — each typed so you know what kind of work it is before you open it.
+
+---
+
+### One-Click Execution
+
+Pick a card and the Loop spawns a fresh Claude session with the full context — sender memory, project notes, the original signal, and the suggested action — all baked into the prompt. OpenLoomi captures the result and moves the card to `done` with the action recorded.
+
+---
+
+### Graceful Degradation
+
+The Loop never leaves you with an empty queue. When a Composio toolkit isn't connected — say you're missing `slack` for the day — the tick falls back to `openloomi-memory list-insights --channel=<channel>` and synthesizes signals from pre-extracted insight summaries. If even memory is offline, `data/inbox/` stays available as a manual drop folder so the lib-level analyze path still produces typed decisions.
+
+---
+
+## What Changed
+
+| Aspect            | Before                                    | After                                                       |
+| ----------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| Reaction time     | Hours between signal arriving and action  | Typed decision in queue within one tick (default 10 min)    |
+| Decision accuracy | Manual triage, miss important RSVPs / PRs | 0.85 confidence for known contacts, 0.60 for cold senders   |
+| Context cost      | Re-read every thread from scratch         | Memory-enriched prompt with sender / project notes attached |
+| Inbox volume      | 4 inboxes × dozens of unread items        | One queue, one card per action                              |
+| Control           | Background auto-senders are a liability   | Nothing fires automatically — every action is explicit      |
+
+---
+
+## How to Set Up
+
+**Option 1: Copy & Paste (Easiest)**
+
+Open OpenLoomi and paste this — it walks through every step end-to-end:
+
+```
+Please help me set up the openloomi-loop proactive execution brain inside OpenLoomi.
+
+1. Configure the two API keys in OpenLoomi's API Settings:
+   - OpenLoomi API Key: my local token (auto-generated; if missing, sign out and back in)
+   - COMPOSIO_API_KEY: paste the API key I just created at composio.dev → Settings → API Keys
+
+2. Connect the four toolkits the Loop watches:
+   - Open Settings → Connectors, click "+ Add New Connector"
+   - Add Gmail, Google Calendar, GitHub, and Slack (each uses Composio OAuth under the hood)
+   - Verify all four show status "Connected"
+
+3. Install the openloomi-loop skill:
+   - Open Settings → Skills, search for "openloomi-loop"
+   - Click Install (or, if not in the marketplace, point it at the bundled skills/openloomi-loop/ folder)
+
+4. Start the Loop as a scheduled task:
+   - Go to Agent → Automation → New Task
+   - Task Name: "Proactive Execution Loop"
+   - Task Description: "Run openloomi-loop tick to pull signals from Gmail/Calendar/GitHub/Slack, enrich via openloomi-memory, classify into typed decisions, and queue them"
+   - Schedule: Every 10 minutes
+
+5. Open the Loop panel in OpenLoomi's sidebar to see the decision queue
+```
+
+OpenLoomi will configure the keys, connect the toolkits, install the skill, and start the scheduler for you.
+
+---
+
+**Option 2: Manual Setup**
+
+### Step 1: Configure your API keys in OpenLoomi
+
+Both keys live in **Settings → API Settings**. OpenLoomi uses them in tandem — one for the local server, one for the Composio MCP toolkit the Loop calls into.
+
+| Key                   | Where to get it                                                                            | Why OpenLoomi needs it                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **OpenLoomi API Key** | Auto-generated on first sign-in; reset via **Settings → Account → Reset Local Token**      | Authenticates requests to the local OpenLoomi server (`http://127.0.0.1:3414/api/`) that the Loop reads/writes memory and insights through |
+| **COMPOSIO_API_KEY**  | Sign up at [composio.dev](https://composio.dev), then **Settings → API Keys → Create Key** | Authenticates the Composio MCP toolkit that fetches signals from Gmail, Calendar, GitHub, Slack                                            |
+
+After pasting both keys, click **Test Connection** on each — OpenLoomi will confirm both endpoints are reachable before you move on.
+
+---
+
+### Step 2: Connect the four toolkits
+
+Each toolkit OpenLoomi exposes for the Loop routes through Composio under the hood. You only need OAuth once.
+
+1. Open **Settings → Connectors**
+2. Click **+ Add New Connector**
+3. Add each of the four in turn:
+
+| Connector           | What it powers          | OAuth scope                                    |
+| ------------------- | ----------------------- | ---------------------------------------------- |
+| **Gmail**           | `draft_reply` decisions | Read inbox metadata, send on your behalf       |
+| **Google Calendar** | `rsvp` decisions        | Read events, patch event responses             |
+| **GitHub**          | `review_pr` decisions   | Read PRs where you're a reviewer, post reviews |
+| **Slack**           | `slack_reply` decisions | Read channels you're in, post replies          |
+
+After all four are added, the Connectors page should show each as **Connected**. If any show "Not Connected," click into them and re-run the OAuth flow.
+
+> **Tip:** The Loop degrades gracefully — you can start with just one toolkit connected. Missing toolkits fall back to `openloomi-memory list-insights` so the queue still produces decisions.
+
+---
+
+### Step 3: Install the openloomi-loop skill
+
+OpenLoomi's Loop is the `openloomi-loop` skill. Install it via one of two paths:
+
+**Path A — From OpenLoomi's Skills panel:**
+
+1. Open **Settings → Skills**
+2. Search for **`openloomi-loop`**
+3. Click **Install**
+
+**Path B — From a local checkout:**
+
+If you're running OpenLoomi against a local monorepo checkout, point Skills at the bundled folder:
+
+```text
+Settings → Skills → Add Local Skill
+Path: <repo-root>/skills/openloomi-loop
+```
+
+Once installed, the skill registers its data directory at `~/.openloomi/skills/openloomi-loop/data/` and is available from the Agent sidebar as **Loop**.
+
+---
+
+### Step 4: Start the Loop — just ask OpenLoomi
+
+The Loop is a **continuously running execution brain** — it needs a scheduled task to tick on a regular interval. The fastest way to start it is to simply ask OpenLoomi in chat:
+
+```
+Start the openloomi-loop proactive execution brain.
+Run a tick every 10 minutes so new signals from Gmail / Calendar / GitHub / Slack
+get pulled, enriched via openloomi-memory, classified into typed decisions
+(rsvp / draft_reply / review_pr / todo / slack_reply), and queued in the Loop panel.
+```
+
+OpenLoomi handles the rest — it creates the scheduled task, registers it in **Agent → Automation**, and runs the first tick immediately so the queue isn't empty. The Loop panel in the sidebar starts showing cards within seconds.
+
+---
+
+**Optional — terminal control (headless server / CI / debugging)**
+
+If you want to drive the Loop yourself instead of letting OpenLoomi manage it, the bundled helper starts both the schedule and the local web UI:
+
+```bash
+cd ~/.openloomi/skills/openloomi-loop
+./loop-ctl.sh start
+#   ✓ schedule started (pid=…, interval=600s)
+#   ✓ web started (pid=…, http://127.0.0.1:3614/)
+
+./loop-ctl.sh status           # confirm both schedule and web are alive
+open http://127.0.0.1:3614/    # Ink & Circuit UI — Q / T / A views
+```
+
+The web UI binds `127.0.0.1:3614` (not the OpenLoomi app's `3414`) so both can run side-by-side. Override the defaults with `PORT=4000 INTERVAL=300 ./loop-ctl.sh start` when you need a faster demo.
+
+---
+
+### Step 5: Browse the decision queue
+
+Three ways to inspect what the Loop has queued:
+
+| Surface                  | URL / Command                      | Best for                                     |
+| ------------------------ | ---------------------------------- | -------------------------------------------- |
+| **OpenLoomi Loop panel** | Sidebar → **Loop**                 | Picking cards in-app with full context       |
+| **Web UI (local)**       | `http://127.0.0.1:3614/`           | Kanban + timeline + activity views, REST API |
+| **CLI inbox**            | `loop inbox` / `loop inbox --pick` | Terminal-first workflows, arrow-key picker   |
+
+Each card carries the memory refs that explain why it surfaced — click any **🧠 memory_refs** entry to inline-load the person / project / insight note.
+
+---
+
+### Use the Right Skills
+
+| Scenario                                      | Skill to Invoke          | What It Does                                                            |
+| --------------------------------------------- | ------------------------ | ----------------------------------------------------------------------- |
+| Continuous background watch + decision queue  | **openloomi-loop**       | Pulls signals, classifies into typed decisions, queues them             |
+| Enrichment + persistence of people / projects | **openloomi-memory**     | Single source of truth the Loop delegates all reads/writes to           |
+| One-time platform OAuth + signal ingestion    | **openloomi-connectors** | Manual sync if you ever need to backfill history before the Loop starts |
+
+---
+
+## Why This Works
+
+**🧠 Decisions, Not Streams**
+
+- Four inboxes collapse into one typed queue: `rsvp`, `draft_reply`, `review_pr`, `todo`, `slack_reply`
+- Each card carries the memory refs that explain why it surfaced — no guessing, no re-reading
+- Confidence score (0.85 known / 0.60 cold) lets you triage in one glance
+
+**⚡ Continuous Without Burnout**
+
+- The Loop ticks every 10 minutes by default; you only open the panel when there is something to do
+- Watch timers run independently — a hung tick never blocks notifications on new decisions
+- Nothing fires automatically; execution is always an explicit `▶ RUN` click or a `loop run <id>` command
+
+**🔄 Graceful Degradation**
+
+- Missing Composio toolkit → falls back to `openloomi-memory list-insights` for that channel
+- Missing memory → the lib-level `loop analyze` + `data/inbox/` drop folder still produce typed decisions
+- Queue never goes silent; the Loop works on day one with zero toolkits connected
