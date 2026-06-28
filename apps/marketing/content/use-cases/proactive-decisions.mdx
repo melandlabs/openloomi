@@ -23,26 +23,21 @@ The average professional has 4 streams of inbound — Gmail, Calendar, GitHub, S
 
 ## See It in Action
 
+### What the Loop Looks Like Inside OpenLoomi
+
+If you haven't seen it yet, the Loop is OpenLoomi's proactive execution brain — it lives inside the app and watches your tools 24/7. Ask OpenLoomi in chat to bring up the overview:
+
+![OpenLoomi explaining the openloomi-loop skill](/img/use-cases/proactive-decisions-what-is-loop.png)
+
+---
+
 ### Decisions Land in OpenLoomi's Loop Panel
 
-Once started, the Loop writes new decisions to `~/.openloomi/skills/openloomi-loop/data/decisions.json`. OpenLoomi's own Loop panel surfaces them as cards — type badge, confidence bar, triggering context, memory refs, suggested action — and lets you `▶ RUN`, `✓ DONE`, or `✕ DISMISS` without leaving the app.
+Once started, the Loop writes new decisions to `~/.openloomi/skills/openloomi-loop/data/decisions.json`. New pending decisions arrive as a desktop notification (top-right) so you see them without opening the panel:
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Q · Queue                                3 pending · 1 done   │
-├─────────────────────────────────────────────────────────────────┤
-│  🟠 rsvp           0.85     ⏰ Tomorrow 15:00                    │
-│     RSVP: Q2 Roadmap Review                                     │
-│     👤 Sarah Chen  🧠 people/sarah_chen.md, projects/q2.md      │
-│     → calendar_rsvp · accepted                                  │
-│     [ ▶ RUN ]  [ ✓ DONE ]  [ ✕ DISMISS ]                       │
-├─────────────────────────────────────────────────────────────────┤
-│  🟢 draft_reply    0.85     ✉️ 2h ago                           │
-│     Reply: Q2 review tomorrow please RSVP                       │
-│     👤 Sarah Chen  🧠 people/sarah_chen.md                      │
-│     → email_reply · thread_id=t1                                │
-└─────────────────────────────────────────────────────────────────┘
-```
+![OpenLoomi Loop notification surfacing 8 new decisions](/img/use-cases/proactive-decisions-notification.png)
+
+OpenLoomi's own Loop panel then surfaces them as cards — type badge, confidence bar, triggering context, memory refs, suggested action — and lets you `▶ RUN`, `✓ DONE`, or `✕ DISMISS` without leaving the app.
 
 ---
 
@@ -145,6 +140,8 @@ OpenLoomi will configure the keys, connect the toolkits, install the skill, and 
 
 ### Step 1: Configure your API keys in OpenLoomi
 
+> **Prerequisite:** Before this step, finish the AI Configuration in [Getting Started → AI Configuration](/docs/getting-started#ai-configuration) — the OpenLoomi app needs your AI provider's `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_MODEL` set in `~/.claude/settings.json` (or via the on-screen **Settings → API Settings** panel). The Loop builds on top of that foundation.
+
 Both keys live in **Settings → API Settings**. OpenLoomi uses them in tandem — one for the local server, one for the Composio MCP toolkit the Loop calls into.
 
 | Key                   | Where to get it                                                                            | Why OpenLoomi needs it                                                                                                                     |
@@ -244,6 +241,10 @@ Three ways to inspect what the Loop has queued:
 | **CLI inbox**            | `loop inbox` / `loop inbox --pick` | Terminal-first workflows, arrow-key picker   |
 
 Each card carries the memory refs that explain why it surfaced — click any **🧠 memory_refs** entry to inline-load the person / project / insight note.
+
+The local web UI's **Queue** view (the `Q` tab at `http://127.0.0.1:3614/`) shows the same decisions as a 3-column kanban — PENDING, DONE, DISMISSED — with the type badge, confidence bar, and suggested action rendered inline. Click any card to open the full decision detail and run it from the browser:
+
+![OpenLoomi Loop web UI — Queue view (PENDING / DONE / DISMISSED kanban)](/img/use-cases/proactive-decisions-kanban.png)
 
 ---
 
