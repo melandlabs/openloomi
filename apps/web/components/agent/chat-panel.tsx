@@ -626,6 +626,7 @@ export function AgentChatPanel({
 
                   await sendMessagePresent(messageObj as any);
                   handleSetInput("");
+                  setAttachments([]);
                 }}
               />
             </form>
