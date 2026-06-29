@@ -3812,7 +3812,12 @@ describe("memory consolidation evaluation scenarios", () => {
     );
 
     deprecated.sourceRecordIds.push("mutated");
-    deprecated.rollback!.metadata = {
+    expect(deprecated.rollback).toBeDefined();
+    const rollback = deprecated.rollback;
+    if (!rollback) {
+      throw new Error("Expected rollback metadata for deprecated memory.");
+    }
+    rollback.metadata = {
       reversible: false,
     };
     expect(active.sourceRecordIds).toEqual(["trace-a", "trace-b"]);
