@@ -18,7 +18,9 @@ type PrimitiveValue = string | number | boolean;
 export type MemoryRelationCandidateReasonCode =
   | "shared_candidate_key"
   | "shared_dimension"
-  | "shared_metadata";
+  | "shared_metadata"
+  | "caller_provided_candidate"
+  | (string & {});
 
 export interface MemoryRelationCandidate {
   id: string;
@@ -27,6 +29,7 @@ export interface MemoryRelationCandidate {
   candidateKeys: string[];
   score: number;
   reasonCodes: MemoryRelationCandidateReasonCode[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface BuildMemoryRelationCandidatesInput {
@@ -37,6 +40,42 @@ export interface BuildMemoryRelationCandidatesInput {
   maxRecordsPerKey?: number;
   maxCandidatesPerRecord?: number;
   scoreNorm?: number;
+}
+
+export type MemoryRelationDiscoveryReasonCode =
+  | MemoryRelationCandidateReasonCode
+  | "duplicate_candidate"
+  | "missing_record"
+  | "self_relation_candidate"
+  | (string & {});
+
+export interface CallerProvidedMemoryRelationCandidate {
+  fromRecordId: string;
+  toRecordId: string;
+  candidateKeys?: string[];
+  score?: number;
+  reasonCodes?: MemoryRelationCandidateReasonCode[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface BuildCallerProvidedMemoryRelationCandidateDiscoveryReportInput {
+  records: MemoryEvidenceRecord[];
+  candidates: CallerProvidedMemoryRelationCandidate[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface SkippedMemoryRelationCandidateDiscoveryEntry {
+  fromRecordId?: string;
+  toRecordId?: string;
+  reasonCodes: MemoryRelationDiscoveryReasonCode[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryRelationCandidateDiscoveryReport {
+  candidates: MemoryRelationCandidate[];
+  skippedCandidates: SkippedMemoryRelationCandidateDiscoveryEntry[];
+  reasonCodes: MemoryRelationDiscoveryReasonCode[];
+  metadata?: Record<string, unknown>;
 }
 
 export type MemoryRelationJudgmentKind = MemoryRelationKind | "uncertain";
@@ -89,6 +128,101 @@ export interface JudgeMemoryRelationCandidatesInput {
 export interface MemoryRelationJudgmentResult {
   judgments: MemoryRelationJudgment[];
   relations: MemoryRelationEdge[];
+}
+
+export type MemoryRelationJudgeProviderReasonCode =
+  | "provider_invoked"
+  | "provider_error"
+  | "missing_record"
+  | "default_decision_used"
+  | MemoryRelationJudgmentReasonCode
+  | MemoryRelationCandidateReasonCode
+  | (string & {});
+
+export interface MemoryRelationJudgeProviderInput {
+  candidate: MemoryRelationCandidate;
+  fromRecord: MemoryEvidenceRecord;
+  toRecord: MemoryEvidenceRecord;
+  defaultDecision: MemoryRelationJudgmentDecision;
+  now: number;
+  metadata?: Record<string, unknown>;
+}
+
+export type MemoryRelationJudgeProviderInvoke = (
+  input: MemoryRelationJudgeProviderInput,
+) =>
+  | Promise<MemoryRelationJudgmentDecision | undefined>
+  | MemoryRelationJudgmentDecision
+  | undefined;
+
+export interface InvokeMemoryRelationJudgeProviderInput {
+  candidate: MemoryRelationCandidate;
+  records: MemoryEvidenceRecord[];
+  now: number;
+  invoke: MemoryRelationJudgeProviderInvoke;
+  getRelationGroup?: JudgeMemoryRelationCandidatesInput["getRelationGroup"];
+  getRelationValue?: JudgeMemoryRelationCandidatesInput["getRelationValue"];
+  thresholds?: Partial<MemoryRelationJudgmentThresholds>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryRelationJudgeProviderResult {
+  status: "judged" | "skipped" | "failed";
+  candidateId: string;
+  fromRecordId: string;
+  toRecordId: string;
+  input?: MemoryRelationJudgeProviderInput;
+  decision?: MemoryRelationJudgmentDecision;
+  judgment?: MemoryRelationJudgment;
+  error?: {
+    name: string;
+    message: string;
+  };
+  reasonCodes: MemoryRelationJudgeProviderReasonCode[];
+  metadata?: Record<string, unknown>;
+}
+
+export type MemoryWeakRelationObservationReasonCode =
+  | "weak_related_relation"
+  | "uncertain_relation_candidate"
+  | MemoryRelationJudgmentReasonCode
+  | MemoryRelationCandidateReasonCode
+  | (string & {});
+
+export interface MemoryWeakRelationObservation {
+  candidateId: string;
+  fromRecordId: string;
+  toRecordId: string;
+  relation: Extract<MemoryRelationJudgmentKind, "related" | "uncertain">;
+  status: "observed";
+  score: number;
+  weight: number;
+  candidateKeys: string[];
+  edgeId?: string;
+  promotesToCluster: false;
+  mutatesGraph: false;
+  reasonCodes: MemoryWeakRelationObservationReasonCode[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface BuildMemoryWeakRelationObservationReportInput {
+  judgments: MemoryRelationJudgment[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryWeakRelationObservationReport {
+  summary: {
+    judgmentCount: number;
+    observationCount: number;
+    relatedCount: number;
+    uncertainCount: number;
+    excludedStrongRelationCount: number;
+    promotesToCluster: false;
+    mutatesGraph: false;
+  };
+  observations: MemoryWeakRelationObservation[];
+  reasonCodes: MemoryWeakRelationObservationReasonCode[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface MemorySummaryCandidate {
@@ -164,6 +298,18 @@ function isPrimitive(value: unknown): value is PrimitiveValue {
 function stablePairId(left: string, right: string): string {
   const [fromRecordId, toRecordId] = [left, right].sort();
   return `${encodeURIComponent(fromRecordId)}|${encodeURIComponent(toRecordId)}`;
+}
+
+function stableRecordPair(
+  left: string,
+  right: string,
+): {
+  fromRecordId: string;
+  toRecordId: string;
+} {
+  return left <= right
+    ? { fromRecordId: left, toRecordId: right }
+    : { fromRecordId: right, toRecordId: left };
 }
 
 function candidateId(fromRecordId: string, toRecordId: string): string {
@@ -329,6 +475,79 @@ export function buildMemoryRelationCandidates(
   }
 
   return sortCandidates(selected);
+}
+
+export function buildCallerProvidedMemoryRelationCandidateDiscoveryReport(
+  input: BuildCallerProvidedMemoryRelationCandidateDiscoveryReportInput,
+): MemoryRelationCandidateDiscoveryReport {
+  const recordsById = new Set(input.records.map((record) => record.id));
+  const candidates: MemoryRelationCandidate[] = [];
+  const skippedCandidates: SkippedMemoryRelationCandidateDiscoveryEntry[] = [];
+  const seenPairIds = new Set<string>();
+  const reasonCodes = new Set<MemoryRelationDiscoveryReasonCode>();
+
+  for (const candidate of input.candidates) {
+    const pairReasonCodes = new Set<MemoryRelationDiscoveryReasonCode>();
+
+    if (
+      !recordsById.has(candidate.fromRecordId) ||
+      !recordsById.has(candidate.toRecordId)
+    ) {
+      pairReasonCodes.add("missing_record");
+    }
+
+    if (candidate.fromRecordId === candidate.toRecordId) {
+      pairReasonCodes.add("self_relation_candidate");
+    }
+
+    const pairId = stablePairId(candidate.fromRecordId, candidate.toRecordId);
+    if (seenPairIds.has(pairId)) {
+      pairReasonCodes.add("duplicate_candidate");
+    }
+
+    if (pairReasonCodes.size > 0) {
+      for (const reasonCode of pairReasonCodes) {
+        reasonCodes.add(reasonCode);
+      }
+      skippedCandidates.push({
+        fromRecordId: candidate.fromRecordId,
+        toRecordId: candidate.toRecordId,
+        reasonCodes: [...pairReasonCodes],
+        metadata: candidate.metadata,
+      });
+      continue;
+    }
+
+    seenPairIds.add(pairId);
+    reasonCodes.add("caller_provided_candidate");
+    for (const reasonCode of candidate.reasonCodes ?? []) {
+      reasonCodes.add(reasonCode);
+    }
+
+    const pair = stableRecordPair(candidate.fromRecordId, candidate.toRecordId);
+    const candidateKeys = [...new Set(candidate.candidateKeys ?? [])].sort();
+    const candidateReasonCodes: MemoryRelationCandidateReasonCode[] = [
+      "caller_provided_candidate",
+      ...(candidate.reasonCodes ?? []),
+    ];
+
+    candidates.push({
+      id: candidateId(pair.fromRecordId, pair.toRecordId),
+      fromRecordId: pair.fromRecordId,
+      toRecordId: pair.toRecordId,
+      candidateKeys,
+      score: clamp01(candidate.score ?? 1),
+      reasonCodes: [...new Set(candidateReasonCodes)],
+      metadata: candidate.metadata,
+    });
+  }
+
+  return {
+    candidates: sortCandidates(candidates),
+    skippedCandidates,
+    reasonCodes: [...reasonCodes],
+    metadata: input.metadata,
+  };
 }
 
 function resolveJudgmentThresholds(
@@ -515,6 +734,184 @@ export function judgeMemoryRelationCandidates(
     relations: judgments.flatMap((judgment) =>
       judgment.edge ? [judgment.edge] : [],
     ),
+  };
+}
+
+function errorInfo(error: unknown): { name: string; message: string } {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+
+  return {
+    name: "Error",
+    message: String(error),
+  };
+}
+
+export async function invokeMemoryRelationJudgeProvider(
+  input: InvokeMemoryRelationJudgeProviderInput,
+): Promise<MemoryRelationJudgeProviderResult> {
+  const recordsById = new Map(
+    input.records.map((record) => [record.id, record]),
+  );
+  const fromRecord = recordsById.get(input.candidate.fromRecordId);
+  const toRecord = recordsById.get(input.candidate.toRecordId);
+
+  if (!fromRecord || !toRecord) {
+    return {
+      status: "skipped",
+      candidateId: input.candidate.id,
+      fromRecordId: input.candidate.fromRecordId,
+      toRecordId: input.candidate.toRecordId,
+      reasonCodes: ["missing_record"],
+      metadata: input.metadata,
+    };
+  }
+
+  const thresholds = resolveJudgmentThresholds(input.thresholds);
+  const defaultDecision = defaultJudgmentDecision(
+    input.candidate,
+    fromRecord,
+    toRecord,
+    thresholds,
+    input.getRelationGroup,
+    input.getRelationValue,
+  );
+  const providerInput: MemoryRelationJudgeProviderInput = {
+    candidate: input.candidate,
+    fromRecord,
+    toRecord,
+    defaultDecision,
+    now: input.now,
+    metadata: input.metadata,
+  };
+
+  try {
+    const providerDecision = await input.invoke(providerInput);
+    const decision = providerDecision ?? defaultDecision;
+    const judgmentResult = judgeMemoryRelationCandidates({
+      candidates: [input.candidate],
+      records: input.records,
+      now: input.now,
+      getRelationGroup: input.getRelationGroup,
+      getRelationValue: input.getRelationValue,
+      thresholds: input.thresholds,
+      judgeCandidate: () => decision,
+    });
+    const reasonCodes = new Set<MemoryRelationJudgeProviderReasonCode>();
+    reasonCodes.add("provider_invoked");
+    if (!providerDecision) {
+      reasonCodes.add("default_decision_used");
+    }
+    for (const reasonCode of decision.reasonCodes ?? []) {
+      reasonCodes.add(reasonCode);
+    }
+    for (const reasonCode of input.candidate.reasonCodes) {
+      reasonCodes.add(reasonCode);
+    }
+
+    return {
+      status: "judged",
+      candidateId: input.candidate.id,
+      fromRecordId: input.candidate.fromRecordId,
+      toRecordId: input.candidate.toRecordId,
+      input: providerInput,
+      decision,
+      judgment: judgmentResult.judgments[0],
+      reasonCodes: [...reasonCodes],
+      metadata: input.metadata,
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      candidateId: input.candidate.id,
+      fromRecordId: input.candidate.fromRecordId,
+      toRecordId: input.candidate.toRecordId,
+      input: providerInput,
+      error: errorInfo(error),
+      reasonCodes: ["provider_error"],
+      metadata: input.metadata,
+    };
+  }
+}
+
+function weakRelationReasonCode(
+  relation: Extract<MemoryRelationJudgmentKind, "related" | "uncertain">,
+): MemoryWeakRelationObservationReasonCode {
+  return relation === "related"
+    ? "weak_related_relation"
+    : "uncertain_relation_candidate";
+}
+
+export function buildMemoryWeakRelationObservationReport(
+  input: BuildMemoryWeakRelationObservationReportInput,
+): MemoryWeakRelationObservationReport {
+  const observations: MemoryWeakRelationObservation[] = [];
+  const reasonCodes = new Set<MemoryWeakRelationObservationReasonCode>();
+  let excludedStrongRelationCount = 0;
+
+  for (const judgment of input.judgments) {
+    if (judgment.relation !== "related" && judgment.relation !== "uncertain") {
+      excludedStrongRelationCount += 1;
+      continue;
+    }
+
+    const observationReasonCodes: MemoryWeakRelationObservationReasonCode[] = [
+      weakRelationReasonCode(judgment.relation),
+      ...judgment.reasonCodes,
+      ...judgment.candidate.reasonCodes,
+    ];
+    for (const reasonCode of observationReasonCodes) {
+      reasonCodes.add(reasonCode);
+    }
+
+    observations.push({
+      candidateId: judgment.candidate.id,
+      fromRecordId: judgment.candidate.fromRecordId,
+      toRecordId: judgment.candidate.toRecordId,
+      relation: judgment.relation,
+      status: "observed",
+      score: judgment.candidate.score,
+      weight: judgment.weight,
+      candidateKeys: [...judgment.candidate.candidateKeys],
+      edgeId: judgment.edge?.id,
+      promotesToCluster: false,
+      mutatesGraph: false,
+      reasonCodes: [...new Set(observationReasonCodes)],
+      metadata: judgment.candidate.metadata,
+    });
+  }
+
+  observations.sort((a, b) => {
+    if (b.weight !== a.weight) {
+      return b.weight - a.weight;
+    }
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    return a.candidateId.localeCompare(b.candidateId);
+  });
+
+  return {
+    summary: {
+      judgmentCount: input.judgments.length,
+      observationCount: observations.length,
+      relatedCount: observations.filter(
+        (observation) => observation.relation === "related",
+      ).length,
+      uncertainCount: observations.filter(
+        (observation) => observation.relation === "uncertain",
+      ).length,
+      excludedStrongRelationCount,
+      promotesToCluster: false,
+      mutatesGraph: false,
+    },
+    observations,
+    reasonCodes: [...reasonCodes],
+    metadata: input.metadata,
   };
 }
 
