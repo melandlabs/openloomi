@@ -43,6 +43,7 @@ import {
   serializeSemanticMemoryArtifactStorageRecord,
   summarizeSemanticMemoryDraftCandidate,
   resolveMemorySemanticRetrievalConfig,
+  type MemoryEvidenceRecord,
   type MemorySemanticRetrievalConfig,
   type MemorySemanticRetrievalCandidate,
   type MemorySemanticRetrievalComparisonReport,
@@ -3488,7 +3489,7 @@ describe("memory consolidation evaluation scenarios", () => {
   });
 
   it("builds a compact diagnostics run report for real-record batches", async () => {
-    const records = [
+    const records: AdapterSourceRecord[] = [
       {
         owner: "adapter-user",
         createdAt: NOW,
@@ -4552,7 +4553,7 @@ describe("memory consolidation evaluation scenarios", () => {
   });
 
   it("normalizes caller-provided relation candidates before judgment", () => {
-    const records = [
+    const records: MemoryEvidenceRecord[] = [
       {
         id: "manual-a",
         userId: "eval-user",
@@ -4680,7 +4681,7 @@ describe("memory consolidation evaluation scenarios", () => {
   });
 
   it("keeps weak relation observations from promoting clusters", () => {
-    const records = [
+    const records: MemoryEvidenceRecord[] = [
       {
         id: "weak-a",
         userId: "eval-user",
@@ -4823,7 +4824,7 @@ describe("memory consolidation evaluation scenarios", () => {
   });
 
   it("invokes an optional relation judge adapter without provider wiring", async () => {
-    const records = [
+    const records: MemoryEvidenceRecord[] = [
       {
         id: "judge-a",
         userId: "eval-user",
