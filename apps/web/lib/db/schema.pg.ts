@@ -1057,11 +1057,71 @@ export const userInsightSettings = pgTable("user_insight_settings", {
   identityIndustries: text("identity_industries"),
   /** User manually filled work description, max 5000 characters, takes priority over survey */
   identityWorkDescription: text("identity_work_description"),
+  /** Chronicle screen-aware memory feature enabled */
+  chronicleEnabled: boolean("chronicle_enabled").notNull().default(false),
+  /** Global capture trigger key id (device_query Keycode), e.g. Enter, F9 */
+  chronicleCaptureShortcut: varchar("chronicle_capture_shortcut", {
+    length: 32,
+  })
+    .notNull()
+    .default("Enter"),
+  /** Minimum milliseconds between consecutive screen captures (default 5000, min 3000) */
+  chronicleCaptureIntervalMs: integer("chronicle_capture_interval_ms")
+    .notNull()
+    .default(5000),
+  /** One-shot: retry Chronicle enable on next app start after permission-blocked toggle. */
+  chronicleBootCheck: boolean("chronicle_boot_check").notNull().default(false),
+  /** Global voice input trigger key (device_query Keycode), e.g. Shift+V */
+  voiceInputShortcut: varchar("voice_input_shortcut", {
+    length: 32,
+  })
+    .notNull()
+    .default("Shift+V"),
   lastUpdated: timestamp("last_updated").notNull().defaultNow(),
 });
 export type DBInsightSettings = InferSelectModel<typeof userInsightSettings>;
 export type DBInsertInsightSettings = InferInsertModel<
   typeof userInsightSettings
+>;
+
+/**
+ * Per-user "custom vision LLM" override for the Chronicle screen-aware
+ * memory analyzer. When `enabled = true`, /api/chronicle/analyze bypasses
+ * the internal /api/ai/v1/messages route and POSTs an OpenAI Chat
+ * Completions–shaped vision request to `${apiUrl}/chat/completions` with
+ * `Authorization: Bearer ${apiKey}` and the configured `model`.
+ *
+ * Gated by `userInsightSettings.chronicleEnabled` at the UI/API level:
+ * the section is hidden and inert while the main Chronicle toggle is off.
+ *
+ * Per the chosen design (option 2B), the API GET response returns the raw
+ * apiKey so the settings page can render its current value.
+ */
+export const userVisionLlmSettings = pgTable("user_vision_llm_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  /** OpenAI-compatible base URL, e.g. `https://api.openai.com/v1`. */
+  apiUrl: text("api_url").notNull().default(""),
+  /** Raw API key. Returned verbatim in GET per agreed UX. */
+  apiKey: text("api_key").notNull().default(""),
+  /** Vision-capable model id, e.g. `gpt-4o-mini` or `qwen-vl-max`. */
+  model: text("model").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export type DBVisionLlmSettings = InferSelectModel<
+  typeof userVisionLlmSettings
+>;
+export type DBInsertVisionLlmSettings = InferInsertModel<
+  typeof userVisionLlmSettings
 >;
 
 export const userLlmApiSettings = pgTable(
@@ -1191,6 +1251,11 @@ export type InsightSettings = {
   aiSoulPrompt: string | null;
   identityIndustries: string[] | null;
   identityWorkDescription: string | null;
+  chronicleEnabled?: boolean;
+  chronicleCaptureShortcut?: string;
+  chronicleCaptureIntervalMs?: number;
+  chronicleBootCheck?: boolean;
+  voiceInputShortcut?: string;
   lastUpdated: Date;
 };
 export function parseInsightSettings(
@@ -1219,6 +1284,11 @@ export function parseInsightSettings(
         ? (JSON.parse(dbSettings.identityIndustries) as string[])
         : null,
     identityWorkDescription: dbSettings.identityWorkDescription ?? null,
+    chronicleEnabled: dbSettings.chronicleEnabled ?? false,
+    chronicleCaptureShortcut: dbSettings.chronicleCaptureShortcut ?? "Enter",
+    chronicleCaptureIntervalMs: dbSettings.chronicleCaptureIntervalMs ?? 5000,
+    chronicleBootCheck: dbSettings.chronicleBootCheck ?? false,
+    voiceInputShortcut: dbSettings.voiceInputShortcut ?? "Shift+V",
     lastUpdated: dbSettings.lastUpdated,
   };
 }
@@ -1287,6 +1357,11 @@ export function serializeInsightSettings(
         ? JSON.stringify(settings.identityIndustries)
         : null,
     identityWorkDescription: settings.identityWorkDescription ?? null,
+    chronicleEnabled: settings.chronicleEnabled ?? false,
+    chronicleCaptureShortcut: settings.chronicleCaptureShortcut ?? "Enter",
+    chronicleCaptureIntervalMs: settings.chronicleCaptureIntervalMs ?? 5000,
+    chronicleBootCheck: settings.chronicleBootCheck ?? false,
+    voiceInputShortcut: settings.voiceInputShortcut ?? "Shift+V",
   };
 }
 

@@ -15,6 +15,7 @@ import { detectAndSetLanguage, saveLanguage } from "@/i18n";
 import { toast } from "@/components/toast";
 import { RemixIcon } from "@/components/remix-icon";
 import { PersonalizationLanguageRefresh } from "./personalization-language-refresh";
+import { ChronicleSettings } from "./personalization-chronicle-settings";
 
 type InsightPreferencesResponse = {
   focusPeople: string[];
@@ -23,6 +24,11 @@ type InsightPreferencesResponse = {
   refreshIntervalMinutes: number;
   lastUpdated: string;
   aiSoulPrompt?: string | null;
+  chronicleEnabled?: boolean;
+  chronicleCaptureShortcut?: string;
+  chronicleCaptureIntervalMs?: number;
+  chronicleBootCheck?: boolean;
+  voiceInputShortcut?: string;
   roles?: {
     manual: string[];
   };
@@ -240,7 +246,15 @@ export const PersonalizationBasicSettings = forwardRef<
   );
 
   /** Render only language and refresh settings; hide openloomi Soul configuration block. */
-  return <div className="flex-1 min-h-0 overflow-y-auto">{leftColumn}</div>;
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      {leftColumn}
+      {/* Chronicle Screen-Aware Memory Settings */}
+      <div className="mt-6 px-4">
+        <ChronicleSettings open={_open} />
+      </div>
+    </div>
+  );
 });
 
 PersonalizationBasicSettings.displayName = "PersonalizationBasicSettings";

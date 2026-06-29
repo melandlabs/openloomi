@@ -33,6 +33,8 @@ export const insightEmbeddings = (currentSchema as any).insightEmbeddings;
 export const rawMessages = (currentSchema as any).rawMessages;
 export const memorySummaries = (currentSchema as any).memorySummaries;
 export const userInsightSettings = (currentSchema as any).userInsightSettings;
+export const userVisionLlmSettings = (currentSchema as any)
+  .userVisionLlmSettings;
 export const userLlmApiSettings = (currentSchema as any).userLlmApiSettings;
 export const userEmbeddingSettings = (currentSchema as any)
   .userEmbeddingSettings;
@@ -150,6 +152,8 @@ export type {
   InsightSettings,
   DBInsightSettings,
   DBInsertInsightSettings,
+  DBVisionLlmSettings,
+  DBInsertVisionLlmSettings,
   UserLlmApiSettings,
   InsertUserLlmApiSettings,
   UserEmbeddingSettings,

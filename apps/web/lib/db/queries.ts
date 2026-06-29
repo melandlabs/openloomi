@@ -45,6 +45,8 @@ import {
   userInsightSettings,
   type InsightSettings,
   parseInsightSettings,
+  userVisionLlmSettings,
+  type DBVisionLlmSettings,
   userLlmApiSettings,
   type UserLlmApiSettings,
   userEmbeddingSettings,
@@ -1770,6 +1772,35 @@ export async function ensureRssBot(userId: string): Promise<Bot> {
     );
   }
   return created;
+}
+
+/**
+ * Lazily create (or fetch) a generic "default" bot for the user. Used as a
+ * generic storage target for system-generated records (Chronicle screen
+ * memories, etc.) that need a `botId` FK but don't belong to a specific
+ * integration. Mirrors the `ensureRssBot` pattern: get-by-adapter first,
+ * only insert when missing. Note: there is no unique constraint on
+ * (userId, adapter) in the bot table, so concurrent first-time calls
+ * could in principle race and produce two rows. In practice these
+ * helpers are called serially per user request, and the `getBotByAdapter`
+ * lookup in the next call returns the first row either way.
+ */
+export async function ensureUserDefaultBot(userId: string): Promise<string> {
+  const existing = await getBotByAdapter({ userId, adapter: "default" });
+  if (existing) {
+    return existing.id;
+  }
+
+  return await createBot({
+    userId,
+    name: "openloomi",
+    description:
+      "Default system bot for openloomi-generated records (Chronicle, manual insights, etc.)",
+    adapter: "default",
+    adapterConfig: {},
+    enable: false,
+    platformAccountId: null,
+  });
 }
 
 export async function botExists({
@@ -5635,6 +5666,67 @@ function toSafeLlmApiSetting(row: UserLlmApiSettings): UserLlmApiSettingSafe {
     ...rest,
     hasApiKey: Boolean(_apiKeyEncrypted),
   };
+}
+
+export async function getUserVisionLlmSettings(
+  userId: string,
+): Promise<DBVisionLlmSettings | null> {
+  try {
+    const rows = await db
+      .select()
+      .from(userVisionLlmSettings)
+      .where(eq(userVisionLlmSettings.userId, userId))
+      .limit(1);
+
+    return rows[0] ?? null;
+  } catch (error) {
+    console.error("Failed to get user vision LLM settings:", error);
+    throw new AppError(
+      "bad_request:database",
+      `Failed to retrieve vision LLM settings. ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export async function upsertUserVisionLlmSettings(params: {
+  userId: string;
+  enabled: boolean;
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+}): Promise<DBVisionLlmSettings> {
+  const now = new Date();
+  const existing = await getUserVisionLlmSettings(params.userId);
+
+  if (existing) {
+    const updated = await db
+      .update(userVisionLlmSettings)
+      .set({
+        enabled: params.enabled,
+        apiUrl: params.apiUrl,
+        apiKey: params.apiKey,
+        model: params.model,
+        updatedAt: now,
+      })
+      .where(eq(userVisionLlmSettings.userId, params.userId))
+      .returning();
+    return updated[0] ?? existing;
+  }
+
+  const inserted = await db
+    .insert(userVisionLlmSettings)
+    .values({
+      id: generateUUID(),
+      userId: params.userId,
+      enabled: params.enabled,
+      apiUrl: params.apiUrl,
+      apiKey: params.apiKey,
+      model: params.model,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+  return inserted[0];
 }
 
 export async function getUserLlmApiSettings(

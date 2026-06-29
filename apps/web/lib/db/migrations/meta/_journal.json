@@ -666,6 +666,13 @@
       "when": 1781481600000,
       "tag": "0105_user_embedding_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1784150400000,
+      "tag": "0106_add_chronicle_settings",
+      "breakpoints": true
     }
   ]
 }

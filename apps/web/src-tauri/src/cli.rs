@@ -1961,30 +1961,9 @@ async fn check_network_connectivity() -> PreflightCheck {
         }
     };
 
-    // R2 is the primary latest.json source used by the updater.
-    let r2_url = "https://pub-7f8ad94cb1444cbebae6bfd55ec52f5d.r2.dev/latest.json";
-    match client.get(r2_url).send().await {
-        Ok(response) if response.status().is_success() => PreflightCheck {
-            name: "network",
-            ok: true,
-            detail: "R2 latest.json reachable".to_string(),
-        },
-        Ok(response) => {
-            let r2_error = format!("R2 returned HTTP {}", response.status());
-            check_github_network_fallback(&client, r2_error).await
-        }
-        Err(error) => check_github_network_fallback(&client, format!("R2 failed: {}", error)).await,
-    }
-}
-
-async fn check_github_network_fallback(
-    client: &reqwest::Client,
-    r2_error: String,
-) -> PreflightCheck {
-    // GitHub tags are a secondary signal; this keeps preflight useful during
-    // transient R2 outages.
+    // GitHub Releases is the only update source.
     let mut request = client
-        .get("https://api.github.com/repos/melandlabs/release/tags")
+        .get("https://api.github.com/repos/melandlabs/openloomi/tags")
         .header("Accept", "application/vnd.github+json");
     if let Ok(token) = std::env::var("GITHUB_TOKEN") {
         if !token.is_empty() {
@@ -1996,17 +1975,17 @@ async fn check_github_network_fallback(
         Ok(response) if response.status().is_success() => PreflightCheck {
             name: "network",
             ok: true,
-            detail: format!("GitHub tags reachable; {}", r2_error),
+            detail: "GitHub tags reachable".to_string(),
         },
         Ok(response) => PreflightCheck {
             name: "network",
             ok: false,
-            detail: format!("{}; GitHub returned HTTP {}", r2_error, response.status()),
+            detail: format!("GitHub returned HTTP {}", response.status()),
         },
         Err(error) => PreflightCheck {
             name: "network",
             ok: false,
-            detail: format!("{}; GitHub failed: {}", r2_error, error),
+            detail: format!("GitHub failed: {}", error),
         },
     }
 }

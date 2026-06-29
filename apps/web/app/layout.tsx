@@ -11,6 +11,7 @@ import { MotionConfigProvider } from "@/components/motion-config-provider";
 import { GeddleScript } from "@/components/geddle-script";
 import { AppProviders } from "@/components/app-providers";
 import { ScheduledJobsInit } from "@/components/scheduled-jobs-init";
+import { UpdateBanner } from "@/components/update-banner";
 
 const notoSansSC = Noto_Sans_SC({
   subsets: ["latin"],
@@ -64,6 +65,7 @@ export default async function RootLayout({
               <TooltipProvider>
                 <SonnerToaster />
                 <AppProviders>{children}</AppProviders>
+                <UpdateBanner />
               </TooltipProvider>
             </I18nProvider>
           </MotionConfigProvider>

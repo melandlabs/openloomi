@@ -24,6 +24,7 @@ import {
 import { toast } from "@/components/toast";
 import { fetchWithAuth } from "@/lib/utils";
 import { useUserProfile } from "@/hooks/use-user-profile";
+import { ChronicleSettings } from "@/components/personalization/personalization-chronicle-settings";
 
 type ProfileResponse = {
   user: {
@@ -544,6 +545,14 @@ export function UserProfileSettings() {
         </div>
 
         <Separator className="mb-8" />
+      </div>
+
+      {/* Chronicle (Screen-Aware Memory) — openloomi-only feature */}
+      <div className="w-full px-1 sm:px-0 space-y-4">
+        <p className="px-0 pb-0 text-base font-semibold text-foreground-secondary">
+          {t("chronicle.settings.sectionTitle", "Chronicle")}
+        </p>
+        <ChronicleSettings open />
       </div>
 
       {/* Change full name */}

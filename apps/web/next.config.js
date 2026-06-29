@@ -129,6 +129,10 @@ const nextConfig = {
     "ioredis-mock",
     "fengari",
     "fengari-web",
+    // chromadb uses dynamic imports for embedding functions and pulls in
+    // @chroma-core/* packages. Externalize to skip Turbopack's static analysis.
+    "chromadb",
+    "@chroma-core/default-embed",
   ],
 
   // Experimental features - performance improvements
@@ -206,25 +210,6 @@ const nextConfig = {
         weixinRedactShimPath,
     };
 
-    // Sentry source maps upload in production
-    if (
-      process.env.SENTRY_AUTH_TOKEN &&
-      process.env.NODE_ENV === "production" &&
-      !isServer
-    ) {
-      const SentryWebpackPlugin = require("@sentry/webpack-plugin");
-      config.plugins.push(
-        new SentryWebpackPlugin({
-          org: process.env.SENTRY_ORG,
-          project: process.env.SENTRY_PROJECT,
-          authToken: process.env.SENTRY_AUTH_TOKEN,
-          include: "./.next/static",
-          ignore: ["node_modules"],
-          setCommits: { auto: true },
-        }),
-      );
-    }
-
     if (isServer) {
       config.externals = config.externals ?? [];
       config.externals.push({
@@ -253,8 +238,37 @@ const nextConfig = {
           module: /utf-8-validate/,
           message: /can't be external/,
         },
+        // chromadb uses dynamic import() expressions for embedding function
+        // feature detection that webpack's static analysis cannot follow.
+        {
+          module: /chromadb/,
+          message: /the request of a dependency is an expression/,
+        },
+        // sqlite-vec resolves its native binding via import.meta which webpack
+        // cannot analyze (already externalized for the server build).
+        {
+          module: /sqlite-vec/,
+          message: /Accessing import\.meta directly is unsupported/,
+        },
       ];
     } else {
+      // Suppress client-side warnings for chromadb (still pulled into the
+      // client bundle transitively via @openloomi/rag re-exports) and
+      // sqlite-vec (referenced by server-only code paths).
+      config.ignoreWarnings = [
+        {
+          module: /chromadb/,
+          message: /the request of a dependency is an expression/,
+        },
+        {
+          module: /chromadb/,
+          message: /Can't resolve '@chroma-core/,
+        },
+        {
+          module: /sqlite-vec/,
+          message: /Accessing import\.meta directly is unsupported/,
+        },
+      ];
       config.resolve = config.resolve ?? {};
       config.resolve.fallback = config.resolve.fallback ?? {};
       config.resolve.fallback["zlib-sync"] = false;

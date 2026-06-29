@@ -252,3 +252,13 @@ commands.allow = ["request_notification_access"]
 identifier = "allow-open-system-settings"
 description = "Allow the open_system_settings command"
 commands.allow = ["open_system_settings"]
+
+[[permission]]
+identifier = "allow-register-voice-input-shortcut"
+description = "Allow the register_voice_input_shortcut command"
+commands.allow = ["register_voice_input_shortcut"]
+
+[[permission]]
+identifier = "allow-unregister-voice-input-shortcut"
+description = "Allow the unregister_voice_input_shortcut command"
+commands.allow = ["unregister_voice_input_shortcut"]

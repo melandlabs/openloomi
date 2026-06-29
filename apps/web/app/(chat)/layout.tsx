@@ -14,6 +14,7 @@ import { SidePanelProvider } from "@/components/agent/side-panel-context";
 import { ChatContextProvider } from "@/components/chat-context";
 import { SessionAuthChecker } from "@/components/session-auth-checker";
 import { ConversationApiOnboardingGuard } from "@/components/conversation-api-onboarding-guard";
+import { ScreenMemoryCaptureProvider } from "@/components/chronicle/screen-memory-provider";
 
 export default async function Layout({
   children,
@@ -41,6 +42,7 @@ export default async function Layout({
                 <SidePanelProvider>
                   <ChatContextProvider>
                     <GlobalInsightDrawerProvider>
+                      <ScreenMemoryCaptureProvider />
                       <SidePanelShell>{children}</SidePanelShell>
                     </GlobalInsightDrawerProvider>
                   </ChatContextProvider>

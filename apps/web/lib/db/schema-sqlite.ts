@@ -890,6 +890,21 @@ export const userInsightSettings = sqliteTable("user_insight_settings", {
     },
   ),
   activityTier: text("activity_tier").notNull().default("low"),
+  /** Chronicle screen-aware memory feature enabled */
+  chronicleEnabled: integer("chronicle_enabled", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  chronicleCaptureShortcut: text("chronicle_capture_shortcut")
+    .notNull()
+    .default("Enter"),
+  chronicleCaptureIntervalMs: integer("chronicle_capture_interval_ms")
+    .notNull()
+    .default(5000),
+  chronicleBootCheck: integer("chronicle_boot_check", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  /** Global voice input trigger key (device_query Keycode), e.g. Shift+V */
+  voiceInputShortcut: text("voice_input_shortcut").notNull().default("Shift+V"),
   lastUpdated: integer("last_updated", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -898,6 +913,36 @@ export const userInsightSettings = sqliteTable("user_insight_settings", {
 export type DBInsightSettings = InferSelectModel<typeof userInsightSettings>;
 export type DBInsertInsightSettings = InferInsertModel<
   typeof userInsightSettings
+>;
+
+/**
+ * SQLite mirror of `user_vision_llm_settings`. See schema.pg.ts for the
+ * full design rationale (custom vision LLM override for Chronicle).
+ */
+export const userVisionLlmSettings = sqliteTable("user_vision_llm_settings", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  apiUrl: text("api_url").notNull().default(""),
+  apiKey: text("api_key").notNull().default(""),
+  model: text("model").notNull().default(""),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+export type DBVisionLlmSettings = InferSelectModel<
+  typeof userVisionLlmSettings
+>;
+export type DBInsertVisionLlmSettings = InferInsertModel<
+  typeof userVisionLlmSettings
 >;
 
 export const userLlmApiSettings = sqliteTable(
@@ -1104,6 +1149,11 @@ export type InsightSettings = {
   lastInsightMaintenanceRunAt?: Date | null;
   lastInsightEmbeddingDreamRunAt?: Date | null;
   activityTier: "high" | "medium" | "low" | "dormant";
+  chronicleEnabled?: boolean;
+  chronicleCaptureShortcut?: string;
+  chronicleCaptureIntervalMs?: number;
+  chronicleBootCheck?: boolean;
+  voiceInputShortcut?: string;
   lastUpdated: Date;
 };
 
@@ -1133,6 +1183,11 @@ export function parseInsightSettings(
     lastInsightEmbeddingDreamRunAt:
       dbSettings.lastInsightEmbeddingDreamRunAt ?? null,
     activityTier: normalizeActivityTier(dbSettings.activityTier),
+    chronicleEnabled: dbSettings.chronicleEnabled ?? false,
+    chronicleCaptureShortcut: dbSettings.chronicleCaptureShortcut ?? "Enter",
+    chronicleCaptureIntervalMs: dbSettings.chronicleCaptureIntervalMs ?? 5000,
+    chronicleBootCheck: dbSettings.chronicleBootCheck ?? false,
+    voiceInputShortcut: dbSettings.voiceInputShortcut ?? "Shift+V",
     lastUpdated: dbSettings.lastUpdated,
   };
 }
@@ -1158,6 +1213,11 @@ export function serializeInsightSettings(
     lastInsightMaintenanceRunAt: settings.lastInsightMaintenanceRunAt,
     lastInsightEmbeddingDreamRunAt: settings.lastInsightEmbeddingDreamRunAt,
     activityTier: settings.activityTier,
+    chronicleEnabled: settings.chronicleEnabled ?? false,
+    chronicleCaptureShortcut: settings.chronicleCaptureShortcut ?? "Enter",
+    chronicleCaptureIntervalMs: settings.chronicleCaptureIntervalMs ?? 5000,
+    chronicleBootCheck: settings.chronicleBootCheck ?? false,
+    voiceInputShortcut: settings.voiceInputShortcut ?? "Shift+V",
   };
 }
 

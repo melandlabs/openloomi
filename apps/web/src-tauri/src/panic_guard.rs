@@ -14,8 +14,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll};
 
-pub const SUPPRESS_DEFAULT_PANIC_EVENT_TAG: &str = "rust.error.suppress_default_panic_event";
-
 #[derive(Clone)]
 struct GuardedPanicContext {
     name: String,
@@ -104,103 +102,7 @@ fn mark_guarded_panic_reported() {
     }
 }
 
-fn with_panic_scope<F>(context: &str, location: Option<&str>, recoverable: bool, f: F)
-where
-    F: FnOnce(),
-{
-    let level = if recoverable {
-        sentry::Level::Error
-    } else {
-        sentry::Level::Fatal
-    };
-    sentry::with_scope(
-        |scope| {
-            scope.set_tag("rust.error.kind", "panic");
-            scope.set_tag(
-                "rust.error.recoverable",
-                if recoverable { "true" } else { "false" },
-            );
-            scope.set_tag("rust.context", context);
-            if let Some(location) = location {
-                scope.set_tag("rust.location", location);
-            }
-            scope.set_level(Some(level));
-        },
-        f,
-    );
-}
-
-fn with_default_panic_scope<F>(context: &str, location: &str, recoverable: bool, f: F)
-where
-    F: FnOnce(),
-{
-    sentry::with_scope(
-        |scope| {
-            if recoverable {
-                scope.set_tag(SUPPRESS_DEFAULT_PANIC_EVENT_TAG, "true");
-            }
-            scope.set_tag("rust.error.kind", "panic");
-            scope.set_tag(
-                "rust.error.recoverable",
-                if recoverable { "true" } else { "false" },
-            );
-            scope.set_tag("rust.context", context);
-            scope.set_tag("rust.location", location);
-            scope.set_level(Some(if recoverable {
-                sentry::Level::Error
-            } else {
-                sentry::Level::Fatal
-            }));
-        },
-        f,
-    );
-}
-
-fn report_panic(context: &str, message: &str, location: Option<&str>, recoverable: bool) {
-    let level = if recoverable {
-        sentry::Level::Error
-    } else {
-        sentry::Level::Fatal
-    };
-    with_panic_scope(context, location, recoverable, || {
-        let classification = if recoverable { "recoverable" } else { "fatal" };
-        let location = location
-            .map(|value| format!(" at {value}"))
-            .unwrap_or_default();
-        sentry::capture_message(
-            &format!("Rust {classification} panic in {context}{location}: {message}"),
-            level,
-        );
-    });
-}
-
-fn report_guarded_panic_from_hook(context: &str, location: &str, info: &PanicHookInfo<'_>) {
-    with_panic_scope(context, Some(location), true, || {
-        let mut event =
-            sentry::integrations::panic::PanicIntegration::new().event_from_panic_info(info);
-        event.level = sentry::Level::Error;
-        for exception in &mut event.exception.values {
-            if let Some(mechanism) = exception.mechanism.as_mut() {
-                mechanism.handled = Some(true);
-            }
-        }
-        sentry::capture_event(event);
-    });
-}
-
-fn run_default_panic_hook_with_scope(
-    context: &str,
-    location: &str,
-    recoverable: bool,
-    info: &PanicHookInfo<'_>,
-    default_hook: &(dyn Fn(&PanicHookInfo<'_>) + Sync + Send),
-) {
-    with_default_panic_scope(context, location, recoverable, || {
-        default_hook(info);
-    });
-}
-
-/// Keep the Sentry/standard panic hook chain intact while adding our own tags.
+/// Run the previously-installed (default) panic hook for fatal panics.
 pub fn run_fatal_panic_hook(
     message: &str,
     location: &str,
@@ -208,19 +110,16 @@ pub fn run_fatal_panic_hook(
     default_hook: &(dyn Fn(&PanicHookInfo<'_>) + Sync + Send),
 ) {
     log::error!("[panic] Fatal panic at {location}: {message}");
-    run_default_panic_hook_with_scope("tauri runtime", location, false, info, default_hook);
+    default_hook(info);
 }
 
 fn caught_panic_error(
     payload: Box<dyn Any + Send>,
     context: &str,
-    reported: &Arc<AtomicBool>,
+    _reported: &Arc<AtomicBool>,
 ) -> String {
     let message = panic_message(payload);
     log::error!("[panic] {context}: {message}");
-    if !reported.load(Ordering::SeqCst) {
-        report_panic(context, &message, None, true);
-    }
     format!("{context} failed unexpectedly: {message}")
 }
 
@@ -272,9 +171,8 @@ pub fn handle_guarded_panic_hook(
         location,
         message
     );
-    report_guarded_panic_from_hook(&context.name, &location, info);
     mark_guarded_panic_reported();
-    run_default_panic_hook_with_scope(&context.name, &location, true, info, default_hook);
+    default_hook(info);
     true
 }
 

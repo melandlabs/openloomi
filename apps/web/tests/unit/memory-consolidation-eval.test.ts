@@ -11,9 +11,11 @@ import {
   buildMemoryGovernanceExplanationReport,
   buildMemoryConsolidationPlan,
   buildMemoryConsolidationDiagnosticsReport,
+  buildCallerProvidedMemoryRelationCandidateDiscoveryReport,
   buildMemoryEvidenceClusters,
   buildMemoryConsolidationDiagnosticsRunReport,
   buildMemoryConsolidationRuntimeRecordSelectors,
+  buildMemoryWeakRelationObservationReport,
   buildMemoryRelationCandidates,
   buildMemoryRelationPipeline,
   buildMemoryRelationPipelineDiagnostics,
@@ -34,11 +36,14 @@ import {
   deriveMemoryRelationGraphLifecycle,
   invokeSemanticMemoryDraftSummarizerProvider,
   logMemoryConsolidationDiagnosticsRun,
+  judgeMemoryRelationCandidates,
   persistSemanticMemoryDrafts,
+  invokeMemoryRelationJudgeProvider,
   runMemoryConsolidationDiagnostics,
   serializeSemanticMemoryArtifactStorageRecord,
   summarizeSemanticMemoryDraftCandidate,
   resolveMemorySemanticRetrievalConfig,
+  type MemoryEvidenceRecord,
   type MemorySemanticRetrievalConfig,
   type MemorySemanticRetrievalCandidate,
   type MemorySemanticRetrievalComparisonReport,
@@ -3484,7 +3489,7 @@ describe("memory consolidation evaluation scenarios", () => {
   });
 
   it("builds a compact diagnostics run report for real-record batches", async () => {
-    const records = [
+    const records: AdapterSourceRecord[] = [
       {
         owner: "adapter-user",
         createdAt: NOW,
@@ -4545,5 +4550,438 @@ describe("memory consolidation evaluation scenarios", () => {
     expect(report.metadata).toEqual({
       mode: "fixture-only",
     });
+  });
+
+  it("normalizes caller-provided relation candidates before judgment", () => {
+    const records: MemoryEvidenceRecord[] = [
+      {
+        id: "manual-a",
+        userId: "eval-user",
+        timestamp: NOW,
+        text: "Use Chinese for repo work.",
+        tier: "short",
+        metadata: {
+          relationGroup: "answer-language",
+          relationValue: "zh",
+        },
+      },
+      {
+        id: "manual-b",
+        userId: "eval-user",
+        timestamp: NOW,
+        text: "Prefer Chinese technical explanations.",
+        tier: "short",
+        metadata: {
+          relationGroup: "answer-language",
+          relationValue: "zh",
+        },
+      },
+      {
+        id: "manual-c",
+        userId: "eval-user",
+        timestamp: NOW,
+        text: "Use English for this one reply.",
+        tier: "short",
+        metadata: {
+          relationGroup: "answer-language",
+          relationValue: "en",
+        },
+      },
+    ];
+    const report = buildCallerProvidedMemoryRelationCandidateDiscoveryReport({
+      records,
+      candidates: [
+        {
+          fromRecordId: "manual-b",
+          toRecordId: "manual-a",
+          candidateKeys: ["manual:answer-language", "manual:answer-language"],
+          score: 1.4,
+          reasonCodes: ["manual_review"],
+          metadata: {
+            source: "reviewer",
+          },
+        },
+        {
+          fromRecordId: "manual-a",
+          toRecordId: "manual-b",
+        },
+        {
+          fromRecordId: "manual-a",
+          toRecordId: "missing-record",
+        },
+        {
+          fromRecordId: "manual-c",
+          toRecordId: "manual-c",
+        },
+      ],
+      metadata: {
+        mode: "caller-provided",
+      },
+    });
+
+    expect(report).toEqual({
+      candidates: [
+        {
+          id: "candidate:manual-a|manual-b",
+          fromRecordId: "manual-a",
+          toRecordId: "manual-b",
+          candidateKeys: ["manual:answer-language"],
+          score: 1,
+          reasonCodes: ["caller_provided_candidate", "manual_review"],
+          metadata: {
+            source: "reviewer",
+          },
+        },
+      ],
+      skippedCandidates: [
+        {
+          fromRecordId: "manual-a",
+          toRecordId: "manual-b",
+          reasonCodes: ["duplicate_candidate"],
+          metadata: undefined,
+        },
+        {
+          fromRecordId: "manual-a",
+          toRecordId: "missing-record",
+          reasonCodes: ["missing_record"],
+          metadata: undefined,
+        },
+        {
+          fromRecordId: "manual-c",
+          toRecordId: "manual-c",
+          reasonCodes: ["self_relation_candidate"],
+          metadata: undefined,
+        },
+      ],
+      reasonCodes: [
+        "caller_provided_candidate",
+        "manual_review",
+        "duplicate_candidate",
+        "missing_record",
+        "self_relation_candidate",
+      ],
+      metadata: {
+        mode: "caller-provided",
+      },
+    });
+
+    const judgment = judgeMemoryRelationCandidates({
+      candidates: report.candidates,
+      records,
+      now: NOW,
+    });
+
+    expect(judgment.relations).toEqual([
+      expect.objectContaining({
+        fromRecordId: "manual-a",
+        toRecordId: "manual-b",
+        relation: "support",
+      }),
+    ]);
+  });
+
+  it("keeps weak relation observations from promoting clusters", () => {
+    const records: MemoryEvidenceRecord[] = [
+      {
+        id: "weak-a",
+        userId: "eval-user",
+        timestamp: NOW,
+        text: "Use Chinese for repo work.",
+        tier: "short",
+        metadata: {
+          relationGroup: "answer-language",
+          relationValue: "zh",
+        },
+      },
+      {
+        id: "weak-b",
+        userId: "eval-user",
+        timestamp: NOW,
+        text: "Prefer Chinese technical explanations.",
+        tier: "short",
+        metadata: {
+          relationGroup: "answer-language",
+          relationValue: "zh",
+        },
+      },
+      {
+        id: "weak-related",
+        userId: "eval-user",
+        timestamp: NOW,
+        text: "Technical replies should include context.",
+        tier: "short",
+      },
+      {
+        id: "weak-uncertain",
+        userId: "eval-user",
+        timestamp: NOW,
+        text: "Maybe mention examples.",
+        tier: "short",
+      },
+    ];
+    const discovery = buildCallerProvidedMemoryRelationCandidateDiscoveryReport(
+      {
+        records,
+        candidates: [
+          {
+            fromRecordId: "weak-a",
+            toRecordId: "weak-b",
+            candidateKeys: ["manual:language"],
+            score: 1,
+          },
+          {
+            fromRecordId: "weak-a",
+            toRecordId: "weak-related",
+            candidateKeys: ["manual:style"],
+            score: 0.7,
+            metadata: {
+              source: "weak-discovery",
+            },
+          },
+          {
+            fromRecordId: "weak-a",
+            toRecordId: "weak-uncertain",
+            candidateKeys: ["manual:loose"],
+            score: 0.2,
+          },
+        ],
+      },
+    );
+    const judgment = judgeMemoryRelationCandidates({
+      candidates: discovery.candidates,
+      records,
+      now: NOW,
+    });
+    const report = buildMemoryWeakRelationObservationReport({
+      judgments: judgment.judgments,
+      metadata: {
+        mode: "observation-only",
+      },
+    });
+    const assignment = assignMemoryRelationGraph({
+      records,
+      relations: judgment.relations,
+      now: NOW,
+    });
+
+    expect(report.summary).toEqual({
+      judgmentCount: 3,
+      observationCount: 2,
+      relatedCount: 1,
+      uncertainCount: 1,
+      excludedStrongRelationCount: 1,
+      promotesToCluster: false,
+      mutatesGraph: false,
+    });
+    expect(report.observations).toEqual([
+      expect.objectContaining({
+        fromRecordId: "weak-a",
+        toRecordId: "weak-related",
+        relation: "related",
+        status: "observed",
+        score: 0.7,
+        promotesToCluster: false,
+        mutatesGraph: false,
+        reasonCodes: expect.arrayContaining([
+          "weak_related_relation",
+          "candidate_related",
+          "caller_provided_candidate",
+        ]),
+        metadata: {
+          source: "weak-discovery",
+        },
+      }),
+      expect.objectContaining({
+        fromRecordId: "weak-a",
+        toRecordId: "weak-uncertain",
+        relation: "uncertain",
+        status: "observed",
+        edgeId: undefined,
+        promotesToCluster: false,
+        mutatesGraph: false,
+        reasonCodes: expect.arrayContaining([
+          "uncertain_relation_candidate",
+          "uncertain_candidate",
+          "caller_provided_candidate",
+        ]),
+      }),
+    ]);
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "weak_related_relation",
+        "uncertain_relation_candidate",
+      ]),
+    );
+    expect(report.metadata).toEqual({
+      mode: "observation-only",
+    });
+    expect(assignment.recordClusterKeys["weak-a"]).toBe(
+      assignment.recordClusterKeys["weak-b"],
+    );
+    expect(assignment.recordClusterKeys["weak-a"]).not.toBe(
+      assignment.recordClusterKeys["weak-related"],
+    );
+  });
+
+  it("invokes an optional relation judge adapter without provider wiring", async () => {
+    const records: MemoryEvidenceRecord[] = [
+      {
+        id: "judge-a",
+        userId: "eval-user",
+        timestamp: NOW,
+        text: "Use Chinese for repo work.",
+        tier: "short",
+        metadata: {
+          relationGroup: "answer-language",
+          relationValue: "zh",
+        },
+      },
+      {
+        id: "judge-b",
+        userId: "eval-user",
+        timestamp: NOW,
+        text: "Prefer Chinese technical explanations.",
+        tier: "short",
+        metadata: {
+          relationGroup: "answer-language",
+          relationValue: "zh",
+        },
+      },
+    ];
+    const discovery = buildCallerProvidedMemoryRelationCandidateDiscoveryReport(
+      {
+        records,
+        candidates: [
+          {
+            fromRecordId: "judge-a",
+            toRecordId: "judge-b",
+            candidateKeys: ["manual:language"],
+            score: 0.9,
+            reasonCodes: ["manual_review"],
+            metadata: {
+              source: "fake-judge-test",
+            },
+          },
+        ],
+      },
+    );
+    const providerInputs: string[] = [];
+    const candidate = discovery.candidates[0];
+    if (!candidate) {
+      throw new Error("Expected relation judge candidate.");
+    }
+    const judged = await invokeMemoryRelationJudgeProvider({
+      candidate,
+      records,
+      now: NOW,
+      metadata: {
+        mode: "fake-judge",
+      },
+      async invoke(input) {
+        providerInputs.push(input.candidate.id);
+        expect(input.defaultDecision).toEqual({
+          relation: "support",
+          weight: expect.any(Number),
+          reasonCodes: ["same_relation_value"],
+        });
+        expect(input.fromRecord.id).toBe("judge-a");
+        expect(input.toRecord.id).toBe("judge-b");
+
+        return {
+          relation: "related",
+          weight: 0.35,
+          reasonCodes: ["candidate_related"],
+        };
+      },
+    });
+    let skippedInvokeCount = 0;
+    const skipped = await invokeMemoryRelationJudgeProvider({
+      candidate: {
+        id: "candidate:judge-a|missing-record",
+        fromRecordId: "judge-a",
+        toRecordId: "missing-record",
+        candidateKeys: ["manual:missing"],
+        score: 0.8,
+        reasonCodes: ["caller_provided_candidate"],
+      },
+      records,
+      now: NOW,
+      async invoke() {
+        skippedInvokeCount += 1;
+        throw new Error("should not be called");
+      },
+    });
+    const failed = await invokeMemoryRelationJudgeProvider({
+      candidate,
+      records,
+      now: NOW,
+      async invoke() {
+        throw new Error("fake judge unavailable");
+      },
+    });
+
+    expect(providerInputs).toEqual(["candidate:judge-a|judge-b"]);
+    expect(judged).toEqual(
+      expect.objectContaining({
+        status: "judged",
+        candidateId: "candidate:judge-a|judge-b",
+        fromRecordId: "judge-a",
+        toRecordId: "judge-b",
+        reasonCodes: [
+          "provider_invoked",
+          "candidate_related",
+          "caller_provided_candidate",
+          "manual_review",
+        ],
+        metadata: {
+          mode: "fake-judge",
+        },
+        decision: {
+          relation: "related",
+          weight: 0.35,
+          reasonCodes: ["candidate_related"],
+        },
+        judgment: expect.objectContaining({
+          relation: "related",
+          weight: 0.35,
+          edge: expect.objectContaining({
+            relation: "related",
+          }),
+        }),
+      }),
+    );
+    expect(judged.input).toEqual(
+      expect.objectContaining({
+        now: NOW,
+        metadata: {
+          mode: "fake-judge",
+        },
+      }),
+    );
+    expect(skippedInvokeCount).toBe(0);
+    expect(skipped).toEqual(
+      expect.objectContaining({
+        status: "skipped",
+        reasonCodes: ["missing_record"],
+      }),
+    );
+    expect(skipped.input).toBeUndefined();
+    expect(skipped.judgment).toBeUndefined();
+    expect(failed).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        reasonCodes: ["provider_error"],
+        error: {
+          name: "Error",
+          message: "fake judge unavailable",
+        },
+      }),
+    );
+    expect(failed.input).toEqual(
+      expect.objectContaining({
+        candidate,
+      }),
+    );
+    expect(failed.judgment).toBeUndefined();
   });
 });

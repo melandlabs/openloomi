@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 /**
  * DELETE /api/chronicle/memories/[memoryId]
- * Delete a screen memory (insight with taskLabel = "chronicle_memory")
+ * Delete a screen memory (insight with taskLabel = "chronicle_screen")
  */
 export async function DELETE(
   request: Request,
@@ -30,7 +30,7 @@ export async function DELETE(
       .where(
         and(
           eq(insight.id, memoryId),
-          eq(insight.taskLabel, "chronicle_memory"),
+          eq(insight.taskLabel, "chronicle_screen"),
         ),
       )
       .limit(1);

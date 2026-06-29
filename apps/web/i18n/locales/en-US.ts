@@ -238,6 +238,140 @@ const en = {
     selectAudioFile: "Select audio file",
     loadFailed: "Failed to load files. Please try again.",
   },
+  chronicle: {
+    settings: {
+      title: "Screen Memory",
+      sectionTitle: "Chronicle",
+      subtitle: "Capture and remember what's on your screen",
+      description:
+        "Press your chosen shortcut to capture the screen, analyze it with AI, and save it as memory. Useful for recalling important things you see during the day.",
+      howItWorks:
+        "Press the {{shortcut}} key from any app to capture the current screen",
+      privacyNote: "Screenshots are stored locally and analyzed securely",
+      debounceNote: "At least {{seconds}}s between captures",
+      captureInterval: "Capture interval",
+      captureIntervalHint: "Minimum seconds between captures (≥3s)",
+      captureIntervalSaved: "Capture interval saved",
+      captureIntervalSaveError: "Failed to save capture interval",
+      captureShortcut: "Capture shortcut",
+      captureShortcutHint: "Press Esc to cancel editing.",
+      shortcutDisplay: "{{shortcut}}",
+      editShortcut: "Edit",
+      saveShortcut: "Save",
+      cancelShortcut: "Cancel",
+      shortcutInvalid:
+        "Unknown key id. Use the exact desktop key name (e.g. Enter, F9).",
+      shortcutPressPrompt:
+        "Click the area below to focus it, then press the key to bind. Current: {{current}}",
+      shortcutListening: "Waiting for a key…",
+      shortcutUnsupportedKey: "That key is not supported. Try another key.",
+      shortcutPickFirst: "Press a key to bind before saving.",
+      warning:
+        "This feature captures your screen. Make sure you understand the privacy implications before enabling.",
+      enabled: "Screen Memory enabled",
+      disabled: "Screen Memory disabled",
+      bootCheckEnabled: "Screen Memory enabled successfully",
+      permissionDenied:
+        "Screen Recording was not granted. If you previously declined, enable this app under System Settings → Screen & System Audio Recording.",
+      accessibilityDenied:
+        "Accessibility was not granted, so the global capture shortcut cannot work. Enable this app under System Settings → Privacy & Security → Accessibility.",
+      saveError: "Failed to save Screen Memory settings",
+      loading: "Loading...",
+      visionLlm: {
+        title: "Custom Vision LLM",
+        description:
+          "Use your own OpenAI-compatible vision model to analyze screenshots. When enabled, the built-in analyzer is bypassed and requests are sent to your endpoint.",
+        apiUrl: "Base URL",
+        apiKey: "API Key",
+        model: "Model",
+        saveError: "Failed to save custom vision LLM settings",
+      },
+      meetingRecording: {
+        title: "Meeting Recording",
+        description:
+          "Automatically record meeting audio from Google Meet, Lark, and other platforms. Audio is transcribed and summarized automatically.",
+        howItWorks:
+          "Click the microphone button to start recording, or enable auto-detection to start automatically when meeting audio is detected.",
+        autoDetection: "Auto-detect meeting start",
+        saveError: "Failed to save meeting recording settings",
+        permissionDenied: "Microphone permission denied",
+        recordingStarted: "Meeting recording started",
+        recordingStopped: "Meeting recording stopped",
+        processing: "Processing meeting audio...",
+        summaryReady: "Meeting summary ready",
+        silenceDetected: "Silence detected, recording stopped",
+        audioTooLarge: "Recording is too large. Please keep it under 500MB.",
+        noSpeechDetected: "No clear speech detected, recording discarded",
+      },
+    },
+    permissionGuide: {
+      title: "Screen Memory Permissions",
+      description:
+        "The following permissions are required to use Screen Memory",
+      accessibilityTitle: "Accessibility Permission",
+      accessibilityDesc:
+        "Required for global shortcut to capture screen (no restart needed)",
+      screenRecordingTitle: "Screen Recording Permission",
+      screenRecordingDesc:
+        "Required to capture screen content (may require app restart)",
+      authorize: "Authorize",
+      openSettings: "System Settings",
+      cancel: "Cancel",
+      complete: "Complete",
+    },
+    meeting: {
+      silenceDetected: "Silence detected, recording stopped",
+      audioTooLarge: "Recording is too large. Please keep it under 500MB.",
+      permissionDenied: "Microphone permission denied, please enable and retry",
+      audioNotSupported: "Current environment does not support audio recording",
+      recordFailed: "Audio recording failed, please retry",
+      noSpeechDetected: "No clear speech detected, recording discarded",
+      processing: "Processing meeting audio...",
+      summaryReady: "Meeting summary ready",
+      systemAudioPrePrompt:
+        'A sharing dialog will appear — check "Share system audio" at the bottom to capture remote participants',
+      systemAudioFallback:
+        'System audio not captured. To record remote participants, check "Share system audio" next time',
+      systemAudioStopped:
+        "System audio sharing stopped, now recording microphone only",
+      systemAudioOnly: "No microphone detected — recording system audio only",
+      systemAudioCaptureFailed:
+        "System audio capture failed. Enable System Audio for this app in System Settings → Privacy & Security → Screen & System Audio Recording, then retry",
+      systemAudioCaptureUnavailable:
+        "Could not capture system audio. Please restart the application and try again",
+      restartToRecordTitle: "A restart is needed",
+      restartToRecordDescription:
+        "System audio isn't available right now. Restarting the app will restore recording.",
+      restartToRecordConfirm: "Restart app",
+      restartToRecordCancel: "Not now",
+      alreadyRecording: "Recording already in progress",
+      noAudioSource:
+        "Cannot start recording: microphone or system audio permission required",
+      recordingFailed: "Recording failed, please retry",
+      micPermissionDenied:
+        "Microphone permission denied, please enable and retry",
+      noActiveChat: "No active chat",
+      envNotSupportRecording:
+        "Current environment does not support audio recording",
+      uploadAudioFailed: "Failed to upload audio file",
+      recordingSaved: "Recording saved: {{fileName}}",
+      recordingSavedToSpace:
+        "Recording saved to conversation space: {{fileName}}",
+    },
+    meetingSummary: {
+      systemAudioPermission: {
+        title: "Recording Permissions",
+        description:
+          "To record meeting audio, please grant microphone and system audio permissions.",
+        microphoneTitle: "Microphone",
+        microphoneDesc:
+          "Required for capturing your voice during meeting recording",
+        systemAudioTitle: "System Audio",
+        systemAudioDesc:
+          "Required for capturing system audio during meeting recording",
+      },
+    },
+  },
 };
 
 export default en;

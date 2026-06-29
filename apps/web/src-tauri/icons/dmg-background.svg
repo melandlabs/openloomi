@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- DMG installer background image for Alloomi (macOS).
+     Layout: light-grey canvas with a centered grey dashed right-arrow
+     that visually connects the app icon (left) to the Applications
+     folder alias (right). Mirrors the standard macOS DMG style used
+     by mainstream apps (e.g. Manus, Slack, Chrome).
+     @1x canvas: 660 x 400. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="400" viewBox="0 0 660 400">
+  <!-- Neutral light-grey background, close to macOS Finder window backdrop -->
+  <rect width="660" height="400" fill="#f5f5f7" />
+
+  <!-- Centered dashed right-arrow connecting app icon to Applications folder -->
+  <g stroke="#8e8e93" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 6">
+    <!-- Shaft -->
+    <line x1="210" y1="200" x2="445" y2="200" />
+    <!-- Arrow head (two strokes forming a > shape) -->
+    <polyline points="432,188 448,200 432,212" />
+  </g>
+</svg>

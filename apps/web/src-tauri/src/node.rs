@@ -8,7 +8,6 @@
 //! Node.js management module — handles discovery, download, and Next.js server lifecycle.
 
 use crate::panic_guard::{catch_unwind_str, lock_recovered};
-use sentry::{capture_message, Level};
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -194,9 +193,6 @@ fn emit_crash_event(message: &str) {
     let mut status_guard = lock_recovered(&LAST_SERVER_STATUS, "record crash status");
     *status_guard = "crashed".to_string();
     drop(status_guard);
-
-    // Capture crash to Sentry
-    capture_message(&format!("Node.js Process Crash: {}", message), Level::Error);
 
     let app_handle_opt = lock_recovered(&APP_HANDLE, "read app handle for crash event").clone();
 
@@ -1045,7 +1041,16 @@ pub fn try_start_nextjs(
     };
 
     // Double-base64 encoded secrets (format: base64(base64(value)))
-    let encoded_secrets: Vec<(&str, &str)> = vec![];
+    let encoded_secrets: Vec<(&str, &str)> = vec![
+        (
+            "AUTH_SECRET",
+            "V1ZONU5ISnFaMnc1SzFaNllYWmlWRkp4UmxSU1lscGtOR0ZOYld4eWVIb3dXbXhVUmtaQ2VGSnFVVDA9",
+        ),
+        (
+            "ENCRYPTION_KEY",
+            "V1ZONU5ISnFaMnc1SzFaNllYWmlWRkp4UmxSU1lscGtOR0ZOYld4eWVIb3dXbXhVUmtaQ2VGSnFVVDA9",
+        ),
+    ];
 
     let decode_double_base64 = |encoded: &str| -> Option<String> {
         let first = base64_decode(encoded).ok()?;

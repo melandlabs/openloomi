@@ -220,6 +220,329 @@ pub fn unregister_screen_capture_shortcut<R: tauri::Runtime>(
     })
 }
 
+// ============ Voice Input Shortcut ============
+
+static VOICE_INPUT_REGISTERED_SHORTCUTS: std::sync::LazyLock<Mutex<Vec<String>>> =
+    std::sync::LazyLock::new(|| Mutex::new(Vec::new()));
+static VOICE_INPUT_LISTENER_RUNNING: std::sync::LazyLock<AtomicBool> =
+    std::sync::LazyLock::new(|| AtomicBool::new(false));
+static VOICE_INPUT_LISTENER_HANDLE: std::sync::LazyLock<Mutex<Option<JoinHandle<()>>>> =
+    std::sync::LazyLock::new(|| Mutex::new(None));
+
+/// Parsed modifier+key binding for voice input (e.g. "Shift+V").
+#[derive(Clone, Debug)]
+struct VoiceShortcutBinding {
+    require_ctrl: bool,
+    require_shift: bool,
+    require_alt: bool,
+    require_meta: bool,
+    main_key: Keycode,
+}
+
+const VOICE_MODIFIER_NAMES: &[&str] = &[
+    "Ctrl", "Control", "LControl", "RControl", "Shift", "LShift", "RShift", "Alt", "LAlt", "RAlt",
+    "Cmd", "Meta", "Command", "LMeta", "RMeta",
+];
+
+fn is_voice_modifier_name(part: &str) -> bool {
+    VOICE_MODIFIER_NAMES.iter().any(|name| *name == part)
+}
+
+fn parse_voice_main_key(part: &str) -> Result<Keycode, String> {
+    let trimmed = part.trim();
+    if trimmed.is_empty() {
+        return Err("Voice input shortcut must include a non-modifier key".to_string());
+    }
+    if let Ok(keycode) = Keycode::from_str(trimmed) {
+        return Ok(keycode);
+    }
+    if trimmed.len() == 1 {
+        let ch = trimmed.chars().next().unwrap();
+        if ch.is_ascii_alphanumeric() {
+            let key_name = if ch.is_ascii_digit() {
+                format!("Key{ch}")
+            } else {
+                format!("Key{}", ch.to_ascii_uppercase())
+            };
+            if let Ok(keycode) = Keycode::from_str(&key_name) {
+                return Ok(keycode);
+            }
+        }
+    }
+    Err(format!(
+        "Unsupported voice input key {:?}. Use a modifier+key combo (e.g. Shift+V).",
+        trimmed
+    ))
+}
+
+fn parse_voice_shortcut(shortcut: &str) -> Result<VoiceShortcutBinding, String> {
+    let parts: Vec<&str> = shortcut
+        .split('+')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+
+    if parts.len() < 2 {
+        return Err(
+            "Voice input shortcut must include at least one modifier and one key (e.g. Shift+V)."
+                .to_string(),
+        );
+    }
+
+    let mut require_ctrl = false;
+    let mut require_shift = false;
+    let mut require_alt = false;
+    let mut require_meta = false;
+    let mut main_key: Option<Keycode> = None;
+
+    for part in parts {
+        match part {
+            "Ctrl" | "Control" | "LControl" | "RControl" => require_ctrl = true,
+            "Shift" | "LShift" | "RShift" => require_shift = true,
+            "Alt" | "LAlt" | "RAlt" => require_alt = true,
+            "Cmd" | "Meta" | "Command" | "LMeta" | "RMeta" => require_meta = true,
+            key if !is_voice_modifier_name(key) => {
+                main_key = Some(parse_voice_main_key(key)?);
+            }
+            _ => {}
+        }
+    }
+
+    let main_key = main_key.ok_or_else(|| {
+        "Voice input shortcut must include a non-modifier key (e.g. Shift+V).".to_string()
+    })?;
+
+    if !(require_ctrl || require_shift || require_alt || require_meta) {
+        return Err(
+            "Voice input shortcut must include a modifier (Ctrl/Shift/Alt/Cmd).".to_string(),
+        );
+    }
+
+    Ok(VoiceShortcutBinding {
+        require_ctrl,
+        require_shift,
+        require_alt,
+        require_meta,
+        main_key,
+    })
+}
+
+fn is_ctrl_pressed(keys: &[Keycode]) -> bool {
+    keys.iter()
+        .any(|k| matches!(k, Keycode::LControl | Keycode::RControl))
+}
+
+fn is_shift_pressed(keys: &[Keycode]) -> bool {
+    keys.iter()
+        .any(|k| matches!(k, Keycode::LShift | Keycode::RShift))
+}
+
+fn is_alt_pressed(keys: &[Keycode]) -> bool {
+    keys.iter()
+        .any(|k| matches!(k, Keycode::LAlt | Keycode::RAlt))
+}
+
+fn is_meta_pressed(keys: &[Keycode]) -> bool {
+    keys.iter()
+        .any(|k| matches!(k, Keycode::LMeta | Keycode::RMeta))
+}
+
+fn is_voice_combo_pressed(keys: &[Keycode], binding: &VoiceShortcutBinding) -> bool {
+    if binding.require_ctrl && !is_ctrl_pressed(keys) {
+        return false;
+    }
+    if binding.require_shift && !is_shift_pressed(keys) {
+        return false;
+    }
+    if binding.require_alt && !is_alt_pressed(keys) {
+        return false;
+    }
+    if binding.require_meta && !is_meta_pressed(keys) {
+        return false;
+    }
+    keys.contains(&binding.main_key)
+}
+
+/// Event payload for voice input shortcut
+#[derive(Clone, serde::Serialize)]
+struct VoiceInputEvent {
+    shortcut: String,
+    state: String,
+}
+
+fn stop_voice_input_listener() {
+    VOICE_INPUT_LISTENER_RUNNING.store(false, Ordering::SeqCst);
+    if let Some(handle) =
+        lock_recovered(&VOICE_INPUT_LISTENER_HANDLE, "stop voice input listener").take()
+    {
+        if handle.join().is_err() {
+            log::warn!("[VoiceInputShortcut] Listener thread panicked on join");
+        }
+    }
+    let mut stored = lock_recovered(
+        &VOICE_INPUT_REGISTERED_SHORTCUTS,
+        "clear voice input shortcut registry",
+    );
+    stored.clear();
+}
+
+/// Background poll loop for Voice Input global shortcut (`device_query`).
+fn run_voice_input_listener<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    shortcut: String,
+    binding: VoiceShortcutBinding,
+    ready: SyncSender<Result<(), String>>,
+) {
+    let device_state = match catch_unwind_str("DeviceState::new", DeviceState::new) {
+        Ok(ds) => ds,
+        Err(err) => {
+            let _ = ready.send(Err(err));
+            VOICE_INPUT_LISTENER_RUNNING.store(false, Ordering::SeqCst);
+            return;
+        }
+    };
+
+    if ready.send(Ok(())).is_err() {
+        VOICE_INPUT_LISTENER_RUNNING.store(false, Ordering::SeqCst);
+        return;
+    }
+
+    let mut was_trigger_pressed = false;
+
+    while VOICE_INPUT_LISTENER_RUNNING.load(Ordering::SeqCst) {
+        let tick = catch_unwind_str("DeviceState::get_keys", || {
+            let keys = device_state.get_keys();
+            let is_trigger_pressed = is_voice_combo_pressed(&keys, &binding);
+            let mut event: Option<VoiceInputEvent> = None;
+
+            if is_trigger_pressed && !was_trigger_pressed {
+                event = Some(VoiceInputEvent {
+                    shortcut: shortcut.clone(),
+                    state: "Pressed".to_string(),
+                });
+            } else if !is_trigger_pressed && was_trigger_pressed {
+                event = Some(VoiceInputEvent {
+                    shortcut: shortcut.clone(),
+                    state: "Released".to_string(),
+                });
+            }
+
+            (is_trigger_pressed, event)
+        });
+
+        match tick {
+            Ok((is_trigger_pressed, event)) => {
+                was_trigger_pressed = is_trigger_pressed;
+                if let Some(event_data) = event {
+                    if let Err(e) = app.emit("voice-input-shortcut", event_data) {
+                        log::error!("[VoiceInputShortcut] Failed to emit event: {}", e);
+                    }
+                }
+            }
+            Err(err) => {
+                log::error!("[VoiceInputShortcut] Stopping listener after poll failure: {err}");
+                break;
+            }
+        }
+
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    VOICE_INPUT_LISTENER_RUNNING.store(false, Ordering::SeqCst);
+}
+
+fn register_voice_input_shortcut_impl<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    shortcut: String,
+) -> Result<String, String> {
+    let binding = parse_voice_shortcut(shortcut.trim())?;
+
+    if !crate::permissions::is_accessibility_granted() {
+        return Err(ACCESSIBILITY_REQUIRED_MSG.to_string());
+    }
+
+    if VOICE_INPUT_LISTENER_RUNNING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Ok(shortcut);
+    }
+
+    let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
+    let app_clone = app.clone();
+    let shortcut_clone = shortcut.clone();
+    let ready_error_tx = ready_tx.clone();
+    let handle = std::thread::spawn(move || {
+        if let Err(error) = catch_unwind_str("voice input listener thread", || {
+            run_voice_input_listener(app_clone, shortcut_clone, binding, ready_tx);
+        }) {
+            log::error!("[VoiceInputShortcut] Listener panicked: {error}");
+            VOICE_INPUT_LISTENER_RUNNING.store(false, Ordering::SeqCst);
+            let _ = ready_error_tx.send(Err(error));
+        }
+    });
+
+    let ready = match ready_rx.recv_timeout(LISTENER_READY_TIMEOUT) {
+        Ok(Ok(())) => true,
+        Ok(Err(err)) => {
+            log::error!("[VoiceInputShortcut] Listener init failed: {err}");
+            false
+        }
+        Err(RecvTimeoutError::Timeout) => {
+            log::error!("[VoiceInputShortcut] Listener init timed out");
+            false
+        }
+        Err(RecvTimeoutError::Disconnected) => {
+            log::error!("[VoiceInputShortcut] Listener exited before ready");
+            false
+        }
+    };
+
+    if !ready {
+        VOICE_INPUT_LISTENER_RUNNING.store(false, Ordering::SeqCst);
+        if handle.join().is_err() {
+            log::warn!("[VoiceInputShortcut] Listener thread panicked during init");
+        }
+        return Err(ACCESSIBILITY_REQUIRED_MSG.to_string());
+    }
+
+    let mut listener_handle = lock_recovered(
+        &VOICE_INPUT_LISTENER_HANDLE,
+        "register voice input listener handle",
+    );
+    *listener_handle = Some(handle);
+
+    let mut stored = lock_recovered(
+        &VOICE_INPUT_REGISTERED_SHORTCUTS,
+        "register voice input shortcut",
+    );
+    stored.push(shortcut.clone());
+
+    Ok(shortcut)
+}
+
+/// Tauri command: register a global shortcut for voice input
+#[tauri::command]
+pub fn register_voice_input_shortcut<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    shortcut: String,
+) -> Result<String, String> {
+    catch_unwind_result("register_voice_input_shortcut", || {
+        register_voice_input_shortcut_impl(app, shortcut)
+    })
+}
+
+/// Tauri command: unregister the voice input shortcut
+#[tauri::command]
+pub fn unregister_voice_input_shortcut<R: tauri::Runtime>(
+    _app: tauri::AppHandle<R>,
+) -> Result<(), String> {
+    catch_unwind_result("unregister_voice_input_shortcut", || {
+        stop_voice_input_listener();
+        Ok(())
+    })
+}
+
 // ============ File Operations ============
 
 /// Tauri command: open a URL via system handler (bypasses opener plugin ACL)

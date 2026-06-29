@@ -2,7 +2,6 @@
 
 import { Component, type ReactNode } from "react";
 import { withTranslation, type WithTranslation } from "react-i18next";
-import * as Sentry from "@sentry/react";
 import { RemixIcon } from "@/components/remix-icon";
 import { Button } from "./ui/button";
 
@@ -46,15 +45,6 @@ export class ErrorBoundary extends Component<
   componentDidCatch(error: Error, errorInfo: { componentStack: string }) {
     console.error("[ErrorBoundary] Caught error:", error);
     console.error("[ErrorBoundary] Component stack:", errorInfo.componentStack);
-
-    // Capture error in Sentry with React context
-    Sentry.captureException(error, {
-      contexts: {
-        react: {
-          componentStack: errorInfo.componentStack,
-        },
-      },
-    });
 
     // Save error info to session storage for debugging
     try {

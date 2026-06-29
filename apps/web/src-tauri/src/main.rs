@@ -5,8 +5,6 @@
 #![allow(unused)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use sentry::init;
-use std::sync::Arc;
 use tauri::Manager;
 use tauri::{Emitter, Listener};
 
@@ -231,8 +229,9 @@ fn panic_location_from_hook(info: &std::panic::PanicHookInfo<'_>) -> String {
 }
 
 fn install_panic_hook() {
-    // Install after Sentry init so `default_panic` keeps Sentry's structured
-    // panic integration and the standard stderr/backtrace output.
+    // `default_panic` is the previous panic hook (initially the standard
+    // stderr/backtrace hook). We invoke it after our tagged handling so the
+    // default output still runs.
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         if panic_guard::handle_guarded_panic_hook(info, default_panic.as_ref()) {
@@ -258,37 +257,6 @@ fn main() {
         env!("CARGO_PKG_VERSION")
     );
     println!("╚══════════════════════════════════════╝");
-
-    // Initialize Sentry for crash monitoring
-    // Note: In production, set SENTRY_DSN environment variable
-    let _sentry = if let Ok(dsn) = std::env::var("SENTRY_DSN") {
-        println!("📡 Initializing Sentry crash monitoring...");
-        Some(init(sentry::ClientOptions {
-            dsn: dsn.parse::<sentry::types::Dsn>().ok(),
-            release: Some(env!("CARGO_PKG_VERSION").into()),
-            environment: Some(if cfg!(debug_assertions) {
-                "development".into()
-            } else {
-                "production".into()
-            }),
-            before_send: Some(Arc::new(|event| {
-                if event
-                    .tags
-                    .get(panic_guard::SUPPRESS_DEFAULT_PANIC_EVENT_TAG)
-                    .map(String::as_str)
-                    == Some("true")
-                {
-                    None
-                } else {
-                    Some(event)
-                }
-            })),
-            ..Default::default()
-        }))
-    } else {
-        println!("⚠️  SENTRY_DSN not set, skipping Sentry initialization");
-        None
-    };
 
     install_panic_hook();
 
@@ -360,6 +328,8 @@ fn main() {
             // Chronicle (screen-aware memory)
             system::register_screen_capture_shortcut,
             system::unregister_screen_capture_shortcut,
+            system::register_voice_input_shortcut,
+            system::unregister_voice_input_shortcut,
             system::test_global_shortcut,
             // Chronicle screen capture (macOS only - uses xcap/ScreenCaptureKit)
             #[cfg(target_os = "macos")]

@@ -1,15 +1,24 @@
 import { auth } from "@/app/(auth)/auth";
 import {
+  DEFAULT_CHRONICLE_CAPTURE_SHORTCUT,
+  chronicleCaptureShortcutKeySchema,
+} from "@/lib/chronicle/chronicle-capture-shortcut-keys";
+import {
   getUserInsightSettings,
   getUserRoles,
+  getUserVisionLlmSettings,
+  removeUserRole,
   updateUserInsightSettings,
   upsertUserRole,
-  removeUserRole,
-  getLatestSurveyByUserId,
+  upsertUserVisionLlmSettings,
 } from "@/lib/db/queries";
-import { AppError } from "@openloomi/shared/errors";
 import { formatToLocalTime } from "@/lib/utils";
+import { AppError } from "@openloomi/shared/errors";
 import { NextResponse } from "next/server";
+import {
+  DEFAULT_VOICE_INPUT_SHORTCUT,
+  isValidVoiceShortcut,
+} from "@/lib/shortcuts/voice-input-shortcut";
 import { z } from "zod";
 
 const MANUAL_ROLE_SOURCE = "profile";
@@ -29,7 +38,7 @@ const insightSettingsSchema = z.object({
     .max(24 * 60)
     .optional(),
   roleKeys: z.array(z.string().max(128)).optional(),
-  aiSoulPrompt: z.string().max(5000).optional(),
+  aiSoulPrompt: z.string().max(5000).nullable().optional(),
   /** User-filled industry list, max 4 items (multi-select + custom) */
   industries: z
     .array(z.string().max(128))
@@ -37,6 +46,36 @@ const insightSettingsSchema = z.object({
     .optional(),
   /** User-filled work description, max 5000 characters */
   workDescription: z.string().max(MAX_IDENTITY_DESCRIPTION_LENGTH).optional(),
+  /** Chronicle screen-aware memory feature enabled */
+  chronicleEnabled: z.boolean().optional(),
+  /** One-shot boot retry after enable was blocked by missing permissions */
+  chronicleBootCheck: z.boolean().optional(),
+  /** Global key id for Chronicle capture (device_query Keycode name) */
+  chronicleCaptureShortcut: chronicleCaptureShortcutKeySchema.optional(),
+  /** Modifier+key combo for voice input (e.g. Shift+V) */
+  voiceInputShortcut: z
+    .string()
+    .max(32)
+    .refine(isValidVoiceShortcut, {
+      message: "Invalid voice input shortcut",
+    })
+    .optional(),
+  /** Minimum milliseconds between consecutive screen captures (min 3000) */
+  chronicleCaptureIntervalMs: z
+    .number()
+    .int()
+    .min(3000)
+    .max(60 * 60 * 1000)
+    .optional(),
+  /** Custom vision LLM override for Chronicle */
+  visionLlm: z
+    .object({
+      enabled: z.boolean().optional(),
+      apiUrl: z.string().max(512).optional(),
+      apiKey: z.string().max(2048).optional(),
+      model: z.string().max(128).optional(),
+    })
+    .optional(),
 });
 
 const DEFAULT_SETTINGS = {
@@ -45,12 +84,16 @@ const DEFAULT_SETTINGS = {
   language: "",
   refreshIntervalMinutes: 30,
   aiSoulPrompt: null as string | null,
+  chronicleEnabled: false,
+  chronicleCaptureShortcut: DEFAULT_CHRONICLE_CAPTURE_SHORTCUT,
+  chronicleCaptureIntervalMs: 5000,
+  chronicleBootCheck: false,
+  voiceInputShortcut: DEFAULT_VOICE_INPUT_SHORTCUT,
 };
 
 const sanitizeList = (values: string[] | undefined) => {
   if (!values) return undefined;
 
-  // Optimize: combine map and filter into single iteration
   const seen = new Set<string>();
   const result: string[] = [];
 
@@ -114,6 +157,11 @@ const serializeSettings = (settings: {
   lastActiveAt: Date | null;
   activityTier: "high" | "medium" | "low" | "dormant";
   aiSoulPrompt?: string | null;
+  chronicleEnabled?: boolean;
+  chronicleCaptureShortcut?: string;
+  chronicleCaptureIntervalMs?: number;
+  chronicleBootCheck?: boolean;
+  voiceInputShortcut?: string;
 }) => ({
   focusPeople: settings.focusPeople,
   focusTopics: settings.focusTopics,
@@ -128,6 +176,13 @@ const serializeSettings = (settings: {
     : null,
   activityTier: settings.activityTier,
   aiSoulPrompt: settings.aiSoulPrompt ?? null,
+  chronicleEnabled: settings.chronicleEnabled ?? false,
+  chronicleCaptureShortcut:
+    settings.chronicleCaptureShortcut ?? DEFAULT_CHRONICLE_CAPTURE_SHORTCUT,
+  chronicleCaptureIntervalMs: settings.chronicleCaptureIntervalMs ?? 5000,
+  chronicleBootCheck: settings.chronicleBootCheck ?? false,
+  voiceInputShortcut:
+    settings.voiceInputShortcut ?? DEFAULT_VOICE_INPUT_SHORTCUT,
 });
 
 /**
@@ -151,41 +206,23 @@ async function buildIdentitySummary(
       ? settings.identityIndustries
       : null;
   const workDescription =
-    fromSettings && typeof settings.identityWorkDescription === "string"
+    fromSettings && settings.identityWorkDescription
       ? settings.identityWorkDescription
       : null;
 
-  if (industries != null || workDescription != null) {
+  if (industries || workDescription) {
     return {
       industries: industries ?? [],
-      primaryIndustry: industries?.[0] ?? null,
-      workDescription,
-      lastUpdated: formatToLocalTime(new Date()),
+      workDescription: workDescription ?? null,
+      source: "settings" as const,
     };
   }
 
-  const latestSurvey = await getLatestSurveyByUserId(userId);
-  if (!latestSurvey) {
-    return {
-      industries: [],
-      primaryIndustry: null,
-      workDescription: null,
-      lastUpdated: null,
-    };
-  }
-  const surveyIndustries = latestSurvey.industry
-    ? latestSurvey.industry
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter((entry) => entry.length > 0)
-    : [];
+  // Fallback: not implemented in openloomi (no survey → identity table).
   return {
-    industries: surveyIndustries,
-    primaryIndustry: surveyIndustries[0] ?? null,
-    workDescription: latestSurvey.workDescription ?? null,
-    lastUpdated: latestSurvey.submittedAt
-      ? formatToLocalTime(latestSurvey.submittedAt)
-      : null,
+    industries: [] as string[],
+    workDescription: null as string | null,
+    source: "none" as const,
   };
 }
 
@@ -195,7 +232,11 @@ export async function GET() {
     return new AppError("unauthorized:insight").toResponse();
   }
 
-  const settings = await getUserInsightSettings(session.user.id);
+  const [settings, visionLlm] = await Promise.all([
+    getUserInsightSettings(session.user.id),
+    getUserVisionLlmSettings(session.user.id),
+  ]);
+
   const payload = settings
     ? serializeSettings(settings)
     : serializeSettings({
@@ -210,6 +251,19 @@ export async function GET() {
     ...payload,
     roles: await buildRolePreferencePayload(session.user.id),
     identity: await buildIdentitySummary(session.user.id, settings),
+    visionLlm: visionLlm
+      ? {
+          enabled: visionLlm.enabled,
+          apiUrl: visionLlm.apiUrl,
+          apiKey: visionLlm.apiKey,
+          model: visionLlm.model,
+        }
+      : {
+          enabled: false,
+          apiUrl: "",
+          apiKey: "",
+          model: "",
+        },
   });
 }
 
@@ -274,6 +328,15 @@ export async function PUT(request: Request) {
           aiSoulPrompt: current.aiSoulPrompt ?? null,
           identityIndustries: current.identityIndustries ?? null,
           identityWorkDescription: current.identityWorkDescription ?? null,
+          chronicleEnabled: current.chronicleEnabled ?? false,
+          chronicleCaptureShortcut:
+            current.chronicleCaptureShortcut ??
+            DEFAULT_CHRONICLE_CAPTURE_SHORTCUT,
+          chronicleCaptureIntervalMs:
+            current.chronicleCaptureIntervalMs ?? 5000,
+          chronicleBootCheck: current.chronicleBootCheck ?? false,
+          voiceInputShortcut:
+            current.voiceInputShortcut ?? DEFAULT_VOICE_INPUT_SHORTCUT,
         }
       : {
           ...DEFAULT_SETTINGS,
@@ -284,6 +347,11 @@ export async function PUT(request: Request) {
           aiSoulPrompt: null,
           identityIndustries: null,
           identityWorkDescription: null,
+          chronicleEnabled: false,
+          chronicleCaptureShortcut: DEFAULT_CHRONICLE_CAPTURE_SHORTCUT,
+          chronicleCaptureIntervalMs: 5000,
+          chronicleBootCheck: false,
+          voiceInputShortcut: DEFAULT_VOICE_INPUT_SHORTCUT,
         };
 
     const sanitizedIndustries =
@@ -321,10 +389,55 @@ export async function PUT(request: Request) {
         workDescriptionValue !== undefined
           ? workDescriptionValue
           : base.identityWorkDescription,
+      chronicleEnabled:
+        typeof payload.chronicleEnabled === "boolean"
+          ? payload.chronicleEnabled
+          : base.chronicleEnabled,
+      chronicleCaptureShortcut:
+        payload.chronicleCaptureShortcut !== undefined
+          ? payload.chronicleCaptureShortcut
+          : base.chronicleCaptureShortcut,
+      chronicleCaptureIntervalMs:
+        payload.chronicleCaptureIntervalMs !== undefined
+          ? payload.chronicleCaptureIntervalMs
+          : base.chronicleCaptureIntervalMs,
+      chronicleBootCheck:
+        typeof payload.chronicleBootCheck === "boolean"
+          ? payload.chronicleBootCheck
+          : base.chronicleBootCheck,
+      voiceInputShortcut:
+        payload.voiceInputShortcut !== undefined
+          ? payload.voiceInputShortcut
+          : base.voiceInputShortcut,
       lastUpdated: new Date(),
     };
 
     await updateUserInsightSettings(session.user.id, nextSettings);
+
+    // Custom vision LLM partial update. Each subfield is independently
+    // optional so the UI can debounce-save them individually (per the
+    // chosen 6B UX). Missing subfields fall back to whatever is in the DB.
+    let visionLlmRow = await getUserVisionLlmSettings(session.user.id);
+    if (payload.visionLlm) {
+      const v = payload.visionLlm;
+      const baseVision = visionLlmRow ?? {
+        enabled: false,
+        apiUrl: "",
+        apiKey: "",
+        model: "",
+      };
+      const nextVision = {
+        userId: session.user.id,
+        enabled:
+          typeof v.enabled === "boolean" ? v.enabled : baseVision.enabled,
+        apiUrl:
+          typeof v.apiUrl === "string" ? v.apiUrl.trim() : baseVision.apiUrl,
+        apiKey:
+          typeof v.apiKey === "string" ? v.apiKey.trim() : baseVision.apiKey,
+        model: typeof v.model === "string" ? v.model.trim() : baseVision.model,
+      };
+      visionLlmRow = await upsertUserVisionLlmSettings(nextVision);
+    }
 
     if (shouldUpdateRoles) {
       const normalized = normalizedRoleKeys ?? [];
@@ -365,6 +478,19 @@ export async function PUT(request: Request) {
       ...serializeSettings(nextSettings),
       roles: await buildRolePreferencePayload(session.user.id),
       identity: await buildIdentitySummary(session.user.id, nextSettings),
+      visionLlm: visionLlmRow
+        ? {
+            enabled: visionLlmRow.enabled,
+            apiUrl: visionLlmRow.apiUrl,
+            apiKey: visionLlmRow.apiKey,
+            model: visionLlmRow.model,
+          }
+        : {
+            enabled: false,
+            apiUrl: "",
+            apiKey: "",
+            model: "",
+          },
     });
   } catch (error) {
     console.error("[Insight Preferences] Failed to update settings", error);
