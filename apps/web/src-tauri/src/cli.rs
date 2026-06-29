@@ -6,16 +6,20 @@
 //! Non-interactive command-line entry point.
 
 #[cfg(debug_assertions)]
-use std::fs::OpenOptions;
-use std::io::Read;
+use std::collections::HashMap;
 #[cfg(debug_assertions)]
-use std::io::Write;
+use std::fs::OpenOptions;
+#[cfg(debug_assertions)]
+use std::io::{BufRead, BufReader};
+use std::io::{IsTerminal, Read, Write};
 use std::path::Path;
 #[cfg(debug_assertions)]
 use std::path::PathBuf;
 #[cfg(debug_assertions)]
 use std::process::{Child, Stdio};
 use std::process::{Command, ExitCode};
+#[cfg(debug_assertions)]
+use std::sync::mpsc;
 use std::time::Duration;
 #[cfg(debug_assertions)]
 use std::time::Instant;
@@ -37,6 +41,25 @@ const ONE_SHOT_API_HEALTH_TIMEOUT_SECS: u64 = 2;
 const OPENLOOMI_API_URL_ENV: &str = "OPENLOOMI_API_URL";
 // CI can provide auth without relying on the desktop token file.
 const OPENLOOMI_AUTH_TOKEN_ENV: &str = "OPENLOOMI_AUTH_TOKEN";
+// Claude SDK treats allowedTools as "auto-allowed", not merely "available".
+// Keep one-shot's default auto-allow surface read/search/skill-oriented, and
+// let protected tools flow through the SDK permission hook instead.
+const ONE_SHOT_DEFAULT_ALLOWED_TOOLS: &[&str] = &[
+    "Read",
+    "Edit",
+    "Write",
+    "Agent",
+    "Glob",
+    "Grep",
+    "Bash",
+    "WebSearch",
+    "WebFetch",
+    "Skill",
+    "Task",
+    "LSP",
+    "TodoWrite",
+];
+const ONE_SHOT_PERMISSION_GATED_TOOLS: &[&str] = &["Edit", "Write", "Bash", "Agent", "Task"];
 // Set to 0/false/off to force the older local HTTP route path in debug builds.
 #[cfg(debug_assertions)]
 const OPENLOOMI_CLI_DIRECT_ENV: &str = "OPENLOOMI_CLI_DIRECT";
@@ -62,6 +85,32 @@ struct OneShotArgs {
     model: Option<String>,
     provider: Option<String>,
     platform: Option<String>,
+    permission_mode: Option<OneShotPermissionMode>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OneShotPermissionMode {
+    Ask,
+    Deny,
+    Bypass,
+}
+
+impl OneShotPermissionMode {
+    fn cli_value(self) -> &'static str {
+        match self {
+            Self::Ask => "ask",
+            Self::Deny => "deny",
+            Self::Bypass => "bypass",
+        }
+    }
+
+    fn sdk_value(self) -> &'static str {
+        match self {
+            Self::Ask => "default",
+            Self::Deny => "dontAsk",
+            Self::Bypass => "bypassPermissions",
+        }
+    }
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -86,6 +135,8 @@ struct OneShotJsonOutput {
     event_count: usize,
     text_event_count: usize,
     tool_calls: Vec<String>,
+    tools: Vec<String>,
+    skills: Vec<String>,
     permission_requests: usize,
     cost: Option<f64>,
     duration_ms: Option<f64>,
@@ -126,10 +177,20 @@ struct OneShotAgentRequest<'a> {
     platform: &'a str,
     #[serde(rename = "workDir", skip_serializing_if = "Option::is_none")]
     work_dir: Option<String>,
+    #[serde(rename = "useProvidedWorkDir")]
+    use_provided_work_dir: bool,
     #[serde(rename = "modelConfig", skip_serializing_if = "Option::is_none")]
     model_config: Option<OneShotModelConfig<'a>>,
     #[serde(rename = "permissionMode")]
     permission_mode: &'static str,
+    #[serde(rename = "cliPermissionMode")]
+    cli_permission_mode: &'static str,
+    #[serde(rename = "allowedTools")]
+    allowed_tools: Vec<&'static str>,
+    #[serde(rename = "disallowedTools", skip_serializing_if = "Vec::is_empty")]
+    disallowed_tools: Vec<&'static str>,
+    #[serde(rename = "excludeTools", skip_serializing_if = "Vec::is_empty")]
+    exclude_tools: Vec<&'static str>,
     #[serde(rename = "skillsConfig")]
     skills_config: OneShotFeatureConfig,
     #[serde(rename = "mcpConfig")]
@@ -162,10 +223,77 @@ struct OneShotStreamResult {
     event_count: usize,
     text_event_count: usize,
     tool_calls: Vec<String>,
+    tools: Vec<String>,
+    skills: Vec<String>,
     permission_requests: usize,
     cost: Option<f64>,
     duration_ms: Option<f64>,
     error: Option<String>,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum DirectRunnerMessage {
+    Result {
+        output: OneShotStreamResult,
+    },
+    PermissionRequest {
+        #[serde(rename = "toolName")]
+        tool_name: String,
+        #[serde(rename = "toolUseID")]
+        tool_use_id: String,
+        #[serde(rename = "toolInput")]
+        tool_input: Option<serde_json::Value>,
+        #[serde(rename = "decisionReason")]
+        decision_reason: Option<String>,
+        #[serde(rename = "blockedPath")]
+        blocked_path: Option<String>,
+        title: Option<String>,
+        #[serde(rename = "displayName")]
+        display_name: Option<String>,
+        description: Option<String>,
+        #[serde(rename = "agentID")]
+        agent_id: Option<String>,
+    },
+}
+
+#[cfg(debug_assertions)]
+struct DirectRunnerPermissionRequest {
+    tool_name: String,
+    tool_use_id: String,
+    tool_input: Option<serde_json::Value>,
+    decision_reason: Option<String>,
+    blocked_path: Option<String>,
+    title: Option<String>,
+    display_name: Option<String>,
+    description: Option<String>,
+    agent_id: Option<String>,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Default)]
+struct DirectRunnerPermissionCache {
+    decisions_by_tool: HashMap<String, bool>,
+}
+
+#[cfg(debug_assertions)]
+impl DirectRunnerPermissionCache {
+    fn get(&self, tool_name: &str) -> Option<bool> {
+        self.decisions_by_tool
+            .get(normalize_permission_tool_name(tool_name))
+            .copied()
+    }
+
+    fn remember(&mut self, tool_name: &str, allow: bool) {
+        self.decisions_by_tool
+            .insert(normalize_permission_tool_name(tool_name).to_string(), allow);
+    }
+}
+
+#[cfg(debug_assertions)]
+fn normalize_permission_tool_name(tool_name: &str) -> &str {
+    tool_name.trim()
 }
 
 #[derive(Debug)]
@@ -266,6 +394,7 @@ fn parse_one_shot_args(args: &[String], json: bool) -> Result<OneShotArgs, CliEr
     let mut model = None;
     let mut provider = None;
     let mut platform = None;
+    let mut permission_mode = None;
     let mut prompt_parts: Vec<String> = Vec::new();
 
     let mut index = 0;
@@ -286,6 +415,14 @@ fn parse_one_shot_args(args: &[String], json: bool) -> Result<OneShotArgs, CliEr
                 index += 1;
                 platform = Some(require_value(args, index, "--platform")?);
             }
+            "--permission-mode" => {
+                index += 1;
+                permission_mode = Some(parse_permission_mode(&require_value(
+                    args,
+                    index,
+                    "--permission-mode",
+                )?)?);
+            }
             _ if arg.starts_with("--model=") => {
                 model = Some(require_inline_value(arg, "--model=")?);
             }
@@ -294,6 +431,12 @@ fn parse_one_shot_args(args: &[String], json: bool) -> Result<OneShotArgs, CliEr
             }
             _ if arg.starts_with("--platform=") => {
                 platform = Some(require_inline_value(arg, "--platform=")?);
+            }
+            _ if arg.starts_with("--permission-mode=") => {
+                permission_mode = Some(parse_permission_mode(&require_inline_value(
+                    arg,
+                    "--permission-mode=",
+                )?)?);
             }
             _ if arg.starts_with('-') => {
                 return Err(CliError::new(
@@ -315,7 +458,23 @@ fn parse_one_shot_args(args: &[String], json: bool) -> Result<OneShotArgs, CliEr
         model,
         provider,
         platform,
+        permission_mode,
     })
+}
+
+fn parse_permission_mode(value: &str) -> Result<OneShotPermissionMode, CliError> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "ask" => Ok(OneShotPermissionMode::Ask),
+        "deny" | "dontask" | "dont-ask" => Ok(OneShotPermissionMode::Deny),
+        "bypass" | "bypasspermissions" | "bypass-permissions" => Ok(OneShotPermissionMode::Bypass),
+        _ => Err(CliError::new(
+            "usage",
+            format!(
+                "unknown permission mode: {}. Expected ask, deny, or bypass.",
+                value
+            ),
+        )),
+    }
 }
 
 fn require_value(args: &[String], index: usize, flag: &'static str) -> Result<String, CliError> {
@@ -343,6 +502,7 @@ fn require_inline_value(arg: &str, prefix: &'static str) -> Result<String, CliEr
 
 async fn run_one_shot(options: OneShotArgs) -> ExitCode {
     let platform = one_shot_platform(&options);
+    let permission_mode = resolve_one_shot_permission_mode(&options);
 
     // Resolve local input and auth before touching the agent API. This keeps
     // usage/auth failures fast and gives scripts stable exit codes.
@@ -354,6 +514,19 @@ async fn run_one_shot(options: OneShotArgs) -> ExitCode {
     };
     let prompt_length = prompt.trim().len();
 
+    if options.permission_mode == Some(OneShotPermissionMode::Ask) && !can_prompt_for_permission() {
+        return print_one_shot_error(
+            &options,
+            prompt_length,
+            platform,
+            CliError::new(
+                "usage",
+                "--permission-mode ask requires an interactive terminal.",
+            ),
+            2,
+        );
+    }
+
     let auth_token = match load_cli_auth_token() {
         Ok(token) => token,
         Err(error) => {
@@ -361,7 +534,7 @@ async fn run_one_shot(options: OneShotArgs) -> ExitCode {
         }
     };
 
-    match execute_one_shot(&prompt, &options, &platform, &auth_token).await {
+    match execute_one_shot(&prompt, &options, &platform, &auth_token, permission_mode).await {
         Ok(result) => {
             let ok = result.error.is_none();
             if options.json {
@@ -380,6 +553,8 @@ async fn run_one_shot(options: OneShotArgs) -> ExitCode {
                     event_count: result.event_count,
                     text_event_count: result.text_event_count,
                     tool_calls: result.tool_calls,
+                    tools: result.tools,
+                    skills: result.skills,
                     permission_requests: result.permission_requests,
                     cost: result.cost,
                     duration_ms: result.duration_ms,
@@ -432,6 +607,8 @@ fn print_one_shot_error(
             event_count: 0,
             text_event_count: 0,
             tool_calls: Vec::new(),
+            tools: Vec::new(),
+            skills: Vec::new(),
             permission_requests: 0,
             cost: None,
             duration_ms: None,
@@ -455,6 +632,20 @@ fn one_shot_platform(options: &OneShotArgs) -> String {
         .filter(|platform| !platform.trim().is_empty())
         .unwrap_or(DEFAULT_ONE_SHOT_PLATFORM)
         .to_string()
+}
+
+fn resolve_one_shot_permission_mode(options: &OneShotArgs) -> OneShotPermissionMode {
+    options.permission_mode.unwrap_or_else(|| {
+        if can_prompt_for_permission() {
+            OneShotPermissionMode::Ask
+        } else {
+            OneShotPermissionMode::Deny
+        }
+    })
+}
+
+fn can_prompt_for_permission() -> bool {
+    std::io::stdin().is_terminal() && std::io::stderr().is_terminal()
 }
 
 fn load_cli_auth_token() -> Result<String, CliError> {
@@ -488,17 +679,28 @@ async fn execute_one_shot(
     options: &OneShotArgs,
     platform: &str,
     auth_token: &str,
+    permission_mode: OneShotPermissionMode,
 ) -> Result<OneShotStreamResult, CliError> {
-    let request_body = build_one_shot_agent_request(prompt, options, platform, auth_token);
+    let request_body =
+        build_one_shot_agent_request(prompt, options, platform, auth_token, permission_mode);
 
     #[cfg(debug_assertions)]
     if should_try_direct_one_shot_runner() {
         // Development builds can execute the native-agent runner directly, so
         // one-shot does not need to open the desktop app or start a hidden
         // Next.js service. The HTTP path below is kept as an explicit fallback.
-        match execute_one_shot_with_node_runner(&request_body).await {
+        match execute_one_shot_with_node_runner(&request_body, permission_mode).await {
             Ok(result) => return Ok(result),
             Err(error) if is_direct_runner_fallback_error(&error) => {
+                if permission_mode == OneShotPermissionMode::Ask {
+                    return Err(CliError::new(
+                        "direct_runner_unavailable",
+                        format!(
+                            "interactive CLI permissions require the direct native-agent runner, but it was unavailable: {}",
+                            error.message
+                        ),
+                    ));
+                }
                 eprintln!(
                     "warning: direct native-agent runner unavailable ({}); falling back to local API.",
                     error.message
@@ -506,6 +708,14 @@ async fn execute_one_shot(
             }
             Err(error) => return Err(error),
         }
+    }
+
+    #[cfg(not(debug_assertions))]
+    if permission_mode == OneShotPermissionMode::Ask {
+        return Err(CliError::new(
+            "direct_runner_unavailable",
+            "interactive CLI permissions require the direct native-agent runner. Use --permission-mode deny or --permission-mode bypass for HTTP fallback.",
+        ));
     }
 
     execute_one_shot_via_http(&request_body, auth_token).await
@@ -516,6 +726,7 @@ fn build_one_shot_agent_request<'a>(
     options: &'a OneShotArgs,
     platform: &'a str,
     auth_token: &'a str,
+    permission_mode: OneShotPermissionMode,
 ) -> OneShotAgentRequest<'a> {
     // Use the caller's current directory as the agent workspace so commands
     // launched from CI or scripts operate in the expected project folder.
@@ -528,13 +739,25 @@ fn build_one_shot_agent_request<'a>(
         provider: options.provider.as_deref(),
         platform,
         work_dir,
+        // CLI callers expect relative file operations to target the directory
+        // they launched from. Desktop/web sessions keep the historical
+        // sessions/<slug> wrapping because they do not set this flag.
+        use_provided_work_dir: true,
         model_config: options
             .model
             .as_deref()
             .map(|model| OneShotModelConfig { model: Some(model) }),
-        // Non-interactive mode cannot answer permission prompts, so deny
-        // unsafe tool calls instead of waiting on the TUI.
-        permission_mode: "dontAsk",
+        // SDK permission mode and CLI permission mode are intentionally split.
+        // The SDK mode controls when Claude Code asks for permission; the CLI
+        // mode controls how the direct runner answers each concrete request.
+        permission_mode: permission_mode.sdk_value(),
+        cli_permission_mode: permission_mode.cli_value(),
+        // allowedTools means "do not ask before using this tool". For ask/deny
+        // modes, remove protected tools from that list so they cannot skip the
+        // permission hook. Deny mode also hides them from the model entirely.
+        allowed_tools: one_shot_allowed_tools(permission_mode),
+        disallowed_tools: one_shot_disallowed_tools(permission_mode),
+        exclude_tools: Vec::new(),
         skills_config: OneShotFeatureConfig {
             enabled: true,
             user_dir_enabled: true,
@@ -548,6 +771,24 @@ fn build_one_shot_agent_request<'a>(
             app_dir_enabled: false,
         },
         auth_token: Some(auth_token),
+    }
+}
+
+fn one_shot_allowed_tools(permission_mode: OneShotPermissionMode) -> Vec<&'static str> {
+    match permission_mode {
+        OneShotPermissionMode::Bypass => ONE_SHOT_DEFAULT_ALLOWED_TOOLS.to_vec(),
+        OneShotPermissionMode::Ask | OneShotPermissionMode::Deny => ONE_SHOT_DEFAULT_ALLOWED_TOOLS
+            .iter()
+            .copied()
+            .filter(|tool| !ONE_SHOT_PERMISSION_GATED_TOOLS.contains(tool))
+            .collect(),
+    }
+}
+
+fn one_shot_disallowed_tools(permission_mode: OneShotPermissionMode) -> Vec<&'static str> {
+    match permission_mode {
+        OneShotPermissionMode::Deny => ONE_SHOT_PERMISSION_GATED_TOOLS.to_vec(),
+        OneShotPermissionMode::Ask | OneShotPermissionMode::Bypass => Vec::new(),
     }
 }
 
@@ -630,6 +871,7 @@ fn is_direct_runner_fallback_error(error: &CliError) -> bool {
 #[cfg(debug_assertions)]
 async fn execute_one_shot_with_node_runner(
     request_body: &OneShotAgentRequest<'_>,
+    permission_mode: OneShotPermissionMode,
 ) -> Result<OneShotStreamResult, CliError> {
     let web_dir = find_web_dir()?;
     let script = web_dir.join("scripts").join("native-agent-cli.ts");
@@ -703,62 +945,360 @@ async fn execute_one_shot_with_node_runner(
         )
     })?;
 
-    if let Some(mut stdin) = child.stdin.take() {
-        if let Err(error) = stdin.write_all(input_json.as_bytes()) {
-            terminate_child_process(&mut child);
+    let mut stdin = child.stdin.take().ok_or_else(|| {
+        CliError::new(
+            "direct_runner_start",
+            "direct native-agent runner stdin was not available.",
+        )
+    })?;
+    let stdout = child.stdout.take().ok_or_else(|| {
+        CliError::new(
+            "direct_runner_start",
+            "direct native-agent runner stdout was not available.",
+        )
+    })?;
+
+    writeln!(stdin, "{}", input_json).map_err(|error| {
+        terminate_child_process(&mut child);
+        CliError::new(
+            "direct_runner_start",
+            format!("failed to write direct runner input: {}", error),
+        )
+    })?;
+    stdin.flush().map_err(|error| {
+        terminate_child_process(&mut child);
+        CliError::new(
+            "direct_runner_start",
+            format!("failed to flush direct runner input: {}", error),
+        )
+    })?;
+
+    run_direct_runner_protocol(&mut child, stdin, stdout, permission_mode, &log_path)
+}
+
+#[cfg(debug_assertions)]
+fn run_direct_runner_protocol(
+    child: &mut Child,
+    mut stdin: std::process::ChildStdin,
+    stdout: std::process::ChildStdout,
+    permission_mode: OneShotPermissionMode,
+    log_path: &Path,
+) -> Result<OneShotStreamResult, CliError> {
+    let (line_tx, line_rx) = mpsc::channel::<Result<String, String>>();
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            let message = line.map_err(|error| error.to_string());
+            if line_tx.send(message).is_err() {
+                break;
+            }
+        }
+    });
+
+    let started_at = Instant::now();
+    let mut child_status = None;
+    let mut stdout_closed = false;
+    let mut result = None;
+    let mut permission_cache = DirectRunnerPermissionCache::default();
+
+    while !stdout_closed || child_status.is_none() {
+        if started_at.elapsed() > Duration::from_secs(ONE_SHOT_TIMEOUT_SECS) {
+            terminate_child_process(child);
             return Err(CliError::new(
-                "direct_runner_start",
-                format!("failed to write direct runner input: {}", error),
+                "direct_runner_timeout",
+                format!(
+                    "timed out after {} seconds waiting for direct native-agent runner. See log: {}",
+                    ONE_SHOT_TIMEOUT_SECS,
+                    log_path.display()
+                ),
             ));
         }
-    }
 
-    let status = wait_for_direct_runner(&mut child, &log_path)?;
-    let mut stdout = String::new();
-    if let Some(mut child_stdout) = child.stdout.take() {
-        child_stdout.read_to_string(&mut stdout).map_err(|error| {
-            CliError::new(
-                "direct_runner_output",
-                format!("failed to read direct runner output: {}", error),
-            )
-        })?;
-    }
-
-    let trimmed = stdout.trim();
-    if trimmed.is_empty() {
-        return Err(CliError::new(
-            "direct_runner_output",
-            format!(
-                "direct native-agent runner produced no JSON output. See log: {}",
-                log_path.display()
-            ),
-        ));
-    }
-
-    match serde_json::from_str::<OneShotStreamResult>(trimmed) {
-        Ok(result) => Ok(result),
-        Err(error) => {
-            if !status.success() {
+        match line_rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(Ok(line)) => {
+                handle_direct_runner_line(
+                    &line,
+                    &mut stdin,
+                    permission_mode,
+                    &mut permission_cache,
+                    &mut result,
+                )?;
+            }
+            Ok(Err(error)) => {
                 return Err(CliError::new(
                     "direct_runner_output",
                     format!(
-                        "direct native-agent runner exited with status {} and invalid JSON output: {}. See log: {}",
-                        status,
+                        "failed to read direct native-agent runner output: {}. See log: {}",
                         error,
                         log_path.display()
                     ),
                 ));
             }
-            Err(CliError::new(
-                "direct_runner_output",
-                format!(
-                    "failed to parse direct native-agent runner JSON output: {}. See log: {}",
-                    error,
-                    log_path.display()
-                ),
-            ))
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                stdout_closed = true;
+            }
+        }
+
+        if child_status.is_none() {
+            match child.try_wait() {
+                Ok(Some(status)) => child_status = Some(status),
+                Ok(None) => {}
+                Err(error) => {
+                    return Err(CliError::new(
+                        "direct_runner_output",
+                        format!(
+                            "failed to monitor direct native-agent runner: {}. See log: {}",
+                            error,
+                            log_path.display()
+                        ),
+                    ));
+                }
+            }
         }
     }
+
+    let status = child_status.ok_or_else(|| {
+        CliError::new(
+            "direct_runner_output",
+            "direct native-agent runner exited without a process status.",
+        )
+    })?;
+
+    match result {
+        Some(result) => Ok(result),
+        None if !status.success() => Err(CliError::new(
+            "direct_runner_output",
+            format!(
+                "direct native-agent runner exited with status {} and no JSON result. See log: {}",
+                status,
+                log_path.display()
+            ),
+        )),
+        None => Err(CliError::new(
+            "direct_runner_output",
+            format!(
+                "direct native-agent runner produced no JSON result. See log: {}",
+                log_path.display()
+            ),
+        )),
+    }
+}
+
+#[cfg(debug_assertions)]
+fn handle_direct_runner_line(
+    line: &str,
+    stdin: &mut std::process::ChildStdin,
+    permission_mode: OneShotPermissionMode,
+    permission_cache: &mut DirectRunnerPermissionCache,
+    result: &mut Option<OneShotStreamResult>,
+) -> Result<(), CliError> {
+    let line = line.trim();
+    if line.is_empty() {
+        return Ok(());
+    }
+
+    let message = serde_json::from_str::<DirectRunnerMessage>(line).map_err(|error| {
+        CliError::new(
+            "direct_runner_output",
+            format!("failed to parse direct runner protocol line: {}", error),
+        )
+    })?;
+
+    match message {
+        DirectRunnerMessage::Result { output } => {
+            *result = Some(output);
+        }
+        DirectRunnerMessage::PermissionRequest {
+            tool_name,
+            tool_use_id,
+            tool_input,
+            decision_reason,
+            blocked_path,
+            title,
+            display_name,
+            description,
+            agent_id,
+        } => {
+            let request = DirectRunnerPermissionRequest {
+                tool_name,
+                tool_use_id,
+                tool_input,
+                decision_reason,
+                blocked_path,
+                title,
+                display_name,
+                description,
+                agent_id,
+            };
+            let allow =
+                resolve_direct_runner_permission(&request, permission_mode, permission_cache)?;
+            send_direct_runner_permission_response(stdin, &request.tool_use_id, allow)?;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(debug_assertions)]
+fn resolve_direct_runner_permission(
+    request: &DirectRunnerPermissionRequest,
+    permission_mode: OneShotPermissionMode,
+    permission_cache: &mut DirectRunnerPermissionCache,
+) -> Result<bool, CliError> {
+    match permission_mode {
+        OneShotPermissionMode::Bypass => Ok(true),
+        OneShotPermissionMode::Deny => {
+            eprintln!(
+                "denied tool request without prompting: {}",
+                request.tool_name
+            );
+            Ok(false)
+        }
+        OneShotPermissionMode::Ask => {
+            if let Some(allow) = permission_cache.get(&request.tool_name) {
+                eprintln!(
+                    "reusing previous permission decision for tool {}: {}",
+                    request.tool_name,
+                    if allow { "allow" } else { "deny" }
+                );
+                return Ok(allow);
+            }
+
+            let allow = prompt_for_tool_permission(request)?;
+            permission_cache.remember(&request.tool_name, allow);
+            Ok(allow)
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+fn prompt_for_tool_permission(request: &DirectRunnerPermissionRequest) -> Result<bool, CliError> {
+    if !can_prompt_for_permission() {
+        return Err(CliError::new(
+            "permission_prompt",
+            "cannot prompt for tool permission because stdin/stderr is not interactive.",
+        ));
+    }
+
+    eprintln!();
+    if let Some(title) = request
+        .title
+        .as_deref()
+        .filter(|title| !title.trim().is_empty())
+    {
+        eprintln!("{}", title);
+    } else {
+        eprintln!(
+            "Agent requests permission to use tool: {}",
+            request.tool_name
+        );
+    }
+    if let Some(display_name) = request
+        .display_name
+        .as_deref()
+        .filter(|name| !name.trim().is_empty())
+    {
+        eprintln!("Action: {}", display_name);
+    }
+    if let Some(description) = request
+        .description
+        .as_deref()
+        .filter(|description| !description.trim().is_empty())
+    {
+        eprintln!("Description: {}", description);
+    }
+    if let Some(reason) = request
+        .decision_reason
+        .as_deref()
+        .filter(|reason| !reason.trim().is_empty())
+    {
+        eprintln!("Reason: {}", reason);
+    }
+    if let Some(path) = request
+        .blocked_path
+        .as_deref()
+        .filter(|path| !path.trim().is_empty())
+    {
+        eprintln!("Path: {}", path);
+    }
+    if let Some(input) = &request.tool_input {
+        eprintln!("Input: {}", format_permission_input(input));
+    }
+    if let Some(agent_id) = request
+        .agent_id
+        .as_deref()
+        .filter(|agent_id| !agent_id.trim().is_empty())
+    {
+        eprintln!("Agent ID: {}", agent_id);
+    }
+    eprintln!(
+        "This decision will be reused for later {} calls in this run.",
+        request.tool_name
+    );
+    eprint!("Allow this tool for this run? [y/N]: ");
+    read_yes_no_from_stdin()
+}
+
+fn read_yes_no_from_stdin() -> Result<bool, CliError> {
+    std::io::stderr().flush().map_err(|error| {
+        CliError::new(
+            "permission_prompt",
+            format!("failed to flush permission prompt: {}", error),
+        )
+    })?;
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer).map_err(|error| {
+        CliError::new(
+            "permission_prompt",
+            format!("failed to read permission response: {}", error),
+        )
+    })?;
+
+    Ok(matches!(
+        answer.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
+}
+
+#[cfg(debug_assertions)]
+fn format_permission_input(input: &serde_json::Value) -> String {
+    const MAX_INPUT_CHARS: usize = 1200;
+    let formatted = serde_json::to_string_pretty(input).unwrap_or_else(|_| {
+        serde_json::to_string(input).unwrap_or_else(|_| "<unprintable>".into())
+    });
+    if formatted.chars().count() <= MAX_INPUT_CHARS {
+        return formatted;
+    }
+
+    let mut truncated: String = formatted.chars().take(MAX_INPUT_CHARS).collect();
+    truncated.push_str("...");
+    truncated
+}
+
+#[cfg(debug_assertions)]
+fn send_direct_runner_permission_response(
+    stdin: &mut std::process::ChildStdin,
+    tool_use_id: &str,
+    allow: bool,
+) -> Result<(), CliError> {
+    let response = serde_json::json!({
+        "kind": "permission_response",
+        "toolUseID": tool_use_id,
+        "behavior": if allow { "allow" } else { "deny" },
+    });
+    writeln!(stdin, "{}", response).map_err(|error| {
+        CliError::new(
+            "direct_runner_start",
+            format!("failed to write permission response: {}", error),
+        )
+    })?;
+    stdin.flush().map_err(|error| {
+        CliError::new(
+            "direct_runner_start",
+            format!("failed to flush permission response: {}", error),
+        )
+    })
 }
 
 #[cfg(debug_assertions)]
@@ -790,40 +1330,6 @@ fn one_shot_web_data_dir() -> PathBuf {
     }
 
     crate::storage::get_data_dir()
-}
-
-#[cfg(debug_assertions)]
-fn wait_for_direct_runner(
-    child: &mut Child,
-    log_path: &Path,
-) -> Result<std::process::ExitStatus, CliError> {
-    let started_at = Instant::now();
-    while started_at.elapsed() < Duration::from_secs(ONE_SHOT_TIMEOUT_SECS) {
-        match child.try_wait() {
-            Ok(Some(status)) => return Ok(status),
-            Ok(None) => std::thread::sleep(Duration::from_millis(200)),
-            Err(error) => {
-                return Err(CliError::new(
-                    "direct_runner_output",
-                    format!(
-                        "failed to monitor direct native-agent runner: {}. See log: {}",
-                        error,
-                        log_path.display()
-                    ),
-                ));
-            }
-        }
-    }
-
-    terminate_child_process(child);
-    Err(CliError::new(
-        "direct_runner_timeout",
-        format!(
-            "timed out after {} seconds waiting for direct native-agent runner. See log: {}",
-            ONE_SHOT_TIMEOUT_SECS,
-            log_path.display()
-        ),
-    ))
 }
 
 #[cfg(debug_assertions)]
@@ -1175,6 +1681,12 @@ fn record_agent_event(result: &mut OneShotStreamResult, event: &serde_json::Valu
             // runs without dumping full tool inputs.
             if let Some(name) = event.get("name").and_then(serde_json::Value::as_str) {
                 result.tool_calls.push(name.to_string());
+                push_unique_string(&mut result.tools, name);
+                if name == "Skill" {
+                    if let Some(skill) = extract_skill_name(event.get("input")) {
+                        push_unique_string(&mut result.skills, &skill);
+                    }
+                }
             }
         }
         "permission_request" => {
@@ -1193,6 +1705,39 @@ fn record_agent_event(result: &mut OneShotStreamResult, event: &serde_json::Valu
                 .or_else(|| Some("agent returned an error event".to_string()));
         }
         _ => {}
+    }
+}
+
+fn push_unique_string(values: &mut Vec<String>, value: &str) {
+    if !values.iter().any(|existing| existing == value) {
+        values.push(value.to_string());
+    }
+}
+
+fn extract_skill_name(input: Option<&serde_json::Value>) -> Option<String> {
+    let input = input?;
+    if let Some(name) = input.as_str() {
+        return non_empty_string(name);
+    }
+
+    let object = input.as_object()?;
+    for key in ["skill", "skillName", "skill_name", "name", "command"] {
+        if let Some(name) = object.get(key).and_then(serde_json::Value::as_str) {
+            if let Some(name) = non_empty_string(name) {
+                return Some(name);
+            }
+        }
+    }
+
+    None
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
     }
 }
 
@@ -1755,8 +2300,8 @@ fn print_help() {
         r#"openloomi-ctl {}
 
 Usage:
-  openloomi-ctl --one-shot <prompt> [--json] [--model <model>] [--provider <provider>] [--platform <platform>]
-  openloomi-ctl --one-shot --stdin [--json] [--model <model>] [--provider <provider>] [--platform <platform>]
+  openloomi-ctl --one-shot <prompt> [--json] [--model <model>] [--provider <provider>] [--platform <platform>] [--permission-mode <mode>]
+  openloomi-ctl --one-shot --stdin [--json] [--model <model>] [--provider <provider>] [--platform <platform>] [--permission-mode <mode>]
   openloomi-ctl update --check [--json]
   openloomi-ctl --version
   openloomi-ctl --help
@@ -1768,6 +2313,8 @@ Options:
       --model <model>     Override the default model for one-shot execution
       --provider <name>   Override the agent provider for one-shot execution
       --platform <name>   Override the platform context for one-shot execution
+      --permission-mode <mode>
+                           Tool permissions: ask, deny, or bypass (default: ask on TTY, deny otherwise)
       --check             Run update preflight checks without installing updates
   -V, --version           Print version
   -h, --help              Print help
@@ -1815,8 +2362,81 @@ mod tests {
                 model: Some("gpt-test".to_string()),
                 provider: Some("claude".to_string()),
                 platform: Some("cli".to_string()),
+                permission_mode: None,
             })
         );
+    }
+
+    #[test]
+    fn parses_one_shot_permission_mode() {
+        assert_eq!(
+            parse_args(&args(&["--one-shot", "hello", "--permission-mode", "ask",])).unwrap(),
+            CliCommand::OneShot(OneShotArgs {
+                prompt: Some("hello".to_string()),
+                read_stdin: false,
+                json: false,
+                model: None,
+                provider: None,
+                platform: None,
+                permission_mode: Some(OneShotPermissionMode::Ask),
+            })
+        );
+
+        assert_eq!(
+            parse_args(&args(&[
+                "--one-shot",
+                "hello",
+                "--permission-mode",
+                "bypass",
+            ]))
+            .unwrap(),
+            CliCommand::OneShot(OneShotArgs {
+                prompt: Some("hello".to_string()),
+                read_stdin: false,
+                json: false,
+                model: None,
+                provider: None,
+                platform: None,
+                permission_mode: Some(OneShotPermissionMode::Bypass),
+            })
+        );
+    }
+
+    #[test]
+    fn permission_modes_gate_protected_tools() {
+        let ask_tools = one_shot_allowed_tools(OneShotPermissionMode::Ask);
+        assert!(ask_tools.contains(&"Read"));
+        assert!(ask_tools.contains(&"Skill"));
+        assert!(!ask_tools.contains(&"Write"));
+        assert!(!ask_tools.contains(&"Agent"));
+        assert!(one_shot_disallowed_tools(OneShotPermissionMode::Ask).is_empty());
+
+        let deny_tools = one_shot_allowed_tools(OneShotPermissionMode::Deny);
+        assert!(!deny_tools.contains(&"Bash"));
+        assert!(!deny_tools.contains(&"Task"));
+        assert_eq!(
+            one_shot_disallowed_tools(OneShotPermissionMode::Deny),
+            vec!["Edit", "Write", "Bash", "Agent", "Task"]
+        );
+
+        let bypass_tools = one_shot_allowed_tools(OneShotPermissionMode::Bypass);
+        assert!(bypass_tools.contains(&"Write"));
+        assert!(bypass_tools.contains(&"Bash"));
+        assert!(bypass_tools.contains(&"Agent"));
+        assert!(one_shot_disallowed_tools(OneShotPermissionMode::Bypass).is_empty());
+    }
+
+    #[test]
+    fn direct_runner_permission_cache_is_per_tool() {
+        let mut cache = DirectRunnerPermissionCache::default();
+        assert_eq!(cache.get("Bash"), None);
+
+        cache.remember("Bash", true);
+        cache.remember("Write", false);
+
+        assert_eq!(cache.get("Bash"), Some(true));
+        assert_eq!(cache.get("Write"), Some(false));
+        assert_eq!(cache.get("Read"), None);
     }
 
     #[test]
@@ -1850,6 +2470,8 @@ mod tests {
             "data: {\"type\":\"session\",\"sessionId\":\"sess-1\"}\n\n",
             "data: {\"type\":\"text\",\"content\":\"Hello\"}\n\n",
             "data: {\"type\":\"tool_use\",\"name\":\"Read\"}\n\n",
+            "data: {\"type\":\"tool_use\",\"name\":\"Skill\",\"input\":{\"skillName\":\"writer\"}}\n\n",
+            "data: {\"type\":\"tool_use\",\"name\":\"Read\"}\n\n",
             "data: {\"type\":\"text\",\"content\":\" world\"}\n\n",
             "data: {\"type\":\"result\",\"cost\":0.12,\"duration\":345}\n\n",
             "data: {\"type\":\"done\"}\n\n",
@@ -1859,7 +2481,9 @@ mod tests {
         assert_eq!(result.response, "Hello world");
         assert_eq!(result.session_id.as_deref(), Some("sess-1"));
         assert_eq!(result.text_event_count, 2);
-        assert_eq!(result.tool_calls, vec!["Read"]);
+        assert_eq!(result.tool_calls, vec!["Read", "Skill", "Read"]);
+        assert_eq!(result.tools, vec!["Read", "Skill"]);
+        assert_eq!(result.skills, vec!["writer"]);
         assert_eq!(result.cost, Some(0.12));
         assert_eq!(result.duration_ms, Some(345.0));
         assert_eq!(result.error, None);

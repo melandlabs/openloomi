@@ -32,6 +32,7 @@ export interface NativeAgentRequest {
   phase?: "plan" | "execute";
   planId?: string;
   workDir?: string;
+  useProvidedWorkDir?: boolean;
   taskId?: string;
   provider?: "claude" | "deepagents";
   modelConfig?: {
@@ -40,6 +41,9 @@ export interface NativeAgentRequest {
     model?: string;
     thinkingLevel?: "disabled" | "low" | "adaptive";
   };
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  excludeTools?: string[];
   sandboxConfig?: SandboxConfig;
   skillsConfig?: {
     enabled: boolean;
@@ -84,6 +88,10 @@ export interface NativeAgentRunnerContext {
   session: AuthenticatedNativeAgentSession;
   userId: string;
   abortController: AbortController;
+  permissionHandler?: (request: PermissionRequest) => Promise<{
+    behavior: "allow" | "deny";
+    updatedInput?: Record<string, unknown>;
+  }>;
 }
 
 export interface NativeAgentRun {
@@ -167,6 +175,7 @@ export async function runNativeAgentRequest(
       finalPrompt,
       agentOptions,
       permissionRequestEventQueue,
+      permissionHandler: context.permissionHandler,
     });
   } else {
     selectedGenerator = createRunGenerator({
@@ -175,6 +184,7 @@ export async function runNativeAgentRequest(
       agentOptions,
       permissionRequestEventQueue,
       pendingSudoCommands,
+      permissionHandler: context.permissionHandler,
     });
   }
 
@@ -249,6 +259,7 @@ function buildAgentOptions(
     authToken: body.authToken,
     conversation: body.conversation,
     cwd: body.workDir,
+    useProvidedWorkDir: body.useProvidedWorkDir,
     taskId: body.taskId,
     sandbox: body.sandboxConfig,
     skillsConfig: body.skillsConfig,
@@ -257,7 +268,9 @@ function buildAgentOptions(
     images: body.images,
     focusedInsightIds: body.focusedInsightIds,
     focusedInsights: body.focusedInsights,
-    allowedTools: DEFAULT_ALLOWED_TOOLS,
+    allowedTools: body.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
+    disallowedTools: body.disallowedTools,
+    excludeTools: body.excludeTools,
     aiSoulPrompt: userSettings.aiSoulPrompt,
     language: userSettings.language,
     abortController: context.abortController,
@@ -270,6 +283,11 @@ async function buildNativeAgentPrompt(
   session: AuthenticatedNativeAgentSession,
 ): Promise<string> {
   const contextParts: string[] = [];
+
+  const permissionContext = buildPermissionPromptContext(body);
+  if (permissionContext) {
+    contextParts.push(permissionContext);
+  }
 
   if (body.ragDocuments && body.ragDocuments.length > 0) {
     contextParts.push(buildRagDocumentPromptContext(body.ragDocuments));
@@ -286,6 +304,17 @@ async function buildNativeAgentPrompt(
   }
 
   return finalPrompt;
+}
+
+function buildPermissionPromptContext(body: NativeAgentRequest): string {
+  if (!body.disallowedTools || body.disallowedTools.length === 0) {
+    return "";
+  }
+
+  // Non-interactive CLI runs hide protected tools instead of waiting forever
+  // for a desktop permission dialog. Make that explicit so the model does not
+  // claim it completed filesystem/shell actions it was not allowed to perform.
+  return `[System Note: This run has the following tools disabled by permission policy: ${body.disallowedTools.join(", ")}. Do not claim that you completed an action requiring a disabled tool. If the user requests such an action, explain that it cannot be performed in the current permission mode and provide a safe command or next step instead.]\n\n`;
 }
 
 function buildRagDocumentPromptContext(
@@ -537,12 +566,14 @@ function createExecuteGenerator({
   finalPrompt,
   agentOptions,
   permissionRequestEventQueue,
+  permissionHandler,
 }: {
   agent: IAgent;
   planId: string;
   finalPrompt: string;
   agentOptions: AgentOptions;
   permissionRequestEventQueue: PermissionRequest[];
+  permissionHandler?: NativeAgentRunnerContext["permissionHandler"];
 }): AsyncGenerator<AgentMessage> {
   const insightChangeEventQueue: InsightChange[] = [];
 
@@ -556,8 +587,12 @@ function createExecuteGenerator({
       },
       onPermissionRequest: async (request) => {
         console.log("[AgentAPI] Permission request (execute mode):", request);
-        permissionRequestEventQueue.push(request);
-        return waitForPermissionResponse(request);
+        return resolvePermissionRequest({
+          request,
+          agentOptions,
+          permissionRequestEventQueue,
+          permissionHandler,
+        });
       },
     });
 
@@ -577,12 +612,14 @@ function createRunGenerator({
   agentOptions,
   permissionRequestEventQueue,
   pendingSudoCommands,
+  permissionHandler,
 }: {
   agent: IAgent;
   finalPrompt: string;
   agentOptions: AgentOptions;
   permissionRequestEventQueue: PermissionRequest[];
   pendingSudoCommands: Map<string, { command: string; cwd?: string }>;
+  permissionHandler?: NativeAgentRunnerContext["permissionHandler"];
 }): AsyncGenerator<AgentMessage> {
   const insightChangeEventQueue: InsightChange[] = [];
 
@@ -609,8 +646,12 @@ function createRunGenerator({
           }
         }
 
-        permissionRequestEventQueue.push(request);
-        return waitForPermissionResponse(request);
+        return resolvePermissionRequest({
+          request,
+          agentOptions,
+          permissionRequestEventQueue,
+          permissionHandler,
+        });
       },
     });
 
@@ -646,6 +687,36 @@ function createRunGenerator({
       );
     }
   })();
+}
+
+function resolvePermissionRequest({
+  request,
+  agentOptions,
+  permissionRequestEventQueue,
+  permissionHandler,
+}: {
+  request: PermissionRequest;
+  agentOptions: AgentOptions;
+  permissionRequestEventQueue: PermissionRequest[];
+  permissionHandler?: NativeAgentRunnerContext["permissionHandler"];
+}): Promise<{
+  behavior: "allow" | "deny";
+  updatedInput?: Record<string, unknown>;
+}> {
+  if (permissionHandler) {
+    return permissionHandler(request);
+  }
+
+  permissionRequestEventQueue.push(request);
+  if (agentOptions.permissionMode === "dontAsk") {
+    console.log(
+      "[AgentAPI] Permission request auto-denied because permissionMode is dontAsk:",
+      request,
+    );
+    return Promise.resolve({ behavior: "deny" });
+  }
+
+  return waitForPermissionResponse(request);
 }
 
 function waitForPermissionResponse(request: PermissionRequest): Promise<{

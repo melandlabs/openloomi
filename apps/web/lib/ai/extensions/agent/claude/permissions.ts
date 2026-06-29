@@ -7,6 +7,14 @@ import type { AgentOptions } from "@openloomi/ai/agent/types";
 
 import type { ClaudeRuntimeLogger } from "./skills";
 
+function toPermissionInputRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
 /**
  * Bridge OpenLoomi's permission request callback into the Claude SDK
  * canUseTool hook.
@@ -52,6 +60,10 @@ export function createCanUseToolOption({
         toolUseID: canUseToolOptions.toolUseID,
         decisionReason: canUseToolOptions.decisionReason,
         blockedPath: canUseToolOptions.blockedPath,
+        title: canUseToolOptions.title,
+        displayName: canUseToolOptions.displayName,
+        description: canUseToolOptions.description,
+        agentID: canUseToolOptions.agentID,
       });
 
       if (!result) {
@@ -74,7 +86,12 @@ export function createCanUseToolOption({
       if (result.behavior === "allow") {
         return {
           behavior: "allow",
-          updatedInput: result.updatedInput,
+          // Current Claude SDK runtime validation expects allow decisions to
+          // carry a record-shaped updatedInput. If OpenLoomi did not transform
+          // the input, echo the original tool input back unchanged.
+          updatedInput: toPermissionInputRecord(
+            result.updatedInput ?? toolInput,
+          ),
           toolUseID: canUseToolOptions.toolUseID,
         };
       }

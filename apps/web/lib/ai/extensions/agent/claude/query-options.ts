@@ -88,7 +88,10 @@ export function createClaudeQueryOptions({
   settingSources: ("user" | "project")[];
   settings?: string;
   allowedTools: string[];
-  agentOptions?: Pick<AgentOptions, "permissionMode" | "onPermissionRequest">;
+  agentOptions?: Pick<
+    AgentOptions,
+    "permissionMode" | "onPermissionRequest" | "disallowedTools"
+  >;
   abortController: AbortController;
   env: Record<string, string>;
   config: AgentConfig;
@@ -105,6 +108,8 @@ export function createClaudeQueryOptions({
   maxTurns?: number;
   includePartialMessages?: boolean;
 }): Options {
+  const effectivePermissionMode = permissionMode || "bypassPermissions";
+
   return {
     cwd,
     // `tools` can be omitted for plan-only calls; run/execute use the Claude
@@ -113,10 +118,14 @@ export function createClaudeQueryOptions({
     allowedTools,
     settingSources,
     settings,
-    // Keep bypassPermissions as the historical default. When a stricter mode
-    // is supplied, createCanUseToolOption wires it to OpenLoomi's callback.
-    permissionMode: permissionMode || "bypassPermissions",
-    allowDangerouslySkipPermissions: true,
+    // Keep bypassPermissions as the historical default. Any stricter mode
+    // registers canUseTool below so desktop UI and CLI prompts can decide.
+    permissionMode: effectivePermissionMode,
+    ...(agentOptions?.disallowedTools?.length
+      ? { disallowedTools: agentOptions.disallowedTools }
+      : {}),
+    allowDangerouslySkipPermissions:
+      effectivePermissionMode === "bypassPermissions",
     abortController,
     env,
     model: config.model,
@@ -216,6 +225,26 @@ export function attachClaudeMcpServers({
     const label = mode === "execute" ? "Execute: " : "";
     logger.info(
       `[Claude ${sessionId}] ${label}Excluded tools: ${agentOptions.excludeTools.join(", ")}`,
+    );
+  }
+
+  // disallowedTools is stronger than allowedTools: it removes tools from the
+  // model context. Filter any auto-allowed list after MCP attachment so a
+  // caller cannot accidentally re-add a forbidden tool through another source.
+  if (agentOptions.disallowedTools && agentOptions.disallowedTools.length > 0) {
+    const disallowedSet = new Set(agentOptions.disallowedTools);
+    queryOptions.allowedTools = (queryOptions.allowedTools || []).filter(
+      (tool: string) => !disallowedSet.has(tool),
+    );
+    queryOptions.disallowedTools = [
+      ...new Set([
+        ...(queryOptions.disallowedTools || []),
+        ...agentOptions.disallowedTools,
+      ]),
+    ];
+    const label = mode === "execute" ? "Execute: " : "";
+    logger.info(
+      `[Claude ${sessionId}] ${label}Disallowed tools: ${agentOptions.disallowedTools.join(", ")}`,
     );
   }
 

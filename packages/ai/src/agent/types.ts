@@ -393,8 +393,12 @@ export interface AgentOptions {
   supplementalInput?: AgentSupplementalInputSource;
   /** Working directory */
   cwd?: string;
+  /** Use cwd exactly instead of wrapping it in an OpenLoomi session folder */
+  useProvidedWorkDir?: boolean;
   /** Allowed tools */
   allowedTools?: string[];
+  /** Tools that must be unavailable even if the provider preset exposes them */
+  disallowedTools?: string[];
   /** Tools to exclude from the allowed list */
   excludeTools?: string[];
   /**
@@ -508,6 +512,10 @@ export interface AgentOptions {
     toolUseID: string;
     decisionReason?: string;
     blockedPath?: string;
+    title?: string;
+    displayName?: string;
+    description?: string;
+    agentID?: string;
   }) => Promise<{
     behavior: "allow" | "deny";
     updatedInput?: Record<string, unknown>;

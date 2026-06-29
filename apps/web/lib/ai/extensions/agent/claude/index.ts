@@ -856,24 +856,12 @@ function getLanguageInstruction(language: string | undefined): string {
   return "\n\n**Language Preference**:\nPlease reply in English.\n";
 }
 
-/**
- * Get or create session working directory
- * If workDir already contains a valid session path (from frontend), use it directly
- * Otherwise, generate a new session folder
- * NOTE: This function only computes the path, it does NOT create the directory
- */
-function getSessionWorkDir(
-  workDir: string = DEFAULT_WORK_DIR,
-  prompt?: string,
-  taskId?: string,
-): string {
+function normalizeWorkDirBase(workDir: string = DEFAULT_WORK_DIR): string {
   const expandedPath = expandPath(workDir);
 
   // DEFENSIVE: Ensure the path is absolute. On Windows, spawn() with a
-  // relative cwd falls back to process.cwd(), which can cause the agent
-  // to run in the wrong directory (e.g. cli-bundle instead of the session dir).
-  // Paths starting with ~ (unexpanded), relative paths, or suspicious values
-  // like "cli-bundle" are converted to absolute paths under process.cwd().
+  // relative cwd falls back to process.cwd(), which can cause the agent to run
+  // in the wrong directory.
   const os = platform();
   const isAbsolute =
     os === "win32"
@@ -885,19 +873,55 @@ function getSessionWorkDir(
     expandedPath.startsWith("cli-bundle") ||
     expandedPath.includes("/cli-bundle") ||
     expandedPath.includes("\\cli-bundle");
-  let safePath = expandedPath;
-  if (suspiciousPath) {
-    safePath = join(process.cwd(), expandedPath);
-    console.warn(
-      "[Claude] getSessionWorkDir: suspicious or relative path detected, resolving to cwd:",
-      safePath,
-    );
+
+  if (!suspiciousPath) {
+    return expandedPath;
   }
+
+  const safePath = join(process.cwd(), expandedPath);
+  console.warn(
+    "[Claude] normalizeWorkDirBase: suspicious or relative path detected, resolving to cwd:",
+    safePath,
+  );
+  return safePath;
+}
+
+function resolveClaudeWorkDir({
+  workDir,
+  prompt,
+  taskId,
+  useProvidedWorkDir,
+}: {
+  workDir?: string;
+  prompt?: string;
+  taskId?: string;
+  useProvidedWorkDir?: boolean;
+}): string {
+  if (useProvidedWorkDir) {
+    return normalizeWorkDirBase(workDir);
+  }
+
+  return getSessionWorkDir(workDir, prompt, taskId);
+}
+
+/**
+ * Get or create session working directory
+ * If workDir already contains a valid session path (from frontend), use it directly
+ * Otherwise, generate a new session folder
+ * NOTE: This function only computes the path, it does NOT create the directory
+ */
+function getSessionWorkDir(
+  workDir: string = DEFAULT_WORK_DIR,
+  prompt?: string,
+  taskId?: string,
+): string {
+  const safePath = normalizeWorkDirBase(workDir);
 
   // Check if the workDir is already a session folder path from frontend
   // Session paths from frontend look like: ~/.openloomi/sessions/{sessionId}/task-{xx}
   // or: ~/.openloomi/sessions/{sessionId}
   // Support both Unix (/) and Windows (\) path separators (case-insensitive for Windows)
+  const os = platform();
   const normalizedForCheck = os === "win32" ? safePath.toLowerCase() : safePath;
   const hasSessionsPath =
     normalizedForCheck.includes("/sessions/") ||
@@ -1546,11 +1570,12 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       messageId: this.generateMessageId(),
     };
 
-    const sessionCwd = getSessionWorkDir(
-      options?.cwd || this.config.workDir,
+    const sessionCwd = resolveClaudeWorkDir({
+      workDir: options?.cwd || this.config.workDir,
       prompt,
-      options?.taskId,
-    );
+      taskId: options?.taskId,
+      useProvidedWorkDir: options?.useProvidedWorkDir,
+    });
     // Ensure the working directory exists before calling SDK
     await ensureDir(sessionCwd);
 
@@ -2020,11 +2045,12 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
     };
 
     // Get session working directory
-    const sessionCwd = getSessionWorkDir(
-      options?.cwd || this.config.workDir,
+    const sessionCwd = resolveClaudeWorkDir({
+      workDir: options?.cwd || this.config.workDir,
       prompt,
-      options?.taskId,
-    );
+      taskId: options?.taskId,
+      useProvidedWorkDir: options?.useProvidedWorkDir,
+    });
     // Ensure the working directory exists before calling SDK
     await ensureDir(sessionCwd);
 
@@ -2405,11 +2431,12 @@ If you need to create any files during planning, use this directory.
 
     console.log(`[Claude ${session.id}] Using plan: ${plan.id} (${plan.goal})`);
 
-    const sessionCwd = getSessionWorkDir(
-      options.cwd || this.config.workDir,
-      options.originalPrompt,
-      options.taskId,
-    );
+    const sessionCwd = resolveClaudeWorkDir({
+      workDir: options.cwd || this.config.workDir,
+      prompt: options.originalPrompt,
+      taskId: options.taskId,
+      useProvidedWorkDir: options.useProvidedWorkDir,
+    });
     // Ensure the working directory exists before calling SDK
     await ensureDir(sessionCwd);
 
