@@ -88,8 +88,22 @@ export default defineConfig({
         replacement: alias("../../packages/ai/src/agent/model"),
       },
       {
+        find: "@openloomi/ai/agent/native-cli",
+        replacement: alias("../../packages/ai/src/agent/native-cli/index.ts"),
+      },
+      {
+        find: "@openloomi/ai/agent/native-runner",
+        replacement: alias(
+          "../../packages/ai/src/agent/native-runner/index.ts",
+        ),
+      },
+      {
         find: "@openloomi/ai/agent/routing",
         replacement: alias("../../packages/ai/src/agent/routing"),
+      },
+      {
+        find: "@openloomi/ai/agent/runtime",
+        replacement: alias("../../packages/ai/src/agent/runtime/index.ts"),
       },
       {
         find: "@openloomi/ai/agent/sandbox",

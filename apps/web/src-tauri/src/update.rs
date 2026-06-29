@@ -81,7 +81,7 @@ fn get_progress_state() -> Arc<Mutex<DownloadProgressState>> {
 
 // ============ Version Utilities ============
 
-/// Parse semver into (major, minor, patch)
+/// Parse an updater semver string into (major, minor, patch).
 fn parse_semver(version: &str) -> Option<(u32, u32, u32)> {
     let v = version.strip_prefix('v').unwrap_or(version);
     let parts: Vec<&str> = v.split('.').collect();
@@ -95,7 +95,7 @@ fn parse_semver(version: &str) -> Option<(u32, u32, u32)> {
     }
 }
 
-/// Compare versions; returns true if latest > current
+/// Compare updater versions; returns true if latest > current.
 fn is_newer_version(latest: &str, current: &str) -> bool {
     match (parse_semver(latest), parse_semver(current)) {
         (Some(l), Some(c)) => l > c,
@@ -103,7 +103,7 @@ fn is_newer_version(latest: &str, current: &str) -> bool {
     }
 }
 
-/// Get download filename for the current platform/arch
+/// Get the update asset filename for the current platform/arch.
 pub(crate) fn get_platform_download_filename(version: &str) -> Option<String> {
     let v = version.strip_prefix('v').unwrap_or(version);
 
@@ -1058,6 +1058,84 @@ mod tests {
             std::process::id(),
             now
         ))
+    }
+
+    #[test]
+    fn parse_semver_accepts_plain_versions() {
+        assert_eq!(parse_semver("1.2.3"), Some((1, 2, 3)));
+    }
+
+    #[test]
+    fn parse_semver_accepts_v_prefix() {
+        assert_eq!(parse_semver("v1.2.3"), Some((1, 2, 3)));
+    }
+
+    #[test]
+    fn parse_semver_rejects_incomplete_versions() {
+        assert_eq!(parse_semver("1.2"), None);
+        assert_eq!(parse_semver(""), None);
+    }
+
+    #[test]
+    fn parse_semver_rejects_non_numeric_versions() {
+        assert_eq!(parse_semver("a.b.c"), None);
+        assert_eq!(parse_semver("1.2.x"), None);
+    }
+
+    #[test]
+    fn is_newer_version_detects_major_minor_and_patch_updates() {
+        assert!(is_newer_version("2.0.0", "1.9.9"));
+        assert!(is_newer_version("1.2.0", "1.1.0"));
+        assert!(is_newer_version("1.1.1", "1.1.0"));
+    }
+
+    #[test]
+    fn is_newer_version_rejects_equal_older_and_invalid_versions() {
+        assert!(!is_newer_version("1.2.3", "1.2.3"));
+        assert!(!is_newer_version("1.1.0", "1.2.0"));
+        assert!(!is_newer_version("invalid", "1.0.0"));
+        assert!(!is_newer_version("1.0.0", "invalid"));
+    }
+
+    #[test]
+    fn get_platform_download_filename_accepts_v_prefix() {
+        let result = get_platform_download_filename("v1.0.0");
+        assert!(result.is_some());
+        assert!(!result.unwrap().contains('v'));
+    }
+
+    #[test]
+    fn get_platform_download_filename_accepts_plain_version() {
+        assert!(get_platform_download_filename("1.0.0").is_some());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn get_platform_download_filename_uses_windows_setup_asset() {
+        let result = get_platform_download_filename("v1.0.0").unwrap();
+        assert!(
+            result.contains("openloomi_1.0.0_windows_x64-setup.exe"),
+            "got: {}",
+            result
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn get_platform_download_filename_uses_macos_asset() {
+        let result = get_platform_download_filename("v1.0.0").unwrap();
+        if cfg!(target_arch = "aarch64") {
+            assert!(result.contains("openloomi_1.0.0_macOS_aarch64.dmg"));
+        } else {
+            assert!(result.contains("openloomi_1.0.0_macOS_x64.dmg"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn get_platform_download_filename_uses_linux_asset() {
+        let result = get_platform_download_filename("v1.0.0").unwrap();
+        assert!(result.contains("openloomi_1.0.0_linux"), "got: {}", result);
     }
 
     #[test]
