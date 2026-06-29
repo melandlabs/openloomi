@@ -5,9 +5,11 @@
 
 //! Auto-update module — version checking, download, install, and relaunch.
 
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::panic_guard::lock_recovered;
 
@@ -37,6 +39,21 @@ pub struct DownloadProgress {
 pub struct UpdateInstallResult {
     pub auto_installed: bool,
     pub message: String,
+    pub backup_created: bool,
+    pub backup_path: Option<String>,
+}
+
+/// Optional install behavior supplied by the frontend.
+#[derive(serde::Deserialize, Default)]
+pub struct UpdateInstallOptions {
+    #[serde(default)]
+    pub backup: bool,
+}
+
+#[derive(Default)]
+struct UpdateBackupInfo {
+    created: bool,
+    path: Option<PathBuf>,
 }
 
 // ============ Global Progress State ============
@@ -257,6 +274,192 @@ fn fallback_open_installer(path: &std::path::Path) {
             .args(["/C", "start", "", &path.to_string_lossy()])
             .spawn();
     }
+}
+
+fn create_pre_update_backup() -> Result<UpdateBackupInfo, String> {
+    let source = current_backup_source()?;
+    let backup_dir = update_backup_dir();
+    fs::create_dir_all(&backup_dir).map_err(|error| {
+        format!(
+            "Failed to create update backup directory {}: {}",
+            backup_dir.display(),
+            error
+        )
+    })?;
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("System clock error while creating backup: {}", error))?
+        .as_millis();
+    let destination = backup_destination_for_source(&source, &backup_dir, timestamp);
+
+    copy_path_to_backup(&source, &destination)?;
+    println!("🧰 Created pre-update backup: {}", destination.display());
+
+    Ok(UpdateBackupInfo {
+        created: true,
+        path: Some(destination),
+    })
+}
+
+fn current_backup_source() -> Result<PathBuf, String> {
+    let exe = std::env::current_exe()
+        .map_err(|error| format!("Failed to locate current executable: {}", error))?;
+
+    #[cfg(target_os = "macos")]
+    {
+        // In a packaged app the executable lives at
+        // OpenLoomi.app/Contents/MacOS/<binary>; backing up the bundle is the
+        // useful rollback artifact, not only the tiny launcher binary.
+        if let Some(app_bundle) = exe
+            .ancestors()
+            .find(|path| path.extension().map_or(false, |ext| ext == "app"))
+        {
+            return Ok(app_bundle.to_path_buf());
+        }
+    }
+
+    Ok(exe)
+}
+
+fn update_backup_dir() -> PathBuf {
+    crate::storage::get_data_dir()
+        .join("backups")
+        .join("updates")
+}
+
+fn backup_destination_for_source(source: &Path, backup_dir: &Path, timestamp: u128) -> PathBuf {
+    let source_name = source
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("openloomi");
+    let source_name = sanitize_backup_component(source_name);
+    let filename = format!(
+        "openloomi-{}-{}-{}",
+        env!("CARGO_PKG_VERSION"),
+        timestamp,
+        source_name
+    );
+    backup_dir.join(filename)
+}
+
+fn sanitize_backup_component(value: &str) -> String {
+    let sanitized: String = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-') {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let sanitized = sanitized.trim_matches('-');
+    if sanitized.is_empty() {
+        "openloomi".to_string()
+    } else {
+        sanitized.to_string()
+    }
+}
+
+fn copy_path_to_backup(source: &Path, destination: &Path) -> Result<(), String> {
+    if source.is_dir() {
+        copy_directory_to_backup(source, destination)
+    } else if source.is_file() {
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "Failed to create backup parent directory {}: {}",
+                    parent.display(),
+                    error
+                )
+            })?;
+        }
+        fs::copy(source, destination).map_err(|error| {
+            format!(
+                "Failed to copy {} to {}: {}",
+                source.display(),
+                destination.display(),
+                error
+            )
+        })?;
+        Ok(())
+    } else {
+        Err(format!(
+            "Cannot back up unsupported path type: {}",
+            source.display()
+        ))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn copy_directory_to_backup(source: &Path, destination: &Path) -> Result<(), String> {
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Failed to create backup parent directory {}: {}",
+                parent.display(),
+                error
+            )
+        })?;
+    }
+
+    let status = Command::new("ditto")
+        .arg(source)
+        .arg(destination)
+        .status()
+        .map_err(|error| format!("Failed to run ditto for app backup: {}", error))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "ditto failed while copying {} to {}",
+            source.display(),
+            destination.display()
+        ))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn copy_directory_to_backup(source: &Path, destination: &Path) -> Result<(), String> {
+    fs::create_dir_all(destination).map_err(|error| {
+        format!(
+            "Failed to create backup directory {}: {}",
+            destination.display(),
+            error
+        )
+    })?;
+
+    for entry in fs::read_dir(source)
+        .map_err(|error| format!("Failed to read {}: {}", source.display(), error))?
+    {
+        let entry = entry
+            .map_err(|error| format!("Failed to read {} entry: {}", source.display(), error))?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let file_type = entry.file_type().map_err(|error| {
+            format!(
+                "Failed to inspect {} while creating backup: {}",
+                source_path.display(),
+                error
+            )
+        })?;
+
+        if file_type.is_dir() {
+            copy_directory_to_backup(&source_path, &destination_path)?;
+        } else if file_type.is_file() {
+            fs::copy(&source_path, &destination_path).map_err(|error| {
+                format!(
+                    "Failed to copy {} to {}: {}",
+                    source_path.display(),
+                    destination_path.display(),
+                    error
+                )
+            })?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Get the path to relaunch the current app
@@ -698,15 +901,20 @@ pub fn poll_update_download_progress() -> PollProgressResult {
 
 /// Tauri command: finish update (install the downloaded file, called after poll shows done)
 #[tauri::command]
-pub async fn finish_update_download() -> Result<UpdateInstallResult, String> {
+pub async fn finish_update_download(
+    options: Option<UpdateInstallOptions>,
+) -> Result<UpdateInstallResult, String> {
+    let options = options.unwrap_or_default();
     crate::panic_guard::catch_unwind_future_result(
         "finish_update_download",
-        finish_update_download_impl(),
+        finish_update_download_impl(options),
     )
     .await
 }
 
-async fn finish_update_download_impl() -> Result<UpdateInstallResult, String> {
+async fn finish_update_download_impl(
+    options: UpdateInstallOptions,
+) -> Result<UpdateInstallResult, String> {
     let state = get_progress_state();
     let (download_path, _error_msg) = {
         let s = lock_recovered(&state, "update download progress");
@@ -722,10 +930,21 @@ async fn finish_update_download_impl() -> Result<UpdateInstallResult, String> {
 
     println!("📦 Installing update from: {:?}", download_path);
 
+    // Backup is opt-in: normal updates preserve current behavior, while users
+    // who request extra safety get a rollback artifact before installation.
+    let backup = if options.backup {
+        create_pre_update_backup()?
+    } else {
+        UpdateBackupInfo::default()
+    };
+    let backup_path = backup.path.as_ref().map(|path| path.display().to_string());
+
     match auto_install_platform(&download_path) {
         Ok(()) => Ok(UpdateInstallResult {
             auto_installed: true,
             message: "Update installed, restarting...".to_string(),
+            backup_created: backup.created,
+            backup_path,
         }),
         Err(e) => {
             println!("⚠️  Auto-install failed: {}, falling back to manual", e);
@@ -736,6 +955,8 @@ async fn finish_update_download_impl() -> Result<UpdateInstallResult, String> {
                     "Auto-install failed ({}). Installer opened, please install manually.",
                     e
                 ),
+                backup_created: backup.created,
+                backup_path,
             })
         }
     }
@@ -817,4 +1038,60 @@ async fn restart_for_update_impl(app_handle: tauri::AppHandle) -> Result<(), Str
 
     app_handle.exit(0);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_test_dir(name: &str) -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "openloomi-update-{}-{}-{}",
+            name,
+            std::process::id(),
+            now
+        ))
+    }
+
+    #[test]
+    fn backup_destination_sanitizes_source_name_and_preserves_extension() {
+        let backup_dir = Path::new("backups");
+        let source = Path::new("OpenLoomi Preview.exe");
+
+        let destination = backup_destination_for_source(source, backup_dir, 42);
+
+        assert_eq!(
+            destination.file_name().and_then(|value| value.to_str()),
+            Some(concat!(
+                "openloomi-",
+                env!("CARGO_PKG_VERSION"),
+                "-42-OpenLoomi-Preview.exe"
+            ))
+        );
+    }
+
+    #[test]
+    fn copy_path_to_backup_copies_file_without_touching_source() {
+        let root = unique_test_dir("file");
+        let source = root.join("openloomi.exe");
+        let backup_dir = root.join("backups");
+        let destination = backup_destination_for_source(&source, &backup_dir, 99);
+
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&source, b"current binary").unwrap();
+
+        copy_path_to_backup(&source, &destination).unwrap();
+
+        assert_eq!(fs::read(&source).unwrap(), b"current binary");
+        assert_eq!(fs::read(&destination).unwrap(), b"current binary");
+
+        let _ = fs::remove_dir_all(&root);
+    }
 }

@@ -452,6 +452,12 @@ export const checkForUpdate = async (): Promise<UpdateCheckResult | null> => {
 export interface UpdateInstallResult {
   auto_installed: boolean;
   message: string;
+  backup_created: boolean;
+  backup_path: string | null;
+}
+
+export interface UpdateInstallOptions {
+  backup?: boolean;
 }
 
 /**
@@ -505,18 +511,21 @@ export const pollUpdateDownloadProgress =
 /**
  * Finish update (install the downloaded file, called after poll shows done)
  */
-export const finishUpdateDownload =
-  async (): Promise<UpdateInstallResult | null> => {
-    if (!isTauri()) {
-      return null;
-    }
-    try {
-      return await invoke<UpdateInstallResult>("finish_update_download");
-    } catch (error) {
-      console.error("Failed to finish update:", error);
-      throw error;
-    }
-  };
+export const finishUpdateDownload = async (
+  options?: UpdateInstallOptions,
+): Promise<UpdateInstallResult | null> => {
+  if (!isTauri()) {
+    return null;
+  }
+  try {
+    return await invoke<UpdateInstallResult>("finish_update_download", {
+      options: options ?? null,
+    });
+  } catch (error) {
+    console.error("Failed to finish update:", error);
+    throw error;
+  }
+};
 /**
  * Restart application to complete update
  */

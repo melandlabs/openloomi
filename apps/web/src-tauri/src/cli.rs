@@ -34,8 +34,8 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 const DEFAULT_UPDATE_SPACE_BYTES: u64 = 512 * 1024 * 1024;
 // Downstream business tools can inspect session.platform to distinguish CLI runs.
 const DEFAULT_ONE_SHOT_PLATFORM: &str = "cli";
-// One-shot agent runs can legitimately take minutes when tools are involved.
-const ONE_SHOT_TIMEOUT_SECS: u64 = 600;
+// One-shot agent runs can legitimately take a long time when tools/skills are involved.
+const ONE_SHOT_TIMEOUT_SECS: u64 = 1800;
 const ONE_SHOT_API_HEALTH_TIMEOUT_SECS: u64 = 2;
 // Test and CI callers can point the CLI at a non-default local API server.
 const OPENLOOMI_API_URL_ENV: &str = "OPENLOOMI_API_URL";
@@ -332,7 +332,7 @@ where
             println!("openloomi-ctl {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
-        Ok(CliCommand::UpdateCheck { json }) => run_update_check(json).await,
+        Ok(CliCommand::UpdateCheck { json, .. }) => run_update_check(json).await,
         Ok(CliCommand::OneShot(options)) => run_one_shot(options).await,
         Err(error) => {
             eprintln!("error: {}", error.message);
@@ -370,12 +370,26 @@ fn parse_args(raw_args: &[String]) -> Result<CliCommand, CliError> {
     }
 
     if args.first().map(String::as_str) == Some("update") {
-        if args.iter().any(|arg| arg == "--check") {
+        let check = args.iter().any(|arg| arg == "--check");
+        let dry_run = args.iter().any(|arg| arg == "--dry-run");
+        let unknown = args
+            .iter()
+            .skip(1)
+            .find(|arg| !matches!(arg.as_str(), "--check" | "--dry-run"));
+
+        if let Some(arg) = unknown {
+            return Err(CliError::new(
+                "usage",
+                format!("unknown update option: {}", arg),
+            ));
+        }
+
+        if check || dry_run {
             return Ok(CliCommand::UpdateCheck { json });
         }
         return Err(CliError::new(
             "usage",
-            "`openloomi-ctl update` currently supports only `--check`.",
+            "`openloomi-ctl update` currently supports only `--check` or `--dry-run`.",
         ));
     }
 
@@ -2303,6 +2317,7 @@ Usage:
   openloomi-ctl --one-shot <prompt> [--json] [--model <model>] [--provider <provider>] [--platform <platform>] [--permission-mode <mode>]
   openloomi-ctl --one-shot --stdin [--json] [--model <model>] [--provider <provider>] [--platform <platform>] [--permission-mode <mode>]
   openloomi-ctl update --check [--json]
+  openloomi-ctl update --dry-run [--json]
   openloomi-ctl --version
   openloomi-ctl --help
 
@@ -2316,8 +2331,11 @@ Options:
       --permission-mode <mode>
                            Tool permissions: ask, deny, or bypass (default: ask on TTY, deny otherwise)
       --check             Run update preflight checks without installing updates
+      --dry-run           Alias for --check; run update preflight checks only
   -V, --version           Print version
   -h, --help              Print help
+
+One-shot execution times out after 30 minutes.
 "#,
         env!("CARGO_PKG_VERSION")
     );
@@ -2337,6 +2355,14 @@ mod tests {
     fn parses_update_check() {
         assert_eq!(
             parse_args(&args(&["update", "--check", "--json"])).unwrap(),
+            CliCommand::UpdateCheck { json: true }
+        );
+    }
+
+    #[test]
+    fn parses_update_dry_run_as_preflight_check() {
+        assert_eq!(
+            parse_args(&args(&["update", "--dry-run", "--json"])).unwrap(),
             CliCommand::UpdateCheck { json: true }
         );
     }
