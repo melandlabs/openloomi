@@ -904,6 +904,7 @@ jobs:
 
   # ─── Create Release ─────────────────────────────────────────────────────────
   create-release:
+    if: github.event_name != 'workflow_dispatch'
     needs:
       [
         release-macos-arm64,
@@ -967,6 +968,7 @@ jobs:
 
   # ─── Update Homebrew Cask ────────────────────────────────────────────────────
   update-homebrew-cask:
+    if: github.event_name != 'workflow_dispatch'
     needs: [create-release]
     runs-on: ubuntu-latest
     permissions:
