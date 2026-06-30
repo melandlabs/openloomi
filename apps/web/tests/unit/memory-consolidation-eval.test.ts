@@ -25,7 +25,9 @@ import {
   buildMemorySemanticRetrievalEvalScenarioReport,
   buildMemorySemanticRetrievalMergedResults,
   buildMemorySemanticRetrievalPlan,
+  buildMemoryConsolidationShadowReport,
   buildSemanticMemoryArtifactStorageDryRunReport,
+  buildSemanticMemoryDraftPersistencePreparationReport,
   buildSemanticMemoryRevisionCompetitionDiagnostics,
   buildSemanticMemoryRevisionExplanationReport,
   buildSemanticMemoryRevisionRelationPlan,
@@ -35,12 +37,14 @@ import {
   buildSemanticMemoryDraftCandidates,
   deserializeSemanticMemoryArtifactStorageRecord,
   deriveMemoryRelationGraphLifecycle,
+  invokeSemanticMemoryDraftSummarizerProviderBatch,
   invokeSemanticMemoryDraftSummarizerProvider,
   logMemoryConsolidationDiagnosticsRun,
   judgeMemoryRelationCandidates,
   persistSemanticMemoryDrafts,
   invokeMemoryRelationJudgeProvider,
   runMemoryConsolidationDiagnostics,
+  runMemoryConsolidationShadowDiagnostics,
   serializeSemanticMemoryArtifactStorageRecord,
   summarizeSemanticMemoryDraftCandidate,
   resolveMemorySemanticRetrievalConfig,
@@ -721,6 +725,63 @@ function adapterSourceRecords(
   return specs.map(([uid, body, day, value, options]) =>
     adapterSourceRecord(uid, body, day, value, options),
   );
+}
+
+function buildTraceToPersistencePrototypeRecords(): AdapterSourceRecord[] {
+  return adapterSourceRecords([
+    [
+      "prototype-zh-a",
+      "Use Chinese for technical repository work.",
+      86,
+      "zh",
+      { reads: 1 },
+    ],
+    [
+      "prototype-zh-b",
+      "Prefer Chinese explanations when reviewing code.",
+      98,
+      "zh",
+      { reads: 1 },
+    ],
+    [
+      "prototype-zh-c",
+      "Chinese answers are easier to use for repo debugging.",
+      112,
+      "zh",
+      { reads: 1 },
+    ],
+    [
+      "prototype-temp-en",
+      "For this one reply, use English.",
+      118,
+      "en",
+      { reads: 9, scope: "temporary" },
+    ],
+    [
+      "prototype-noise",
+      "The editor sidebar was blue during this session.",
+      119,
+      "blue-sidebar",
+      { preference: "scratch-note", reads: 9 },
+    ],
+  ]);
+}
+
+function adapterSourceRecordToMemoryRecord(
+  record: AdapterSourceRecord,
+): MemoryRecord {
+  return {
+    id: record.uid ?? "unknown",
+    userId: record.owner ?? "adapter-user",
+    timestamp: record.createdAt ?? 0,
+    text: record.body ?? "",
+    tier: "short",
+    accessCount: record.reads,
+    metadata: {
+      ...record.fields,
+      ...record.meta,
+    },
+  };
 }
 
 const adapterSelectors = {
@@ -2228,6 +2289,527 @@ describe("memory consolidation evaluation scenarios", () => {
     expect(failed.draft).toBeUndefined();
     expect(failed.diagnostics.request.ready).toBe(true);
     expect(failed.diagnostics.response).toBeUndefined();
+  });
+
+  it("summarizes provider adapter batches with skipped and failed candidates", async () => {
+    const { diagnostics, candidate } = buildSemanticDraftSummarizerFixture();
+    const lowConfidenceCandidate = {
+      ...candidate,
+      draftId: `${candidate.draftId}:low-confidence`,
+      confidence: 0.2,
+    };
+    const providerFailureCandidate = {
+      ...candidate,
+      draftId: `${candidate.draftId}:provider-failure`,
+    };
+    const invokedDraftIds: string[] = [];
+    const report = await invokeSemanticMemoryDraftSummarizerProviderBatch({
+      candidates: [candidate, lowConfidenceCandidate, providerFailureCandidate],
+      records: diagnostics.records,
+      minConfidence: 0.5,
+      async invoke(input) {
+        invokedDraftIds.push(input.candidate.draftId);
+
+        if (input.candidate.draftId === providerFailureCandidate.draftId) {
+          throw new Error("batch provider unavailable");
+        }
+
+        return {
+          type: input.candidate.suggestedType,
+          content: input.sourceRecords.map((record) => record.text).join(" "),
+          sourceRecordIds: [...input.candidate.sourceRecordIds],
+          confidence: input.candidate.confidence,
+        };
+      },
+    });
+
+    expect(invokedDraftIds).toEqual([
+      candidate.draftId,
+      providerFailureCandidate.draftId,
+    ]);
+    expect(report.summary).toEqual({
+      candidateCount: 3,
+      summarizedCount: 1,
+      skippedCount: 1,
+      failedCount: 1,
+      responseIssueCount: 0,
+    });
+    expect(report.results.map((result) => result.status)).toEqual([
+      "summarized",
+      "skipped",
+      "failed",
+    ]);
+    expect(report.results[1]).toEqual(
+      expect.objectContaining({
+        reasonCodes: ["request_not_ready", "low_confidence"],
+      }),
+    );
+    expect(report.results[2]).toEqual(
+      expect.objectContaining({
+        reasonCodes: ["provider_error"],
+        error: {
+          name: "Error",
+          message: "batch provider unavailable",
+        },
+      }),
+    );
+    expect(report.reasonCodes).toEqual([
+      "request_not_ready",
+      "low_confidence",
+      "provider_error",
+    ]);
+  });
+
+  it("prepares persistence items from safe provider batch results only", async () => {
+    const { diagnostics, candidate } = buildSemanticDraftSummarizerFixture();
+    const lowConfidenceCandidate = {
+      ...candidate,
+      draftId: `${candidate.draftId}:low-confidence`,
+      confidence: 0.2,
+    };
+    const providerFailureCandidate = {
+      ...candidate,
+      draftId: `${candidate.draftId}:provider-failure`,
+    };
+    const responseIssueCandidate = {
+      ...candidate,
+      draftId: `${candidate.draftId}:response-issue`,
+    };
+    const providerBatchReport =
+      await invokeSemanticMemoryDraftSummarizerProviderBatch({
+        candidates: [
+          candidate,
+          lowConfidenceCandidate,
+          providerFailureCandidate,
+          responseIssueCandidate,
+        ],
+        records: diagnostics.records,
+        minConfidence: 0.5,
+        async invoke(input) {
+          if (input.candidate.draftId === providerFailureCandidate.draftId) {
+            throw new Error("batch provider unavailable");
+          }
+
+          return {
+            type: input.candidate.suggestedType,
+            content:
+              input.candidate.draftId === responseIssueCandidate.draftId
+                ? ""
+                : input.sourceRecords.map((record) => record.text).join(" "),
+            sourceRecordIds: [...input.candidate.sourceRecordIds],
+            confidence: input.candidate.confidence,
+          };
+        },
+      });
+    const report = buildSemanticMemoryDraftPersistencePreparationReport({
+      providerBatchReport,
+    });
+
+    expect(report.summary).toEqual({
+      resultCount: 4,
+      persistenceItemCount: 1,
+      skippedResultCount: 3,
+      responseIssueCount: 1,
+    });
+    expect(report.items).toEqual([
+      expect.objectContaining({
+        candidate,
+        draft: expect.objectContaining({
+          sourceRecordIds: candidate.sourceRecordIds,
+          confidence: candidate.confidence,
+        }),
+      }),
+    ]);
+    expect(report.skippedResults).toEqual([
+      {
+        draftId: lowConfidenceCandidate.draftId,
+        status: "skipped",
+        reasonCodes: [
+          "provider_result_skipped",
+          "request_not_ready",
+          "low_confidence",
+        ],
+      },
+      {
+        draftId: providerFailureCandidate.draftId,
+        status: "failed",
+        reasonCodes: ["provider_result_failed", "provider_error"],
+      },
+      {
+        draftId: responseIssueCandidate.draftId,
+        status: "summarized",
+        reasonCodes: [
+          "provider_result_has_response_issues",
+          "missing_output_content",
+        ],
+      },
+    ]);
+    expect(report.reasonCodes).toEqual([
+      "provider_result_ready",
+      "provider_result_skipped",
+      "request_not_ready",
+      "low_confidence",
+      "provider_result_failed",
+      "provider_error",
+      "provider_result_has_response_issues",
+      "missing_output_content",
+    ]);
+  });
+
+  it("validates the trace-to-persistence prototype without a coupled pipeline API", async () => {
+    const sourceRecords = buildTraceToPersistencePrototypeRecords();
+    const diagnostics = buildAdapterDiagnosticsForRecords(sourceRecords);
+    const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+    const candidates = buildSemanticMemoryDraftCandidates({
+      report,
+      records: diagnostics.records,
+    });
+    const sourceIds = ["prototype-zh-a", "prototype-zh-b", "prototype-zh-c"];
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toEqual(
+      expect.objectContaining({
+        suggestedType: "preference",
+        sourceRecordIds: sourceIds,
+        needsSummary: true,
+      }),
+    );
+    expect(report.decayedRecords.map((record) => record.recordId)).toEqual(
+      expect.arrayContaining(["prototype-temp-en", "prototype-noise"]),
+    );
+
+    const providerSourceIds: string[][] = [];
+    const providerBatchReport =
+      await invokeSemanticMemoryDraftSummarizerProviderBatch({
+        candidates,
+        records: diagnostics.records,
+        minConfidence: 0.5,
+        async invoke(input) {
+          providerSourceIds.push(
+            input.sourceRecords.map((record) => record.recordId),
+          );
+
+          return {
+            type: input.candidate.suggestedType,
+            content:
+              "User prefers Chinese explanations for technical repository work.",
+            sourceRecordIds: [...input.candidate.sourceRecordIds],
+            confidence: input.candidate.confidence,
+            metadata: {
+              sourceClusterKey: input.candidate.sourceClusterKey,
+              competitionKey: input.candidate.competitionKey,
+              reasonCodes: [...input.candidate.reasonCodes],
+            },
+          };
+        },
+      });
+    const preparationReport =
+      buildSemanticMemoryDraftPersistencePreparationReport({
+        providerBatchReport,
+      });
+    const candidate = candidates[0];
+
+    expect(candidate).toBeDefined();
+    expect(providerSourceIds).toEqual([sourceIds]);
+    expect(providerBatchReport.summary.summarizedCount).toBe(1);
+    expect(preparationReport.summary.persistenceItemCount).toBe(1);
+    expect(preparationReport.skippedResults).toEqual([]);
+    expect(preparationReport.items).toEqual([
+      expect.objectContaining({
+        candidate: expect.objectContaining({
+          sourceRecordIds: sourceIds,
+          reasonCodes: expect.arrayContaining(["strong_repeated_evidence"]),
+        }),
+        draft: expect.objectContaining({
+          type: "preference",
+          sourceRecordIds: sourceIds,
+          confidence: candidate?.confidence,
+          metadata: expect.objectContaining({
+            sourceClusterKey: candidate?.sourceClusterKey,
+            competitionKey: candidate?.competitionKey,
+          }),
+        }),
+      }),
+    ]);
+  });
+
+  it("shows the prototype reduces trace-level noise before persistence", async () => {
+    const sourceRecords = buildTraceToPersistencePrototypeRecords();
+    const scorer = new DefaultMemoryRecordScorer();
+    const baselineTopIds = sourceRecords
+      .map((record) => ({
+        id: record.uid,
+        score: scorer.score(adapterSourceRecordToMemoryRecord(record), {
+          now: NOW,
+        }),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 2)
+      .map((record) => record.id);
+    const diagnostics = buildAdapterDiagnosticsForRecords(sourceRecords);
+    const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+    const candidates = buildSemanticMemoryDraftCandidates({
+      report,
+      records: diagnostics.records,
+    });
+    const providerBatchReport =
+      await invokeSemanticMemoryDraftSummarizerProviderBatch({
+        candidates,
+        records: diagnostics.records,
+        async invoke(input) {
+          return {
+            type: input.candidate.suggestedType,
+            content:
+              "User prefers Chinese explanations for technical repository work.",
+            sourceRecordIds: [...input.candidate.sourceRecordIds],
+            confidence: input.candidate.confidence,
+          };
+        },
+      });
+    const preparationReport =
+      buildSemanticMemoryDraftPersistencePreparationReport({
+        providerBatchReport,
+      });
+
+    expect(baselineTopIds).toEqual(
+      expect.arrayContaining(["prototype-temp-en", "prototype-noise"]),
+    );
+    expect(preparationReport.items).toHaveLength(1);
+    expect(preparationReport.items[0]?.candidate.sourceRecordIds).toEqual([
+      "prototype-zh-a",
+      "prototype-zh-b",
+      "prototype-zh-c",
+    ]);
+    expect(preparationReport.items[0]?.candidate.sourceRecordIds).not.toEqual(
+      expect.arrayContaining(baselineTopIds),
+    );
+  });
+
+  it("builds a report-only consolidation shadow report without a provider", async () => {
+    const report = await buildMemoryConsolidationShadowReport({
+      ...buildAdapterDiagnosticsInput(),
+      records: buildTraceToPersistencePrototypeRecords(),
+    });
+
+    expect(report.summary).toEqual(
+      expect.objectContaining({
+        semanticDraftCandidateCount: 1,
+        providerResultCount: 0,
+        persistenceItemCount: 0,
+      }),
+    );
+    expect(report.providerBatchReport).toBeUndefined();
+    expect(report.persistencePreparationReport).toBeUndefined();
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining(["shadow_report_only", "provider_not_configured"]),
+    );
+    expect(report.mutatesRuntime).toBe(false);
+    expect(report.mutatesStorage).toBe(false);
+    expect(report.mutatesRetrieval).toBe(false);
+  });
+
+  it("extends the shadow report through a fake provider and preparation boundary", async () => {
+    const sourceIds = ["prototype-zh-a", "prototype-zh-b", "prototype-zh-c"];
+    const report = await buildMemoryConsolidationShadowReport({
+      ...buildAdapterDiagnosticsInput(),
+      records: buildTraceToPersistencePrototypeRecords(),
+      async summarizerProvider(input) {
+        return {
+          type: input.candidate.suggestedType,
+          content:
+            "User prefers Chinese explanations for technical repository work.",
+          sourceRecordIds: [...input.candidate.sourceRecordIds],
+          confidence: input.candidate.confidence,
+        };
+      },
+    });
+
+    expect(report.summary).toEqual(
+      expect.objectContaining({
+        semanticDraftCandidateCount: 1,
+        summarizedCount: 1,
+        persistenceItemCount: 1,
+        skippedPersistenceResultCount: 0,
+      }),
+    );
+    expect(
+      report.persistencePreparationReport?.items[0]?.candidate.sourceRecordIds,
+    ).toEqual(sourceIds);
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "provider_batch_attached",
+        "persistence_preparation_attached",
+        "provider_result_ready",
+      ]),
+    );
+  });
+
+  it("keeps shadow provider failures observable without throwing the batch", async () => {
+    const report = await buildMemoryConsolidationShadowReport({
+      ...buildAdapterDiagnosticsInput(),
+      records: buildTraceToPersistencePrototypeRecords(),
+      async summarizerProvider() {
+        throw new Error("shadow provider unavailable");
+      },
+    });
+
+    expect(report.summary).toEqual(
+      expect.objectContaining({
+        failedProviderCount: 1,
+        persistenceItemCount: 0,
+        skippedPersistenceResultCount: 1,
+      }),
+    );
+    expect(report.providerBatchReport?.results[0]).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        reasonCodes: ["provider_error"],
+      }),
+    );
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining(["provider_error", "provider_result_failed"]),
+    );
+  });
+
+  it("does not load records when shadow diagnostics are disabled", async () => {
+    let loaded = false;
+    const result = await runMemoryConsolidationShadowDiagnostics({
+      ...buildAdapterDiagnosticsInput(),
+      enabled: false,
+      dryRun: true,
+      async loadRecords() {
+        loaded = true;
+        return buildTraceToPersistencePrototypeRecords();
+      },
+    });
+
+    expect(loaded).toBe(false);
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "disabled",
+        scannedRecordCount: 0,
+        reasonCodes: ["shadow_disabled"],
+        mutatesRuntime: false,
+        mutatesStorage: false,
+        mutatesRetrieval: false,
+      }),
+    );
+  });
+
+  it("runs shadow diagnostics as an enabled dry-run with caller logging", async () => {
+    const loggedReports: unknown[] = [];
+    const result = await runMemoryConsolidationShadowDiagnostics({
+      ...buildAdapterDiagnosticsInput(),
+      enabled: true,
+      dryRun: true,
+      async loadRecords() {
+        return buildTraceToPersistencePrototypeRecords();
+      },
+      async summarizerProvider(input) {
+        return {
+          type: input.candidate.suggestedType,
+          content:
+            "User prefers Chinese explanations for technical repository work.",
+          sourceRecordIds: [...input.candidate.sourceRecordIds],
+          confidence: input.candidate.confidence,
+        };
+      },
+      async logReport(report) {
+        loggedReports.push(report);
+      },
+    });
+
+    expect(result.status).toBe("success");
+    expect(result.scannedRecordCount).toBe(5);
+    expect(result.report?.summary.persistenceItemCount).toBe(1);
+    expect(result.log.status).toBe("logged");
+    expect(loggedReports).toHaveLength(1);
+    expect(result.reasonCodes).toEqual(
+      expect.arrayContaining(["shadow_log_success"]),
+    );
+  });
+
+  it("keeps shadow log failures observable without failing diagnostics", async () => {
+    const result = await runMemoryConsolidationShadowDiagnostics({
+      ...buildAdapterDiagnosticsInput(),
+      enabled: true,
+      dryRun: true,
+      async loadRecords() {
+        return buildTraceToPersistencePrototypeRecords();
+      },
+      async logReport() {
+        throw new Error("shadow log unavailable");
+      },
+    });
+
+    expect(result.status).toBe("success");
+    expect(result.report?.summary.semanticDraftCandidateCount).toBe(1);
+    expect(result.log).toEqual({
+      status: "failed",
+      error: {
+        name: "Error",
+        message: "shadow log unavailable",
+      },
+    });
+    expect(result.reasonCodes).toEqual(
+      expect.arrayContaining(["shadow_log_failed"]),
+    );
+  });
+
+  it("keeps shadow record loading failures observable without throwing", async () => {
+    let logged = false;
+    const result = await runMemoryConsolidationShadowDiagnostics({
+      ...buildAdapterDiagnosticsInput(),
+      enabled: true,
+      dryRun: true,
+      async loadRecords() {
+        throw new Error("shadow reader unavailable");
+      },
+      async logReport() {
+        logged = true;
+      },
+    });
+
+    expect(logged).toBe(false);
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        dryRun: true,
+        scannedRecordCount: 0,
+        log: { status: "disabled" },
+        error: {
+          name: "Error",
+          message: "shadow reader unavailable",
+        },
+        reasonCodes: ["shadow_run_failed"],
+        mutatesRuntime: false,
+        mutatesStorage: false,
+        mutatesRetrieval: false,
+      }),
+    );
+  });
+
+  it("rejects non-dry-run shadow diagnostics before loading records", async () => {
+    let loaded = false;
+    const result = await runMemoryConsolidationShadowDiagnostics({
+      ...buildAdapterDiagnosticsInput(),
+      enabled: true,
+      dryRun: false,
+      async loadRecords() {
+        loaded = true;
+        return buildTraceToPersistencePrototypeRecords();
+      },
+    });
+
+    expect(loaded).toBe(false);
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "unsupported",
+        dryRun: false,
+        scannedRecordCount: 0,
+        reasonCodes: ["shadow_dry_run_required"],
+      }),
+    );
   });
 
   it("documents fake summarizer failure cases without adding a real provider", async () => {

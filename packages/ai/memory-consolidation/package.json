@@ -16,7 +16,8 @@
     "./retrieval": "./src/retrieval.ts",
     "./revision": "./src/revision.ts",
     "./runtime": "./src/runtime.ts",
-    "./semantic-draft": "./src/semantic-draft.ts"
+    "./semantic-draft": "./src/semantic-draft.ts",
+    "./shadow": "./src/shadow.ts"
   },
   "devDependencies": {
     "@openloomi/config": "workspace:*",

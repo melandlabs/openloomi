@@ -11,3 +11,4 @@ export * from "./retrieval";
 export * from "./revision";
 export * from "./runtime";
 export * from "./semantic-draft";
+export * from "./shadow";

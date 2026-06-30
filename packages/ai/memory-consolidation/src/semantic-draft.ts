@@ -179,6 +179,7 @@ export interface SemanticMemoryDraftSummarizerProviderAdapterError {
 
 export interface SemanticMemoryDraftSummarizerProviderAdapterResult {
   status: SemanticMemoryDraftSummarizerProviderAdapterStatus;
+  candidate: MemorySemanticDraftCandidate;
   input: SemanticMemoryDraftSummarizerInputContract;
   diagnostics: SemanticMemoryDraftSummarizerDiagnostics;
   draft?: SemanticMemoryDraft;
@@ -202,6 +203,27 @@ export interface BuildSemanticMemoryDraftSummarizerInputContractInput {
 
 export interface InvokeSemanticMemoryDraftSummarizerProviderInput extends BuildSemanticMemoryDraftSummarizerInputContractInput {
   invoke: SemanticMemoryDraftSummarizerProviderInvoke;
+}
+
+export interface InvokeSemanticMemoryDraftSummarizerProviderBatchInput extends Omit<
+  InvokeSemanticMemoryDraftSummarizerProviderInput,
+  "candidate"
+> {
+  candidates: MemorySemanticDraftCandidate[];
+}
+
+export interface SemanticMemoryDraftSummarizerProviderBatchSummary {
+  candidateCount: number;
+  summarizedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  responseIssueCount: number;
+}
+
+export interface SemanticMemoryDraftSummarizerProviderBatchReport {
+  summary: SemanticMemoryDraftSummarizerProviderBatchSummary;
+  results: SemanticMemoryDraftSummarizerProviderAdapterResult[];
+  reasonCodes: SemanticMemoryDraftSummarizerProviderAdapterReasonCode[];
 }
 
 function clamp01(value: number): number {
@@ -627,6 +649,7 @@ export async function invokeSemanticMemoryDraftSummarizerProvider(
   if (!inputContract.request.ready) {
     return {
       status: "skipped",
+      candidate: input.candidate,
       input: inputContract,
       diagnostics: {
         request: inputContract.request,
@@ -646,6 +669,7 @@ export async function invokeSemanticMemoryDraftSummarizerProvider(
 
     return {
       status: "summarized",
+      candidate: input.candidate,
       input: inputContract,
       diagnostics,
       draft,
@@ -654,6 +678,7 @@ export async function invokeSemanticMemoryDraftSummarizerProvider(
   } catch (error) {
     return {
       status: "failed",
+      candidate: input.candidate,
       input: inputContract,
       diagnostics: {
         request: inputContract.request,
@@ -662,4 +687,41 @@ export async function invokeSemanticMemoryDraftSummarizerProvider(
       reasonCodes: ["provider_error"],
     };
   }
+}
+
+export async function invokeSemanticMemoryDraftSummarizerProviderBatch(
+  input: InvokeSemanticMemoryDraftSummarizerProviderBatchInput,
+): Promise<SemanticMemoryDraftSummarizerProviderBatchReport> {
+  const results: SemanticMemoryDraftSummarizerProviderAdapterResult[] = [];
+
+  for (const candidate of input.candidates) {
+    results.push(
+      await invokeSemanticMemoryDraftSummarizerProvider({
+        candidate,
+        records: input.records,
+        context: input.context,
+        minConfidence: input.minConfidence,
+        invoke: input.invoke,
+      }),
+    );
+  }
+
+  return {
+    summary: {
+      candidateCount: input.candidates.length,
+      summarizedCount: results.filter(
+        (result) => result.status === "summarized",
+      ).length,
+      skippedCount: results.filter((result) => result.status === "skipped")
+        .length,
+      failedCount: results.filter((result) => result.status === "failed")
+        .length,
+      responseIssueCount: results.filter(
+        (result) =>
+          result.status === "summarized" && result.reasonCodes.length > 0,
+      ).length,
+    },
+    results,
+    reasonCodes: [...new Set(results.flatMap((result) => result.reasonCodes))],
+  };
 }

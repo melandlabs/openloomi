@@ -145,6 +145,19 @@ summarizer.
 The summarizer provider boundary can format request/response diagnostics, build a
 stable caller-provided input contract, and wrap fake or external adapters with
 readiness checks. It still does not ship or call a concrete model provider.
+Batch provider reports can invoke the same caller-provided adapter across
+multiple draft candidates and summarize `summarized`, `skipped`, and `failed`
+results without adding provider wiring.
+Persistence preparation reports can then select safe summarized drafts from a
+provider batch while keeping skipped, failed, or response-issue results
+observable before any storage write.
+
+`buildMemoryConsolidationShadowReport` composes diagnostics, semantic draft
+candidates, optional caller-provided summarizer batches, and persistence
+preparation into a report-only shadow result before runtime integration.
+`runMemoryConsolidationShadowDiagnostics` adds the smallest runtime-facing
+enabled/dry-run/log boundary while still avoiding runtime, storage, and retrieval
+mutation.
 
 `calculateMemoryConsolidationEvalMetrics` provides a small scenario metrics
 helper for comparing expected preservation, temporary/noise leakage, contested

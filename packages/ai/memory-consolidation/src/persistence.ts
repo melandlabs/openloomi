@@ -1,11 +1,46 @@
 import type {
   MemorySemanticDraftCandidate,
   SemanticMemoryDraft,
+  SemanticMemoryDraftSummarizerProviderAdapterReasonCode,
+  SemanticMemoryDraftSummarizerProviderAdapterResult,
+  SemanticMemoryDraftSummarizerProviderBatchReport,
 } from "./semantic-draft";
 
 export interface SemanticMemoryDraftPersistenceItem {
   candidate: MemorySemanticDraftCandidate;
   draft: SemanticMemoryDraft;
+}
+
+export type SemanticMemoryDraftPersistencePreparationReasonCode =
+  | "provider_result_ready"
+  | "provider_result_skipped"
+  | "provider_result_failed"
+  | "provider_result_has_response_issues"
+  | SemanticMemoryDraftSummarizerProviderAdapterReasonCode
+  | (string & {});
+
+export interface SemanticMemoryDraftPersistenceSkippedProviderResult {
+  draftId: string;
+  status: SemanticMemoryDraftSummarizerProviderAdapterResult["status"];
+  reasonCodes: SemanticMemoryDraftPersistencePreparationReasonCode[];
+}
+
+export interface SemanticMemoryDraftPersistencePreparationSummary {
+  resultCount: number;
+  persistenceItemCount: number;
+  skippedResultCount: number;
+  responseIssueCount: number;
+}
+
+export interface SemanticMemoryDraftPersistencePreparationReport {
+  summary: SemanticMemoryDraftPersistencePreparationSummary;
+  items: SemanticMemoryDraftPersistenceItem[];
+  skippedResults: SemanticMemoryDraftPersistenceSkippedProviderResult[];
+  reasonCodes: SemanticMemoryDraftPersistencePreparationReasonCode[];
+}
+
+export interface BuildSemanticMemoryDraftPersistencePreparationReportInput {
+  providerBatchReport: SemanticMemoryDraftSummarizerProviderBatchReport;
 }
 
 export interface PersistedSemanticMemoryDraft {
@@ -225,6 +260,76 @@ function buildPersistedDraft(
     score: item.candidate.score,
     reasonCodes: [...item.candidate.reasonCodes],
     createdAt,
+  };
+}
+
+function candidateDraftId(
+  result: SemanticMemoryDraftSummarizerProviderAdapterResult,
+): string {
+  return result.candidate.draftId;
+}
+
+function skippedProviderReasonCodes(
+  result: SemanticMemoryDraftSummarizerProviderAdapterResult,
+): SemanticMemoryDraftPersistencePreparationReasonCode[] {
+  if (result.status === "skipped") {
+    return ["provider_result_skipped", ...result.reasonCodes];
+  }
+
+  if (result.status === "failed") {
+    return ["provider_result_failed", ...result.reasonCodes];
+  }
+
+  return ["provider_result_has_response_issues", ...result.reasonCodes];
+}
+
+export function buildSemanticMemoryDraftPersistencePreparationReport(
+  input: BuildSemanticMemoryDraftPersistencePreparationReportInput,
+): SemanticMemoryDraftPersistencePreparationReport {
+  const items: SemanticMemoryDraftPersistenceItem[] = [];
+  const skippedResults: SemanticMemoryDraftPersistenceSkippedProviderResult[] =
+    [];
+  const reasonCodes =
+    new Set<SemanticMemoryDraftPersistencePreparationReasonCode>();
+  let responseIssueCount = 0;
+
+  for (const result of input.providerBatchReport.results) {
+    const hasResponseIssues = result.reasonCodes.length > 0;
+
+    if (result.status === "summarized" && hasResponseIssues) {
+      responseIssueCount += 1;
+    }
+
+    if (result.status === "summarized" && result.draft && !hasResponseIssues) {
+      items.push({
+        candidate: result.candidate,
+        draft: result.draft,
+      });
+      reasonCodes.add("provider_result_ready");
+      continue;
+    }
+
+    const skippedReasonCodes = skippedProviderReasonCodes(result);
+    for (const reasonCode of skippedReasonCodes) {
+      reasonCodes.add(reasonCode);
+    }
+    skippedResults.push({
+      draftId: candidateDraftId(result),
+      status: result.status,
+      reasonCodes: skippedReasonCodes,
+    });
+  }
+
+  return {
+    summary: {
+      resultCount: input.providerBatchReport.results.length,
+      persistenceItemCount: items.length,
+      skippedResultCount: skippedResults.length,
+      responseIssueCount,
+    },
+    items,
+    skippedResults,
+    reasonCodes: [...reasonCodes],
   };
 }
 
