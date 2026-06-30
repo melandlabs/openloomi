@@ -5,6 +5,7 @@ import {
   type MemoryLockHandle,
   type MemoryPageResult,
   type MemoryRecord,
+  type MemoryTier,
   type MemorySemanticRecallHit,
   type MemorySemanticRecallQuery,
   type MemorySearchQuery,
@@ -13,6 +14,11 @@ import {
   type MemorySummary,
   type MemorySummarySearchQuery,
 } from "../../ai/src/memory";
+import type { MemoryConsolidationRuntimeRelationKeys } from "../../ai/memory-consolidation/src/runtime";
+import type {
+  MemoryConsolidationShadowDiagnosticsRunResult,
+  RunMemoryConsolidationShadowDiagnosticsInput,
+} from "../../ai/memory-consolidation/src/shadow";
 import { cosineSimilarity } from "./embedding";
 import type {
   IndexedDBManager,
@@ -495,11 +501,27 @@ export function createIndexedDBMemoryStorageAdapter(
   };
 }
 
+export interface RunMemoryForgettingCycleShadowDiagnosticsOptions {
+  enabled?: boolean;
+  dryRun?: boolean;
+  limit?: number;
+  candidateTier?: MemoryTier;
+  olderThan?: number;
+  relationKeys?: MemoryConsolidationRuntimeRelationKeys;
+  semanticDraftCandidates?: RunMemoryConsolidationShadowDiagnosticsInput<MemoryRecord>["semanticDraftCandidates"];
+  summarizerProvider?: RunMemoryConsolidationShadowDiagnosticsInput<MemoryRecord>["summarizerProvider"];
+  summarizerContext?: RunMemoryConsolidationShadowDiagnosticsInput<MemoryRecord>["summarizerContext"];
+  minConfidence?: number;
+  metadata?: Record<string, unknown>;
+  logReport?: RunMemoryConsolidationShadowDiagnosticsInput<MemoryRecord>["logReport"];
+}
+
 export interface RunMemoryForgettingCycleOptions {
   now?: number;
   dryRun?: boolean;
   policy?: MemoryForgettingPolicyOverrides;
   hardDeleteArchivedOlderThan?: number;
+  shadowDiagnostics?: RunMemoryForgettingCycleShadowDiagnosticsOptions;
 }
 
 export interface RunMemoryForgettingCycleResult {
@@ -514,6 +536,7 @@ export interface RunMemoryForgettingCycleResult {
   transitionedRecords: number;
   archivedDetailRecords: number;
   hardDeletedRecords: number;
+  shadowDiagnostics?: MemoryConsolidationShadowDiagnosticsRunResult;
 }
 
 export async function runMemoryForgettingCycle(
@@ -527,10 +550,52 @@ export async function runMemoryForgettingCycle(
     storage,
     policy: options?.policy,
   });
+  const now =
+    options?.shadowDiagnostics === undefined
+      ? options?.now
+      : (options.now ?? Date.now());
+  let shadowDiagnostics:
+    | MemoryConsolidationShadowDiagnosticsRunResult
+    | undefined;
+
+  if (options?.shadowDiagnostics) {
+    const { buildMemoryConsolidationRuntimeRecordSelectors } =
+      await import("../../ai/memory-consolidation/src/runtime");
+    const { runMemoryConsolidationShadowDiagnostics } =
+      await import("../../ai/memory-consolidation/src/shadow");
+    const shadowOptions = options.shadowDiagnostics;
+    shadowDiagnostics = await runMemoryConsolidationShadowDiagnostics({
+      enabled: shadowOptions.enabled,
+      dryRun: shadowOptions.dryRun ?? true,
+      now,
+      limit: shadowOptions.limit,
+      defaultUserId: userId,
+      defaultTier: shadowOptions.candidateTier ?? "short",
+      selectors: buildMemoryConsolidationRuntimeRecordSelectors({
+        relationKeys: shadowOptions.relationKeys,
+      }),
+      semanticDraftCandidates: shadowOptions.semanticDraftCandidates,
+      summarizerProvider: shadowOptions.summarizerProvider,
+      summarizerContext: shadowOptions.summarizerContext,
+      minConfidence: shadowOptions.minConfidence,
+      metadata: {
+        ...(shadowOptions.metadata ?? {}),
+        integration: "forgetting-cycle",
+      },
+      loadRecords: ({ now: shadowNow, limit }) =>
+        storage.listCandidates({
+          userId,
+          tier: shadowOptions.candidateTier ?? "short",
+          olderThan: shadowOptions.olderThan ?? shadowNow,
+          limit: limit ?? 500,
+        }),
+      logReport: shadowOptions.logReport,
+    });
+  }
 
   const result = await engine.runCycle({
     userId,
-    now: options?.now,
+    now,
     dryRun: options?.dryRun,
   });
 
@@ -549,6 +614,7 @@ export async function runMemoryForgettingCycle(
   return {
     ...result,
     hardDeletedRecords,
+    shadowDiagnostics,
   };
 }
 

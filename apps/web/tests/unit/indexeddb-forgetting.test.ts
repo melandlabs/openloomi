@@ -208,6 +208,7 @@ function createRaw(input: {
   embeddingContentHash?: string;
   embeddingDimensions?: number;
   embeddingUpdatedAt?: number;
+  metadata?: Record<string, unknown>;
 }): RawMessage {
   return {
     messageId: input.messageId,
@@ -228,6 +229,7 @@ function createRaw(input: {
     accessCount: 0,
     importanceScore: 0,
     isPinned: false,
+    metadata: input.metadata,
   };
 }
 
@@ -305,6 +307,208 @@ describe("indexeddb forgetting bridge", () => {
     );
     expect(shortToMid.length).toBe(3);
     expect(manager.summaries.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps consolidation shadow diagnostics disabled by default", async () => {
+    const now = Date.now();
+    const manager = new InMemoryManager();
+
+    manager.rawMessages = [
+      createRaw({
+        messageId: "default-shadow-off",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - 10 * DAY_MS) / 1000),
+        text: "stable preference evidence",
+      }),
+    ];
+
+    const result = await runMemoryForgettingCycle(
+      manager as unknown as IndexedDBManager,
+      "u1",
+      {
+        now,
+        dryRun: true,
+      },
+    );
+
+    expect(result.shadowDiagnostics).toBeUndefined();
+    expect(result.dryRun).toBe(true);
+  });
+
+  it("attaches opt-in consolidation shadow diagnostics without mutating storage", async () => {
+    const now = Date.now();
+    const manager = new InMemoryManager();
+
+    manager.rawMessages = [
+      createRaw({
+        messageId: "lang-zh-1",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - 10 * DAY_MS) / 1000),
+        text: "User prefers Chinese answers by default",
+        metadata: {
+          relationGroup: "answer-language",
+          relationValue: "zh",
+          relationScope: "long-term",
+        },
+      }),
+      createRaw({
+        messageId: "lang-zh-2",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - 9 * DAY_MS) / 1000),
+        text: "User repeats that Chinese technical discussion is easier",
+        metadata: {
+          relationGroup: "answer-language",
+          relationValue: "zh",
+          relationScope: "long-term",
+        },
+      }),
+      createRaw({
+        messageId: "lang-zh-3",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - 8 * DAY_MS) / 1000),
+        text: "User wants code explanations in Chinese first",
+        metadata: {
+          relationGroup: "answer-language",
+          relationValue: "zh",
+          relationScope: "long-term",
+        },
+      }),
+    ];
+
+    const result = await runMemoryForgettingCycle(
+      manager as unknown as IndexedDBManager,
+      "u1",
+      {
+        now,
+        dryRun: true,
+        shadowDiagnostics: {
+          enabled: true,
+          dryRun: true,
+          limit: 20,
+        },
+      },
+    );
+
+    expect(result.shadowDiagnostics?.status).toBe("success");
+    expect(result.shadowDiagnostics?.mutatesRuntime).toBe(false);
+    expect(result.shadowDiagnostics?.mutatesStorage).toBe(false);
+    expect(result.shadowDiagnostics?.mutatesRetrieval).toBe(false);
+    expect(result.shadowDiagnostics?.report?.summary.sourceRecordCount).toBe(3);
+    expect(
+      result.shadowDiagnostics?.report?.diagnostics.pipeline.candidates.length,
+    ).toBeGreaterThan(0);
+    expect(
+      result.shadowDiagnostics?.report?.diagnostics.pipeline.plan.entries,
+    ).toContainEqual(
+      expect.objectContaining({
+        recordIds: ["lang-zh-1", "lang-zh-2", "lang-zh-3"],
+      }),
+    );
+    expect(manager.rawMessages.map((item) => item.memoryStage)).toEqual([
+      "short",
+      "short",
+      "short",
+    ]);
+  });
+
+  it("keeps shadow log failures observable without failing forgetting", async () => {
+    const now = Date.now();
+    const manager = new InMemoryManager();
+
+    manager.rawMessages = [
+      createRaw({
+        messageId: "log-shadow-1",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - 10 * DAY_MS) / 1000),
+        text: "User prefers concise answers",
+        metadata: {
+          relationGroup: "answer-style",
+          relationValue: "concise",
+          relationScope: "stable",
+        },
+      }),
+      createRaw({
+        messageId: "log-shadow-2",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - 9 * DAY_MS) / 1000),
+        text: "User repeats that answers should be concise",
+        metadata: {
+          relationGroup: "answer-style",
+          relationValue: "concise",
+          relationScope: "stable",
+        },
+      }),
+    ];
+
+    const result = await runMemoryForgettingCycle(
+      manager as unknown as IndexedDBManager,
+      "u1",
+      {
+        now,
+        dryRun: true,
+        shadowDiagnostics: {
+          enabled: true,
+          dryRun: true,
+          logReport: () => {
+            throw new Error("shadow sink unavailable");
+          },
+        },
+      },
+    );
+
+    expect(result.status).toBe("success");
+    expect(result.shadowDiagnostics?.status).toBe("success");
+    expect(result.shadowDiagnostics?.log).toEqual({
+      status: "failed",
+      error: {
+        name: "Error",
+        message: "shadow sink unavailable",
+      },
+    });
+    expect(result.shadowDiagnostics?.reasonCodes).toEqual(
+      expect.arrayContaining(["shadow_log_failed"]),
+    );
+  });
+
+  it("does not load records when opt-in shadow diagnostics are not dry-run", async () => {
+    const now = Date.now();
+    const manager = new InMemoryManager();
+
+    manager.rawMessages = [
+      createRaw({
+        messageId: "unsupported-shadow",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - 10 * DAY_MS) / 1000),
+        text: "record should not be loaded by unsupported shadow diagnostics",
+      }),
+    ];
+
+    const result = await runMemoryForgettingCycle(
+      manager as unknown as IndexedDBManager,
+      "u1",
+      {
+        now,
+        dryRun: true,
+        shadowDiagnostics: {
+          enabled: true,
+          dryRun: false,
+        },
+      },
+    );
+
+    expect(result.shadowDiagnostics).toMatchObject({
+      status: "unsupported",
+      dryRun: false,
+      scannedRecordCount: 0,
+      reasonCodes: ["shadow_dry_run_required"],
+    });
   });
 
   it("queries summaries as fallback when raw is insufficient", async () => {
