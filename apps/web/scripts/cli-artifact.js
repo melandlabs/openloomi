@@ -313,19 +313,28 @@ function addDirectoryToZip(zip, sourceDir, zipRoot) {
   }
 }
 
-function writeCliReadme(artifactDir, platform = process.platform, arch = process.arch) {
+function writeCliReadme(
+  artifactDir,
+  platform = process.platform,
+  arch = process.arch,
+) {
   fs.writeFileSync(
     path.join(artifactDir, "README.md"),
     getCliReadmeContent(platform, arch),
   );
 }
 
-export function getCliReadmeContent(platform = process.platform, arch = process.arch) {
+export function getCliReadmeContent(
+  platform = process.platform,
+  arch = process.arch,
+) {
   const releasePlatform = normalizePlatform(platform);
   const releaseArch = normalizeArch(arch);
   const binaryName = getCliBinaryName(platform);
   const promptCommand =
-    releasePlatform === "windows" ? `.${path.win32.sep}${binaryName}` : `./${binaryName}`;
+    releasePlatform === "windows"
+      ? `.${path.win32.sep}${binaryName}`
+      : `./${binaryName}`;
   const tokenExport =
     releasePlatform === "windows"
       ? "set OPENLOOMI_AUTH_TOKEN=your-token"

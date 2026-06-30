@@ -1,4 +1,10 @@
-import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -149,7 +155,11 @@ describe("CLI artifact packaging checks", () => {
     mkdirSync(cliBundle, { recursive: true });
     writeFileSync(join(cliBundle, "native-agent-cli.cjs"), "runner");
 
-    const result = await packageCliArtifact(root, process.platform, process.arch);
+    const result = await packageCliArtifact(
+      root,
+      process.platform,
+      process.arch,
+    );
 
     expect(existsSync(result.artifactPath)).toBe(true);
     expect(basename(result.artifactPath)).toBe(

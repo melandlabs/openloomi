@@ -221,7 +221,9 @@ async function checkArtifact(artifactPath, options = {}) {
   const platform = normalizePlatform(
     options.platform ?? inferPlatform(absoluteArtifact),
   );
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openloomi-cli-release-"));
+  const tempRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "openloomi-cli-release-"),
+  );
   const extractDir = path.join(tempRoot, "extract");
   fs.mkdirSync(extractDir, { recursive: true });
 
@@ -270,7 +272,9 @@ async function checkArtifact(artifactPath, options = {}) {
       2,
     );
     if (usageError.ok !== false || usageError.error?.code !== "usage") {
-      throw new Error(`unexpected JSON usage payload: ${JSON.stringify(usageError)}`);
+      throw new Error(
+        `unexpected JSON usage payload: ${JSON.stringify(usageError)}`,
+      );
     }
 
     await withMockAgentServer(async (baseUrl) => {
@@ -294,7 +298,9 @@ async function checkArtifact(artifactPath, options = {}) {
         0,
       );
       if (oneShot.ok !== true || oneShot.response !== "OK") {
-        throw new Error(`unexpected mock one-shot payload: ${JSON.stringify(oneShot)}`);
+        throw new Error(
+          `unexpected mock one-shot payload: ${JSON.stringify(oneShot)}`,
+        );
       }
     });
 
@@ -318,4 +324,6 @@ if (!artifact) {
 
 checkArtifact(artifact, {
   platform: parseOption(rawArgs, "--platform", undefined),
-}).catch((error) => fail(error instanceof Error ? error.message : String(error)));
+}).catch((error) =>
+  fail(error instanceof Error ? error.message : String(error)),
+);
