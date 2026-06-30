@@ -737,9 +737,6 @@ importers:
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.9.0))
-      tar:
-        specifier: ^7.5.0
-        version: 7.5.13
       telegram:
         specifier: ^2.26.22
         version: 2.26.22

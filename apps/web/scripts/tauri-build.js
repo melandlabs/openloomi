@@ -33,6 +33,26 @@ if (isDarwin) {
 const webDir = __dirname;
 process.chdir(webDir);
 
+function nextBuildEnv() {
+  if (!process.platform.startsWith("win")) {
+    return process.env;
+  }
+
+  const buildHome = `${webDir}/.next-build-home`;
+  const appData = `${buildHome}/AppData/Roaming`;
+  const localAppData = `${buildHome}/AppData/Local`;
+  fs.mkdirSync(appData, { recursive: true });
+  fs.mkdirSync(localAppData, { recursive: true });
+
+  return {
+    ...process.env,
+    HOME: buildHome,
+    USERPROFILE: buildHome,
+    APPDATA: appData,
+    LOCALAPPDATA: localAppData,
+  };
+}
+
 console.log("Web directory:", webDir);
 console.log("Working directory:", process.cwd());
 
@@ -57,11 +77,23 @@ console.log("Bundling native-agent CLI runner...");
 execSync("node scripts/build-native-agent-cli.js", { stdio: "inherit" });
 
 console.log("Running migrations and building Next.js...");
-execSync("IS_TAURI=true SKIP_TYPE_CHECK=true pnpm run build", {
+execSync("pnpm run build", {
   stdio: "inherit",
+  env: {
+    ...nextBuildEnv(),
+    IS_TAURI: "true",
+    SKIP_TYPE_CHECK: "true",
+  },
 });
 
 console.log("Fixing standalone resources...");
 execSync("node scripts/fix-standalone-pnpm.js", { stdio: "inherit" });
+
+console.log("Building and staging bundled openloomi-ctl...");
+execSync(
+  "cargo build --manifest-path src-tauri/Cargo.toml --release --bin openloomi-ctl",
+  { stdio: "inherit" },
+);
+execSync("node scripts/cli-bundled.js stage", { stdio: "inherit" });
 
 console.log("Build complete!");

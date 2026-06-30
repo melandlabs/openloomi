@@ -32,6 +32,7 @@ yarn-error.log*
 
 # turbo
 .turbo
+.next-build-home/
 
 .env
 .vercel
@@ -112,6 +113,8 @@ apps/*/node-runtime/
 
 cli-bundle/
 apps/*/cli-bundle/
+apps/*/src-tauri/cli/*
+!apps/*/src-tauri/cli/.gitkeep
 
 # Skills standalone build (copied during build, not needed)
 apps/skills/

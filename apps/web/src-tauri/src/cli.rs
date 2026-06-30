@@ -714,7 +714,7 @@ fn load_cli_auth_token() -> Result<String, CliError> {
         Ok(_) => Err(CliError::new(
             "not_authenticated",
             format!(
-                "no saved auth token found. Log in to OpenLoomi first, or set {}.",
+                "No OpenLoomi auth token found.\nLog in through the OpenLoomi desktop app, or set {}.",
                 OPENLOOMI_AUTH_TOKEN_ENV
             ),
         )),
@@ -2690,7 +2690,7 @@ Options:
   -h, --help              Print help
 
 One-shot execution times out after 30 minutes.
-Packaged builds also produce a standalone CLI artifact under the release bundle's cli directory.
+Packaged desktop builds include openloomi-ctl in the app bundle resources.
 "#,
         env!("CARGO_PKG_VERSION")
     );

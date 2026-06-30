@@ -47,6 +47,7 @@
       "signingIdentity": null
     },
     "resources": [
+      "cli/**/*",
       "../../../skills/**/*",
       "../.next/standalone/**/*",
       "../.next/standalone/apps/web/.next/**/*",
