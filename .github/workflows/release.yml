@@ -101,6 +101,20 @@ jobs:
 
           EOF
 
+      - name: Build standalone CLI artifact (macOS ARM64)
+        working-directory: ./apps/web
+        run: |
+          node scripts/run-tauri-build.js
+          cargo build --manifest-path src-tauri/Cargo.toml --release --bin openloomi-ctl
+          node scripts/cli-artifact.js package --platform macos --arch arm64
+          node scripts/check-cli-release-artifact.js src-tauri/target/release/bundle/cli-release/openloomi-ctl-macos-arm64.tar.gz --platform macos
+
+      - name: Upload standalone CLI artifact (macOS ARM64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: openloomi-ctl-macos-arm64
+          path: ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/cli-release/openloomi-ctl-macos-arm64.tar.gz
+
       - name: Import Apple Certificate and Intermediate Certificates
         if: env.SKIP_SIGNING != 'true'
         env:
@@ -335,6 +349,20 @@ jobs:
           IS_TAURI=true
 
           EOF
+
+      - name: Build standalone CLI artifact (macOS x64)
+        working-directory: ./apps/web
+        run: |
+          node scripts/run-tauri-build.js
+          cargo build --manifest-path src-tauri/Cargo.toml --release --bin openloomi-ctl
+          node scripts/cli-artifact.js package --platform macos --arch x64
+          node scripts/check-cli-release-artifact.js src-tauri/target/release/bundle/cli-release/openloomi-ctl-macos-x64.tar.gz --platform macos
+
+      - name: Upload standalone CLI artifact (macOS x64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: openloomi-ctl-macos-x64
+          path: ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/cli-release/openloomi-ctl-macos-x64.tar.gz
 
       - name: Import Apple Certificate and Intermediate Certificates
         if: env.SKIP_SIGNING != 'true'
@@ -590,6 +618,20 @@ jobs:
 
           EOF
 
+      - name: Build standalone CLI artifact (Linux x64)
+        working-directory: ./apps/web
+        run: |
+          node scripts/run-tauri-build.js
+          cargo build --manifest-path src-tauri/Cargo.toml --release --bin openloomi-ctl
+          node scripts/cli-artifact.js package --platform linux --arch x64
+          node scripts/check-cli-release-artifact.js src-tauri/target/release/bundle/cli-release/openloomi-ctl-linux-x64.tar.gz --platform linux
+
+      - name: Upload standalone CLI artifact (Linux x64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: openloomi-ctl-linux-x64
+          path: ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/cli-release/openloomi-ctl-linux-x64.tar.gz
+
       - name: Patch tauri.conf.json to build Linux packages
         working-directory: ./apps/web
         run: |
@@ -705,6 +747,24 @@ jobs:
           IS_TAURI=true
 
           EOF
+
+      - name: Build standalone CLI artifact (Windows x64)
+        working-directory: ./apps/web
+        shell: bash
+        run: |
+          node scripts/run-tauri-build.js
+          cargo build --manifest-path src-tauri/Cargo.toml --release --bin openloomi-ctl
+          node scripts/cli-artifact.js package --platform windows --arch x64
+          node scripts/check-cli-release-artifact.js src-tauri/target/release/bundle/cli-release/openloomi-ctl-windows-x64.zip --platform windows
+        env:
+          USE_TURBOPACK: true
+          RUSTUP_WINDOWS_PATH: 1
+
+      - name: Upload standalone CLI artifact (Windows x64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: openloomi-ctl-windows-x64
+          path: ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/cli-release/openloomi-ctl-windows-x64.zip
 
       - name: Patch tauri.conf.json to skip MSI on Windows
         working-directory: ./apps/web
@@ -826,6 +886,20 @@ jobs:
 
           EOF
 
+      - name: Build standalone CLI artifact (Linux arm64)
+        working-directory: ./apps/web
+        run: |
+          node scripts/run-tauri-build.js
+          cargo build --manifest-path src-tauri/Cargo.toml --release --bin openloomi-ctl
+          node scripts/cli-artifact.js package --platform linux --arch arm64
+          node scripts/check-cli-release-artifact.js src-tauri/target/release/bundle/cli-release/openloomi-ctl-linux-arm64.tar.gz --platform linux
+
+      - name: Upload standalone CLI artifact (Linux arm64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: openloomi-ctl-linux-arm64
+          path: ${{ github.workspace }}/apps/web/src-tauri/target/release/bundle/cli-release/openloomi-ctl-linux-arm64.tar.gz
+
       - name: Patch tauri.conf.json to build Linux packages
         working-directory: ./apps/web
         run: |
@@ -883,7 +957,12 @@ jobs:
           mv openloomi-linux-arm64/deb/*.deb "openloomi_${VERSION}_linux_aarch64.deb"
           mv openloomi-linux-arm64/rpm/*.rpm "openloomi_${VERSION}_linux_aarch64.rpm"
           mv openloomi-windows-nsis/*.exe "openloomi_${VERSION}_windows_amd64.exe"
-          rm -rf openloomi-dmg-aarch64 openloomi-dmg-x64 openloomi-linux-amd64 openloomi-linux-arm64 openloomi-windows-nsis
+          mv openloomi-ctl-macos-arm64/*.tar.gz "openloomi-ctl-macos-arm64.tar.gz"
+          mv openloomi-ctl-macos-x64/*.tar.gz "openloomi-ctl-macos-x64.tar.gz"
+          mv openloomi-ctl-linux-x64/*.tar.gz "openloomi-ctl-linux-x64.tar.gz"
+          mv openloomi-ctl-linux-arm64/*.tar.gz "openloomi-ctl-linux-arm64.tar.gz"
+          mv openloomi-ctl-windows-x64/*.zip "openloomi-ctl-windows-x64.zip"
+          rm -rf openloomi-dmg-aarch64 openloomi-dmg-x64 openloomi-linux-amd64 openloomi-linux-arm64 openloomi-windows-nsis openloomi-ctl-macos-arm64 openloomi-ctl-macos-x64 openloomi-ctl-linux-x64 openloomi-ctl-linux-arm64 openloomi-ctl-windows-x64
           ls -la
 
       - name: Create Release
@@ -902,6 +981,11 @@ jobs:
             artifacts/openloomi_${{ steps.version.outputs.version }}_linux_aarch64.deb
             artifacts/openloomi_${{ steps.version.outputs.version }}_linux_aarch64.rpm
             artifacts/openloomi_${{ steps.version.outputs.version }}_windows_amd64.exe
+            artifacts/openloomi-ctl-macos-arm64.tar.gz
+            artifacts/openloomi-ctl-macos-x64.tar.gz
+            artifacts/openloomi-ctl-linux-x64.tar.gz
+            artifacts/openloomi-ctl-linux-arm64.tar.gz
+            artifacts/openloomi-ctl-windows-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

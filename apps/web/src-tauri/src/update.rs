@@ -35,7 +35,7 @@ pub struct DownloadProgress {
 }
 
 /// Install result returned to the frontend
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 pub struct UpdateInstallResult {
     pub auto_installed: bool,
     pub message: String,
@@ -530,6 +530,80 @@ pub async fn do_check_for_update() -> Result<UpdateCheckResult, String> {
     })
 }
 
+pub async fn install_latest_update_for_cli(
+    options: UpdateInstallOptions,
+) -> Result<UpdateInstallResult, String> {
+    let result = do_check_for_update().await?;
+    if !result.has_update {
+        return Ok(UpdateInstallResult {
+            auto_installed: false,
+            message: format!(
+                "No update available. Current version {} is up to date.",
+                result.current_version
+            ),
+            backup_created: false,
+            backup_path: None,
+        });
+    }
+
+    let download_path = download_update_asset_for_cli(&result).await?;
+    install_downloaded_update(&download_path, options)
+}
+
+async fn download_update_asset_for_cli(result: &UpdateCheckResult) -> Result<PathBuf, String> {
+    if result.download_url.trim().is_empty() {
+        return Err("No update download URL available".to_string());
+    }
+
+    let filename = result
+        .download_url
+        .split('/')
+        .last()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or("Invalid download URL")?;
+    let download_path = std::env::temp_dir().join(filename);
+    let _ = tokio::fs::remove_file(&download_path).await;
+
+    let client = reqwest::Client::builder()
+        .user_agent("openloomi-ctl")
+        .timeout(Duration::from_secs(300))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let mut request = client
+        .get(&result.download_url)
+        .header("Accept", "application/octet-stream");
+    if result.download_url.contains("github.com") {
+        if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+            if !token.is_empty() {
+                request = request.header("Authorization", format!("Bearer {}", token));
+            }
+        }
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("Failed to download update: {}", format_err(&e)))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!(
+            "Failed to download update: HTTP {} - {}",
+            status, result.download_url
+        ));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read update download: {}", e))?;
+    tokio::fs::write(&download_path, &bytes)
+        .await
+        .map_err(|e| format!("Failed to write update file: {}", e))?;
+
+    Ok(download_path)
+}
+
 async fn fetch_version_from_github(client: &reqwest::Client) -> Result<String, String> {
     let mut req = client
         .get("https://api.github.com/repos/melandlabs/openloomi/tags")
@@ -880,16 +954,44 @@ async fn finish_update_download_impl(
 
     println!("📦 Installing update from: {:?}", download_path);
 
+    install_downloaded_update(&download_path, options)
+}
+
+fn install_downloaded_update(
+    download_path: &Path,
+    options: UpdateInstallOptions,
+) -> Result<UpdateInstallResult, String> {
+    install_downloaded_update_with_hooks(
+        download_path,
+        options,
+        create_pre_update_backup,
+        auto_install_platform,
+        fallback_open_installer,
+    )
+}
+
+fn install_downloaded_update_with_hooks<CreateBackup, AutoInstall, FallbackOpen>(
+    download_path: &Path,
+    options: UpdateInstallOptions,
+    create_backup: CreateBackup,
+    auto_install: AutoInstall,
+    fallback_open: FallbackOpen,
+) -> Result<UpdateInstallResult, String>
+where
+    CreateBackup: FnOnce() -> Result<UpdateBackupInfo, String>,
+    AutoInstall: FnOnce(&Path) -> Result<(), String>,
+    FallbackOpen: FnOnce(&Path),
+{
     // Backup is opt-in: normal updates preserve current behavior, while users
     // who request extra safety get a rollback artifact before installation.
     let backup = if options.backup {
-        create_pre_update_backup()?
+        create_backup()?
     } else {
         UpdateBackupInfo::default()
     };
     let backup_path = backup.path.as_ref().map(|path| path.display().to_string());
 
-    match auto_install_platform(&download_path) {
+    match auto_install(download_path) {
         Ok(()) => Ok(UpdateInstallResult {
             auto_installed: true,
             message: "Update installed, restarting...".to_string(),
@@ -898,7 +1000,7 @@ async fn finish_update_download_impl(
         }),
         Err(e) => {
             println!("⚠️  Auto-install failed: {}, falling back to manual", e);
-            fallback_open_installer(&download_path);
+            fallback_open(download_path);
             Ok(UpdateInstallResult {
                 auto_installed: false,
                 message: format!(
@@ -1123,6 +1225,79 @@ mod tests {
 
         assert_eq!(fs::read(&source).unwrap(), b"current binary");
         assert_eq!(fs::read(&destination).unwrap(), b"current binary");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn default_install_does_not_create_backup() {
+        let root = unique_test_dir("default-install");
+        let installer = root.join("openloomi.exe");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&installer, b"installer").unwrap();
+
+        let result = install_downloaded_update_with_hooks(
+            &installer,
+            UpdateInstallOptions::default(),
+            || panic!("backup should not be created by default"),
+            |_| Ok(()),
+            |_| {},
+        )
+        .unwrap();
+
+        assert!(!result.backup_created);
+        assert_eq!(result.backup_path, None);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn explicit_backup_install_reports_backup_path() {
+        let root = unique_test_dir("backup-install");
+        let installer = root.join("openloomi.exe");
+        let backup_path = root.join("backups").join("openloomi-backup.exe");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&installer, b"installer").unwrap();
+
+        let result = install_downloaded_update_with_hooks(
+            &installer,
+            UpdateInstallOptions { backup: true },
+            || {
+                Ok(UpdateBackupInfo {
+                    created: true,
+                    path: Some(backup_path.clone()),
+                })
+            },
+            |_| Ok(()),
+            |_| {},
+        )
+        .unwrap();
+
+        assert!(result.backup_created);
+        assert_eq!(
+            result.backup_path.as_deref(),
+            Some(backup_path.to_string_lossy().as_ref())
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn backup_failure_aborts_install() {
+        let root = unique_test_dir("backup-failure");
+        let installer = root.join("openloomi.exe");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&installer, b"installer").unwrap();
+
+        let result = install_downloaded_update_with_hooks(
+            &installer,
+            UpdateInstallOptions { backup: true },
+            || Err("backup failed".to_string()),
+            |_| panic!("install should not run after backup failure"),
+            |_| {},
+        );
+
+        assert_eq!(result.unwrap_err(), "backup failed");
 
         let _ = fs::remove_dir_all(&root);
     }

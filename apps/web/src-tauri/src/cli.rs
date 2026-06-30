@@ -5,29 +5,22 @@
 
 //! Non-interactive command-line entry point.
 
-#[cfg(debug_assertions)]
 use std::collections::HashMap;
-#[cfg(debug_assertions)]
 use std::fs::OpenOptions;
-#[cfg(debug_assertions)]
 use std::io::{BufRead, BufReader};
 use std::io::{IsTerminal, Read, Write};
 use std::path::Path;
-#[cfg(debug_assertions)]
 use std::path::PathBuf;
-#[cfg(debug_assertions)]
 use std::process::{Child, Stdio};
 use std::process::{Command, ExitCode};
-#[cfg(debug_assertions)]
 use std::sync::mpsc;
 use std::time::Duration;
-#[cfg(debug_assertions)]
 use std::time::Instant;
 
-#[cfg(all(target_os = "windows", debug_assertions))]
+#[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
-#[cfg(all(target_os = "windows", debug_assertions))]
+#[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // Conservative fallback used when update metadata does not include a file size.
@@ -60,8 +53,7 @@ const ONE_SHOT_DEFAULT_ALLOWED_TOOLS: &[&str] = &[
     "TodoWrite",
 ];
 const ONE_SHOT_PERMISSION_GATED_TOOLS: &[&str] = &["Edit", "Write", "Bash", "Agent", "Task"];
-// Set to 0/false/off to force the older local HTTP route path in debug builds.
-#[cfg(debug_assertions)]
+// Set to 0/false/off to force the older local HTTP route path.
 const OPENLOOMI_CLI_DIRECT_ENV: &str = "OPENLOOMI_CLI_DIRECT";
 // Development and tests can point the CLI at a checked-out web app directory.
 #[cfg(debug_assertions)]
@@ -72,6 +64,7 @@ enum CliCommand {
     Help,
     Version,
     UpdateCheck { json: bool },
+    UpdateInstall { json: bool, backup: bool },
     OneShot(OneShotArgs),
 }
 
@@ -158,6 +151,18 @@ struct UpdateCheckJsonOutput {
     error: Option<CliErrorBody>,
 }
 
+#[derive(Debug, serde::Serialize)]
+struct UpdateInstallJsonOutput {
+    ok: bool,
+    command: &'static str,
+    installed: bool,
+    auto_installed: bool,
+    message: String,
+    backup_created: bool,
+    backup_path: Option<String>,
+    error: Option<CliErrorBody>,
+}
+
 // A single preflight probe; detail is human-readable but still stable enough
 // to surface in JSON logs.
 #[derive(Debug, serde::Serialize)]
@@ -231,7 +236,6 @@ struct OneShotStreamResult {
     error: Option<String>,
 }
 
-#[cfg(debug_assertions)]
 #[derive(Debug, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum DirectRunnerMessage {
@@ -258,7 +262,6 @@ enum DirectRunnerMessage {
     },
 }
 
-#[cfg(debug_assertions)]
 struct DirectRunnerPermissionRequest {
     tool_name: String,
     tool_use_id: String,
@@ -271,13 +274,11 @@ struct DirectRunnerPermissionRequest {
     agent_id: Option<String>,
 }
 
-#[cfg(debug_assertions)]
 #[derive(Default)]
 struct DirectRunnerPermissionCache {
     decisions_by_tool: HashMap<String, bool>,
 }
 
-#[cfg(debug_assertions)]
 impl DirectRunnerPermissionCache {
     fn get(&self, tool_name: &str) -> Option<bool> {
         self.decisions_by_tool
@@ -291,9 +292,14 @@ impl DirectRunnerPermissionCache {
     }
 }
 
-#[cfg(debug_assertions)]
 fn normalize_permission_tool_name(tool_name: &str) -> &str {
     tool_name.trim()
+}
+
+struct DirectRunnerTarget {
+    node_command: String,
+    args: Vec<String>,
+    current_dir: PathBuf,
 }
 
 #[derive(Debug)]
@@ -333,14 +339,30 @@ where
             ExitCode::SUCCESS
         }
         Ok(CliCommand::UpdateCheck { json, .. }) => run_update_check(json).await,
+        Ok(CliCommand::UpdateInstall { json, backup }) => run_update_install(json, backup).await,
         Ok(CliCommand::OneShot(options)) => run_one_shot(options).await,
         Err(error) => {
-            eprintln!("error: {}", error.message);
-            eprintln!();
-            eprintln!("Run `openloomi-ctl --help` for usage.");
+            if args_have_json_flag(&args) {
+                print_json(&serde_json::json!({
+                    "ok": false,
+                    "command": "usage",
+                    "error": {
+                        "code": error.code,
+                        "message": error.message,
+                    },
+                }));
+            } else {
+                eprintln!("error: {}", error.message);
+                eprintln!();
+                eprintln!("Run `openloomi-ctl --help` for usage.");
+            }
             ExitCode::from(2)
         }
     }
+}
+
+fn args_have_json_flag(args: &[String]) -> bool {
+    args.iter().any(|arg| arg == "--json")
 }
 
 fn parse_args(raw_args: &[String]) -> Result<CliCommand, CliError> {
@@ -372,10 +394,14 @@ fn parse_args(raw_args: &[String]) -> Result<CliCommand, CliError> {
     if args.first().map(String::as_str) == Some("update") {
         let check = args.iter().any(|arg| arg == "--check");
         let dry_run = args.iter().any(|arg| arg == "--dry-run");
-        let unknown = args
-            .iter()
-            .skip(1)
-            .find(|arg| !matches!(arg.as_str(), "--check" | "--dry-run"));
+        let install = args.iter().any(|arg| arg == "--install");
+        let backup = args.iter().any(|arg| arg == "--backup");
+        let unknown = args.iter().skip(1).find(|arg| {
+            !matches!(
+                arg.as_str(),
+                "--check" | "--dry-run" | "--install" | "--backup"
+            )
+        });
 
         if let Some(arg) = unknown {
             return Err(CliError::new(
@@ -384,12 +410,23 @@ fn parse_args(raw_args: &[String]) -> Result<CliCommand, CliError> {
             ));
         }
 
+        if (check || dry_run) && (install || backup) {
+            return Err(CliError::new(
+                "usage",
+                "`--backup` is only valid with `openloomi-ctl update --install --backup`; update checks never create backups.",
+            ));
+        }
+
+        if install {
+            return Ok(CliCommand::UpdateInstall { json, backup });
+        }
+
         if check || dry_run {
             return Ok(CliCommand::UpdateCheck { json });
         }
         return Err(CliError::new(
             "usage",
-            "`openloomi-ctl update` currently supports only `--check` or `--dry-run`.",
+            "`openloomi-ctl update` currently supports `--check`, `--dry-run`, or `--install [--backup]`.",
         ));
     }
 
@@ -698,11 +735,10 @@ async fn execute_one_shot(
     let request_body =
         build_one_shot_agent_request(prompt, options, platform, auth_token, permission_mode);
 
-    #[cfg(debug_assertions)]
     if should_try_direct_one_shot_runner() {
-        // Development builds can execute the native-agent runner directly, so
-        // one-shot does not need to open the desktop app or start a hidden
-        // Next.js service. The HTTP path below is kept as an explicit fallback.
+        // one-shot should not open the desktop app or start a hidden Next.js
+        // service. The HTTP path below is kept only as an explicit
+        // compatibility fallback.
         match execute_one_shot_with_node_runner(&request_body, permission_mode).await {
             Ok(result) => return Ok(result),
             Err(error) if is_direct_runner_fallback_error(&error) => {
@@ -724,7 +760,6 @@ async fn execute_one_shot(
         }
     }
 
-    #[cfg(not(debug_assertions))]
     if permission_mode == OneShotPermissionMode::Ask {
         return Err(CliError::new(
             "direct_runner_unavailable",
@@ -852,12 +887,20 @@ async fn execute_one_shot_via_http(
     parse_agent_sse(&response_text)
 }
 
-#[cfg(debug_assertions)]
 fn should_try_direct_one_shot_runner() -> bool {
+    should_try_direct_one_shot_runner_for_env(
+        std::env::var(OPENLOOMI_API_URL_ENV).ok().as_deref(),
+        std::env::var(OPENLOOMI_CLI_DIRECT_ENV).ok().as_deref(),
+    )
+}
+
+fn should_try_direct_one_shot_runner_for_env(
+    api_url: Option<&str>,
+    cli_direct: Option<&str>,
+) -> bool {
     // OPENLOOMI_API_URL is an explicit request to use the HTTP API path, usually
     // for integration tests or a manually managed local server.
-    if std::env::var(OPENLOOMI_API_URL_ENV)
-        .ok()
+    if api_url
         .map(|value| !value.trim().is_empty())
         .unwrap_or(false)
     {
@@ -867,14 +910,12 @@ fn should_try_direct_one_shot_runner() -> bool {
     // OPENLOOMI_CLI_DIRECT=0 is a debugging escape hatch for comparing the
     // direct runner with the older API route behavior.
     !matches!(
-        std::env::var(OPENLOOMI_CLI_DIRECT_ENV)
-            .ok()
+        cli_direct
             .map(|value| value.to_ascii_lowercase()),
         Some(value) if matches!(value.as_str(), "0" | "false" | "off")
     )
 }
 
-#[cfg(debug_assertions)]
 fn is_direct_runner_fallback_error(error: &CliError) -> bool {
     matches!(
         error.code,
@@ -882,22 +923,12 @@ fn is_direct_runner_fallback_error(error: &CliError) -> bool {
     )
 }
 
-#[cfg(debug_assertions)]
 async fn execute_one_shot_with_node_runner(
     request_body: &OneShotAgentRequest<'_>,
     permission_mode: OneShotPermissionMode,
 ) -> Result<OneShotStreamResult, CliError> {
-    let web_dir = find_web_dir()?;
-    let script = web_dir.join("scripts").join("native-agent-cli.ts");
-    if !script.exists() {
-        return Err(CliError::new(
-            "direct_runner_unavailable",
-            format!("native agent CLI runner not found at {}", script.display()),
-        ));
-    }
-
-    let tsx_cli = find_dev_tsx_cli(&web_dir)?;
     let log_path = prepare_one_shot_runner_log()?;
+    let target = resolve_direct_runner_target(&log_path)?;
     let stderr = OpenOptions::new()
         .create(true)
         .append(true)
@@ -918,14 +949,15 @@ async fn execute_one_shot_with_node_runner(
     let data_dir = one_shot_web_data_dir();
     let db_path = data_dir.join("data.db");
     let base_url = crate::constants::nextjs_url();
-    let mut command = Command::new("node");
+    let runner_env = load_one_shot_runner_dotenv(&target.current_dir);
+    let mut command = Command::new(&target.node_command);
+    command.envs(runner_env);
     // Rust owns CLI parsing, auth-token loading, process timeout, and final
-    // JSON output. The TypeScript shim owns application runtime setup and calls
-    // the shared native-agent runner directly.
+    // JSON output. The Node runner owns application runtime setup and calls the
+    // shared native-agent runner directly.
     command
-        .arg(&tsx_cli)
-        .arg(&script)
-        .current_dir(&web_dir)
+        .args(&target.args)
+        .current_dir(&target.current_dir)
         .env("NODE_OPTIONS", node_options_with_react_server())
         .env("IS_TAURI", "true")
         .env("TAURI_MODE", "1")
@@ -952,7 +984,7 @@ async fn execute_one_shot_with_node_runner(
             "direct_runner_start",
             format!(
                 "failed to start direct native-agent runner with {}: {}. See log: {}",
-                tsx_cli.display(),
+                target.args.join(" "),
                 error,
                 log_path.display()
             ),
@@ -990,7 +1022,250 @@ async fn execute_one_shot_with_node_runner(
     run_direct_runner_protocol(&mut child, stdin, stdout, permission_mode, &log_path)
 }
 
+fn resolve_direct_runner_target(log_path: &Path) -> Result<DirectRunnerTarget, CliError> {
+    #[cfg(debug_assertions)]
+    {
+        let _ = log_path;
+        resolve_dev_direct_runner_target()
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        resolve_packaged_direct_runner_target(log_path)
+    }
+}
+
 #[cfg(debug_assertions)]
+fn resolve_dev_direct_runner_target() -> Result<DirectRunnerTarget, CliError> {
+    let web_dir = find_web_dir()?;
+    let script = web_dir.join("scripts").join("native-agent-cli.ts");
+    if !script.exists() {
+        return Err(CliError::new(
+            "direct_runner_unavailable",
+            format!("native agent CLI runner not found at {}", script.display()),
+        ));
+    }
+
+    let tsx_cli = find_dev_tsx_cli(&web_dir)?;
+    Ok(DirectRunnerTarget {
+        node_command: "node".to_string(),
+        args: vec![
+            tsx_cli.to_string_lossy().to_string(),
+            script.to_string_lossy().to_string(),
+        ],
+        current_dir: web_dir,
+    })
+}
+
+#[cfg(not(debug_assertions))]
+fn resolve_packaged_direct_runner_target(log_path: &Path) -> Result<DirectRunnerTarget, CliError> {
+    let runner = find_packaged_native_agent_runner().ok_or_else(|| {
+        CliError::new(
+            "direct_runner_unavailable",
+            format!(
+                "packaged native-agent runner not found. Expected cli-bundle/native-agent-cli.mjs in packaged resources. See log: {}",
+                log_path.display()
+            ),
+        )
+    })?;
+    let node_command = find_cli_node_quiet(&runner.current_dir).ok_or_else(|| {
+        CliError::new(
+            "direct_runner_unavailable",
+            format!(
+                "Node.js 22 or newer is required on PATH for packaged one-shot mode, but no compatible Node.js runtime was found. See log: {}",
+                log_path.display()
+            ),
+        )
+    })?;
+
+    Ok(DirectRunnerTarget {
+        node_command,
+        args: vec![runner.script.to_string_lossy().to_string()],
+        current_dir: runner.current_dir,
+    })
+}
+
+#[cfg(not(debug_assertions))]
+struct PackagedRunnerPath {
+    script: PathBuf,
+    current_dir: PathBuf,
+}
+
+#[cfg(not(debug_assertions))]
+fn find_packaged_native_agent_runner() -> Option<PackagedRunnerPath> {
+    for root in packaged_resource_candidates() {
+        let standalone_app = root
+            .join(".next")
+            .join("standalone")
+            .join("apps")
+            .join("web");
+        if let Some(script) = find_native_agent_runner_script(&standalone_app.join("cli-bundle")) {
+            return Some(PackagedRunnerPath {
+                script,
+                current_dir: standalone_app,
+            });
+        }
+
+        let up_standalone_app = root
+            .join("_up_")
+            .join(".next")
+            .join("standalone")
+            .join("apps")
+            .join("web");
+        if let Some(script) = find_native_agent_runner_script(&up_standalone_app.join("cli-bundle"))
+        {
+            return Some(PackagedRunnerPath {
+                script,
+                current_dir: up_standalone_app,
+            });
+        }
+    }
+
+    find_repo_native_agent_runner()
+}
+
+#[cfg(not(debug_assertions))]
+fn find_repo_native_agent_runner() -> Option<PackagedRunnerPath> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+    for ancestor in exe_dir.ancestors() {
+        let candidates = [ancestor.to_path_buf(), ancestor.join("apps").join("web")];
+        for web_dir in candidates {
+            if let Some(script) = find_native_agent_runner_script(&web_dir.join("cli-bundle")) {
+                if !web_dir.join("package.json").exists() {
+                    continue;
+                }
+                return Some(PackagedRunnerPath {
+                    script,
+                    current_dir: web_dir,
+                });
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(not(debug_assertions))]
+fn find_native_agent_runner_script(cli_bundle_dir: &Path) -> Option<PathBuf> {
+    [
+        cli_bundle_dir.join("native-agent-cli.cjs"),
+        cli_bundle_dir.join("native-agent-cli.mjs"),
+    ]
+    .into_iter()
+    .find(|path| path.exists())
+}
+
+#[cfg(not(debug_assertions))]
+fn packaged_resource_candidates() -> Vec<PathBuf> {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let mut candidates = Vec::new();
+    candidates.push(exe_dir.join("resources"));
+    candidates.push(exe_dir.clone());
+
+    if exe_dir.ends_with("MacOS") {
+        if let Some(contents_dir) = exe_dir.parent() {
+            candidates.push(contents_dir.join("Resources"));
+        }
+    }
+
+    if let Some(parent) = exe_dir.parent() {
+        candidates.push(parent.join("resources"));
+        candidates.push(parent.to_path_buf());
+    }
+
+    candidates
+}
+
+#[cfg(not(debug_assertions))]
+fn env_home_dir() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("APPDATA"))
+            .unwrap_or_default()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::env::var("HOME").unwrap_or_default()
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn find_cli_node_quiet(current_dir: &Path) -> Option<String> {
+    let env_home = env_home_dir();
+    let mut candidates = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        candidates.extend([
+            "node".to_string(),
+            format!(r"{}\.openloomi\node\node.exe", env_home),
+            format!(r"{}\AppData\Roaming\nvm\v22.17.0\node.exe", env_home),
+            format!(r"{}\.nvm\versions\node\v22.17.0\node.exe", env_home),
+            r"C:\Program Files\nodejs\node.exe".to_string(),
+            r"C:\Program Files (x86)\nodejs\node.exe".to_string(),
+        ]);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        candidates.extend([
+            "node".to_string(),
+            format!("{}/.openloomi/node/bin/node", env_home),
+            "/usr/local/bin/node".to_string(),
+            "/opt/homebrew/bin/node".to_string(),
+            format!("{}/.nvm/versions/node/v22.17.0/bin/node", env_home),
+            format!(
+                "{}/.local/share/fnm/node-versions/v22.17.0/installation/bin/node",
+                env_home
+            ),
+        ]);
+    }
+
+    candidates
+        .into_iter()
+        .find(|candidate| is_cli_node_compatible_quiet(candidate, current_dir))
+}
+
+#[cfg(not(debug_assertions))]
+fn is_cli_node_compatible_quiet(node_path: &str, current_dir: &Path) -> bool {
+    let output = Command::new(node_path).arg("--version").output();
+    let Ok(output) = output else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let version = String::from_utf8_lossy(&output.stdout);
+    let Some(version) = version.trim().strip_prefix('v') else {
+        return false;
+    };
+    let Some(major) = version
+        .split('.')
+        .next()
+        .and_then(|value| value.parse::<u32>().ok())
+    else {
+        return false;
+    };
+    if major < 22 {
+        return false;
+    }
+
+    Command::new(node_path)
+        .arg("-e")
+        .arg("require('better-sqlite3')")
+        .current_dir(current_dir)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 fn run_direct_runner_protocol(
     child: &mut Child,
     mut stdin: std::process::ChildStdin,
@@ -1099,7 +1374,6 @@ fn run_direct_runner_protocol(
     }
 }
 
-#[cfg(debug_assertions)]
 fn handle_direct_runner_line(
     line: &str,
     stdin: &mut std::process::ChildStdin,
@@ -1154,7 +1428,6 @@ fn handle_direct_runner_line(
     Ok(())
 }
 
-#[cfg(debug_assertions)]
 fn resolve_direct_runner_permission(
     request: &DirectRunnerPermissionRequest,
     permission_mode: OneShotPermissionMode,
@@ -1186,7 +1459,6 @@ fn resolve_direct_runner_permission(
     }
 }
 
-#[cfg(debug_assertions)]
 fn prompt_for_tool_permission(request: &DirectRunnerPermissionRequest) -> Result<bool, CliError> {
     if !can_prompt_for_permission() {
         return Err(CliError::new(
@@ -1275,7 +1547,6 @@ fn read_yes_no_from_stdin() -> Result<bool, CliError> {
     ))
 }
 
-#[cfg(debug_assertions)]
 fn format_permission_input(input: &serde_json::Value) -> String {
     const MAX_INPUT_CHARS: usize = 1200;
     let formatted = serde_json::to_string_pretty(input).unwrap_or_else(|_| {
@@ -1290,7 +1561,6 @@ fn format_permission_input(input: &serde_json::Value) -> String {
     truncated
 }
 
-#[cfg(debug_assertions)]
 fn send_direct_runner_permission_response(
     stdin: &mut std::process::ChildStdin,
     tool_use_id: &str,
@@ -1315,7 +1585,6 @@ fn send_direct_runner_permission_response(
     })
 }
 
-#[cfg(debug_assertions)]
 fn one_shot_web_data_dir() -> PathBuf {
     // The direct runner runs outside the Tauri process, so it needs the same
     // data.db location that the desktop/web runtime expects in development.
@@ -1376,7 +1645,6 @@ fn find_dev_tsx_cli(web_dir: &Path) -> Result<PathBuf, CliError> {
         })
 }
 
-#[cfg(debug_assertions)]
 fn prepare_one_shot_runner_log() -> Result<PathBuf, CliError> {
     let log_dir = crate::storage::get_data_dir().join("logs");
     std::fs::create_dir_all(&log_dir).map_err(|error| {
@@ -1405,7 +1673,6 @@ fn prepare_one_shot_runner_log() -> Result<PathBuf, CliError> {
     Ok(log_path)
 }
 
-#[cfg(debug_assertions)]
 fn node_options_with_react_server() -> String {
     let current = std::env::var("NODE_OPTIONS").unwrap_or_default();
     if current.contains("--conditions=react-server")
@@ -1419,6 +1686,66 @@ fn node_options_with_react_server() -> String {
     } else {
         format!("{} {}", current, condition)
     }
+}
+
+fn load_one_shot_runner_dotenv(current_dir: &Path) -> Vec<(String, String)> {
+    let mut values = Vec::new();
+    for path in one_shot_runner_dotenv_candidates(current_dir) {
+        let Ok(content) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        for line in content.lines() {
+            if let Some((key, value)) = parse_dotenv_line(line) {
+                // Explicit process environment always wins over packaged .env
+                // defaults, which keeps CI and scripted invocations predictable.
+                if std::env::var_os(&key).is_none()
+                    && !values.iter().any(|(existing, _)| existing == &key)
+                {
+                    values.push((key, value));
+                }
+            }
+        }
+    }
+    values
+}
+
+fn one_shot_runner_dotenv_candidates(current_dir: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    candidates.push(current_dir.join(".env"));
+
+    #[cfg(not(debug_assertions))]
+    {
+        candidates.extend(
+            packaged_resource_candidates()
+                .into_iter()
+                .map(|root| root.join(".env")),
+        );
+    }
+
+    candidates
+}
+
+fn parse_dotenv_line(line: &str) -> Option<(String, String)> {
+    let line = line.trim();
+    if line.is_empty() || line.starts_with('#') {
+        return None;
+    }
+    let line = line.strip_prefix("export ").unwrap_or(line).trim();
+    let (key, value) = line.split_once('=')?;
+    let key = key.trim();
+    if key.is_empty() || key.contains(char::is_whitespace) {
+        return None;
+    }
+
+    let mut value = value.trim().to_string();
+    if value.len() >= 2
+        && ((value.starts_with('"') && value.ends_with('"'))
+            || (value.starts_with('\'') && value.ends_with('\'')))
+    {
+        value = value[1..value.len() - 1].to_string();
+    }
+
+    Some((key.to_string(), value))
 }
 
 fn one_shot_base_url() -> String {
@@ -1516,7 +1843,6 @@ fn find_web_dir() -> Result<PathBuf, CliError> {
     ))
 }
 
-#[cfg(debug_assertions)]
 fn terminate_child_process(child: &mut Child) {
     if matches!(child.try_wait(), Ok(Some(_))) {
         return;
@@ -1853,6 +2179,52 @@ async fn run_update_check(json: bool) -> ExitCode {
             } else {
                 eprintln!("update check failed: {}", error);
                 print_preflight(&preflight);
+            }
+            ExitCode::from(1)
+        }
+    }
+}
+
+async fn run_update_install(json: bool, backup: bool) -> ExitCode {
+    let options = crate::update::UpdateInstallOptions { backup };
+    match crate::update::install_latest_update_for_cli(options).await {
+        Ok(result) => {
+            if json {
+                print_json(&UpdateInstallJsonOutput {
+                    ok: true,
+                    command: "update.install",
+                    installed: result.auto_installed,
+                    auto_installed: result.auto_installed,
+                    message: result.message,
+                    backup_created: result.backup_created,
+                    backup_path: result.backup_path,
+                    error: None,
+                });
+            } else {
+                println!("{}", result.message);
+                if let Some(path) = result.backup_path {
+                    println!("Backup: {}", path);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            if json {
+                print_json(&UpdateInstallJsonOutput {
+                    ok: false,
+                    command: "update.install",
+                    installed: false,
+                    auto_installed: false,
+                    message: String::new(),
+                    backup_created: false,
+                    backup_path: None,
+                    error: Some(CliErrorBody {
+                        code: "update_install".to_string(),
+                        message: error,
+                    }),
+                });
+            } else {
+                eprintln!("error: {}", error);
             }
             ExitCode::from(1)
         }
@@ -2297,6 +2669,7 @@ Usage:
   openloomi-ctl --one-shot --stdin [--json] [--model <model>] [--provider <provider>] [--platform <platform>] [--permission-mode <mode>]
   openloomi-ctl update --check [--json]
   openloomi-ctl update --dry-run [--json]
+  openloomi-ctl update --install [--backup] [--json]
   openloomi-ctl --version
   openloomi-ctl --help
 
@@ -2311,10 +2684,13 @@ Options:
                            Tool permissions: ask, deny, or bypass (default: ask on TTY, deny otherwise)
       --check             Run update preflight checks without installing updates
       --dry-run           Alias for --check; run update preflight checks only
+      --install           Download and install the latest update when available
+      --backup            With --install, create a pre-update backup before installing
   -V, --version           Print version
   -h, --help              Print help
 
 One-shot execution times out after 30 minutes.
+Packaged builds also produce a standalone CLI artifact under the release bundle's cli directory.
 "#,
         env!("CARGO_PKG_VERSION")
     );
@@ -2344,6 +2720,31 @@ mod tests {
             parse_args(&args(&["update", "--dry-run", "--json"])).unwrap(),
             CliCommand::UpdateCheck { json: true }
         );
+    }
+
+    #[test]
+    fn parses_update_install_backup() {
+        assert_eq!(
+            parse_args(&args(&["update", "--install", "--backup", "--json"])).unwrap(),
+            CliCommand::UpdateInstall {
+                json: true,
+                backup: true
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_backup_without_update_install() {
+        let error = parse_args(&args(&["update", "--check", "--backup"])).unwrap_err();
+        assert_eq!(error.code, "usage");
+        assert!(error.message.contains("--backup"));
+    }
+
+    #[test]
+    fn rejects_unknown_update_option() {
+        let error = parse_args(&args(&["update", "--wat"])).unwrap_err();
+        assert_eq!(error.code, "usage");
+        assert!(error.message.contains("unknown update option"));
     }
 
     #[test]
@@ -2442,6 +2843,29 @@ mod tests {
         assert_eq!(cache.get("Bash"), Some(true));
         assert_eq!(cache.get("Write"), Some(false));
         assert_eq!(cache.get("Read"), None);
+    }
+
+    #[test]
+    fn direct_runner_is_preferred_without_explicit_api_url() {
+        assert!(should_try_direct_one_shot_runner_for_env(None, None));
+        assert!(!should_try_direct_one_shot_runner_for_env(
+            Some("http://localhost:3515"),
+            None
+        ));
+        assert!(!should_try_direct_one_shot_runner_for_env(None, Some("0")));
+    }
+
+    #[test]
+    fn parses_dotenv_lines_without_losing_secret_padding() {
+        assert_eq!(
+            parse_dotenv_line("AUTH_SECRET=abc123=="),
+            Some(("AUTH_SECRET".to_string(), "abc123==".to_string()))
+        );
+        assert_eq!(
+            parse_dotenv_line("export ENCRYPTION_KEY=\"quoted-value\""),
+            Some(("ENCRYPTION_KEY".to_string(), "quoted-value".to_string()))
+        );
+        assert_eq!(parse_dotenv_line("# comment"), None);
     }
 
     #[test]

@@ -12,6 +12,7 @@ import {
   startUpdateDownload,
   type DownloadProgress,
   type UpdateCheckResult,
+  type UpdateInstallResult,
 } from "@/lib/tauri";
 
 type Phase =
@@ -50,6 +51,9 @@ export function UpdateBanner() {
     error: null,
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [backupBeforeInstall, setBackupBeforeInstall] = useState(false);
+  const [installResult, setInstallResult] =
+    useState<UpdateInstallResult | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -94,6 +98,7 @@ export function UpdateBanner() {
   const handleStartDownload = useCallback(async () => {
     if (!result) return;
     setErrorMessage(null);
+    setInstallResult(null);
     setProgress({
       downloaded: 0,
       total: 0,
@@ -135,15 +140,19 @@ export function UpdateBanner() {
     if (!result) return;
     setPhase("installing");
     setErrorMessage(null);
+    setInstallResult(null);
     try {
-      await finishUpdateDownload();
+      const installResult = await finishUpdateDownload({
+        backup: backupBeforeInstall,
+      });
+      setInstallResult(installResult);
       // restart_for_update exits the process on success.
       await restartForUpdate();
     } catch (err) {
       setErrorMessage(String(err));
       setPhase("error");
     }
-  }, [result]);
+  }, [backupBeforeInstall, result]);
 
   const handleDismiss = useCallback(() => {
     if (result && typeof window !== "undefined") {
@@ -214,7 +223,14 @@ export function UpdateBanner() {
               </>
             )}
             {phase === "installing" && (
-              <p className="text-sm font-semibold">Installing update…</p>
+              <>
+                <p className="text-sm font-semibold">Installing update…</p>
+                {installResult?.backup_created && installResult.backup_path && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Backup created at {installResult.backup_path}
+                  </p>
+                )}
+              </>
             )}
             {phase === "error" && (
               <p className="text-sm font-semibold text-red-600">
@@ -236,6 +252,17 @@ export function UpdateBanner() {
             )}
             {phase === "ready" && (
               <>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={backupBeforeInstall}
+                    onChange={(event) =>
+                      setBackupBeforeInstall(event.currentTarget.checked)
+                    }
+                    className="h-3.5 w-3.5"
+                  />
+                  Create backup before installing
+                </label>
                 <Button variant="ghost" size="sm" onClick={handleDismiss}>
                   Later
                 </Button>

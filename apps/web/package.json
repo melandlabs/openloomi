@@ -16,6 +16,8 @@
     "build:tauri": "pnpm -C ../.. build:packages && node ./scripts/run-cross-env.cjs IS_TAURI=true NODE_OPTIONS=--max-old-space-size=16384 next build --webpack && node scripts/tauri-build.js",
     "bundle:runtime": "node scripts/bundle-runtime.js",
     "fix:standalone": "node scripts/fix-standalone-pnpm.js",
+    "cli:package": "node scripts/cli-artifact.js package",
+    "cli:check": "node scripts/check-cli-release-artifact.js",
     "start": "next start",
     "lint": "node ../../node_modules/@biomejs/biome/bin/biome lint",
     "lint:fix": "node ../../node_modules/@biomejs/biome/bin/biome lint --write --unsafe",
@@ -35,7 +37,7 @@
     "test:benchmark": "tsx tests/benchmark/run-live.ts",
     "tsc": "node ./scripts/run-cross-env.cjs NODE_OPTIONS=--max-old-space-size=16384 node ../../node_modules/typescript/bin/tsc",
     "tauri:dev": "node ./scripts/run-cross-env.cjs IS_TAURI=true PORT=3515 pnpm tauri dev --config src-tauri/tauri.conf.dev.json",
-    "tauri:build": "pnpm tauri build && node scripts/optimize-tauri-bundle.js",
+    "tauri:build": "pnpm tauri build && node scripts/cli-artifact.js package && node scripts/optimize-tauri-bundle.js",
     "tauri:build:debug": "node ./scripts/run-cross-env.cjs IS_TAURI=true SKIP_TYPE_CHECK=true NODE_OPTIONS=--max-old-space-size=16384 tsx lib/db/migrate && next build && pnpm tauri build && node scripts/optimize-tauri-bundle.js",
     "db:generate:sqlite": "drizzle-kit generate --config=drizzle.config.sqlite.ts"
   },

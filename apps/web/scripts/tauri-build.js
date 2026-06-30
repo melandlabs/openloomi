@@ -53,9 +53,15 @@ fs.writeFileSync(".next/standalone/node_modules/package.json", "{}");
 console.log("Bundling Claude and Node.js runtime...");
 execSync("pnpm bundle:runtime", { stdio: "inherit" });
 
+console.log("Bundling native-agent CLI runner...");
+execSync("node scripts/build-native-agent-cli.js", { stdio: "inherit" });
+
 console.log("Running migrations and building Next.js...");
 execSync("IS_TAURI=true SKIP_TYPE_CHECK=true pnpm run build", {
   stdio: "inherit",
 });
+
+console.log("Fixing standalone resources...");
+execSync("node scripts/fix-standalone-pnpm.js", { stdio: "inherit" });
 
 console.log("Build complete!");

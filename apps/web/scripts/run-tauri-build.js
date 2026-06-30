@@ -25,13 +25,16 @@ function run(cmd, args, env) {
 async function main() {
   const env = { IS_TAURI: "true", NODE_ENV: "production" };
 
-  console.log("[0/4] Validating render engine downloads...");
+  console.log("[0/5] Validating render engine downloads...");
   await runRenderEnginePreflight({ ...process.env, ...env });
 
-  console.log("[1/4] Bundling runtime...");
+  console.log("[1/5] Bundling runtime...");
   await run("pnpm", ["--filter", "web", "bundle:runtime"], env);
 
-  console.log("[2/4] Building Next.js...");
+  console.log("[2/5] Bundling native-agent CLI runner...");
+  await run("node", [path.join(scriptsDir, "build-native-agent-cli.js")], env);
+
+  console.log("[3/5] Building Next.js...");
   // Use Turbopack in CI (Windows) to avoid webpack glob EPERM errors
   if (process.env.USE_TURBOPACK === "true") {
     await run("pnpm", ["--filter", "web", "build:turbo"], env);
@@ -39,10 +42,10 @@ async function main() {
     await run("pnpm", ["--filter", "web", "build"], env);
   }
 
-  console.log("[3/4] Fixing standalone...");
+  console.log("[4/5] Fixing standalone...");
   await run("node", [path.join(scriptsDir, "fix-standalone-pnpm.js")]);
 
-  console.log("[4/4] Render engine download preflight passed");
+  console.log("[5/5] Render engine download preflight passed");
   console.log("Done!");
 }
 
