@@ -192,6 +192,11 @@ recency-aware competition without applying replacements or changing retrieval.
 Governance helpers turn revision signals into explanation reports, correction
 command dry-runs, and polluted-memory audit fixtures without applying changes.
 
+`buildMemoryConsolidationDiagnosticsBundle` can stitch the existing diagnostics,
+weak relation observations, draft candidates, storage dry-runs, and
+revision/governance reports into one offline review bundle. It is still
+report-only and marks runtime, storage, and retrieval mutation as disabled.
+
 Callers can keep the full diagnostics for debugging and derive the compact
 report for review or logging:
 

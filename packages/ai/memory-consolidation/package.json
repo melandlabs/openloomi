@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./adapter": "./src/adapter.ts",
+    "./diagnostics-bundle": "./src/diagnostics-bundle.ts",
     "./evaluation": "./src/evaluation.ts",
     "./evidence-cluster": "./src/evidence-cluster.ts",
     "./governance": "./src/governance.ts",

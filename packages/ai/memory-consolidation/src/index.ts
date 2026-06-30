@@ -1,4 +1,5 @@
 export * from "./adapter";
+export * from "./diagnostics-bundle";
 export * from "./evaluation";
 export * from "./evidence-cluster";
 export * from "./governance";

@@ -10,6 +10,7 @@ import {
   buildMemoryGovernanceCommandDryRunReport,
   buildMemoryGovernanceExplanationReport,
   buildMemoryConsolidationPlan,
+  buildMemoryConsolidationDiagnosticsBundle,
   buildMemoryConsolidationDiagnosticsReport,
   buildCallerProvidedMemoryRelationCandidateDiscoveryReport,
   buildMemoryEvidenceClusters,
@@ -4820,6 +4821,140 @@ describe("memory consolidation evaluation scenarios", () => {
     );
     expect(assignment.recordClusterKeys["weak-a"]).not.toBe(
       assignment.recordClusterKeys["weak-related"],
+    );
+  });
+
+  it("bundles end-to-end memory consolidation diagnostics without runtime mutation", () => {
+    const { diagnostics, candidate } = buildSemanticDraftPersistenceFixture();
+    const report = buildMemoryConsolidationDiagnosticsReport(diagnostics);
+    const draftCandidates = buildSemanticMemoryDraftCandidates({
+      report,
+      records: diagnostics.records,
+    });
+    const relationDiscovery =
+      buildCallerProvidedMemoryRelationCandidateDiscoveryReport({
+        records: diagnostics.records,
+        candidates: [
+          {
+            fromRecordId: "adapter-zh-a",
+            toRecordId: "adapter-zh-b",
+            candidateKeys: ["manual:language"],
+            score: 1,
+          },
+        ],
+      });
+    const weakRelationObservation = buildMemoryWeakRelationObservationReport({
+      judgments: diagnostics.pipeline.judgments,
+    });
+    const artifact = semanticArtifactStorageFixture();
+    const storageDryRunReport = buildSemanticMemoryArtifactStorageDryRunReport({
+      userId: artifact.userId,
+      artifacts: [artifact],
+      enabled: true,
+      dryRun: true,
+    });
+    const revisionMemory = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: artifact.artifactId,
+      artifactStatus: artifact.status,
+      sourceRecordIds: artifact.sourceRecordIds,
+      confidence: artifact.confidence,
+      reasonCodes: artifact.reasonCodes,
+      rollback: artifact.rollback,
+      metadata: artifact.metadata,
+    });
+    const revisionExplanation = buildSemanticMemoryRevisionExplanationReport({
+      memories: [revisionMemory],
+    });
+    const governanceExplanation = buildMemoryGovernanceExplanationReport({
+      memories: [revisionMemory],
+      sourceRecords: diagnostics.records,
+    });
+    const bundle = buildMemoryConsolidationDiagnosticsBundle({
+      diagnostics,
+      relationDiscoveryReport: relationDiscovery,
+      weakRelationObservationReport: weakRelationObservation,
+      consolidationReport: report,
+      semanticDraftCandidates: draftCandidates,
+      storageDryRunReport,
+      revisionExplanationReport: revisionExplanation,
+      governanceExplanationReport: governanceExplanation,
+      metadata: {
+        mode: "end-to-end-diagnostics",
+      },
+    });
+
+    expect(bundle.summary).toEqual({
+      sourceRecordCount: report.summary.sourceRecordCount,
+      adaptedRecordCount: report.summary.adaptedRecordCount,
+      skippedRecordCount: report.summary.skippedRecordCount,
+      relationCandidateCount: report.summary.candidateCount,
+      discoveredRelationCandidateCount: 1,
+      skippedDiscoveredRelationCandidateCount: 0,
+      relationCount: report.summary.relationCount,
+      weakObservationCount: weakRelationObservation.summary.observationCount,
+      preservedClusterCount: report.preservedClusters.length,
+      contestedClusterCount: report.contestedClusters.length,
+      decayedRecordCount: report.decayedRecords.length,
+      semanticDraftCandidateCount: draftCandidates.length,
+      storageArtifactCount: 1,
+      storageWouldWriteCount: 1,
+      revisionMemoryCount: 1,
+      governanceMemoryCount: 1,
+      dryRunOnly: true,
+      mutatesRuntime: false,
+      mutatesStorage: false,
+      mutatesRetrieval: false,
+    });
+    expect(bundle.stages.consolidationReport).toBe(report);
+    expect(bundle.stages.semanticDraftCandidates[0]).toEqual(candidate);
+    expect(bundle.stages.storageDryRunReport?.summary.dryRun).toBe(true);
+    expect(bundle.stages.revisionExplanationReport?.summary.activeCount).toBe(
+      1,
+    );
+    expect(bundle.stages.governanceExplanationReport?.memories[0]).toEqual(
+      expect.objectContaining({
+        artifactId: artifact.artifactId,
+        rollbackAvailable: true,
+      }),
+    );
+    expect(bundle.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "diagnostics_bundle",
+        "dry_run_only",
+        "runtime_unchanged",
+        "storage_unchanged",
+        "retrieval_unchanged",
+        "relation_discovery_attached",
+        "semantic_draft_candidates_found",
+        "storage_dry_run_attached",
+        "revision_report_attached",
+        "governance_report_attached",
+      ]),
+    );
+    expect(bundle.metadata).toEqual({
+      mode: "end-to-end-diagnostics",
+    });
+
+    const storageWriteReadyReport =
+      buildSemanticMemoryArtifactStorageDryRunReport({
+        userId: artifact.userId,
+        artifacts: [artifact],
+        enabled: true,
+        dryRun: false,
+      });
+    const writeReadyBundle = buildMemoryConsolidationDiagnosticsBundle({
+      diagnostics,
+      storageDryRunReport: storageWriteReadyReport,
+    });
+
+    expect(writeReadyBundle.summary.dryRunOnly).toBe(false);
+    expect(writeReadyBundle.summary.mutatesStorage).toBe(false);
+    expect(writeReadyBundle.reasonCodes).toEqual(
+      expect.arrayContaining(["storage_write_ready_attached"]),
+    );
+    expect(writeReadyBundle.reasonCodes).not.toContain("dry_run_only");
+    expect(writeReadyBundle.reasonCodes).not.toContain(
+      "storage_dry_run_attached",
     );
   });
 
