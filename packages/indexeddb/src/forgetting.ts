@@ -516,6 +516,18 @@ export interface RunMemoryForgettingCycleShadowDiagnosticsOptions {
   logReport?: RunMemoryConsolidationShadowDiagnosticsInput<MemoryRecord>["logReport"];
 }
 
+export type RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions = Pick<
+  RunMemoryForgettingCycleShadowDiagnosticsOptions,
+  | "enabled"
+  | "dryRun"
+  | "limit"
+  | "candidateTier"
+  | "olderThan"
+  | "relationKeys"
+  | "minConfidence"
+  | "metadata"
+>;
+
 export interface RunMemoryForgettingCycleOptions {
   now?: number;
   dryRun?: boolean;

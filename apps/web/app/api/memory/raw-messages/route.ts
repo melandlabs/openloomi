@@ -10,6 +10,7 @@ import {
   queryMemoryWithFallback,
   runMemoryForgettingCycle,
 } from "@openloomi/indexeddb/forgetting";
+import type { RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions } from "@openloomi/indexeddb/forgetting";
 import type {
   MemorySummaryRecord,
   RawMessage,
@@ -27,6 +28,96 @@ function normalizeTimestampToMs(value: number | undefined): number | undefined {
     return Math.floor((value as number) * 1000);
   }
   return Math.floor(value as number);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function optionalFiniteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function optionalMemoryTier(
+  value: unknown,
+): "short" | "mid" | "long" | undefined {
+  return value === "short" || value === "mid" || value === "long"
+    ? value
+    : undefined;
+}
+
+function optionalRelationKeys(
+  value: unknown,
+): RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions["relationKeys"] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const relationKeys = {
+    relationGroup:
+      typeof value.relationGroup === "string" ? value.relationGroup : undefined,
+    relationValue:
+      typeof value.relationValue === "string" ? value.relationValue : undefined,
+    relationScope:
+      typeof value.relationScope === "string" ? value.relationScope : undefined,
+  };
+
+  return Object.values(relationKeys).some(Boolean) ? relationKeys : undefined;
+}
+
+function parseShadowDiagnosticsOptions(
+  value: unknown,
+): RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const shadowDiagnostics: RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions =
+    {};
+  const enabled = optionalBoolean(value.enabled);
+  const dryRun = optionalBoolean(value.dryRun);
+  const limit = optionalFiniteNumber(value.limit);
+  const olderThan = optionalFiniteNumber(value.olderThan);
+  const candidateTier = optionalMemoryTier(value.candidateTier);
+  const relationKeys = optionalRelationKeys(value.relationKeys);
+  const minConfidence = optionalFiniteNumber(value.minConfidence);
+
+  if (enabled !== undefined) shadowDiagnostics.enabled = enabled;
+  if (dryRun !== undefined) shadowDiagnostics.dryRun = dryRun;
+  if (limit !== undefined) shadowDiagnostics.limit = limit;
+  if (olderThan !== undefined) shadowDiagnostics.olderThan = olderThan;
+  if (candidateTier !== undefined) {
+    shadowDiagnostics.candidateTier = candidateTier;
+  }
+  if (relationKeys !== undefined) shadowDiagnostics.relationKeys = relationKeys;
+  if (minConfidence !== undefined) {
+    shadowDiagnostics.minConfidence = minConfidence;
+  }
+  if (isRecord(value.metadata)) {
+    shadowDiagnostics.metadata = { ...value.metadata };
+  }
+
+  return Object.keys(shadowDiagnostics).length > 0
+    ? shadowDiagnostics
+    : undefined;
+}
+
+function parseForgettingCycleOptions(value: unknown) {
+  const options = isRecord(value) ? value : {};
+  return {
+    dryRun: options.dryRun === true,
+    hardDeleteArchivedOlderThan:
+      typeof options.hardDeleteArchivedOlderThan === "number"
+        ? options.hardDeleteArchivedOlderThan
+        : undefined,
+    shadowDiagnostics: parseShadowDiagnosticsOptions(options.shadowDiagnostics),
+  };
 }
 
 function toRawSourceItem(message: RawMessage): RawMessage & {
@@ -315,13 +406,11 @@ export async function POST(request: NextRequest) {
       }
 
       case "forgettingCycle": {
-        const result = await runMemoryForgettingCycle(manager as any, userId, {
-          dryRun: body.options?.dryRun === true,
-          hardDeleteArchivedOlderThan:
-            typeof body.options?.hardDeleteArchivedOlderThan === "number"
-              ? body.options.hardDeleteArchivedOlderThan
-              : undefined,
-        });
+        const result = await runMemoryForgettingCycle(
+          manager as any,
+          userId,
+          parseForgettingCycleOptions(body.options),
+        );
         return Response.json({ success: true, result });
       }
 

@@ -8,6 +8,10 @@ import type {
   RunRawMessageEmbeddingDreamInput,
   RawMessageSemanticSearchInput,
 } from "./embedding";
+import type {
+  RunMemoryForgettingCycleResult,
+  RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions,
+} from "./forgetting";
 
 export type SQLiteRawMessageQueryResultItem =
   | (RawMessage & { sourceType: "raw" })
@@ -32,6 +36,23 @@ export interface RawMessagesSQLiteMigrationState {
   startedAt?: number;
   completedAt?: number;
   updatedAt: number;
+  error?: string;
+}
+
+export interface SQLiteRunMemoryForgettingCycleForUserOptions {
+  dryRun?: boolean;
+  hardDeleteArchivedOlderThan?: number;
+  shadowDiagnostics?: RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions;
+}
+
+export interface SQLiteRunMemoryForgettingCycleForUserResult {
+  success: boolean;
+  status?: "success" | "skipped_locked";
+  createdSummaries?: number;
+  transitionedRecords?: number;
+  archivedDetailRecords?: number;
+  hardDeletedRecords?: number;
+  shadowDiagnostics?: RunMemoryForgettingCycleResult["shadowDiagnostics"];
   error?: string;
 }
 
@@ -302,19 +323,8 @@ export async function sqliteClearOldRawMessages(
 
 export async function sqliteRunMemoryForgettingCycleForUser(
   _userId: string,
-  options?: {
-    dryRun?: boolean;
-    hardDeleteArchivedOlderThan?: number;
-  },
-): Promise<{
-  success: boolean;
-  status?: "success" | "skipped_locked";
-  createdSummaries?: number;
-  transitionedRecords?: number;
-  archivedDetailRecords?: number;
-  hardDeletedRecords?: number;
-  error?: string;
-}> {
+  options?: SQLiteRunMemoryForgettingCycleForUserOptions,
+): Promise<SQLiteRunMemoryForgettingCycleForUserResult> {
   const response = await requestSQLiteRawMessages<{
     success: boolean;
     result: {
@@ -323,6 +333,7 @@ export async function sqliteRunMemoryForgettingCycleForUser(
       transitionedRecords: number;
       archivedDetailRecords: number;
       hardDeletedRecords: number;
+      shadowDiagnostics?: RunMemoryForgettingCycleResult["shadowDiagnostics"];
     };
   }>("forgettingCycle", { options });
   return {
@@ -332,6 +343,7 @@ export async function sqliteRunMemoryForgettingCycleForUser(
     transitionedRecords: response.result.transitionedRecords,
     archivedDetailRecords: response.result.archivedDetailRecords,
     hardDeletedRecords: response.result.hardDeletedRecords,
+    shadowDiagnostics: response.result.shadowDiagnostics,
   };
 }
 

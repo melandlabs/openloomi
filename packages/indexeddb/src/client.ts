@@ -9,6 +9,10 @@ import type {
   GroupByType,
   MemorySummaryRecord,
 } from "./manager";
+import type {
+  RunMemoryForgettingCycleResult,
+  RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions,
+} from "./forgetting";
 import {
   ensureRawMessagesSQLiteMigration,
   migrateIndexedDBRawMessagesToSQLite,
@@ -38,6 +42,23 @@ export type RawMessageSourceType = "raw" | "summary";
 export type RawMessageQueryResultItem =
   | (RawMessage & { sourceType: "raw" })
   | (MemorySummaryRecord & { sourceType: "summary" });
+
+export interface RunMemoryForgettingCycleForUserOptions {
+  dryRun?: boolean;
+  hardDeleteArchivedOlderThan?: number;
+  shadowDiagnostics?: RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions;
+}
+
+export interface RunMemoryForgettingCycleForUserResult {
+  success: boolean;
+  status?: "success" | "skipped_locked";
+  createdSummaries?: number;
+  transitionedRecords?: number;
+  archivedDetailRecords?: number;
+  hardDeletedRecords?: number;
+  shadowDiagnostics?: RunMemoryForgettingCycleResult["shadowDiagnostics"];
+  error?: string;
+}
 
 let managerInstance: any = null;
 
@@ -413,19 +434,8 @@ export async function clearOldRawMessages(
 
 export async function runMemoryForgettingCycleForUser(
   userId: string,
-  options?: {
-    dryRun?: boolean;
-    hardDeleteArchivedOlderThan?: number;
-  },
-): Promise<{
-  success: boolean;
-  status?: "success" | "skipped_locked";
-  createdSummaries?: number;
-  transitionedRecords?: number;
-  archivedDetailRecords?: number;
-  hardDeletedRecords?: number;
-  error?: string;
-}> {
+  options?: RunMemoryForgettingCycleForUserOptions,
+): Promise<RunMemoryForgettingCycleForUserResult> {
   if (shouldUseRawMessageApiStorage()) {
     try {
       return await sqliteRunMemoryForgettingCycleForUser(userId, options);
@@ -448,6 +458,7 @@ export async function runMemoryForgettingCycleForUser(
       transitionedRecords: result.transitionedRecords,
       archivedDetailRecords: result.archivedDetailRecords,
       hardDeletedRecords: result.hardDeletedRecords,
+      shadowDiagnostics: result.shadowDiagnostics,
     };
   } catch (error) {
     console.error(

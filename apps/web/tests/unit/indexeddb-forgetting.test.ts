@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   IndexedDBManager,
   MemoryStage,
@@ -11,8 +11,10 @@ import {
   queryMemoryWithFallback,
   runMemoryForgettingCycle,
 } from "../../../../packages/indexeddb/src/forgetting";
+import { sqliteRunMemoryForgettingCycleForUser } from "../../../../packages/indexeddb/src/sqlite-client";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const originalFetch = globalThis.fetch;
 
 class InMemoryManager {
   rawMessages: RawMessage[] = [];
@@ -234,6 +236,11 @@ function createRaw(input: {
 }
 
 describe("indexeddb forgetting bridge", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    globalThis.fetch = originalFetch;
+  });
+
   it("runs forgetting cycle and applies transition/archive/delete", async () => {
     const now = Date.now();
     const manager = new InMemoryManager();
@@ -509,6 +516,96 @@ describe("indexeddb forgetting bridge", () => {
       scannedRecordCount: 0,
       reasonCodes: ["shadow_dry_run_required"],
     });
+  });
+
+  it("forwards JSON-safe shadow diagnostics through SQLite raw message API", async () => {
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            result: {
+              status: "success",
+              createdSummaries: 0,
+              transitionedRecords: 0,
+              archivedDetailRecords: 0,
+              hardDeletedRecords: 0,
+              shadowDiagnostics: {
+                status: "success",
+                dryRun: true,
+                scannedRecordCount: 0,
+                reasonCodes: ["shadow_report_only"],
+                mutatesRuntime: false,
+                mutatesStorage: false,
+                mutatesRetrieval: false,
+                log: { status: "disabled" },
+                startedAt: 1,
+                finishedAt: 2,
+              },
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      },
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await sqliteRunMemoryForgettingCycleForUser("u1", {
+      dryRun: true,
+      shadowDiagnostics: {
+        enabled: true,
+        dryRun: true,
+        limit: 10,
+        candidateTier: "short",
+        olderThan: 123,
+        relationKeys: {
+          relationGroup: "relationGroup",
+          relationValue: "relationValue",
+        },
+        minConfidence: 0.7,
+        metadata: {
+          source: "test",
+        },
+      },
+    });
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    );
+
+    expect(requestBody).toMatchObject({
+      action: "forgettingCycle",
+      options: {
+        dryRun: true,
+        shadowDiagnostics: {
+          enabled: true,
+          dryRun: true,
+          limit: 10,
+          candidateTier: "short",
+          olderThan: 123,
+          relationKeys: {
+            relationGroup: "relationGroup",
+            relationValue: "relationValue",
+          },
+          minConfidence: 0.7,
+          metadata: {
+            source: "test",
+          },
+        },
+      },
+    });
+    expect(result.shadowDiagnostics).toEqual(
+      expect.objectContaining({
+        status: "success",
+        dryRun: true,
+        mutatesStorage: false,
+      }),
+    );
   });
 
   it("queries summaries as fallback when raw is insufficient", async () => {
