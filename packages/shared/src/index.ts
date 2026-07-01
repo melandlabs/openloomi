@@ -6,3 +6,4 @@ export * from "./ref";
 export * from "./soul";
 export * from "./tokens";
 export * from "./locale/user-locale";
+export * from "./platform";

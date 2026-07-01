@@ -1,15 +1,13 @@
 "use client";
 
 import { Button } from "@openloomi/ui";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useSWR from "swr";
 import { RemixIcon } from "@/components/remix-icon";
 import { Spinner } from "@/components/spinner";
 import { cn, fetcher } from "@/lib/utils";
-import { isTauri } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeFile } from "@tauri-apps/plugin-fs";
+import { getFileSystem } from "@openloomi/shared";
 
 type AccessTrend = "rising" | "falling" | "stable";
 type OrganizationAction = "keep" | "archive" | "delete";
@@ -278,6 +276,7 @@ function InsightRecommendationRow({ item }: { item: AnalyticsInsight }) {
 
 export function InsightAnalyticsPanel() {
   const { t, i18n } = useTranslation();
+  const [isExporting, setIsExporting] = useState(false);
   const { data, error, isLoading, mutate } =
     useSWR<InsightUsageAnalyticsResponse>(
       "/api/insights/analytics?limit=10",
@@ -325,27 +324,26 @@ export function InsightAnalyticsPanel() {
   }).format(new Date(data.generatedAt));
 
   const exportAnalytics = async () => {
-    const isTauriApp = typeof window !== "undefined" && isTauri();
-    const exportUrl = "/api/insights/analytics/export";
-    if (!isTauriApp) {
-      window.location.href = exportUrl;
-      return;
+    if (isExporting) return;
+
+    setIsExporting(true);
+    try {
+      const exportUrl = "/api/insights/analytics/export";
+      const response = await fetch(exportUrl);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch export analytics: ${response.status} ${response.statusText}`,
+        );
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const disposition = response.headers.get("Content-Disposition");
+      const fileName =
+        disposition?.split("filename=")[1]?.replace(/^"|"$/g, "") ||
+        "export.csv";
+      await (await getFileSystem()).saveFile(bytes, { fileName });
+    } finally {
+      setIsExporting(false);
     }
-    const res = await fetch(exportUrl);
-    if (!res.ok) {
-      throw new Error(
-        `Failed to fetch export analytics: ${res.status} ${res.statusText}`,
-      );
-    }
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    const disposition = res.headers.get("Content-Disposition");
-    const filename =
-      disposition?.split("filename=")[1]?.replace(/"/g, "") || "export.csv";
-    const path = await save({
-      defaultPath: filename,
-    });
-    if (!path) return;
-    await writeFile(path, bytes);
   };
 
   return (
@@ -365,9 +363,14 @@ export function InsightAnalyticsPanel() {
           variant="outline"
           size="sm"
           className="h-8 shrink-0"
-          onClick={() => exportAnalytics()}
+          onClick={exportAnalytics}
+          disabled={isExporting}
         >
-          <RemixIcon name="download" size="size-4" />
+          <RemixIcon
+            name={isExporting ? "loader_2" : "download"}
+            size="size-4"
+            className={isExporting ? "animate-spin" : undefined}
+          />
           {t("common.export", "Export")}
         </Button>
       </div>
