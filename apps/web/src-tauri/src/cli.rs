@@ -1063,7 +1063,7 @@ fn resolve_packaged_direct_runner_target(log_path: &Path) -> Result<DirectRunner
         CliError::new(
             "direct_runner_unavailable",
             format!(
-                "packaged native-agent runner not found. Expected cli-bundle/native-agent-cli.mjs in packaged resources. See log: {}",
+                "packaged native-agent runner not found. Expected cli-bundle/native-agent-cli.cjs or cli-bundle/native-agent-cli.mjs in packaged resources. See log: {}",
                 log_path.display()
             ),
         )
@@ -1176,6 +1176,22 @@ fn packaged_resource_candidates() -> Vec<PathBuf> {
     if let Some(parent) = exe_dir.parent() {
         candidates.push(parent.join("resources"));
         candidates.push(parent.to_path_buf());
+
+        #[cfg(target_os = "linux")]
+        {
+            if exe_dir.file_name().is_some_and(|name| name == "bin") {
+                candidates.push(parent.join("lib").join(env!("CARGO_PKG_NAME")));
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(appdir) = std::env::var("APPDIR") {
+            let appdir = PathBuf::from(appdir);
+            candidates.push(appdir.join("usr").join("lib").join(env!("CARGO_PKG_NAME")));
+        }
+        candidates.push(PathBuf::from("/usr/lib").join(env!("CARGO_PKG_NAME")));
     }
 
     candidates

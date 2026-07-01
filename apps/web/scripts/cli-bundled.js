@@ -141,6 +141,10 @@ export function findBundledCliLayout(inputPath, platform = process.platform) {
   const root = path.resolve(inputPath);
   const binaryName = getCliBinaryName(platform);
   const candidates = bundledLayoutCandidates(root, binaryName);
+  const linuxDebCandidate = linuxDebLayoutCandidate(root, binaryName);
+  if (linuxDebCandidate) {
+    candidates.push(linuxDebCandidate);
+  }
   const recursiveCandidate = findRecursiveCliCandidate(root, binaryName);
   if (recursiveCandidate) {
     candidates.push(recursiveCandidate);
@@ -192,6 +196,68 @@ function bundledLayoutCandidates(root, binaryName) {
   });
 
   return candidates;
+}
+
+function linuxDebLayoutCandidate(root, binaryName) {
+  const binaryPath = path.join(root, "usr", "bin", binaryName);
+  if (!fs.existsSync(binaryPath)) {
+    return undefined;
+  }
+
+  return {
+    kind: "linux-deb-system",
+    cliDir: path.dirname(binaryPath),
+    binaryPath,
+    resourceRoot:
+      findLinuxDebResourceRoot(root) ??
+      path.join(root, "usr", "lib", "openloomi"),
+  };
+}
+
+function findLinuxDebResourceRoot(root) {
+  for (const libDir of [
+    path.join(root, "usr", "lib"),
+    path.join(root, "usr", "lib64"),
+  ]) {
+    const resourceRoot = findResourceRootWithNativeAgentRunner(libDir);
+    if (resourceRoot) {
+      return resourceRoot;
+    }
+  }
+  return undefined;
+}
+
+function findResourceRootWithNativeAgentRunner(startDir) {
+  if (!fs.existsSync(startDir) || !fs.statSync(startDir).isDirectory()) {
+    return undefined;
+  }
+
+  const queue = [{ dir: startDir, depth: 0 }];
+  while (queue.length > 0) {
+    const { dir, depth } = queue.shift();
+    if (depth > 4) {
+      continue;
+    }
+
+    if (findNativeAgentRunner(runtimeAppCandidates(dir, startDir))) {
+      return dir;
+    }
+
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        queue.push({ dir: path.join(dir, entry.name), depth: depth + 1 });
+      }
+    }
+  }
+
+  return undefined;
 }
 
 function findRecursiveCliCandidate(root, binaryName) {

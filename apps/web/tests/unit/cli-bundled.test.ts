@@ -140,6 +140,27 @@ describe("bundled CLI resource checks", () => {
     });
   });
 
+  it("maps Linux deb /usr/bin CLI binaries to /usr/lib/openloomi resources", () => {
+    const root = tempRoot("linux-deb");
+    const binary = join(root, "usr", "bin", "openloomi-ctl");
+    mkdirSync(dirname(binary), { recursive: true });
+    writeFileSync(binary, "binary");
+    chmodSync(binary, 0o755);
+    const resourceRoot = join(root, "usr", "lib", "openloomi");
+    const runner = writeRuntime(resourceRoot);
+
+    expect(findBundledCliLayout(root, "linux")).toMatchObject({
+      binaryPath: binary,
+      layoutKind: "linux-deb-system",
+      resourceRoot,
+    });
+    expect(verifyBundledCliLayout(root, "linux")).toMatchObject({
+      ok: true,
+      binaryPath: binary,
+      runner,
+    });
+  });
+
   it("requires the packaged native-agent runner in bundled resources", () => {
     const root = tempRoot("missing-runner");
     writeBundledBinary(root, "win32");
