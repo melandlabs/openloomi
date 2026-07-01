@@ -1,0 +1,114 @@
+---
+title: "OpenLoomi CLI"
+description: "Run openloomi-ctl from packaged desktop installs for one-shot automation and CI/CD workflows"
+icon: "FaTerminal"
+---
+
+# OpenLoomi CLI
+
+OpenLoomi desktop installers include `openloomi-ctl` inside the installed app resources. GitHub Releases do not publish separate standalone `openloomi-ctl-*` zip or tar archives.
+
+The CLI is not added to `PATH` automatically. Call it by full path, or create your own shell alias in environments where that is useful.
+
+## Installed Paths
+
+Windows:
+
+```powershell
+# Default per-user NSIS installs usually live under LocalAppData\Programs.
+$ctl = "$env:LOCALAPPDATA\Programs\openloomi\cli\openloomi-ctl.exe"
+
+# If OpenLoomi was installed elsewhere, use:
+# <OpenLoomi install dir>\cli\openloomi-ctl.exe
+```
+
+macOS:
+
+```bash
+ctl="/Applications/openloomi.app/Contents/Resources/cli/openloomi-ctl"
+```
+
+Linux:
+
+```bash
+# deb/rpm package resource path
+ctl="/usr/lib/openloomi/cli/openloomi-ctl"
+
+# If your distro relocates package resources, use:
+# <OpenLoomi resources dir>/cli/openloomi-ctl
+```
+
+## Runtime Requirement
+
+Packaged one-shot mode uses the bundled OpenLoomi app runtime and native-agent runner, but it still requires Node.js 22 or newer on `PATH`. If Node.js is missing or too old, one-shot mode exits with a clear error explaining the Node.js 22+ requirement.
+
+The CLI does not require the desktop app process, a Next.js dev server, or local `3414`/`3515` API service to be running. Set `OPENLOOMI_API_URL` only when you intentionally want the HTTP compatibility path to a running OpenLoomi API service.
+
+## Login And Token
+
+Token lookup order:
+
+1. `OPENLOOMI_AUTH_TOKEN`
+2. Token saved by logging in through the OpenLoomi desktop app
+3. Clear error asking you to log in through the desktop app or set `OPENLOOMI_AUTH_TOKEN`
+
+For CI/CD, set `OPENLOOMI_AUTH_TOKEN` from your secret store. It must be a real OpenLoomi auth token; do not invent a placeholder value.
+
+PowerShell:
+
+```powershell
+$env:OPENLOOMI_AUTH_TOKEN = "<token from OpenLoomi>"
+```
+
+Bash:
+
+```bash
+export OPENLOOMI_AUTH_TOKEN="<token from OpenLoomi>"
+```
+
+## Basic Usage
+
+Windows:
+
+```powershell
+& $ctl --version
+& $ctl --one-shot "Reply with exactly: OK" --json --permission-mode deny
+type prompt.txt | & $ctl --one-shot --stdin --json --permission-mode deny
+```
+
+macOS and Linux:
+
+```bash
+"$ctl" --version
+"$ctl" --one-shot "Reply with exactly: OK" --json --permission-mode deny
+cat prompt.txt | "$ctl" --one-shot --stdin --json --permission-mode deny
+```
+
+Use `--permission-mode deny` for non-interactive automation by default. Use `--permission-mode bypass` only in trusted automation.
+
+## CI/CD Example
+
+Install the OpenLoomi desktop package for the runner platform, install Node.js 22 or newer, set `OPENLOOMI_AUTH_TOKEN`, and run the bundled CLI by path.
+
+GitHub Actions example for Linux:
+
+```yaml
+- uses: actions/setup-node@v4
+  with:
+    node-version: 22
+
+- run: sudo apt-get install ./openloomi_${OPENLOOMI_VERSION}_linux_amd64.deb
+
+- run: /usr/lib/openloomi/cli/openloomi-ctl --one-shot "Reply with exactly: OK" --json --permission-mode deny
+  env:
+    OPENLOOMI_AUTH_TOKEN: ${{ secrets.OPENLOOMI_AUTH_TOKEN }}
+```
+
+The bundled runtime chain is:
+
+```text
+bundled openloomi-ctl
+  -> bundled native-agent-cli.cjs
+  -> bundled apps/web runtime / nativeAgentHost
+  -> @openloomi/ai native-runner
+```

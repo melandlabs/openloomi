@@ -12,6 +12,7 @@ import {
   FaPlug,
   FaRocket,
   FaShieldAlt,
+  FaTerminal,
   FaTools,
 } from "react-icons/fa";
 import { source } from "@/lib/source";
@@ -20,6 +21,7 @@ const DOC_TITLES = new Map([
   ["/docs", "Welcome"],
   ["/docs/what-is-openloomi", "What is OpenLoomi?"],
   ["/docs/getting-started", "Getting Started"],
+  ["/docs/openloomi-ctl", "OpenLoomi CLI"],
   ["/docs/chat", "Chat"],
   ["/docs/connectors", "Connectors"],
   ["/docs/messaging-apps", "Messaging Apps"],
@@ -43,6 +45,7 @@ const DOC_TITLES = new Map([
 const DOC_ICON_NAMES = new Map([
   ["/docs/what-is-openloomi", "FaRocket"],
   ["/docs/getting-started", "FaRocket"],
+  ["/docs/openloomi-ctl", "FaTerminal"],
   ["/docs/chat", "FaComments"],
   ["/docs/connectors", "FaPlug"],
   ["/docs/messaging-apps", "FaCommentDots"],
@@ -69,6 +72,7 @@ const DOC_ICONS: Record<string, IconType> = {
   FaPlug,
   FaRocket,
   FaShieldAlt,
+  FaTerminal,
   FaTools,
 };
 
