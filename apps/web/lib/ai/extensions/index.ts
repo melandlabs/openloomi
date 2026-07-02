@@ -5,3 +5,8 @@
  */
 
 export { claudePlugin, createClaudeAgent, ClaudeAgent } from "./agent/claude";
+export {
+  opencodePlugin,
+  createOpenCodeAgent,
+  OpenCodeAgent,
+} from "./agent/opencode";

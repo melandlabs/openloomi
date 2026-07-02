@@ -10,6 +10,7 @@ export type {
   AgentMessage,
   AgentMessageType,
   AgentOptions,
+  BuiltinAgentProvider,
   AgentProvider,
   AgentQuestion,
   AgentRequest,

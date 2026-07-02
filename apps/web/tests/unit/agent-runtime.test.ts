@@ -3,7 +3,7 @@ import {
   runAgentRuntimeRequest,
   type AgentRuntimePermissionRequest,
 } from "@openloomi/ai/agent/runtime";
-import type { AgentRegistry } from "@openloomi/ai/agent/registry";
+import { AgentRegistry } from "@openloomi/ai/agent/registry";
 import type {
   AgentConfig,
   AgentMessage,
@@ -21,6 +21,25 @@ const silentLogger = {
 };
 
 describe("agent runtime", () => {
+  it("registers and creates arbitrary string providers", () => {
+    const registry = new AgentRegistry();
+    const agent = new PermissionAgent("custom-cli");
+
+    registry.register({
+      metadata: {
+        type: "custom-cli",
+        name: "Custom CLI",
+        supportsPlan: true,
+        supportsStreaming: true,
+        supportsSandbox: false,
+      },
+      factory: () => agent,
+    });
+
+    expect(registry.create({ provider: "custom-cli" })).toBe(agent);
+    expect(registry.getRegistered()).toContain("custom-cli");
+  });
+
   it("runs through the shared runtime and surfaces permission request events", async () => {
     const permissionRequests: AgentRuntimePermissionRequest[] = [];
     const run = await runAgentRuntimeRequest(
@@ -125,7 +144,11 @@ describe("agent runtime", () => {
 });
 
 class PermissionAgent implements IAgent {
-  readonly provider: AgentProvider = "custom";
+  readonly provider: AgentProvider;
+
+  constructor(provider: AgentProvider = "custom") {
+    this.provider = provider;
+  }
 
   async *run(
     _prompt: string,

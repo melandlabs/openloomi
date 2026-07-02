@@ -15,6 +15,7 @@ import {
   DEFAULT_ALLOWED_TOOLS,
   type AgentConfig,
   type AgentOptions,
+  type AgentProvider,
   type FileAttachment,
   type ImageAttachment,
 } from "../types";
@@ -29,7 +30,8 @@ export interface NativeAgentRequest {
   workDir?: string;
   useProvidedWorkDir?: boolean;
   taskId?: string;
-  provider?: "claude" | "deepagents";
+  provider?: AgentProvider;
+  providerConfig?: Record<string, unknown>;
   modelConfig?: {
     apiKey?: string;
     baseUrl?: string;
@@ -200,10 +202,15 @@ async function buildAgentConfig(
   userId: string,
   host: NativeAgentHost,
 ): Promise<AgentConfig> {
-  const userAnthropicConfig = await host.getUserLlmProviderConfig?.({
-    userId,
-    providerType: "anthropic_compatible",
-  });
+  const provider = body.provider || "claude";
+  const useAnthropicCompatibleConfig = provider === "claude";
+
+  const userAnthropicConfig = useAnthropicCompatibleConfig
+    ? await host.getUserLlmProviderConfig?.({
+        userId,
+        providerType: "anthropic_compatible",
+      })
+    : undefined;
 
   const effectiveModelConfig = {
     ...body.modelConfig,
@@ -213,12 +220,19 @@ async function buildAgentConfig(
   // User-saved Anthropic settings win over request defaults such as the
   // frontend's selectedModel fallback to claude-sonnet-4.6.
   return {
-    provider: body.provider || "claude",
-    apiKey: effectiveModelConfig.apiKey,
-    baseUrl: effectiveModelConfig.baseUrl,
+    provider,
+    apiKey: useAnthropicCompatibleConfig
+      ? effectiveModelConfig.apiKey
+      : undefined,
+    baseUrl: useAnthropicCompatibleConfig
+      ? effectiveModelConfig.baseUrl
+      : undefined,
     model: effectiveModelConfig.model,
-    thinkingLevel: body.modelConfig?.thinkingLevel,
+    thinkingLevel: useAnthropicCompatibleConfig
+      ? body.modelConfig?.thinkingLevel
+      : undefined,
     workDir: body.workDir,
+    providerConfig: body.providerConfig,
   };
 }
 
@@ -593,6 +607,7 @@ async function saveFileAttachmentsToWorkspace(
 ): Promise<string[]> {
   const savedFilePaths: string[] = [];
   const resolvedWorkDir = resolveHomeDir(workDir);
+  const usedFileNames = new Set<string>();
 
   if (!existsSync(resolvedWorkDir)) {
     await fs.mkdir(resolvedWorkDir, { recursive: true });
@@ -602,14 +617,18 @@ async function saveFileAttachmentsToWorkspace(
     );
   }
 
-  for (const attachment of fileAttachments) {
+  for (const [index, attachment] of fileAttachments.entries()) {
     try {
       const base64Data = attachment.data.includes(",")
         ? attachment.data.split(",")[1]
         : attachment.data;
 
       const buffer = Buffer.from(base64Data, "base64");
-      const filePath = path.join(resolvedWorkDir, attachment.name);
+      const safeFileName = makeUniqueFileName(
+        sanitizeAttachmentFileName(attachment.name, index),
+        usedFileNames,
+      );
+      const filePath = path.join(resolvedWorkDir, safeFileName);
 
       await fs.writeFile(filePath, buffer);
       savedFilePaths.push(filePath);
@@ -626,6 +645,36 @@ async function saveFileAttachmentsToWorkspace(
   }
 
   return savedFilePaths;
+}
+
+function sanitizeAttachmentFileName(fileName: string, index: number): string {
+  const fallback = `attachment-${index + 1}`;
+  const baseName = path
+    .basename(fileName.replace(/\\/g, "/"))
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+    .trim();
+  const normalized = baseName.replace(/^\.+$/, "").trim();
+  return normalized || fallback;
+}
+
+function makeUniqueFileName(fileName: string, usedFileNames: Set<string>) {
+  if (!usedFileNames.has(fileName)) {
+    usedFileNames.add(fileName);
+    return fileName;
+  }
+
+  const extension = path.extname(fileName);
+  const stem = extension ? fileName.slice(0, -extension.length) : fileName;
+  let counter = 2;
+
+  while (true) {
+    const candidate = `${stem}-${counter}${extension}`;
+    if (!usedFileNames.has(candidate)) {
+      usedFileNames.add(candidate);
+      return candidate;
+    }
+    counter += 1;
+  }
 }
 
 async function saveRAGDocumentsToWorkspace(

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -42,6 +42,11 @@ describe("native agent runner", () => {
 
     const agent = new CapturingAgent();
     const registerProviders = vi.fn();
+    const getUserLlmProviderConfig = vi.fn(async () => ({
+      apiKey: "saved-key",
+      baseUrl: "https://llm.example.test",
+      model: "saved-model",
+    }));
     const host: NativeAgentHost = {
       registry: createRegistry(agent),
       registerProviders,
@@ -49,11 +54,7 @@ describe("native agent runner", () => {
         aiSoulPrompt: "answer as the user's operator",
         language: "zh-CN",
       }),
-      getUserLlmProviderConfig: async () => ({
-        apiKey: "saved-key",
-        baseUrl: "https://llm.example.test",
-        model: "saved-model",
-      }),
+      getUserLlmProviderConfig,
       logger: silentLogger,
     };
 
@@ -89,6 +90,10 @@ describe("native agent runner", () => {
     const messages = await collectMessages(run.generator);
 
     expect(registerProviders).toHaveBeenCalledTimes(1);
+    expect(getUserLlmProviderConfig).toHaveBeenCalledWith({
+      userId: "user-1",
+      providerType: "anthropic_compatible",
+    });
     expect(agent.config).toMatchObject({
       provider: "claude",
       apiKey: "saved-key",
@@ -112,6 +117,126 @@ describe("native agent runner", () => {
       "hello from attachment",
     );
     expect(messages).toEqual([{ type: "text", content: "ok" }]);
+  });
+
+  it("passes custom provider config without reading Anthropic settings", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "openloomi-opencode-runner-"));
+    tempDirs.push(workDir);
+
+    const agent = new CapturingAgent();
+    const getUserLlmProviderConfig = vi.fn();
+    const host: NativeAgentHost = {
+      registry: createRegistry(agent),
+      getUserLlmProviderConfig,
+      logger: silentLogger,
+    };
+
+    const run = await runNativeAgentRequest(
+      {
+        prompt: "use opencode",
+        provider: "opencode",
+        providerConfig: {
+          agent: "build",
+          allowAutoApprove: true,
+        },
+        modelConfig: {
+          apiKey: "anthropic-key-that-should-not-leak",
+          baseUrl: "https://anthropic-compatible.example.test",
+          model: "openai/gpt-5",
+          thinkingLevel: "low",
+        },
+        workDir,
+      },
+      {
+        session: { user: { id: "user-1", type: "regular" } },
+        userId: "user-1",
+        abortController: new AbortController(),
+      },
+      host,
+    );
+
+    await collectMessages(run.generator);
+
+    expect(getUserLlmProviderConfig).not.toHaveBeenCalled();
+    expect(agent.config).toMatchObject({
+      provider: "opencode",
+      model: "openai/gpt-5",
+      workDir,
+      providerConfig: {
+        agent: "build",
+        allowAutoApprove: true,
+      },
+    });
+    expect(agent.config?.apiKey).toBeUndefined();
+    expect(agent.config?.baseUrl).toBeUndefined();
+    expect(agent.config?.thinkingLevel).toBeUndefined();
+  });
+
+  it("sanitizes file attachment names before saving to the workspace", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "openloomi-native-files-"));
+    tempDirs.push(workDir);
+
+    const agent = new CapturingAgent();
+    const host: NativeAgentHost = {
+      registry: createRegistry(agent),
+      logger: silentLogger,
+    };
+
+    const run = await runNativeAgentRequest(
+      {
+        prompt: "sanitize attachments",
+        provider: "opencode",
+        workDir,
+        fileAttachments: [
+          {
+            name: "../escape.txt",
+            data: Buffer.from("escape").toString("base64"),
+            mimeType: "text/plain",
+          },
+          {
+            name: "/tmp/absolute.txt",
+            data: Buffer.from("absolute").toString("base64"),
+            mimeType: "text/plain",
+          },
+          {
+            name: "nested/name.txt",
+            data: Buffer.from("nested").toString("base64"),
+            mimeType: "text/plain",
+          },
+          {
+            name: "../escape.txt",
+            data: Buffer.from("second escape").toString("base64"),
+            mimeType: "text/plain",
+          },
+        ],
+      },
+      {
+        session: { user: { id: "user-1", type: "regular" } },
+        userId: "user-1",
+        abortController: new AbortController(),
+      },
+      host,
+    );
+
+    await collectMessages(run.generator);
+
+    await expect(readFile(join(workDir, "escape.txt"), "utf8")).resolves.toBe(
+      "escape",
+    );
+    await expect(readFile(join(workDir, "absolute.txt"), "utf8")).resolves.toBe(
+      "absolute",
+    );
+    await expect(readFile(join(workDir, "name.txt"), "utf8")).resolves.toBe(
+      "nested",
+    );
+    await expect(readFile(join(workDir, "escape-2.txt"), "utf8")).resolves.toBe(
+      "second escape",
+    );
+
+    await expect(readdir(join(workDir, "nested"))).rejects.toThrow();
+    expect(agent.prompt).toContain("escape.txt");
+    expect(agent.prompt).toContain("escape-2.txt");
+    expect(agent.prompt).not.toContain("../escape.txt");
   });
 });
 

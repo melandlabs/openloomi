@@ -333,7 +333,8 @@ export interface PlanStep {
 // Agent Configuration
 // ============================================================================
 
-export type AgentProvider = "claude" | "codex" | "deepagents" | "custom";
+export type BuiltinAgentProvider = "claude" | "codex" | "deepagents" | "custom";
+export type AgentProvider = BuiltinAgentProvider | (string & {});
 
 export interface AgentConfig {
   /** Agent provider to use */
@@ -656,7 +657,9 @@ export interface AgentRequest {
   workDir?: string; // Working directory for session outputs
   taskId?: string; // Task ID for session folder
   /** Provider selection (optional, defaults to env config) */
-  provider?: "claude" | "deepagents";
+  provider?: AgentProvider;
+  /** Provider-specific configuration */
+  providerConfig?: Record<string, unknown>;
   /** Custom model configuration */
   modelConfig?: ModelConfig;
   /** Sandbox configuration for isolated execution */

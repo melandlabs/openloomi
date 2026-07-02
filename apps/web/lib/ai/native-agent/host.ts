@@ -1,7 +1,7 @@
 import { getAgentRegistry } from "@openloomi/ai/agent/registry";
 import type { NativeAgentHost } from "@openloomi/ai/agent/native-runner";
 
-import { claudePlugin } from "@/lib/ai/extensions";
+import { claudePlugin, opencodePlugin } from "@/lib/ai/extensions";
 import { getDocument, getDocumentChunks } from "@/lib/ai/rag/langchain-service";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import {
@@ -18,7 +18,9 @@ function registerNativeAgentProviders() {
     return;
   }
 
-  getAgentRegistry().register(claudePlugin);
+  const registry = getAgentRegistry();
+  registry.register(claudePlugin);
+  registry.register(opencodePlugin);
   providersRegistered = true;
 }
 
