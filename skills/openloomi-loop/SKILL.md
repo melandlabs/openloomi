@@ -1,7 +1,7 @@
 ---
 name: openloomi-loop
 description: "Use this when the user asks about openloomi's Loop — openloomi's proactive execution brain. It actively and continuously pulls external signals (Gmail, Calendar, GitHub, Slack) via any of three Composio surfaces — **MCP** (`mcp__composio__*`), the **`composio-cli` skill**, or the **`composio` CLI** — enriches them through openloomi-memory, **converts every actionable signal into a typed decision** (`rsvp` / `draft_reply` / `review_pr` / `todo` / `slack_reply` / …), queues it in `data/decisions.json`, and **executes via the openloomi native agent API by default** (`POST http://127.0.0.1:3414/api/native/agent`, the same agentic endpoint the locomo benchmark uses — supports tool use, memory writes, multi-round reasoning; no agent install needed) — with a pluggable spawned-CLI fallback (`claude -p` / `codex` / `aider` / anything via `LOOP_AGENT_BIN`). Triggers: 'openloomi loop', 'loop tick', 'loop schedule', 'loop inbox', 'loop run', 'proactive decisions', 'signal → decision → execute', 'pull signals', 'decision queue', 'loop serve'"
-allowed-tools: Bash(node $SKILL_DIR/scripts/openloomi-loop.cjs *), Bash(node $SKILL_DIR/scripts/loop-tick.cjs *), Bash(node ../../openloomi-memory/scripts/openloomi-memory.cjs *), Bash(curl *), Bash(claude *), Bash(codex *), Bash(aider *), Bash(tail -f $SKILL_DIR/data/daemon.log), Bash(cat >> $SKILL_DIR/data/signals.jsonl), Bash(echo *), Bash(ls *)
+allowed-tools: Bash(node $SKILL_DIR/scripts/openloomi-loop.cjs *), Bash(node $SKILL_DIR/scripts/loop-tick.cjs *), Bash(node $SKILL_DIR/scripts/obsidian-scan.cjs *), Bash(node ../../openloomi-memory/scripts/openloomi-memory.cjs *), Bash(curl *), Bash(claude *), Bash(codex *), Bash(aider *), Bash(tail -f $SKILL_DIR/data/daemon.log), Bash(cat >> $SKILL_DIR/data/signals.jsonl), Bash(echo *), Bash(ls *)
 metadata:
   version: 0.6.4
 ---
@@ -483,6 +483,7 @@ The Loop accepts signals from **four surfaces** — three Composio-shaped (pick 
 | 2 | **Composio Skill** (`composio-cli`) | Claude invokes `Skill composio-cli …` to discover tools, connect accounts, and execute actions. Same toolkit coverage as MCP. | When MCP isn't loaded but the `composio-cli` skill is installed in the Claude Code session. | Skill-mediated — loads schemas on demand. |
 | 3 | **Composio CLI** | `Bash(composio <toolkit> <action> --json …)` shells out to the installed `composio` binary. Same toolkit coverage. | Headless contexts (cron, Surface A scheduled runs, CI, container) where neither MCP nor the skill is available. Most portable. | Subprocess spawn + JSON parse per call. |
 | 4 | **openloomi-memory insights** (`list-insights`) | Pre-extracted summaries for channels synced by `openloomi-connectors` (gmail, slack, telegram, whatsapp, etc.). Synthesized into signal-shape payloads; the existing classifier handles gmail/slack and drops everything else. | Always on. Kicks in only when no Composio surface is connected for that channel. | File-backed — no external auth needed. |
+| 5 | **Obsidian vault** (`OBSIDIAN_VAULT` env) | Recursively scans a local Obsidian vault for `.md` files whose `mtime` changed since the last tick. Emits one `obsidian_note_changed` signal per changed file (capped at `OBSIDIAN_VAULT_CAP`, default 50). | When `OBSIDIAN_VAULT` is set. Tauri / desktop reads the path directly; browser web view reads from a `FileSystemDirectoryHandle` persisted in IndexedDB. | Filesystem — desktop: `@tauri-apps/plugin-fs`; web: File System Access API; headless: `node:fs`. |
 | — | **openloomi-memory** (`mcp__*` or CLI) | Memory reads/writes for enrichment. | Always — required for proper context. | Skill / CLI. |
 | — | **data/inbox/*.json** | Manual drop folder (or any non-Composio bridge script). | Default `enableSources.file: true`. | Filesystem. |
 
@@ -558,6 +559,10 @@ Defaults:
 | `LOOP_OPENLOOMI_TOKEN` | `~/.openloomi/token` | Path to the base64-encoded JWT used to authenticate Surface A. Override only for testing / multi-account setups. The desktop app writes this on login; the Loop reads it on each request. |
 | `LOOP_WEB_PORT` | 3614 | Default port for `loop web`. CLI / `LOOP_WEB_PORT` defaults to 3614, which **conflicts with the openloomi desktop app's** Next.js server on the same port. `loop-ctl.sh` defaults to 3614 to avoid that clash; override per-call with `--port N` or this env var. |
 | `LOOP_NOTIFY_WEBHOOK` | _(unset)_ | If set, every notification also POSTs a Slack-compatible JSON payload to this URL. |
+| `OBSIDIAN_VAULT` | _(unset)_ | Absolute path to the user's local Obsidian vault. When set, each tick scans the vault for `.md` files whose `mtime` changed since the last scan and emits one `obsidian_note_changed` signal per change into `data/signals.jsonl`. The Tauri desktop app reads the path directly; the browser web view uses a `FileSystemDirectoryHandle` persisted in IndexedDB (picked via **Settings → Obsidian vault**). Skip the step entirely by leaving this unset. |
+| `OBSIDIAN_VAULT_EXT` | `.md` | Comma-separated extensions the scanner treats as Obsidian notes. Change to `.md,.markdown` if you also keep raw `.markdown` files. |
+| `OBSIDIAN_VAULT_CAP` | `50` | Max `obsidian_note_changed` signals per tick. Beyond this the scanner emits a single `obsidian_scan_overflow` signal and drops the rest. Prevents a fresh clone of the vault from swamping the queue. |
+| `OBSIDIAN_VAULT_RECURSIVE` | `1` | Set to `0` to scan only the vault root (skip subdirectories). Default recurses while skipping hidden and `node_modules` directories. |
 
 ### Watch independence + `--seen-init`
 
@@ -750,6 +755,28 @@ Conventions:
 - `source` is the **channel** (toolkit / provider). `type` is the **semantic kind** within that channel. A new source can reuse an existing `type` (e.g. a `trello` source with `type: "trello_message"`); the classifier only branches on `type`.
 - If a dedupe key isn't natural (RSS, scrape, manual drop), set `_insightId` to a stable hash of the payload — the dedupe code accepts it as a fallback.
 - The hard-rule filters in `loop-lib.cjs → isHardSkipped()` are currently Gmail-flavored. New channels should extend that function (or run their own pre-filter before appending) so `noreply@*` / `mailer-daemon` / etc. are skipped at the signal level, not the decision level.
+
+### Obsidian vault (optional)
+
+When `OBSIDIAN_VAULT` is set, each tick runs `scripts/obsidian-scan.cjs` as a fifth signal source (after the Composio path runs, before classify). The scanner:
+
+1. Recursively walks the vault (Tauri: `@tauri-apps/plugin-fs readDir` + `stat`; browser: `FileSystemDirectoryHandle.entries()`; headless: `node:fs`) and filters to the configured extensions (default `.md`).
+2. Diffs each entry's `mtimeMs` against `data/obsidian.state.json`. The state file is rewritten every tick with the new mtime map so the next tick only emits signals for files that actually changed.
+3. For each change, appends one NDJSON line to `data/signals.jsonl` with `source: "obsidian"`, `type: "obsidian_note_changed"`, and `payload: { path, mtime_ms, size, vault }`. The path is slash-normalized and relative to the vault root (e.g. `ideas/onboarding_redesign.md`), so memory lookups by path are portable.
+4. Caps per-tick emissions at `OBSIDIAN_VAULT_CAP` (default 50) and emits a single `obsidian_scan_overflow` signal with the dropped count if exceeded — protects the queue from a fresh clone of a large vault.
+
+The vault itself is **not a Composio toolkit** — it's a local filesystem adapter, which is what makes the multi-source "product-research iteration" scenario (Linear + GitHub + Obsidian) possible without adding another cloud dependency. On Tauri the path is read directly (no extra permissions beyond the app's existing scope). On the browser, the user picks the directory once via **Settings → Obsidian vault**; the resulting `FileSystemDirectoryHandle` is persisted in IndexedDB so the next tick reads without re-prompting. Safari and Firefox do not currently grant persistent directory access — the scanner silently skips in those browsers, the rest of the tick is unaffected.
+
+The classifier maps each `obsidian_note_changed` signal to a typed decision based on its path prefix:
+
+| Path prefix | Decision type |
+|---|---|
+| `projects/`, `plans/` | `release_plan` |
+| `people/` | `todo` (action `contact_update`) |
+| `customers/` | `requirement_synthesis` |
+| `ideas/`, `drafts/`, (other) | `doc_update` |
+
+The enrich step then reads up to ~2 KB of each changed note via the same `PlatformFileSystem.readFile` interface and indexes it into `openloomi-memory` keyed by path — so future `linear_review` / `requirement_synthesis` cards can look up `people/sarah_chen.md`, `projects/q2_roadmap.md`, `ideas/onboarding_redesign.md` by path to fold the same evidence into typed decisions.
 
 ### 2. Add a new decision type
 

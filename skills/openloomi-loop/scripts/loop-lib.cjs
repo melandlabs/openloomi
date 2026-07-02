@@ -639,6 +639,98 @@ function classify(signal) {
     };
   }
 
+  // Linear issue — review / scope_check
+  if (signal.type === 'linear_issue' && p.identifier) {
+    const labelNames = (p.labels || []).join(' ').toLowerCase();
+    const text = `${p.title || ''} ${p.description || ''}`.toLowerCase();
+    // Multiple issues sharing a label or repeated pain → requirement_synthesis
+    if (
+      /(upload|upload-large|churn|onboard|invit)/.test(labelNames) ||
+      /(upload|churn|onboard|invite).*(fail|broken|loss|drop)/.test(text)
+    ) {
+      return {
+        type: 'requirement_synthesis',
+        title: `Synthesize requirement: ${p.title || p.identifier}`,
+        action: {
+          kind: 'requirement_synthesis',
+          params: {
+            draft_target: 'linear:new',
+            title: `[REQ] ${p.title || p.identifier}`,
+            body_template: 'PR/FAQ',
+            evidence_count: 1,
+            source_issue_id: p.identifier,
+          },
+        },
+      };
+    }
+    return {
+      type: 'linear_review',
+      title: `Review ${p.identifier}: ${p.title || ''}`.trim(),
+      action: {
+        kind: 'linear_review',
+        params: {
+          issue_id: p.identifier,
+          scope_check: true,
+        },
+      },
+    };
+  }
+
+  // Obsidian note changed — map path prefix to typed decision
+  if (signal.type === 'obsidian_note_changed' && p.path) {
+    const path = p.path;
+    const filename = (path.split('/').pop() || '').replace(/\.md$/i, '');
+    const folder = (path.split('/').slice(0, -1).pop() || '').toLowerCase();
+
+    if (folder === 'projects' || folder === 'plans') {
+      return {
+        type: 'release_plan',
+        title: `Update release plan: ${path}`,
+        action: {
+          kind: 'release_plan',
+          params: { source_path: path, mtime_ms: p.mtime_ms },
+        },
+      };
+    }
+    if (folder === 'people') {
+      return {
+        type: 'todo',
+        title: `Update contact: ${path}`,
+        action: {
+          kind: 'contact_update',
+          params: { source_path: path, mtime_ms: p.mtime_ms },
+        },
+      };
+    }
+    if (folder === 'customers') {
+      return {
+        type: 'requirement_synthesis',
+        title: `Customer note changed — re-review requirements: ${path}`,
+        action: {
+          kind: 'requirement_synthesis',
+          params: {
+            draft_target: 'linear:new',
+            source_path: path,
+            evidence_count: 1,
+          },
+        },
+      };
+    }
+    // ideas/, drafts/, or any other path → doc_update
+    return {
+      type: 'doc_update',
+      title: `Regenerate document: ${path}`,
+      action: {
+        kind: 'doc_update',
+        params: {
+          target_path: path,
+          source_path: path,
+          mtime_ms: p.mtime_ms,
+        },
+      },
+    };
+  }
+
   return null;
 }
 

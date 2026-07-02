@@ -173,6 +173,40 @@ Skip signals whose messageId / eventId / ts already appears in the file (dedupe)
 Also skip signals whose \`_insightId\` matches an existing signal — protects against
 duplicates when toggling composio on/off between ticks.
 
+## 3.5 Obsidian vault scan (optional)
+
+If \`$OBSIDIAN_VAULT\` is set, scan the user's local Obsidian vault as an
+additional signal source. The scan is incremental — it diffs each \`.md\`
+file's \`mtime\` against the cache at \`$SKILL_DIR/data/obsidian.state.json\`
+and only emits signals for files that changed since the last tick. Same NDJSON
+line per change as the Composio path.
+
+\`\`\`bash
+# Desktop / Tauri / headless Node: invokes the shared PlatformFileSystem
+# (Tauri adapter) and falls back to node:fs. Browser users must have picked
+# a vault in Settings first; the persisted FileSystemDirectoryHandle is
+# loaded from IndexedDB.
+OBSIDIAN_VAULT="<absolute vault path>" \\
+  node ${path.join(SKILL_DIR, 'scripts/obsidian-scan.cjs')}
+\`\`\`
+
+The script appends one signal per changed file to \`signals.jsonl\`:
+
+\`\`\`json
+{"ts":"<ISO>","source":"obsidian","type":"obsidian_note_changed","payload":{"path":"ideas/onboarding_redesign.md","mtime_ms":1720000000000,"size":2048,"vault":"<vault path>"}}
+\`\`\`
+
+If the change set exceeds \`OBSIDIAN_VAULT_CAP\` (default 50), the script emits
+a single \`obsidian_scan_overflow\` signal with the dropped count and stops.
+Skip this step entirely when \`$OBSIDIAN_VAULT\` is unset — the rest of the
+tick is unaffected.
+
+After the scan, the enrich step below treats each \`obsidian_note_changed\`
+signal as a memory note indexed by path — future \`linear_review\` /
+\`requirement_synthesis\` cards can look up \`people/<x>.md\`,
+\`projects/<y>.md\`, \`ideas/<z>.md\` by path to fold the same evidence into
+typed decisions.
+
 ## 4. Enrich with openloomi-memory
 
 For every signal, look up the sender / organizer / channel in \`openloomi-memory\` BEFORE classifying. Use:
@@ -224,6 +258,11 @@ Read the last ~200 lines of signals.jsonl. For each new signal (not yet classifi
     - github_pr where user_is_reviewer                               -> review_pr   (github_review)
     - github_issue open with assignee_login                           -> todo        (todo)
     - slack_message with mentions_me                                  -> draft_reply (slack_reply)
+    - obsidian_note_changed in projects/ or plans/                    -> release_plan (release_plan)
+    - obsidian_note_changed in people/                                -> todo          (contact_update)
+    - obsidian_note_changed in customers/                             -> requirement_synthesis (requirement_synthesis)
+    - obsidian_note_changed in ideas/ or drafts/                      -> doc_update    (doc_update)
+    - obsidian_note_changed (other paths)                             -> doc_update    (doc_update)
 
 For each surviving signal, append a decision to ${path.join(SKILL_DIR, 'data/decisions.json')} under "pending" using Bash:
 

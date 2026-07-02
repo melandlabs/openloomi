@@ -308,9 +308,9 @@ header{display:flex;align-items:center;gap:12px;padding:10px 16px 8px;border-bot
 
 <script>
 // ── PALETTE ──────────────────────────────────────────────────────────────────
-const TC = {rsvp:'#f0b840',draft_reply:'#7ed488',review_pr:'#5ba8d4',slack_reply:'#c87de8',todo:'#e87070'};
-const TL = {rsvp:'RSVP',draft_reply:'DRAFT',review_pr:'PR',slack_reply:'SLACK',todo:'TODO'};
-const TYPES = ['rsvp','draft_reply','review_pr','slack_reply','todo'];
+const TC = {rsvp:'#f0b840',draft_reply:'#7ed488',review_pr:'#5ba8d4',slack_reply:'#c87de8',todo:'#e87070',linear_review:'#5b8fd4',requirement_synthesis:'#d47eb8',release_plan:'#7ed4d4',doc_update:'#d4b87e'};
+const TL = {rsvp:'RSVP',draft_reply:'DRAFT',review_pr:'PR',slack_reply:'SLACK',todo:'TODO',linear_review:'LINEAR',requirement_synthesis:'REQ',release_plan:'RELEASE',doc_update:'DOC'};
+const TYPES = ['rsvp','draft_reply','review_pr','slack_reply','todo','linear_review','requirement_synthesis','release_plan','doc_update'];
 
 // ── STATE ────────────────────────────────────────────────────────────────────
 let view = 'focus';
@@ -479,7 +479,7 @@ function toggleType(t){ typeFilter.has(t) ? typeFilter.delete(t) : typeFilter.ad
 // One slim row per PENDING decision. Sort: todo first, then by confidence desc.
 // typeFilter still applies (chips). Click row → openDetail. Inline RUN / DISMISS.
 function renderFocus(){
-  const TYPE_ORDER = ['todo','draft_reply','rsvp','review_pr','slack_reply'];
+  const TYPE_ORDER = ['todo','draft_reply','rsvp','review_pr','slack_reply','linear_review','requirement_synthesis','release_plan','doc_update'];
   const arr = (data.pending || [])
     .filter(d => typeFilter.has(d.type || 'unknown'))
     .sort((a, b) => {
