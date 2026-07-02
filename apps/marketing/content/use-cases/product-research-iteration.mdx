@@ -1,0 +1,155 @@
+---
+title: "Product-Research Iteration — Plan the next sprint automatically"
+description: "Pull what's on your screen, Linear tickets, GitHub PRs/issues, and local Obsidian notes into the same Loop cycle, synthesize them into an actionable next-iteration plan, and drop the resulting PRDs / RFCs back into Obsidian."
+icon: "FaStream"
+---
+
+# Product-Research Iteration — Plan the next sprint automatically
+
+The usual way to plan the next sprint goes like this: open Linear to scan dozens of tickets, open GitHub to dig through user feedback and bugs, open Obsidian to flip through half-finished proposals and customer interview notes. You bounce between these tools, skim 200 headlines, and stitch the next iteration together from memory — then jot the conclusion into Notion, and by Monday's standup you've already forgotten half of it.
+
+OpenLoomi's Loop pulls what's on your screen into the same cycle too: a competitor feature you just spotted, user feedback being discussed in an IM group chat, a feedback page surfaced during a customer interview, two pages you snapped side-by-side while comparing an A/B test — hit the global hotkey (default `Enter`) to capture any of those, and Loop recognizes it as a **screen-memory** signal. On top of that, every scan automatically pulls the latest activity from Linear, GitHub, and your local Obsidian vault. Loop lays out a set of decision cards in front of you — things like "ticket health check", "merge these into one requirement", "release plan update" — and you just pick the one you want to act on and press **▶ RUN**.
+
+---
+
+## What changes vs. the traditional product-research iteration flow
+
+| Before (the traditional way)                                                                                                               | After (OpenLoomi Loop)                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Every day, open Linear / GitHub / Obsidian one by one, skim 200 headlines, stitch the next sprint together                                 | One scan pulls screen + Linear / GitHub / Obsidian together and synthesizes decision cards into a single queue                                                                                    |
+| At sprint planning, manually open each ticket, read the description, hunt down related issues, scroll comments                             | Pick a ticket-review card and read Loop's health-check report first (suggested merges / splits), then decide what to do                                                                           |
+| Requirement sources scatter across Slack, GitHub comments, Obsidian notes — no one can trace where anything started                        | Every card carries its original links — a ticket card jumps straight back to the Linear issue / GitHub PR / Obsidian section, so the evidence is traceable                                        |
+| Priority order is a PM's gut call, with nothing to check it against                                                                        | Every card carries a confidence score (well-evidenced cards score high, brand-new topics score low) and links to the relevant project notes                                                       |
+| Decisions end up scattered across Slack drafts, local scratch files, Notion memos                                                          | Every conclusion lives in one decision list — each card spells out its source, context, and recommended action                                                                                    |
+| Editing a Linear description shreds the context, GitHub comments sink to the bottom and get lost, Obsidian notes never get updated         | Press ▶ RUN to do "analyze + edit Linear + write back to your local notes" in one go — the resulting PRD / RFC drops straight into your Obsidian vault                                            |
+| Competitor features, IM feedback, customer-interview screenshots, and A/B comparison shots pile up on your desktop or in browser bookmarks | Hit the global hotkey (default `Enter`) to snap a screen; Loop files it as "screen memory" and AI-extracts the key content, then the next scan matches it against the other sources automatically |
+
+---
+
+## The 5 things it does
+
+**🖼️ What's on your screen queues itself in** — Spotting a competitor's new feature, reading IM feedback as it comes in, comparing two A/B variants, finding a feedback page during a customer interview — hit the global hotkey (default `Enter`) to capture whatever you're looking at, and Loop turns it into a **screen-memory** entry and AI-extracts the key content. The next iteration scan matches this memory against signals from Linear / GitHub / Obsidian; when something lines up, it becomes a decision card like "update competitor comparison" or "merge this IM feedback into that issue".
+
+![Screen memory](/img/use-cases/screen-memory.png)
+
+**🔍 Ticket health check** — Before next sprint planning, Loop walks through your Linear backlog for you: which issues already have a real scope spelled out in the comments, which tickets could actually be merged, which one says "small fix" in the title but already has 7 linked cards. Read Loop's health-check report before you press ▶ RUN.
+
+**🧩 Same problem across tools** — A user pain point that shows up in 7 GitHub issues tagged `upload-large-file`, 2 Linear tickets, and an Obsidian `customers/acme_corp.md` interview note? Loop crosses those 11 signals into a single card that tells you "this is actually the same thing", saving you the assembly work.
+
+**📅 Roadmap auto-follows along** — Edit one line of `projects/q2_roadmap.md` in Obsidian, and that evening Loop turns the corresponding release-plan update into a card and puts it in front of you — no need to remember to sync it yourself.
+
+**📝 PRDs / RFCs land directly on your disk** — Pick a "synthesize requirement" card, press ▶ RUN, and Loop drafts a PR/FAQ-style PRD and writes it straight into `ideas/team_space_large_upload.md` in Obsidian — the same decision leaves a traceable footprint on your screen, in Linear / GitHub, and in your local notes.
+
+### What a card looks like
+
+The **evidence chain** on a ticket-review card is the key to automatic traceability: the original Linear issue, related GitHub PR, and the cited section in your Obsidian notes all live on the same line. You don't have to go back to Slack and hunt for "whatever that thread was about".
+
+When you press ▶ RUN, Loop calls the Linear API to apply the splits the health-check report suggested as new tickets, then writes the new ticket IDs back into the matching Obsidian note — one ▶ RUN does "analyze + edit Linear + sync back to your local knowledge base".
+
+### What your Loop board looks like after one scan
+
+You don't have to turn those 5 features on one at a time — once Linear + screen memory + Obsidian are wired up, the next Loop scan pulls screen + Linear + Obsidian together and pushes a batch of cards into a single queue. The top of the board has 7 chips, one per decision type: `LINEAR` (ticket review), `REQ` (cross-source requirement synthesis), `RELEASE` (release-plan update), `DOC` (PRD / RFC landing), plus the main-line chips `RSVP / DRAFT / PR / SLACK / TODO`.
+
+![Loop board — ticket-review, requirement-synthesis, and PRD-landing cards sharing one queue](/img/use-cases/loop-kanban-product-research.png)
+
+Click the `LINEAR` chip to see only Linear-related cards; click `REQ` to see only cross-source syntheses. Open any card to see the full evidence chain (the original Linear issue / GitHub PR / Obsidian note section / the screen you snapped with Enter), and the **▶ RUN** button in the lower-right triggers the matching action.
+
+### Decisions land back in your local Obsidian vault
+
+Loop drops the PRDs / RFCs / research notes it generates straight into the matching subfolder (`projects/`, `ideas/`, `customers/`) of your configured Obsidian vault — no extra cloud storage needed. Open Obsidian and the file is right there, with the regenerated RFC pre-filled, evidence chain attached, and the linked decisions footer at the bottom:
+
+![Obsidian preview — RFC auto-regenerated by Loop, written to ideas/ folder of the configured vault](/img/use-cases/obsidian-vault-doc-update.png)
+
+### Screen memory is more than a screenshot
+
+Loop doesn't just dump the image you just snapped with Enter into the queue — it first uses the vision LLM you've configured to extract the key content from the image (e.g. it sees a Linear board and pulls "Cycle 24 — Mar 17, contains 12 tickets"), then stores both the extracted text and the original image locally. When the next scan matches this memory against signals from Linear / GitHub / Obsidian, the card carries not only a PNG but also the AI-extracted text snippet and the corresponding source link — the evidence chain runs all the way from "that screenshot I saw earlier" back to "that ticket on Linear".
+
+---
+
+## How to get started
+
+Screen memory, Linear, and Obsidian can each be turned on independently — they don't conflict with using Loop for Gmail / Calendar. Walk through the steps below and the next Loop scan picks all of them up together.
+
+### Step 0: Turn on screen memory (optional, but recommended)
+
+Whether to enable screen memory is entirely up to your workflow — but if you regularly browse competitor sites, watch feedback roll by in IM group chats, scroll user-feedback pages, or compare A/B variants, leaving it on lets Loop turn "what's on your screen right now" into a signal source for the next iteration.
+
+> **🖥️ This step only works on the desktop app.** Screen memory needs OS-level screen-recording permission; the browser can't grant that interface, and Safari / Firefox don't support it either — Loop automatically skips this step in those environments.
+
+Open **OpenLoomi Settings → Personalization → Screen memory (Chronicle)**:
+
+1. Flip the master switch on. The trigger hotkey defaults to `Enter`; you can change it.
+2. Adjust the debounce interval (default 5 seconds, so accidental double-presses don't spam captures).
+3. If you want a different vision LLM, fill in your own model id — this model is only used for analyzing screen captures; it's independent of the LLM Loop itself uses.
+4. macOS will pop a "Screen Recording" permission prompt automatically — allow it. If you denied it before, go to **System Settings → Privacy & Security → Screen Recording**, add OpenLoomi, then come back.
+
+Once it's confirmed, open any browser for a moment and hit Enter to capture a shot — the next Loop scan queues it automatically as a "screen memory" entry.
+
+### Step 1: Authorize Loop to read your Linear
+
+Open a terminal and run this line; your browser will pop up Linear's authorization page automatically:
+
+```bash
+composio link linear
+```
+
+After authorizing, Loop gets read/write access to the projects and issues you're a member of (read issues / comments, write comments, create tickets, change status). Back in the terminal, confirm the status:
+
+```bash
+composio connections list
+```
+
+Look for `linear` with status `ACTIVE`. The next scan picks Linear up automatically.
+
+### Step 2: Point Loop at your Obsidian vault
+
+> **🗂️ Obsidian isn't a cloud service — it's just a local Markdown folder on your disk.** Loop reads the `.md` notes inside your configured vault directory as signal sources; the same interface is also used to write decision output back into the vault.
+>
+> Give the vault's absolute path in OpenLoomi settings:
+>
+> ```json
+> // settings.json
+> {
+>   "loop": {
+>     "obsidian_vault": "/Users/<you>/Documents/ObsidianVault"
+>   }
+> }
+> ```
+>
+> **Desktop**: takes effect the moment you save, scanning starts immediately. **Browser**: the first time you save, the system folder-picker dialog pops up; after you grant permission, Loop keeps that handle so you don't have to re-pick next time. Safari / Firefox don't currently support this kind of authorization, so in those browsers the Obsidian signal source is automatically disabled.
+>
+> Default scan rules: recursively walks every `.md` under the vault root; subfolders like `ideas/`, `projects/`, `customers/` are indexed into Loop memory as separate "topics".
+
+### Step 3: Start via the `openloomi-loop` skill
+
+Steps 0–2 just wire up the signal sources (screen memory / Linear / Obsidian) — Loop isn't scanning yet. Invoke the **`openloomi-loop` skill** in the chat box to start it — OpenLoomi pulls screen + Linear + GitHub + Obsidian together and synthesizes decision cards into your board. After that it keeps running on the default interval, and you can ask it to re-scan any time.
+
+---
+
+## Why it works this way
+
+**🧩 Multi-source synthesis**
+
+- Screen + Linear + GitHub + Obsidian signals fold into a single card; every card carries the original screenshot / issue / PR / note link
+- You don't have to dig through Slack for "whatever that thread was about" — the decision itself carries the evidence chain, including the image you saw earlier and the text extracted from it
+- A ticket-review card gives you a health-check report before you press ▶ RUN — it tells you which tickets could be merged and which one should be cut in two
+
+**📝 Decisions write back to your local knowledge base**
+
+- Loop reads / writes your configured Obsidian vault through your computer's filesystem (not yet another cloud connection)
+- PRDs / RFCs / research notes Loop generates drop straight into the matching subfolder in your vault
+- The same content lives in Loop's decision list and in your usual Obsidian editor — what's local stays local
+
+**🧠 What it saves you vs. doing this by hand**
+
+- Every card ships with its evidence chain and confidence score, so you don't have to click through 200 links to piece together the context — "the screenshot I saw earlier" shows up as one of the references on the card
+- The desktop app and the browser view sit on the same filesystem interface, so they behave identically; screen memory only works on the desktop (the OS-level screen-recording permission isn't available to browsers)
+- Before you press ▶ RUN, Loop hands you an execution plan (which Linear tickets to change, which file in your vault to write to, which section to put it in) — you can revise it before confirming, so one wrong step doesn't blow up the whole batch
+
+---
+
+## See also
+
+- [Proactive Execution Brain](/use-cases/proactive-decisions) — the main-line scenario: Gmail / Calendar / GitHub / Slack → decision-card queue
+- [OpenLoomi Quickstart](/docs/getting-started) — install the app, connect your AI, meet Loop
+- [OpenLoomi Connectors](/docs/connectors) — authorization guide for each data source
