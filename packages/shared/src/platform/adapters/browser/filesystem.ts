@@ -109,9 +109,11 @@ async function walkDirectory(
 ): Promise<void> {
   // `FileSystemDirectoryHandle.prototype.entries()` is in the spec but not yet
   // in TypeScript's lib.dom.d.ts; cast through `unknown` to the WICG shape.
-  const entries = (base as unknown as {
-    entries(): AsyncIterableIterator<[string, FSHandle]>;
-  }).entries();
+  const entries = (
+    base as unknown as {
+      entries(): AsyncIterableIterator<[string, FSHandle]>;
+    }
+  ).entries();
   for await (const [name, child] of entries) {
     const childPath = basePath ? `${basePath}/${name}` : name;
     if (child.kind === "directory") {
