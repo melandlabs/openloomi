@@ -226,7 +226,7 @@ export const zhHans = {
       "OpenLoomi 基于 Apache 2.0 开源,是一款 AI 同事与工作空间——本地优先的工作记忆,围绕你的 AI agent。在你的机器上自托管,并按你的方式使用它。",
     button: "立即开始 →",
     openSourceCta: "GitHub",
-    subtext: "开源 · 本地优先 · Holistic Context",
+    subtext: "开源 · 本地优先 · 全域上下文",
     mobileDesc:
       "OpenLoomi 支持 macOS、Linux 和 Windows。请在桌面设备上访问下载。",
   },
