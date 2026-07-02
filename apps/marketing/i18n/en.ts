@@ -81,27 +81,27 @@ export const en = {
       {
         title: "Holistic Context",
         description:
-          "Short → mid → long-term memory that grows on its own — visible, auditable, and always remembering your people, projects, and decisions across months.",
+          "OpenLoomi understands your work across people, projects, and decisions — not just keywords, but relationships and history.",
       },
       {
-        title: "Platform Connectors",
+        title: "Strategic Memory",
         description:
-          "Auto-fetch background sync loop pulls commits, issues, emails, and docs proactively into your context graph — across Slack, Gmail, GitHub, Lark/Feishu, and the tools you already use.",
+          "Yesterday's discussion, last week's decision, the project's evolution — OpenLoomi remembers it all, across sessions and across days.",
       },
       {
-        title: "Proactive Tasks",
+        title: "Builtin Professional Skills",
         description:
-          "Intelligent task execution that anticipates your needs — not just scheduled automation, but context-aware actions that happen at the right moment, with your approval.",
+          "From drafting contracts to writing code — the right expertise at every critical moment.",
       },
       {
-        title: "Security & Ease of Use",
+        title: "You Approve, It Executes",
         description:
-          "Native apps for Windows, macOS, and Linux — works out of the box, minutes to set up. Local-first storage with IndexedDB + SQLite, AES-256 encryption, no data leaves your machine, auditable access logs.",
+          "Full control. No surprises. OpenLoomi acts on your behalf, with your approval, every step of the way.",
       },
       {
-        title: "Open Sourced Skills",
+        title: "Relentless Follow-Through",
         description:
-          "OpenLoomi Skills are open-source and can be integrated into any Agent — Claude Code, Codex, OpenClaw, Hermes, and more.",
+          "It doesn't stop at the first step. It tracks commitments, follows up, and sees things through.",
       },
     ],
   },

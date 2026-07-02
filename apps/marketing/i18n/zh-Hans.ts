@@ -75,32 +75,35 @@ export const zhHans = {
     eyebrow: "功能",
     heading: "五大支柱。一个工作空间。",
     description:
-      "Holistic Context、Proactive Tasks 与 Open Sourced Skills——协同工作,让你的 AI 带着感知与你的批准行事。",
+      "上下文、记忆、多渠道连接——协同工作，赋予你的 AI 所需的感知能力。",
     items: [
       {
-        title: "Holistic Context",
+        title: "上下文",
         description:
-          "短→中→长期记忆,自主生长——可见、可审计,数月之间始终记得你的人、项目与决策。",
+          "OpenLoomi 理解你跨人、项目和决策的工作——不只是关键词，而是关系和历史。",
       },
       {
-        title: "Platform Connectors",
+        title: "记忆",
         description:
-          "后台自动同步循环主动拉取提交、议题、邮件、文档进入你的上下文图谱——覆盖 Slack、Gmail、GitHub、Lark/Feishu 等你已使用的工具。",
+          "昨天的讨论、上周的决策、项目的演变——OpenLoomi 记住一切，跨会话、跨天。",
       },
       {
-        title: "Proactive Tasks",
+        title: "多渠道连接",
         description:
-          "智能任务执行,会预判你的需求——不只是定时自动化,而是在恰当时机发生、有上下文感知、经过你批准的行动。",
+          "Slack、邮件、日历、文档、Telegram、Discord——OpenLoomi 将你的整个工具栈连接成统一的上下文。",
       },
       {
-        title: "Security & Ease of Use",
-        description:
-          "Windows、macOS、Linux 原生应用——开箱即用,数分钟完成。本地优先存储 (IndexedDB + SQLite),AES-256 加密,数据不出本机,可审计的访问日志。",
+        title: "内置专业技能",
+        description: "从起草合同到编写代码——每个关键时刻都有正确的专业能力。",
       },
       {
-        title: "Open Sourced Skills",
+        title: "你批准，它执行",
         description:
-          "OpenLoomi Skills 完全开源,可被任意 Agent 集成——Claude Code、Codex、OpenClaw、Hermes 等。",
+          "完全掌控。没有意外。OpenLoomi 代表你行动，在你的批准下，每一步都如此。",
+      },
+      {
+        title: "持续跟进",
+        description: "不会在第一步就停下。它追踪承诺、持续跟进、把事情做到底。",
       },
     ],
   },
