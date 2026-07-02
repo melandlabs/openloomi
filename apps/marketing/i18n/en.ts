@@ -8,9 +8,9 @@ export const en = {
     getStarted: "Get Started",
   },
   hero: {
-    title: "Your AI Mates that Remembers All Work Details",
+    title: "Open-source AI coworker and workspace with a Holistic Context",
     subtitle:
-      "OpenLoomi connects your tools, remembers your work, and keeps your AI in context — across every channel, every day.",
+      "OpenLoomi is an AI coworker and workspace for builders who want local-first work memory around their AI agents. It connects your work tools so AI can understand people, projects, decisions, and follow-ups — before it acts with your approval.",
     cta: "Get Started",
     installOnDesktop: "Please install on desktop",
     installDesktopDesc:
@@ -31,20 +31,21 @@ export const en = {
     heading: "Your AI is smart enough.",
     headingAccent: "It just doesn't know your work.",
     subtitle:
-      "Current AI tools reset every session. They don't remember your projects, your team, or your priorities. You spend the first five minutes re-explaining context — every single time.",
+      "Current AI tools reset every session. They don't remember your people, projects, or decisions — and they have no work memory of what matters. You spend the first five minutes re-explaining context, every single time.",
     cards: [
       "Your work spans Slack, email, calendar, and docs — but your AI sees none of it.",
       "Yesterday's decisions, last week's context — gone the moment you close the tab.",
       "You explain your work to AI every day. It should already know.",
     ],
-    footer: "The bottleneck isn't AI capability. It's AI awareness.",
+    footer:
+      "The bottleneck isn't AI capability. It's AI awareness of your work.",
   },
   howItWorks: {
     eyebrow: "02 — How It Works",
-    heading: "Your AI finally sees",
-    headingAccent: "the full picture.",
+    heading: "Platform Connectors.",
+    headingAccent: "Your AI finally sees the full picture.",
     description:
-      "OpenLoomi connects across Slack, email, calendar, docs, and more — not to archive, but to understand. It builds a living picture of your work: who matters, what's at stake, and what needs to move forward.",
+      "OpenLoomi's Platform Connectors auto-fetch commits, issues, emails, and docs into a single context graph — not to archive, but to understand. People, projects, decisions, and follow-ups stay linked together across every tool you already use.",
     quote: "Not because you asked. Because it already knows.",
     statsAvg: "Average contexts indexed in first 30 days",
     platformMarquee: "Works seamlessly with tools you already use",
@@ -57,10 +58,10 @@ export const en = {
   },
   thenItActs: {
     eyebrow: "03 — Then It Acts",
-    heading: "It picks up where you left off.",
-    headingAccent: "And follows through until it's done.",
+    heading: "Proactive Tasks that follow through.",
+    headingAccent: "And close the loop.",
     description:
-      "With persistent memory and cross-channel context, OpenLoomi doesn't just suggest — it drafts replies, schedules follow-ups, tracks commitments, and closes the loop. You approve, it executes.",
+      "With persistent, holistic context, OpenLoomi doesn't just suggest — it drafts replies, schedules follow-ups, tracks commitments, and closes the loop. Context-aware actions that happen at the right moment. You approve, it executes.",
     steps: [
       "Draft a reply.",
       "Schedule a follow-up.",
@@ -73,34 +74,34 @@ export const en = {
   },
   capabilities: {
     eyebrow: "Capabilities",
-    heading: "Three pillars. One workspace.",
+    heading: "Five pillars. One workspace.",
     description:
-      "Context and memory — working together to give your AI the awareness it needs.",
+      "Holistic Context, Proactive Tasks, and Open Sourced Skills — working together so your AI acts with awareness and your approval.",
     items: [
       {
-        title: "Context",
+        title: "Holistic Context",
         description:
-          "OpenLoomi understands your work across people, projects, and decisions — not just keywords, but relationships and history.",
+          "Short → mid → long-term memory that grows on its own — visible, auditable, and always remembering your people, projects, and decisions across months.",
       },
       {
-        title: "Memory",
+        title: "Platform Connectors",
         description:
-          "Yesterday's discussion, last week's decision, the project's evolution — OpenLoomi remembers it all, across sessions and across days.",
+          "Auto-fetch background sync loop pulls commits, issues, emails, and docs proactively into your context graph — across Slack, Gmail, GitHub, Lark/Feishu, and the tools you already use.",
       },
       {
-        title: "Builtin Professional Skills",
+        title: "Proactive Tasks",
         description:
-          "From drafting contracts to writing code — the right expertise at every critical moment.",
+          "Intelligent task execution that anticipates your needs — not just scheduled automation, but context-aware actions that happen at the right moment, with your approval.",
       },
       {
-        title: "You Approve, It Executes",
+        title: "Security & Ease of Use",
         description:
-          "Full control. No surprises. OpenLoomi acts on your behalf, with your approval, every step of the way.",
+          "Native apps for Windows, macOS, and Linux — works out of the box, minutes to set up. Local-first storage with IndexedDB + SQLite, AES-256 encryption, no data leaves your machine, auditable access logs.",
       },
       {
-        title: "Relentless Follow-Through",
+        title: "Open Sourced Skills",
         description:
-          "It doesn't stop at the first step. It tracks commitments, follows up, and sees things through.",
+          "OpenLoomi Skills are open-source and can be integrated into any Agent — Claude Code, Codex, OpenClaw, Hermes, and more.",
       },
     ],
   },
@@ -141,7 +142,7 @@ export const en = {
     eyebrow: "Open Source",
     title: "Open-source. Local-first. Yours.",
     subtitle:
-      "OpenLoomi is open-source under Apache 2.0. Self-host on your machine — your data never leaves. Clone, build, and run in under 5 minutes.",
+      "OpenLoomi is Apache 2.0 and an AI coworker and workspace for builders who want local-first work memory around their AI agents. Clone, build, and run on your own machine — your data never leaves.",
     cloneCommand: "git clone https://github.com/melandlabs/openloomi.git",
     cta: "GitHub",
     community: "Join the community on Discord",
@@ -222,10 +223,10 @@ export const en = {
     badge: "Open-source & ready to run",
     heading: "Clone it. Run it. Make it yours.",
     description:
-      "OpenLoomi is open-source under Apache 2.0. Self-host on your machine and make it your own.",
+      "OpenLoomi is Apache 2.0 and an AI coworker and workspace — local-first work memory around your AI agents. Self-host on your machine and make it your own.",
     button: "Get Started →",
     openSourceCta: "GitHub",
-    subtext: "Open source · Local-first · Works seamlessly with your tools",
+    subtext: "Open source · Local-first · Holistic Context",
     mobileDesc:
       "OpenLoomi supports macOS, Linux and Windows. Please visit on a desktop device to download.",
   },

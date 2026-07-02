@@ -8,9 +8,9 @@ export const zhHans = {
     getStarted: "立即开始",
   },
   hero: {
-    title: "你的工作有上下文了。现在你的 AI 也有了。",
+    title: "开源的 AI 同事与工作空间",
     subtitle:
-      "OpenLoomi 连接你的工具，记住你的工作，让你的 AI 始终带着上下文——跨渠道、每一天。",
+      "OpenLoomi 是一款 AI 同事与工作空间,为希望围绕 AI agent 构建本地优先工作记忆的开发者而生。它连接你的工作工具,让 AI 能理解人、项目、决策与跟进——在行动之前获得你的批准。",
     cta: "立即开始",
     installOnDesktop: "请在桌面端安装",
     installDesktopDesc:
@@ -31,20 +31,20 @@ export const zhHans = {
     heading: "AI 够聪明了。",
     headingAccent: "它只是不了解你的工作。",
     subtitle:
-      "当前的 AI 工具每次会话都重置。它不记得你的项目、你的团队、你的优先级。你每次都要花前五分钟重新解释上下文——每一次。",
+      "当前的 AI 工具每次会话都重置。它不记得你的人、项目、决策——也没有关于什么重要的工作记忆。你每次都要花前五分钟重新解释上下文,每一次。",
     cards: [
       "你的工作跨 Slack、邮件、日历、文档——但你的 AI 看不到任何。",
       "昨天的决策、上周的上下文——关掉标签页就消失了。",
       "你每天都要向 AI 解释你的工作。它应该已经知道了。",
     ],
-    footer: "瓶颈不是 AI 的能力。是 AI 的感知。",
+    footer: "瓶颈不是 AI 的能力,是 AI 对你工作的感知。",
   },
   howItWorks: {
     eyebrow: "02 — 工作原理",
-    heading: "多渠道连接。",
+    heading: "平台连接器。",
     headingAccent: "你的 AI 终于看到了全貌。",
     description:
-      "OpenLoomi 跨 Slack、邮件、日历、文档等平台连接——不是为了存档，而是为了理解。它构建你工作的动态图景：谁重要、什么有风险、什么需要推进。",
+      "OpenLoomi 的平台连接器(Platform Connectors)自动拉取提交、议题、邮件和文档,汇成一张统一的上下文图谱——不是为了存档,而是为了理解。人、项目、决策与跟进在所有你已使用的工具里彼此关联。",
     quote: "不是因为你问了。是因为它已经知道了。",
     statsAvg: "用户前 30 天平均索引上下文量",
     platformMarquee: "与你已用的工具无缝协作",
@@ -57,10 +57,10 @@ export const zhHans = {
   },
   thenItActs: {
     eyebrow: "03 — 然后行动",
-    heading: "它接着上次的进度继续。",
-    headingAccent: "跟进到底，直到完成。",
+    heading: "主动式任务(Proactive Tasks),跟进到底。",
+    headingAccent: "直到闭环完成。",
     description:
-      "有了持久记忆和跨渠道上下文，OpenLoomi 不只是给建议——它起草回复、安排跟进、追踪承诺、完成闭环。你批准，它执行。",
+      "凭借持久、整体的上下文,OpenLoomi 不只是给建议——它起草回复、安排跟进、追踪承诺、完成闭环。在恰当时机发生的有上下文感知的行动,你批准,它执行。",
     steps: [
       "起草回复。",
       "安排跟进。",
@@ -73,37 +73,34 @@ export const zhHans = {
   },
   capabilities: {
     eyebrow: "功能",
-    heading: "三大支柱。一个工作空间。",
+    heading: "五大支柱。一个工作空间。",
     description:
-      "上下文、记忆、多渠道连接——协同工作，赋予你的 AI 所需的感知能力。",
+      "Holistic Context、Proactive Tasks 与 Open Sourced Skills——协同工作,让你的 AI 带着感知与你的批准行事。",
     items: [
       {
-        title: "上下文",
+        title: "Holistic Context",
         description:
-          "OpenLoomi 理解你跨人、项目和决策的工作——不只是关键词，而是关系和历史。",
+          "短→中→长期记忆,自主生长——可见、可审计,数月之间始终记得你的人、项目与决策。",
       },
       {
-        title: "记忆",
+        title: "Platform Connectors",
         description:
-          "昨天的讨论、上周的决策、项目的演变——OpenLoomi 记住一切，跨会话、跨天。",
+          "后台自动同步循环主动拉取提交、议题、邮件、文档进入你的上下文图谱——覆盖 Slack、Gmail、GitHub、Lark/Feishu 等你已使用的工具。",
       },
       {
-        title: "多渠道连接",
+        title: "Proactive Tasks",
         description:
-          "Slack、邮件、日历、文档、Telegram、Discord——OpenLoomi 将你的整个工具栈连接成统一的上下文。",
+          "智能任务执行,会预判你的需求——不只是定时自动化,而是在恰当时机发生、有上下文感知、经过你批准的行动。",
       },
       {
-        title: "内置专业技能",
-        description: "从起草合同到编写代码——每个关键时刻都有正确的专业能力。",
-      },
-      {
-        title: "你批准，它执行",
+        title: "Security & Ease of Use",
         description:
-          "完全掌控。没有意外。OpenLoomi 代表你行动，在你的批准下，每一步都如此。",
+          "Windows、macOS、Linux 原生应用——开箱即用,数分钟完成。本地优先存储 (IndexedDB + SQLite),AES-256 加密,数据不出本机,可审计的访问日志。",
       },
       {
-        title: "持续跟进",
-        description: "不会在第一步就停下。它追踪承诺、持续跟进、把事情做到底。",
+        title: "Open Sourced Skills",
+        description:
+          "OpenLoomi Skills 完全开源,可被任意 Agent 集成——Claude Code、Codex、OpenClaw、Hermes 等。",
       },
     ],
   },
@@ -143,7 +140,7 @@ export const zhHans = {
     eyebrow: "开源",
     title: "开源。本地优先。属于你。",
     subtitle:
-      "OpenLoomi 在 Apache 2.0 下开源。在你的机器上自托管——你的数据永远不会离开。五分钟内 clone、build、运行。",
+      "OpenLoomi 基于 Apache 2.0 开源,是一款 AI 同事与工作空间,为希望围绕 AI agent 构建本地优先工作记忆的开发者而生。在你的机器上 clone、build、运行——你的数据永远不会离开。",
     cloneCommand: "git clone https://github.com/melandlabs/openloomi.git",
     cta: "GitHub",
     community: "加入 Discord 社区",
@@ -226,10 +223,10 @@ export const zhHans = {
     badge: "开源，随时可运行",
     heading: "Clone 它。运行它。让它属于你。",
     description:
-      "OpenLoomi 在 Apache 2.0 下开源。在你的机器上自托管，并按你的方式使用它。",
+      "OpenLoomi 基于 Apache 2.0 开源,是一款 AI 同事与工作空间——本地优先的工作记忆,围绕你的 AI agent。在你的机器上自托管,并按你的方式使用它。",
     button: "立即开始 →",
     openSourceCta: "GitHub",
-    subtext: "开源 · 本地优先 · 与你的工具无缝协作",
+    subtext: "开源 · 本地优先 · Holistic Context",
     mobileDesc:
       "OpenLoomi 支持 macOS、Linux 和 Windows。请在桌面设备上访问下载。",
   },

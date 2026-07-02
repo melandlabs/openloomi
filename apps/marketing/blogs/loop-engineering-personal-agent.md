@@ -53,7 +53,7 @@ Traditional memory is just raw message storage. The AI doesn't know what it has 
 
 ## Turning AI Memory from "Hard Drive" into "Brain"
 
-OpenLoomi's answer is the **Holistic Context** — a structured memory network with both temporal and spatial dimensions. ([OpenLoomi](https://github.com/melandlabs/openloomi) is is a Claude Cowork-style open-source alternative for builders who want local-first work memory around their AI agents. It connects your work tools so AI can understand people, projects, decisions, and follow-ups before it acts with human approval.)
+OpenLoomi's answer is the **Holistic Context** — a structured memory network with both temporal and spatial dimensions. ([OpenLoomi](https://github.com/melandlabs/openloomi) is an AI coworker and workspace for builders who want local-first work memory around their AI agents. It connects your work tools so AI can understand people, projects, decisions, and follow-ups before it acts with human approval.)
 
 ### Holistic Context
 
