@@ -412,32 +412,6 @@ export function ChatHeaderPanel({
 
         {/* Right-side action buttons like close */}
         {children}
-
-        {/* New insights button: shows "Need to Know" sidebar - rightmost */}
-        {onToggleNewInsightsPanel && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={isNewInsightsPanelOpen ? "secondary" : "ghost"}
-                size="icon"
-                className="h-8 w-8 relative"
-                aria-label={t("insight.needYouToKnow", "Need to Know")}
-                aria-haspopup="menu"
-                aria-expanded={isNewInsightsPanelOpen ?? false}
-                onClick={onToggleNewInsightsPanel}
-              >
-                <RemixIcon name="bell" size="size-4" />
-                {typeof newInsightsCount === "number" &&
-                  newInsightsCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2 items-center justify-center rounded-full bg-red-500" />
-                  )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{t("insight.needYouToKnow", "Need to Know")}</p>
-            </TooltipContent>
-          </Tooltip>
-        )}
       </div>
     </AgentSectionHeader>
   );
