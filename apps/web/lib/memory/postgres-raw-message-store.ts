@@ -127,6 +127,9 @@ function toRawMessage(row: RawMessageRow): RawMessage {
     archivedAt: row.archivedAt ?? undefined,
     isPinned: row.isPinned ?? false,
     summaryRefId: row.summaryRefId ?? undefined,
+    deprecatedAt: row.deprecatedAt ?? undefined,
+    deprecationReason: row.deprecationReason ?? undefined,
+    supersededBySummaryId: row.supersededBySummaryId ?? undefined,
   };
 }
 
@@ -208,6 +211,12 @@ function buildMessageConditions(query: RawMessageQuery): SQL[] {
   }
   if (!query.includeArchived) {
     conditions.push(isNull(rawMessages.archivedAt));
+  }
+  if (!query.includeDeprecated) {
+    // Soft-hide deprecated records by default. Backed by the partial index
+    // `raw_messages_active_user_idx` (`WHERE deprecated_at IS NULL`) added
+    // in migration 0107.
+    conditions.push(isNull(rawMessages.deprecatedAt));
   }
   if (query.keywords?.length) {
     const keywordCondition = buildKeywordCondition(query.keywords);
@@ -662,6 +671,42 @@ export class PostgresRawMessageManager implements RawMessageStorageManager {
     const rows = await db
       .update(rawMessages)
       .set({ archivedAt })
+      .where(and(...conditions))
+      .returning({ id: rawMessages.id });
+    return rows.length;
+  }
+
+  /**
+   * Soft-deprecate messages. Idempotent: only rows where `deprecated_at` is
+   * currently NULL get updated, so re-running with the same ids returns 0.
+   */
+  async deprecateMessages(
+    messageIds: string[],
+    input: {
+      userId?: string;
+      deprecatedAt?: number;
+      reason?: string;
+      supersededBySummaryId?: string;
+    } = {},
+  ): Promise<number> {
+    if (messageIds.length === 0) {
+      return 0;
+    }
+    const db = await this.getDatabase();
+    const conditions = [
+      inArray(rawMessages.messageId, messageIds),
+      isNull(rawMessages.deprecatedAt),
+    ];
+    if (input.userId) {
+      conditions.push(eq(rawMessages.userId, input.userId));
+    }
+    const rows = await db
+      .update(rawMessages)
+      .set({
+        deprecatedAt: input.deprecatedAt ?? Date.now(),
+        deprecationReason: input.reason ?? null,
+        supersededBySummaryId: input.supersededBySummaryId ?? null,
+      })
       .where(and(...conditions))
       .returning({ id: rawMessages.id });
     return rows.length;

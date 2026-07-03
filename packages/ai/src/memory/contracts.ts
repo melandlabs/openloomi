@@ -28,6 +28,22 @@ export interface MemoryRecord {
   archivedAt?: number;
   dimensions?: MemoryDimensions;
   metadata?: Record<string, unknown>;
+  /**
+   * Unix timestamp (ms) at which this record was deprecated (soft-hidden
+   * because it has been superseded by a higher-tier summary). When set, the
+   * record is excluded from default retrieval.
+   */
+  deprecatedAt?: number;
+  /**
+   * Short tag describing why this record was deprecated, e.g.
+   * `summarized_into:<summaryId>`.
+   */
+  deprecationReason?: string;
+  /**
+   * When deprecated, the id of the memory summary that superseded this
+   * record. Lets retrieval follow the chain when callers opt in.
+   */
+  supersededBySummaryId?: string;
 }
 
 export interface MemorySummary {
@@ -99,6 +115,28 @@ export interface MemoryMarkAccessedInput {
   at: number;
 }
 
+/**
+ * Input for soft-deprecating memory records. The records stay in storage but
+ * are hidden from default retrieval; `supersededBySummaryId` lets callers
+ * follow the chain when `includeDeprecated` is true.
+ */
+export interface MemoryDeprecateRecordsInput {
+  userId: string;
+  ids: string[];
+  deprecatedAt: number;
+  /**
+   * Short tag, e.g. "summarized_into:<summaryId>". Stored verbatim and used
+   * by operators when scanning the table.
+   */
+  reason?: string;
+  /**
+   * Optional id of the summary that superseded these records. Required when
+   * deprecation is the result of a successful summarize operation; callers
+   * that deprecate for other reasons (manual cleanup, etc.) may omit it.
+   */
+  supersededBySummaryId?: string;
+}
+
 export interface MemorySearchQuery {
   userId: string;
   keywords?: string[];
@@ -110,6 +148,12 @@ export interface MemorySearchQuery {
   reverse?: boolean;
   tiers?: MemoryTier[];
   dimensions?: MemoryDimensions;
+  /**
+   * When false (default), records with `deprecatedAt` set are excluded.
+   * Set true to include deprecated records (useful for audits / chain
+   * traversal back to the canonical summary).
+   */
+  includeDeprecated?: boolean;
 }
 
 export interface MemorySummarySearchQuery {
@@ -134,6 +178,7 @@ export interface MemorySemanticRecallQuery {
   dimensions?: MemoryDimensions;
   startTime?: number;
   endTime?: number;
+  includeDeprecated?: boolean;
 }
 
 export interface MemorySemanticRecallHit {
@@ -162,6 +207,15 @@ export interface MemoryStorageAdapter {
     query: MemorySemanticRecallQuery,
   ): Promise<MemorySemanticRecallHit[]>;
   markRecordsAccessed?(input: MemoryMarkAccessedInput): Promise<void>;
+  /**
+   * Soft-deprecate records: write `deprecatedAt` (+ optional reason /
+   * supersededBySummaryId) without deleting the rows. Returns the number of
+   * rows that transitioned from non-deprecated to deprecated (idempotent —
+   * re-deprecating an already-deprecated record does not bump the count).
+   *
+   * Optional on the adapter so older implementations remain source-compatible.
+   */
+  deprecateRecords?(input: MemoryDeprecateRecordsInput): Promise<number>;
 }
 
 export interface ScoredMemoryRecord extends MemoryRecord {

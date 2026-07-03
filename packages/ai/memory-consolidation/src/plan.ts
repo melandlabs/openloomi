@@ -4,7 +4,11 @@ import {
   type MemoryEvidenceCluster,
 } from "./evidence-cluster";
 
-export type MemoryConsolidationAction = "preserve" | "observe" | "decay";
+export type MemoryConsolidationAction =
+  | "preserve"
+  | "observe"
+  | "decay"
+  | "deprecate";
 
 export type MemoryConsolidationReasonCode =
   | "strong_repeated_evidence"
@@ -12,7 +16,8 @@ export type MemoryConsolidationReasonCode =
   | "outscored_by_competitor"
   | "ambiguous_competition"
   | "isolated_low_confidence"
-  | "insufficient_signal";
+  | "insufficient_signal"
+  | "superseded_by_summary";
 
 export interface MemoryConsolidationPlanThresholds {
   preserveScore: number;
@@ -40,6 +45,18 @@ export interface MemoryConsolidationPlanEntry {
   scoreMargin: number;
   reasonCodes: MemoryConsolidationReasonCode[];
   explanation: string;
+  /**
+   * When `action === "deprecate"`, the id of the memory summary that
+   * supersedes these records. Callers should write this through
+   * `MemoryStorageAdapter.deprecateRecords` so the soft-hide chain stays
+   * consistent.
+   */
+  supersededBySummaryId?: string;
+  /**
+   * Optional short tag forwarded as `deprecationReason` (defaults to
+   * `"superseded_by_summary:<id>"` when `supersededBySummaryId` is set).
+   */
+  deprecationReason?: string;
 }
 
 export interface MemoryConsolidationPlan {
@@ -246,6 +263,46 @@ export function buildMemoryConsolidationPlan(
       preserve: entries.filter((entry) => entry.action === "preserve"),
       observe: entries.filter((entry) => entry.action === "observe"),
       decay: entries.filter((entry) => entry.action === "decay"),
+      deprecate: entries.filter((entry) => entry.action === "deprecate"),
     },
+  };
+}
+
+/**
+ * Build a "deprecate" plan entry for the records that fed into a successful
+ * summarize operation. The new summary supersedes those records; callers
+ * persist the entry via `MemoryStorageAdapter.deprecateRecords` so the
+ * soft-hide chain stays consistent.
+ */
+export function buildMemoryDeprecationEntry(input: {
+  clusterKey: string;
+  competitionKey: string;
+  recordIds: string[];
+  winningClusterKey: string;
+  competingClusterKeys?: string[];
+  score?: number;
+  evidenceCount?: number;
+  scoreMargin?: number;
+  supersededBySummaryId: string;
+  reason?: string;
+  rankInCompetition?: number;
+}): MemoryConsolidationPlanEntry {
+  const reason =
+    input.reason ?? `superseded_by_summary:${input.supersededBySummaryId}`;
+  return {
+    clusterKey: input.clusterKey,
+    competitionKey: input.competitionKey,
+    action: "deprecate",
+    score: input.score ?? 1,
+    evidenceCount: input.evidenceCount ?? input.recordIds.length,
+    recordIds: [...input.recordIds],
+    rankInCompetition: input.rankInCompetition ?? 0,
+    winningClusterKey: input.winningClusterKey,
+    competingClusterKeys: [...(input.competingClusterKeys ?? [])],
+    scoreMargin: input.scoreMargin ?? 0,
+    reasonCodes: ["superseded_by_summary"],
+    explanation: `Records are superseded by summary ${input.supersededBySummaryId}.`,
+    supersededBySummaryId: input.supersededBySummaryId,
+    deprecationReason: reason,
   };
 }

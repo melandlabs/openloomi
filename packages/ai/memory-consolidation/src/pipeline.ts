@@ -1,6 +1,7 @@
 import type { MemoryEvidenceRecord } from "./evidence-cluster";
 import {
   buildMemoryConsolidationPlan,
+  buildMemoryDeprecationEntry,
   type BuildMemoryConsolidationPlanInput,
   type MemoryConsolidationPlan,
   type MemoryConsolidationPlanEntry,
@@ -975,4 +976,79 @@ export function buildMemoryRelationPipeline(
     plan,
     summaryCandidates,
   };
+}
+
+export interface BuildMemoryDeprecationEntriesInput {
+  /**
+   * The summaries that have just been persisted (typically the output of the
+   * summarization step that ran for each `MemorySummaryCandidate`). The order
+   * must align with `summaryCandidates` so we can map a summary id back to the
+   * cluster that fed it.
+   */
+  persistedSummaryIds: string[];
+  summaryCandidates: MemorySummaryCandidate[];
+  /**
+   * Optional override for the deprecation reason tag. Defaults to
+   * `"summarized_into:<summaryId>"`.
+   */
+  reasonFor?: (summaryId: string) => string | undefined;
+}
+
+export interface MemoryDeprecationEntriesResult {
+  entries: MemoryConsolidationPlanEntry[];
+  /**
+   * Convenience grouping: `{ summaryId -> recordIds }`. The caller can
+   * iterate this when invoking `MemoryStorageAdapter.deprecateRecords`.
+   */
+  bySummary: Record<string, string[]>;
+}
+
+/**
+ * Build deprecation plan entries for the records that feed each persisted
+ * summary. The caller (typically a reflection step) is expected to:
+ *
+ *   1. Run `buildMemoryRelationPipeline` → `summaryCandidates`.
+ *   2. Summarize each candidate and persist it → `persistedSummaryIds`.
+ *   3. Call `buildMemoryDeprecationEntries` to get the deprecation plan.
+ *   4. Persist the plan via `MemoryStorageAdapter.deprecateRecords`.
+ *
+ * Pure / synchronous so it can be unit-tested without a DB.
+ */
+export function buildMemoryDeprecationEntries(
+  input: BuildMemoryDeprecationEntriesInput,
+): MemoryDeprecationEntriesResult {
+  const entries: MemoryConsolidationPlanEntry[] = [];
+  const bySummary: Record<string, string[]> = {};
+
+  const length = Math.min(
+    input.persistedSummaryIds.length,
+    input.summaryCandidates.length,
+  );
+
+  for (let i = 0; i < length; i += 1) {
+    const summaryId = input.persistedSummaryIds[i];
+    const candidate = input.summaryCandidates[i];
+    if (!summaryId || !candidate) continue;
+    if (candidate.recordIds.length === 0) continue;
+
+    const reason =
+      input.reasonFor?.(summaryId) ?? `summarized_into:${summaryId}`;
+
+    const entry = buildMemoryDeprecationEntry({
+      clusterKey: candidate.clusterKey,
+      competitionKey: candidate.competitionKey,
+      recordIds: candidate.recordIds,
+      winningClusterKey: candidate.clusterKey,
+      score: candidate.score,
+      evidenceCount: candidate.evidenceCount,
+      scoreMargin: 0,
+      supersededBySummaryId: summaryId,
+      reason,
+      rankInCompetition: 0,
+    });
+    entries.push(entry);
+    bySummary[summaryId] = [...candidate.recordIds];
+  }
+
+  return { entries, bySummary };
 }

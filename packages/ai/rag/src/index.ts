@@ -7,8 +7,22 @@ export {
   countTokens,
   getOptimalChunkSize,
   estimateChunkCount,
+  chunkDocument,
 } from "./chunking";
-export type { ChunkOptions, TextChunk } from "./chunking";
+export type {
+  ChunkOptions,
+  TextChunk,
+  ChunkingStrategy,
+  ChunkingConfig,
+  ChunkDocumentChunk,
+} from "./chunking";
+
+export {
+  chunkAtomicFacts,
+  type AtomicFactChunk,
+  type AtomicFactProvider,
+  type AtomicFactChunkerConfig,
+} from "./atomic-fact-chunker";
 
 export {
   generateEmbedding,
@@ -23,6 +37,7 @@ export type { EmbeddingResult } from "./embeddings";
 export {
   getVectorStore,
   addDocumentToVectorStore,
+  addTextToVectorStore,
   searchVectorStore,
   deleteDocumentFromVectorStore,
   getVectorStoreStats,

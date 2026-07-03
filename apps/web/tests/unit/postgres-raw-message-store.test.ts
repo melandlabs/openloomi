@@ -200,3 +200,63 @@ describe("postgres raw message storage", () => {
     ]);
   });
 });
+
+function createUpdateDb(returningRows: Array<{ id: number }>) {
+  const updateChain = {
+    set: vi.fn(() => updateChain),
+    where: vi.fn(() => updateChain),
+    returning: vi.fn(async () => returningRows),
+  };
+  const db = {
+    update: vi.fn(() => updateChain),
+  };
+  return { db, updateChain };
+}
+
+describe("postgres raw message deprecation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("deprecateMessages runs an UPDATE that filters on deprecated_at IS NULL", async () => {
+    const { db, updateChain } = createUpdateDb([{ id: 1 }, { id: 2 }]);
+    const manager = new PostgresRawMessageManager(db as never);
+    const affected = await manager.deprecateMessages(["msg-1", "msg-2"], {
+      userId,
+      deprecatedAt: 1700000000000,
+      reason: "summarized_into:s-1",
+      supersededBySummaryId: "s-1",
+    });
+    expect(affected).toBe(2);
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(updateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deprecatedAt: 1700000000000,
+        deprecationReason: "summarized_into:s-1",
+        supersededBySummaryId: "s-1",
+      }),
+    );
+  });
+
+  it("deprecateMessages returns 0 for empty ids without hitting the DB", async () => {
+    const { db } = createUpdateDb([]);
+    const manager = new PostgresRawMessageManager(db as never);
+    const affected = await manager.deprecateMessages([], { userId });
+    expect(affected).toBe(0);
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it("deprecateMessages default timestamp defaults to Date.now()", async () => {
+    const { db, updateChain } = createUpdateDb([{ id: 1 }]);
+    const manager = new PostgresRawMessageManager(db as never);
+    await manager.deprecateMessages(["msg-1"], { userId });
+    const setArg = (
+      updateChain.set as unknown as {
+        mock: { calls: Array<[Record<string, unknown>]> };
+      }
+    ).mock.calls[0]?.[0];
+    expect(setArg?.deprecatedAt).toEqual(expect.any(Number));
+    expect(setArg?.deprecationReason).toBeNull();
+    expect(setArg?.supersededBySummaryId).toBeNull();
+  });
+});

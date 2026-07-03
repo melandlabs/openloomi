@@ -812,6 +812,12 @@ export const rawMessages = pgTable(
     archivedAt: bigint("archived_at", { mode: "number" }),
     isPinned: boolean("is_pinned").default(false),
     summaryRefId: text("summary_ref_id"),
+    // Deprecation (soft-hide): when `deprecatedAt` is set the record has
+    // been superseded by a higher-tier summary. The partial index on
+    // `deprecatedAt IS NULL` keeps default retrieval cheap.
+    deprecatedAt: bigint("deprecated_at", { mode: "number" }),
+    deprecationReason: text("deprecation_reason"),
+    supersededBySummaryId: text("superseded_by_summary_id"),
   },
   (table) => ({
     messageIdUnique: uniqueIndex("raw_messages_message_id_idx").on(

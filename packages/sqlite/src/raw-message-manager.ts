@@ -39,6 +39,9 @@ interface RawMessageRow {
   archived_at: number | null;
   is_pinned: number | null;
   summary_ref_id: string | null;
+  deprecated_at: number | null;
+  deprecation_reason: string | null;
+  superseded_by_summary_id: string | null;
 }
 
 interface MemorySummaryRow {
@@ -171,6 +174,9 @@ function toRawMessage(row: RawMessageRow): RawMessage {
     archivedAt: row.archived_at ?? undefined,
     isPinned: Boolean(row.is_pinned ?? 0),
     summaryRefId: row.summary_ref_id ?? undefined,
+    deprecatedAt: row.deprecated_at ?? undefined,
+    deprecationReason: row.deprecation_reason ?? undefined,
+    supersededBySummaryId: row.superseded_by_summary_id ?? undefined,
   };
 }
 
@@ -437,6 +443,11 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
     }
     if (!query.includeArchived) {
       where.push("archived_at IS NULL");
+    }
+    if (!query.includeDeprecated) {
+      // Soft-hide deprecated records by default. Backed by the partial index
+      // `idx_raw_messages_active_user` (`WHERE deprecated_at IS NULL`).
+      where.push("deprecated_at IS NULL");
     }
     if (query.keywords?.length) {
       const ftsQuery = buildFtsQuery(query.keywords);
@@ -791,6 +802,49 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
       { archivedAt },
       userId,
     );
+  }
+
+  /**
+   * Soft-deprecate messages: write `deprecated_at` (+ optional reason /
+   * superseded_by_summary_id) without deleting the rows. Idempotent — the
+   * `WHERE deprecated_at IS NULL` guard means re-running on the same ids
+   * returns 0 affected rows.
+   */
+  async deprecateMessages(
+    messageIds: string[],
+    input: {
+      userId?: string;
+      deprecatedAt?: number;
+      reason?: string;
+      supersededBySummaryId?: string;
+    } = {},
+  ): Promise<number> {
+    await this.init();
+    if (messageIds.length === 0) return 0;
+    const deprecatedAt = input.deprecatedAt ?? Date.now();
+    const reason = input.reason ?? null;
+    const supersededBySummaryId = input.supersededBySummaryId ?? null;
+
+    const placeholders = messageIds.map(() => "?").join(",");
+    const userClause = input.userId ? "AND user_id = ?" : "";
+    const result = this.db
+      .prepare(
+        `UPDATE raw_messages
+            SET deprecated_at = ?,
+                deprecation_reason = ?,
+                superseded_by_summary_id = ?
+          WHERE message_id IN (${placeholders})
+            AND deprecated_at IS NULL
+            ${userClause}`,
+      )
+      .run(
+        deprecatedAt,
+        reason,
+        supersededBySummaryId,
+        ...messageIds,
+        ...(input.userId ? [input.userId] : []),
+      );
+    return result.changes;
   }
 
   async hardDeleteArchived(
@@ -1376,6 +1430,11 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
     }
     if (!query.includeArchived) {
       where.push("archived_at IS NULL");
+    }
+    if (!query.includeDeprecated) {
+      // Soft-hide deprecated records by default. Backed by the partial index
+      // `idx_raw_messages_active_user` (`WHERE deprecated_at IS NULL`).
+      where.push("deprecated_at IS NULL");
     }
 
     const order = query.reverse ? "DESC" : "ASC";

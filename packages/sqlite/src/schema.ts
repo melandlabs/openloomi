@@ -1,6 +1,25 @@
 import type Database from "better-sqlite3";
 
-export const RAW_MESSAGES_SCHEMA_VERSION = 1;
+export const RAW_MESSAGES_SCHEMA_VERSION = 2;
+
+/**
+ * Idempotent column-add helper for SQLite (which lacks `ADD COLUMN IF NOT
+ * EXISTS`). Uses `pragma_table_info` to detect missing columns and runs the
+ * `ALTER TABLE` only when needed. This keeps `initializeRawMessageSchema`
+ * safe to call on databases created by older versions of the schema.
+ */
+function addColumnIfMissing(
+  db: Database.Database,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+    name: string;
+  }>;
+  if (rows.some((row) => row.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
+}
 
 export function initializeRawMessageSchema(db: Database.Database): void {
   db.pragma("journal_mode = WAL");
@@ -95,5 +114,19 @@ export function initializeRawMessageSchema(db: Database.Database): void {
       ON memory_summaries(user_id, end_timestamp);
     CREATE INDEX IF NOT EXISTS idx_memory_summaries_user_tier
       ON memory_summaries(user_id, summary_tier);
+  `);
+
+  // --- v2: deprecation columns ---
+  // `deprecated_at` is non-null only on records superseded by a higher-tier
+  // summary. `deprecation_reason` is a short tag like "summarized_into:<id>".
+  // `superseded_by_summary_id` lets retrieval follow the chain back to the
+  // canonical summary when a deprecated record is requested explicitly.
+  addColumnIfMissing(db, "raw_messages", "deprecated_at", "INTEGER");
+  addColumnIfMissing(db, "raw_messages", "deprecation_reason", "TEXT");
+  addColumnIfMissing(db, "raw_messages", "superseded_by_summary_id", "TEXT");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_raw_messages_active_user
+      ON raw_messages(user_id, memory_stage, deprecated_at)
+      WHERE deprecated_at IS NULL;
   `);
 }

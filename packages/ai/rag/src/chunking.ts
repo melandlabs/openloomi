@@ -1,13 +1,44 @@
 /**
- * Text chunking utilities for RAG
+ * Text chunking utilities for RAG.
+ *
+ * Three strategies are supported via `chunkDocument`:
+ * - "fixed": character-window chunker with overlap (default; cheapest).
+ * - "semantic": reserved for future use; currently aliases "fixed".
+ * - "atomic": LLM-driven decomposition into single-proposition facts.
  */
 
 import { estimateTokens } from "@openloomi/shared";
+import {
+  chunkAtomicFacts,
+  type AtomicFactChunk,
+  type AtomicFactChunkerConfig,
+  type AtomicFactProvider,
+} from "./atomic-fact-chunker";
 
 export interface ChunkOptions {
   maxChunkSize?: number; // Maximum characters per chunk
   chunkOverlap?: number; // Overlap between chunks
   separator?: string; // Separator to split on
+}
+
+export type ChunkingStrategy = "fixed" | "semantic" | "atomic";
+
+export interface ChunkingConfig {
+  strategy: ChunkingStrategy;
+  // atomic-specific
+  atomicFactProvider?: AtomicFactProvider;
+  maxFactsPerChunk?: number;
+  minConfidence?: number;
+  fallbackStrategy?: "fixed" | "throw";
+  fallbackOptions?: ChunkOptions;
+  // fixed / semantic specific
+  chunkSize?: number;
+  chunkOverlap?: number;
+}
+
+export interface ChunkDocumentChunk {
+  text: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface TextChunk {
@@ -175,4 +206,62 @@ export function estimateChunkCount(
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const effectiveChunkSize = opts.maxChunkSize - opts.chunkOverlap;
   return Math.ceil(textLength / effectiveChunkSize);
+}
+
+/**
+ * Dispatch to a chunking strategy and return a uniform chunk list.
+ *
+ * - "fixed": synchronous, character-window chunking (default).
+ * - "semantic": reserved for future use; currently delegates to "fixed" with
+ *   a warning metadata tag so callers can still index something.
+ * - "atomic": async; requires an `AtomicFactProvider`. Falls back to fixed
+ *   chunking on provider errors unless `fallbackStrategy === "throw"`.
+ */
+export async function chunkDocument(
+  text: string,
+  config: ChunkingConfig,
+): Promise<ChunkDocumentChunk[]> {
+  const strategy = config.strategy;
+
+  if (strategy === "fixed" || strategy === "semantic") {
+    const chunks = chunkText(text, {
+      maxChunkSize: config.chunkSize,
+      chunkOverlap: config.chunkOverlap,
+    });
+    const metadata =
+      strategy === "semantic" ? { strategy: "semantic" as const } : undefined;
+    return chunks.map((chunk) => ({
+      text: chunk.content,
+      metadata,
+    }));
+  }
+
+  if (strategy === "atomic") {
+    if (!config.atomicFactProvider) {
+      throw new Error(
+        "chunkDocument: strategy='atomic' requires `atomicFactProvider` in config",
+      );
+    }
+    const atomicConfig: AtomicFactChunkerConfig = {
+      provider: config.atomicFactProvider,
+      maxFactsPerChunk: config.maxFactsPerChunk,
+      minConfidence: config.minConfidence,
+      fallbackStrategy: config.fallbackStrategy,
+      fallbackOptions: config.fallbackOptions,
+    };
+    const facts: AtomicFactChunk[] = await chunkAtomicFacts(text, atomicConfig);
+    return facts.map((fact) => ({
+      text: fact.text,
+      metadata: {
+        ...(fact.metadata ?? {}),
+        strategy: "atomic" as const,
+        confidence: fact.confidence,
+        sourceText: fact.sourceText,
+      },
+    }));
+  }
+
+  // Exhaustiveness check for future strategies.
+  const _exhaustive: never = strategy;
+  throw new Error(`chunkDocument: unknown strategy "${String(_exhaustive)}"`);
 }

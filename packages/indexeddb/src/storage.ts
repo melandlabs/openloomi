@@ -39,6 +39,14 @@ export interface RawMessage {
   archivedAt?: number;
   isPinned?: boolean;
   summaryRefId?: string;
+  /**
+   * Soft-hide flag: when set, the record has been superseded by a higher-tier
+   * summary. Excluded from default retrieval; pass `includeDeprecated: true`
+   * in the query to surface it (audit / chain traversal).
+   */
+  deprecatedAt?: number;
+  deprecationReason?: string;
+  supersededBySummaryId?: string;
 }
 
 export type GroupByType = "none" | "day" | "week" | "month";
@@ -61,6 +69,11 @@ export interface RawMessageQuery {
   minRawResultsWithoutFallback?: number;
   memoryStages?: MemoryStage[];
   includeArchived?: boolean;
+  /**
+   * When false (default), records with `deprecatedAt` set are excluded.
+   * Set true to include deprecated records (audits / chain traversal).
+   */
+  includeDeprecated?: boolean;
 }
 
 export interface MemorySummaryRecord {
@@ -145,6 +158,23 @@ export interface RawMessageStorage {
     messageIds: string[],
     archivedAt?: number,
     userId?: string,
+  ): Promise<number>;
+  /**
+   * Soft-deprecate messages: write `deprecatedAt` (+ optional reason /
+   * supersededBySummaryId) without deleting the rows. Returns the number of
+   * rows that transitioned from non-deprecated to deprecated (idempotent —
+   * re-deprecating an already-deprecated message does not bump the count).
+   *
+   * Optional on implementations that pre-date the deprecation columns.
+   */
+  deprecateMessages?(
+    messageIds: string[],
+    input: {
+      userId?: string;
+      deprecatedAt?: number;
+      reason?: string;
+      supersededBySummaryId?: string;
+    },
   ): Promise<number>;
   hardDeleteArchived(olderThan: number, userId?: string): Promise<number>;
   updateMessageEmbeddings(

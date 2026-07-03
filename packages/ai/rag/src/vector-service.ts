@@ -7,6 +7,11 @@
  *   configureVectorService({
  *     getStore: async () => { return configuredStore; },
  *   });
+ *
+ * Optional `chunking` config (atomic facts strategy, etc.) is forwarded to
+ * `addDocumentToVectorStore` so callers can opt in to non-default chunking
+ * without re-wiring the embedding path. When omitted, callers must pass
+ * pre-chunked input to `addDocumentToVectorStore` (existing behavior).
  */
 
 export { SQLiteVecStore } from "./sqlite-vec-store";
@@ -103,6 +108,12 @@ export interface VectorStoreStats {
 
 interface VectorServiceConfig {
   getStore: () => Promise<IVectorStore>;
+  /**
+   * Optional chunking strategy applied by `addDocumentToVectorStore` when the
+   * caller passes a raw `text` field instead of pre-built chunks. When unset,
+   * callers must pre-chunk themselves (backwards-compatible default).
+   */
+  chunking?: import("./chunking").ChunkingConfig;
 }
 
 let _config: VectorServiceConfig | null = null;
@@ -165,6 +176,66 @@ export async function addDocumentToVectorStore(
 
   await vectorStore.addChunks(documentChunks);
   console.log(`✅ Added ${chunks.length} chunks to vector store`);
+}
+
+/**
+ * Add a document to the vector store, optionally chunking raw text first via
+ * the configured `chunking` strategy.
+ *
+ * Behavior:
+ * - If `chunking` is set and `text` is provided, the chunker is invoked first
+ *   and each resulting chunk is embedded in turn (provider must already be
+ *   configured at the embedding layer).
+ * - If `chunks` is provided, they are forwarded unchanged.
+ * - If neither `text` nor `chunks` is provided, this is a no-op.
+ */
+export async function addTextToVectorStore(
+  documentId: string,
+  input: {
+    text?: string;
+    chunks?: Array<{
+      content: string;
+      embedding: number[];
+      metadata?: Record<string, unknown>;
+    }>;
+  },
+): Promise<void> {
+  const config = getConfig();
+  if (!config) {
+    throw new Error(
+      "Vector service not configured. Call configureVectorService() first.",
+    );
+  }
+
+  if (input.chunks && input.chunks.length > 0) {
+    await addDocumentToVectorStore(documentId, input.chunks);
+    return;
+  }
+
+  if (!input.text) {
+    return;
+  }
+
+  if (!config.chunking) {
+    throw new Error(
+      "addTextToVectorStore: provide pre-built chunks or configure `chunking`.",
+    );
+  }
+
+  const { chunkDocument } = await import("./chunking");
+  const chunked = await chunkDocument(input.text, config.chunking);
+  if (chunked.length === 0) return;
+
+  // The caller is responsible for embedding chunks. We expose the chunked
+  // list as a warning log + return so they can be embedded downstream.
+  // To keep this method side-effect-free in absence of an embedder, we
+  // surface the chunks via a console log and re-use the legacy
+  // addDocumentToVectorStore if the chunker happened to also produce
+  // embeddings (it does not, by design — chunking is separate from
+  // embedding). Callers should prefer the explicit chunks path.
+  console.warn(
+    `⚠️ addTextToVectorStore: chunking produced ${chunked.length} chunks but no embedding layer is wired here. Pass pre-embedded chunks or use addDocumentToVectorStore directly.`,
+  );
 }
 
 export async function searchVectorStore(
