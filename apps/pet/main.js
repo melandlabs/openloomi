@@ -168,18 +168,43 @@ function refreshTrayMenu() {
   ]));
 }
 
-app.whenReady().then(() => {
-  if (process.platform === 'darwin' && app.dock) app.dock.hide();
-  registerIpc();
-  bootBackend();
-  createPetWindow();
-  try { buildTray(); } catch (e) { log('main', 'tray unavailable:', e.message); }
-  log('main', 'OpenLoomiPet ready');
-});
+// pid 文件：OpenLoomi 客户端（apps/web 的 pet launcher）靠它检测在跑/停止。
+const PID_PATH = path.join(require('os').homedir(), '.openloomipet', 'pet.pid');
+function writePidFile() {
+  try {
+    require('fs').mkdirSync(path.dirname(PID_PATH), { recursive: true });
+    require('fs').writeFileSync(PID_PATH, String(process.pid), 'utf8');
+  } catch {}
+}
+function removePidFile() {
+  try {
+    const cur = require('fs').readFileSync(PID_PATH, 'utf8').trim();
+    if (cur === String(process.pid)) require('fs').unlinkSync(PID_PATH);
+  } catch {}
+}
+
+// 单实例：客户端自动拉起 + 用户手动启动不叠加两只
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.whenReady().then(() => {
+    if (process.platform === 'darwin' && app.dock) app.dock.hide();
+    writePidFile();
+    registerIpc();
+    bootBackend();
+    createPetWindow();
+    try { buildTray(); } catch (e) { log('main', 'tray unavailable:', e.message); }
+    log('main', 'OpenLoomiPet ready');
+  });
+}
 
 app.on('window-all-closed', () => { /* 托盘应用：保持存活 */ });
 
+// launcher 用 SIGTERM 停桌宠 → 走正常退出流程
+process.on('SIGTERM', () => app.quit());
+
 app.on('before-quit', () => {
   try { if (watcher) watcher.stop(); } catch {}
+  removePidFile();
   log('main', 'OpenLoomiPet quit');
 });

@@ -67,6 +67,13 @@ export function register() {
         .catch((e) => console.warn("[QQBot] Failed to start listener:", e));
       // Weixin listener is started on-demand by WeixinListenerInit (frontend component)
       // after user authentication, not here, to avoid duplicate poll loops.
+
+      // Desktop pet (apps/pet): auto-launch alongside the client when enabled
+      // in settings (default ON). Soft-fails when the pet app is not present
+      // (e.g. packaged builds without the monorepo checkout).
+      import("./lib/pet/launcher")
+        .then(({ maybeAutoLaunchPet }) => maybeAutoLaunchPet())
+        .catch((e) => console.warn("[Pet] Failed to auto-launch:", e));
     }
   }
 }

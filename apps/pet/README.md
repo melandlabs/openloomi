@@ -17,12 +17,18 @@ Nothing is written to OpenLoomi's data, and nothing leaves your machine except t
 
 ## Run
 
+**With the OpenLoomi client (default):** the pet starts automatically together with the app. Toggle it in **Settings → General → Desktop Pet** (enabled by default; the switch applies immediately). The preference lives in `~/.openloomi/pet-settings.json`; auto-launch looks for the pet at `apps/pet` (monorepo runs) or `OPENLOOMI_PET_PATH`.
+
+**Standalone:**
+
 ```bash
 cd apps/pet
 npm install
 npm start        # start the pet
 npm run demo     # cycle through all 14 expressions (no real data)
 ```
+
+Only one instance runs at a time (single-instance lock + pid file at `~/.openloomipet/pet.pid`).
 
 ## Speech bubbles (optional, BYOK)
 

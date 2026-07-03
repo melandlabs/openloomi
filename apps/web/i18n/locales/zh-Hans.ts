@@ -20,6 +20,13 @@ const zh = {
   settings: {
     ...baseZh.settings,
     aiSettingsTitle: "API 设置",
+    petSectionTitle: "桌面宠物",
+    petEnableLabel: "显示桌面宠物",
+    petEnableDescription:
+      "一只住在桌面上的 Loomi 小狐狸，实时映射 OpenLoomi 的工作状态，随客户端一起启动。",
+    petRunning: "运行中",
+    petSaveError: "桌宠设置保存失败。",
+    petLaunchError: "已保存，但桌宠启动失败：",
     aiSettingsDescription:
       "为当前用户配置兼容的 AI 服务商接口，保存后会优先使用用户配置。",
     conversationModelsTitle: "对话模型",

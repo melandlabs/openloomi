@@ -20,6 +20,13 @@ const en = {
   settings: {
     ...baseEn.settings,
     aiSettingsTitle: "API Settings",
+    petSectionTitle: "Desktop Pet",
+    petEnableLabel: "Show the desktop pet",
+    petEnableDescription:
+      "A Loomi fox on your desktop that mirrors what OpenLoomi is doing. Starts together with the app.",
+    petRunning: "Running",
+    petSaveError: "Failed to save desktop pet setting.",
+    petLaunchError: "Saved, but the pet could not be started: ",
     aiSettingsDescription:
       "Configure per-user API settings for compatible AI providers.",
     conversationModelsTitle: "Conversation models",
