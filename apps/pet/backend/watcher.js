@@ -351,10 +351,11 @@ function createWatcher(handlers) {
     if (overlay && overlay.until <= now) { overlay = null; publish(); }
     if (online) {
       if (turnActive()) {
-        // 回合内：working 是"工具正响着"的态，安静 8s 就回落 thinking——
-        // agent 在两次工具之间就是在思考，这才连续。
-        if (base === 'working' && lastToolTs && now - lastToolTs > TOOL_GAP_TO_THINKING_MS) {
-          setBase('thinking');
+        // 回合内：一旦动过工具就保持"拿电脑干活"直到回复（用户直觉：整个
+        // 任务过程=工作中）。工具间隙只把具体动作（读文件 xx）过期掉，
+        // 状态条退成"干活中…"。thinking 只属于提问后、第一次动工前。
+        if (base === 'working' && (baseTool || baseHint) && lastToolTs && now - lastToolTs > TOOL_GAP_TO_THINKING_MS) {
+          setBase('working', null, null);
         }
       } else if ((base === 'working' || base === 'thinking') && lastActivity && now - lastActivity > QUIET_TO_IDLE_MS) {
         setBase('idle');

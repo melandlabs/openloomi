@@ -44,6 +44,8 @@ function updateStatusChip(state, s) {
   let text = '';
   if ((state === 'working' || state === 'juggling' || state === 'sweeping') && s.label) {
     text = `${s.icon || ''} ${s.label}${s.hint ? ' · ' + s.hint : ''}`.trim();
+  } else if (state === 'working') {
+    text = '💻 干活中…'; // 工具间隙：保持工作姿势，动作条退成泛化文案
   } else if (state === 'thinking') {
     text = '💭 思考中…';
   } else if (state === 'waiting') {
