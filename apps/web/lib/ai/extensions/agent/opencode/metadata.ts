@@ -33,6 +33,10 @@ export const OPENCODE_CONFIG_SCHEMA = {
           description:
             "Allow passing --auto when OpenLoomi permissionMode is bypassPermissions",
         },
+        timeoutMs: {
+          type: "number",
+          description: "Maximum OpenCode CLI runtime in milliseconds",
+        },
       },
     },
   },

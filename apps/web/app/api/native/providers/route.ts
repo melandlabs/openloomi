@@ -14,7 +14,7 @@ import {
   getAllAgentMetadata,
 } from "@openloomi/ai/agent/registry";
 import { opencodePlugin } from "@/lib/ai/extensions/agent/opencode";
-import { DEFAULT_AGENT_PROVIDER } from "@/lib/env/config/constants";
+import { getConfiguredDefaultAgentProvider } from "@/lib/ai/native-agent/provider-env";
 
 // Register lightweight built-in Agent plugins used by this metadata route.
 const registry = getAgentRegistry();
@@ -41,7 +41,7 @@ export async function GET() {
 
     return NextResponse.json({
       agents: agentProviders,
-      defaultAgent: DEFAULT_AGENT_PROVIDER,
+      defaultAgent: getConfiguredDefaultAgentProvider(),
     });
   } catch (error) {
     console.error("[ProvidersAPI] Error:", error);

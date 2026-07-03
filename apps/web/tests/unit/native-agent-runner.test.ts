@@ -17,6 +17,7 @@ import type {
   IAgent,
   TaskPlan,
 } from "@openloomi/ai/agent/types";
+import { resolveNativeAgentProviderRequest } from "@/lib/ai/native-agent/provider-env";
 
 const silentLogger = {
   log: () => {},
@@ -36,6 +37,133 @@ afterEach(async () => {
 });
 
 describe("native agent runner", () => {
+  it("defaults to Claude when no env or request provider is configured", async () => {
+    const agent = new CapturingAgent();
+    const getUserLlmProviderConfig = vi.fn(async () => ({
+      apiKey: "saved-key",
+      baseUrl: "https://llm.example.test",
+      model: "saved-model",
+    }));
+    const host: NativeAgentHost = {
+      registry: createRegistry(agent),
+      prepareRequest: (body) => resolveNativeAgentProviderRequest(body, {}),
+      getUserLlmProviderConfig,
+      logger: silentLogger,
+    };
+
+    const run = await runNativeAgentRequest(
+      {
+        prompt: "default provider",
+        modelConfig: {
+          apiKey: "request-key",
+          model: "request-model",
+          thinkingLevel: "low",
+        },
+      },
+      createContext(),
+      host,
+    );
+
+    await collectMessages(run.generator);
+
+    expect(getUserLlmProviderConfig).toHaveBeenCalledWith({
+      userId: "user-1",
+      providerType: "anthropic_compatible",
+    });
+    expect(agent.config).toMatchObject({
+      provider: "claude",
+      apiKey: "saved-key",
+      baseUrl: "https://llm.example.test",
+      model: "saved-model",
+      thinkingLevel: "low",
+    });
+  });
+
+  it("uses OpenCode env defaults when request provider is not set", async () => {
+    const agent = new CapturingAgent();
+    const getUserLlmProviderConfig = vi.fn();
+    const host: NativeAgentHost = {
+      registry: createRegistry(agent),
+      prepareRequest: (body) =>
+        resolveNativeAgentProviderRequest(body, {
+          OPENLOOMI_AGENT_PROVIDER: "opencode",
+          OPENLOOMI_AGENT_OPENCODE_COMMAND: "env-opencode",
+          OPENLOOMI_AGENT_OPENCODE_MODEL: "env/model",
+          OPENLOOMI_AGENT_OPENCODE_AGENT: "env-agent",
+          OPENLOOMI_AGENT_OPENCODE_TIMEOUT_MS: "5000",
+          OPENLOOMI_AGENT_OPENCODE_ALLOW_AUTO_APPROVE: "true",
+        }),
+      getUserLlmProviderConfig,
+      logger: silentLogger,
+    };
+
+    const run = await runNativeAgentRequest(
+      {
+        prompt: "use env opencode",
+        modelConfig: {
+          apiKey: "anthropic-key-that-should-not-leak",
+          baseUrl: "https://anthropic-compatible.example.test",
+          thinkingLevel: "low",
+        },
+      },
+      createContext(),
+      host,
+    );
+
+    await collectMessages(run.generator);
+
+    expect(getUserLlmProviderConfig).not.toHaveBeenCalled();
+    expect(agent.config).toMatchObject({
+      provider: "opencode",
+      model: "env/model",
+      providerConfig: {
+        opencodePath: "env-opencode",
+        agent: "env-agent",
+        timeoutMs: 5000,
+        allowAutoApprove: true,
+      },
+    });
+    expect(agent.config?.apiKey).toBeUndefined();
+    expect(agent.config?.baseUrl).toBeUndefined();
+    expect(agent.config?.thinkingLevel).toBeUndefined();
+  });
+
+  it("lets request provider override OpenCode env default", async () => {
+    const agent = new CapturingAgent();
+    const getUserLlmProviderConfig = vi.fn(async () => ({
+      apiKey: "saved-key",
+      baseUrl: "https://llm.example.test",
+      model: "saved-model",
+    }));
+    const host: NativeAgentHost = {
+      registry: createRegistry(agent),
+      prepareRequest: (body) =>
+        resolveNativeAgentProviderRequest(body, {
+          OPENLOOMI_AGENT_PROVIDER: "opencode",
+        }),
+      getUserLlmProviderConfig,
+      logger: silentLogger,
+    };
+
+    const run = await runNativeAgentRequest(
+      {
+        prompt: "force claude",
+        provider: "claude",
+      },
+      createContext(),
+      host,
+    );
+
+    await collectMessages(run.generator);
+
+    expect(agent.config).toMatchObject({
+      provider: "claude",
+      apiKey: "saved-key",
+      baseUrl: "https://llm.example.test",
+      model: "saved-model",
+    });
+  });
+
   it("runs through package core using host-provided adapters", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "openloomi-native-runner-"));
     tempDirs.push(workDir);
@@ -298,4 +426,12 @@ async function collectMessages(
     messages.push(message);
   }
   return messages;
+}
+
+function createContext() {
+  return {
+    session: { user: { id: "user-1", type: "regular" } },
+    userId: "user-1",
+    abortController: new AbortController(),
+  };
 }

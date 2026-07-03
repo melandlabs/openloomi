@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/queries";
 import { readFile } from "@/lib/storage";
 import { detectSudoPasswordPrompt } from "./sudo";
+import { resolveNativeAgentProviderRequest } from "./provider-env";
 
 let providersRegistered = false;
 
@@ -34,6 +35,7 @@ function registerNativeAgentProviders() {
 export const nativeAgentHost: NativeAgentHost = {
   registry: getAgentRegistry(),
   registerProviders: registerNativeAgentProviders,
+  prepareRequest: (body) => resolveNativeAgentProviderRequest(body),
   getUserInsightSettings,
   getUserLlmProviderConfig,
   getDocument,

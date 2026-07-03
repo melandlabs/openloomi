@@ -8,6 +8,7 @@ export interface OpenCodeProviderConfig {
   agent?: string;
   files?: string[];
   allowAutoApprove?: boolean;
+  timeoutMs?: number;
   env?: Record<string, string>;
 }
 
@@ -32,6 +33,8 @@ export type OpenCodeCliEvent =
       stderr: string;
       exitCode: number;
       duration: number;
+      timedOut?: boolean;
+      timeoutMs?: number;
     };
 
 export class OpenCodeCommandNotFoundError extends Error {
@@ -72,6 +75,12 @@ export function normalizeOpenCodeProviderConfig(
         : undefined,
     files,
     allowAutoApprove: value?.allowAutoApprove === true,
+    timeoutMs:
+      typeof value?.timeoutMs === "number" &&
+      Number.isInteger(value.timeoutMs) &&
+      value.timeoutMs > 0
+        ? value.timeoutMs
+        : undefined,
     env,
   };
 }
@@ -115,6 +124,7 @@ export async function* runOpenCodeCli(
     cwd: string;
     env?: Record<string, string>;
     signal?: AbortSignal;
+    timeoutMs?: number;
   },
 ): AsyncGenerator<OpenCodeCliEvent> {
   const startTime = Date.now();
@@ -124,6 +134,8 @@ export async function* runOpenCodeCli(
   let stderr = "";
   let stdoutBuffer = "";
   let done = false;
+  let timedOut = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   let spawnError: Error | undefined;
   let proc: ChildProcessWithoutNullStreams;
 
@@ -170,6 +182,12 @@ export async function* runOpenCodeCli(
   if (options.signal?.aborted) {
     abortHandler();
   }
+  if (options.timeoutMs && options.timeoutMs > 0) {
+    timeout = setTimeout(() => {
+      timedOut = true;
+      killProcessTree(proc);
+    }, options.timeoutMs);
+  }
 
   proc.stdout.on("data", (chunk: Buffer) => {
     const text = chunk.toString();
@@ -183,6 +201,10 @@ export async function* runOpenCodeCli(
   });
 
   proc.on("error", (error: Error & { code?: string }) => {
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = undefined;
+    }
     spawnError = isCommandNotFoundError(error)
       ? new OpenCodeCommandNotFoundError(command)
       : error;
@@ -191,6 +213,10 @@ export async function* runOpenCodeCli(
   });
 
   proc.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = undefined;
+    }
     if (stdoutBuffer.trim()) {
       push({ type: "line", line: stdoutBuffer });
       stdoutBuffer = "";
@@ -199,8 +225,10 @@ export async function* runOpenCodeCli(
       type: "close",
       stdout,
       stderr,
-      exitCode: code ?? (signal ? 130 : 0),
+      exitCode: timedOut ? 124 : (code ?? (signal ? 130 : 0)),
       duration: Date.now() - startTime,
+      timedOut,
+      timeoutMs: timedOut ? options.timeoutMs : undefined,
     });
     done = true;
     wake();
@@ -227,6 +255,10 @@ export async function* runOpenCodeCli(
       throw spawnError;
     }
   } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = undefined;
+    }
     options.signal?.removeEventListener("abort", abortHandler);
   }
 }

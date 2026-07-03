@@ -221,6 +221,7 @@ export class OpenCodeAgent extends BaseAgent {
       cwd,
       env: providerConfig.env,
       signal: signal ?? options?.abortController?.signal,
+      timeoutMs: providerConfig.timeoutMs,
     })) {
       if (event.type === "line") {
         for (const message of parseOpenCodeJsonLine(event.line)) {
@@ -284,6 +285,12 @@ function formatOpenCodeExitError(
   closeEvent: Extract<OpenCodeCliEvent, { type: "close" }>,
 ) {
   const output = closeEvent.stderr.trim() || closeEvent.stdout.trim();
+  if (closeEvent.timedOut) {
+    return output
+      ? `OpenCode CLI timed out after ${closeEvent.timeoutMs}ms: ${output}`
+      : `OpenCode CLI timed out after ${closeEvent.timeoutMs}ms`;
+  }
+
   return output
     ? `OpenCode CLI exited with code ${closeEvent.exitCode}: ${output}`
     : `OpenCode CLI exited with code ${closeEvent.exitCode}`;

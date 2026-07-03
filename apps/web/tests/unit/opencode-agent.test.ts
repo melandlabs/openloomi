@@ -5,7 +5,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentMessage, TaskPlan } from "@openloomi/ai/agent/types";
 import { OpenCodeAgent } from "@/lib/ai/extensions/agent/opencode";
-import { buildOpenCodeRunCommand } from "@/lib/ai/extensions/agent/opencode/command";
+import {
+  buildOpenCodeRunCommand,
+  normalizeOpenCodeProviderConfig,
+} from "@/lib/ai/extensions/agent/opencode/command";
 import { parseOpenCodeJsonLine } from "@/lib/ai/extensions/agent/opencode/parser";
 
 const tempDirs: string[] = [];
@@ -85,11 +88,22 @@ describe("OpenCode command builder", () => {
       cwd: "/workspace/project",
       providerConfig: {
         files: ["safe.ts", "--auto"],
+        extraArgs: ["--auto"],
       },
+      permissionMode: "bypassPermissions",
     });
 
     expect(command.args).toContain("safe.ts");
     expect(command.args).not.toContain("--auto");
+  });
+
+  it("normalizes timeoutMs from provider config", () => {
+    expect(normalizeOpenCodeProviderConfig({ timeoutMs: 2500 }).timeoutMs).toBe(
+      2500,
+    );
+    expect(
+      normalizeOpenCodeProviderConfig({ timeoutMs: -1 }).timeoutMs,
+    ).toBeUndefined();
   });
 });
 
@@ -278,6 +292,38 @@ process.exit(7);
     expect(messages.at(-1)?.type).toBe("done");
   });
 
+  it("times out and terminates a long-running OpenCode process", async () => {
+    const workDir = await createFakeOpenCodeWorkDir(`
+console.log(JSON.stringify({ type: "text", text: "started" }));
+setInterval(() => {}, 1000);
+`);
+
+    const agent = new OpenCodeAgent({
+      provider: "opencode",
+      workDir,
+      providerConfig: {
+        opencodePath: process.execPath,
+        timeoutMs: 100,
+      },
+    });
+
+    const messages = await withTimeout(
+      collectMessages(agent.run("time out")),
+      5000,
+    );
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", content: "started" }),
+      ]),
+    );
+    expect(messages.find((message) => message.type === "error")).toMatchObject({
+      type: "error",
+      message: expect.stringContaining("OpenCode CLI timed out after 100ms"),
+    });
+    expect(messages.at(-1)?.type).toBe("done");
+  });
+
   it("returns a clear error when the opencode executable is missing", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "openloomi-opencode-test-"));
     tempDirs.push(workDir);
@@ -358,29 +404,36 @@ console.log(JSON.stringify({ type: "text", text: "done" }));
   });
 
   it("exposes OpenCode metadata from the providers API without changing the default", async () => {
+    const originalEnv = process.env;
+    process.env = { ...originalEnv };
+    process.env.OPENLOOMI_AGENT_PROVIDER = undefined;
     const { GET } = await import("@/app/api/native/providers/route");
 
-    const response = await GET();
-    const body = (await response.json()) as {
-      agents: Array<{ type: string; supportsSandbox: boolean }>;
-      defaultAgent: string;
-    };
+    try {
+      const response = await GET();
+      const body = (await response.json()) as {
+        agents: Array<{ type: string; supportsSandbox: boolean }>;
+        defaultAgent: string;
+      };
 
-    expect(body.defaultAgent).toBe("claude");
-    expect(body.agents.filter((agent) => agent.type === "claude")).toHaveLength(
-      1,
-    );
-    expect(
-      body.agents.filter((agent) => agent.type === "opencode"),
-    ).toHaveLength(1);
-    expect(body.agents).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "opencode",
-          supportsSandbox: false,
-        }),
-      ]),
-    );
+      expect(body.defaultAgent).toBe("claude");
+      expect(
+        body.agents.filter((agent) => agent.type === "claude"),
+      ).toHaveLength(1);
+      expect(
+        body.agents.filter((agent) => agent.type === "opencode"),
+      ).toHaveLength(1);
+      expect(body.agents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "opencode",
+            supportsSandbox: false,
+          }),
+        ]),
+      );
+    } finally {
+      process.env = originalEnv;
+    }
   });
 });
 

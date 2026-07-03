@@ -136,6 +136,10 @@ export interface NativeAgentFocusedInsightData {
 export interface NativeAgentHost {
   registry?: AgentRegistry;
   registerProviders?: () => void | Promise<void>;
+  prepareRequest?: (
+    body: NativeAgentRequest,
+    context: NativeAgentRunnerContext,
+  ) => NativeAgentRequest | Promise<NativeAgentRequest>;
   getUserInsightSettings?: (
     userId: string,
   ) => Promise<NativeAgentInsightSettings | null>;
@@ -170,11 +174,16 @@ export async function runNativeAgentRequest(
   host: NativeAgentHost = {},
 ): Promise<NativeAgentRun> {
   await host.registerProviders?.();
+  const preparedBody = (await host.prepareRequest?.(body, context)) ?? body;
 
-  const finalPrompt = await buildNativeAgentPrompt(body, context.session, host);
+  const finalPrompt = await buildNativeAgentPrompt(
+    preparedBody,
+    context.session,
+    host,
+  );
   const userSettings = await host.getUserInsightSettings?.(context.userId);
-  const config = await buildAgentConfig(body, context.userId, host);
-  const agentOptions = buildAgentOptions(body, context, {
+  const config = await buildAgentConfig(preparedBody, context.userId, host);
+  const agentOptions = buildAgentOptions(preparedBody, context, {
     aiSoulPrompt: userSettings?.aiSoulPrompt ?? null,
     language: userSettings?.language ?? null,
   });
@@ -182,8 +191,8 @@ export async function runNativeAgentRequest(
   return runAgentRuntimeRequest(
     {
       prompt: finalPrompt,
-      phase: body.phase,
-      planId: body.planId,
+      phase: preparedBody.phase,
+      planId: preparedBody.planId,
       config,
       options: agentOptions,
     },
