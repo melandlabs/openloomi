@@ -19,6 +19,9 @@
     "sleeping": "r3c3",
     "working": "r4c0",
     "sweeping": "r4c1",
-    "juggling": "r4c2"
+    "juggling": "r4c2",
+    "done": "r3c2",
+    "angry": "r2c3",
+    "loved": "r3c4"
   }
 }

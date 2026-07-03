@@ -13,13 +13,18 @@ const menu = document.getElementById('menu');
 const STATES = [
   'idle', 'roam', 'working', 'thinking', 'talking', 'juggling', 'sweeping',
   'waiting', 'needsinput', 'happy', 'greet', 'attention', 'sleeping', 'error',
+  'done', 'angry', 'loved',
 ];
 
 let muted = false;
 let bubbleTimer = null;
+let lastStateData = null; // 摸头互动结束后恢复用
+let lovedActive = false;
 
 // ---------- 状态 ----------
 function setState(s) {
+  lastStateData = s;
+  if (lovedActive) return; // 摸头动画期间先记下，结束时恢复
   const state = STATES.includes(s.state) ? s.state : 'idle';
   loomi.classList.remove(...STATES);
   loomi.classList.add(state);
@@ -52,6 +57,12 @@ function updateStatusChip(state, s) {
     text = '✋ 等你批准';
   } else if (state === 'needsinput') {
     text = '❓ 等你回复';
+  } else if (state === 'done') {
+    text = '✅ 搞定！';
+  } else if (state === 'angry') {
+    text = '💢 老是出错，气！';
+  } else if (state === 'loved') {
+    text = '🥰 好开心～';
   }
   if (text) {
     statusChip.textContent = text;
@@ -129,6 +140,35 @@ loomi.addEventListener('pointerup', (e) => {
     if (!bubble.classList.contains('hidden')) hideBubble();
     else window.pet.launchOpenLoomi();
   }
+});
+
+// ---------- 摸头互动 ----------
+// 鼠标停在小狐狸身上 1.5s = 摸头 → 爱心眼 3s（10s 冷却，拖动中不触发）
+let petHoverTimer = null;
+let lovedCooldownUntil = 0;
+
+function triggerLoved() {
+  if (lovedActive || drag || Date.now() < lovedCooldownUntil) return;
+  lovedActive = true;
+  lovedCooldownUntil = Date.now() + 10000;
+  loomi.classList.remove(...STATES);
+  loomi.classList.add('loved');
+  img.src = '../assets/loomi/loomi-loved.png';
+  statusChip.textContent = '🥰 好开心～';
+  statusChip.classList.remove('hidden');
+  window.pet.petLog('state', 'loved(petting)');
+  setTimeout(() => {
+    lovedActive = false;
+    if (lastStateData) setState(lastStateData);
+  }, 3000);
+}
+
+loomi.addEventListener('mouseenter', () => {
+  if (petHoverTimer) clearTimeout(petHoverTimer);
+  petHoverTimer = setTimeout(triggerLoved, 1500);
+});
+loomi.addEventListener('mouseleave', () => {
+  if (petHoverTimer) { clearTimeout(petHoverTimer); petHoverTimer = null; }
 });
 
 // ---------- 右键菜单 ----------

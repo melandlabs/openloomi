@@ -245,7 +245,8 @@ function createWatcher(handlers) {
   const MAIN_RE = /^\[[^\]]+\] \[([A-Z]+)\] \[([^\]]*)\]\s*(.*)$/;
   const PERM_REQ_RE = /Permission request[^:]*:\s*(\S+)/;
   const PERM_DEC_RE = /Permission decision[^:]*:\s*(allow|deny)/;
-  let permHold = null; // {tool, since} 等待用户批准/回复中
+  let permHold = null;    // {tool, since} 等待用户批准/回复中
+  let recentErrors = [];  // 近 5 分钟错误时间戳（连续出错 → angry）
 
   function mainLogTick() {
     if (stopped) return;
@@ -286,7 +287,11 @@ function createWatcher(handlers) {
         permHold = null;
         turnUntil = 0;
         if (overlay && (overlay.state === 'waiting' || overlay.state === 'needsinput')) overlay = null;
-        flash('error', 8000);
+        // 5 分钟内第二次出错 → 从"大哭"升级成"生气冒烟"
+        const now2 = Date.now();
+        recentErrors = recentErrors.filter((t) => now2 - t < 5 * 60 * 1000);
+        recentErrors.push(now2);
+        flash(recentErrors.length >= 2 ? 'angry' : 'error', 8000);
         markActive();
         onMoment({ kind: 'error', detail: errLine });
       } else if (sawAgent && !permHold && !turnActive()) {
@@ -338,6 +343,8 @@ function createWatcher(handlers) {
         const text = extractText(latest.parts);
         setBase('idle');
         flash('talking', 6000);
+        // 说完话竖个大拇指：回合圆满收工
+        timers.push(setTimeout(() => { if (!stopped) flash('done', 3500); }, 6100));
         markActive();
         if (text) onMoment({ kind: 'reply', text });
       }
@@ -373,7 +380,8 @@ function createWatcher(handlers) {
     ['greet', 3000], ['idle', 3000], ['thinking', 3000], ['working', 3000, 'Connector'],
     ['working', 3000, 'Memory'], ['juggling', 3000, 'Agent'], ['talking', 3000],
     ['happy', 3000], ['sweeping', 3000, 'Memory'], ['waiting', 3000], ['needsinput', 3000],
-    ['attention', 3000], ['roam', 3000], ['error', 3000], ['sleeping', 4000],
+    ['attention', 3000], ['done', 3000], ['loved', 3000], ['roam', 3000],
+    ['error', 3000], ['angry', 3000], ['sleeping', 4000],
   ];
   let demoIdx = 0;
   function demoTick() {
