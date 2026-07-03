@@ -15,20 +15,26 @@ A desktop pet for OpenLoomi: the official Loomi fox sits on your desktop, watche
 
 Nothing is written to OpenLoomi's data, and nothing leaves your machine except the optional bubble-generation call to your configured LLM provider.
 
-## Run
+## Enable / disable (the switch)
 
-**With the OpenLoomi client (default):** the pet starts automatically together with the app. Toggle it in **Settings → General → Desktop Pet** (enabled by default; the switch applies immediately). The preference lives in `~/.openloomi/pet-settings.json`; auto-launch looks for the pet at `apps/pet` (monorepo runs) or `OPENLOOMI_PET_PATH`.
+The pet ships **enabled by default** and starts automatically together with the OpenLoomi client.
 
-**Standalone:**
+| Where | What it does |
+|---|---|
+| **Settings → General → Desktop Pet** | One switch. Turning it **on** launches the pet immediately; turning it **off** stops it immediately. No client restart needed. |
+| `~/.openloomi/pet-settings.json` | Where the preference persists (`{ "enabled": true }`). Missing file = enabled. |
+| `GET/PUT /api/preferences/pet` | The API behind the switch (auth required). `GET` returns `{enabled, running}`; `PUT {enabled}` saves and applies on the spot. |
+
+How the plumbing works: at client startup the server (Tauri mode) reads the preference and, when enabled, spawns the pet from `apps/pet` (or `OPENLOOMI_PET_PATH`). The pet writes `~/.openloomipet/pet.pid` and honors `SIGTERM`, which is how the switch detects and stops it. A single-instance lock guarantees auto-launch and manual runs never stack two foxes.
+
+## Run standalone
 
 ```bash
 cd apps/pet
-npm install
+npm install      # not needed on monorepo installs (electron is hoisted)
 npm start        # start the pet
-npm run demo     # cycle through all 14 expressions (no real data)
+npm run demo     # cycle through all 17 expressions (no real data)
 ```
-
-Only one instance runs at a time (single-instance lock + pid file at `~/.openloomipet/pet.pid`).
 
 ## Speech bubbles (optional, BYOK)
 
@@ -42,13 +48,32 @@ or set `DEEPSEEK_API_KEY`. Without a key the pet still works — bubbles fall ba
 
 ## Interactions
 
-- **Drag** to move (position is remembered) · **click** to dismiss bubble / summon OpenLoomi · **right-click** for menu (summon / mute / log / quit) · tray icon has the same menu.
+- **Drag** to move (position is remembered) · **click** to dismiss bubble / summon OpenLoomi · **hover 1.5s** to pet it (heart eyes 🥰) · **right-click** for menu (summon / mute / log / quit) · tray icon has the same menu.
+- A **status chip** under the fox shows what is happening right now: `📄 读文件 · report.md`, `🛠️ 执行命令`, `💭 思考中…`, `✋ 等你批准`… (hints are local UI only, never sent anywhere).
 
-## States × artwork
+## States × triggers
 
-14 expressions cut from the official Loomi sheet (`assets/loomi-src/loomi-sheet-green.png`, mapping in `assets/loomi/grid-map.json`):
+17 expressions cut from the official Loomi sheet (`assets/loomi-src/loomi-sheet-green.png`, mapping in `assets/loomi/grid-map.json`). The state machine is **turn-aware**: your prompt opens a turn; the first tool activity switches to the laptop pose and holds it until the reply lands.
 
-`idle · roam · working · thinking · talking · juggling · sweeping · waiting · needsinput · happy · greet · attention · sleeping · error`
+| Expression | State | When |
+|---|---|---|
+| 💻 typing on a laptop | `working` | agent is on the job — from its first tool call until the reply; the chip shows the concrete action (read file / run command / skill / memory / search / connector) |
+| 🤔 chin scratch | `thinking` | after your prompt, before the agent touches any tool |
+| 👉 explaining | `talking` | the reply just landed (with the speech bubble) |
+| 👍 thumbs up | `done` | flashes right after talking — turn completed |
+| 🧍 standing by | `idle` | OpenLoomi online, nothing to do |
+| 🚶 strolling | `roam` | idle for 10+ minutes, occasional wander |
+| ✉️ envelope leap | `juggling` | subagents fanned out |
+| ✍️ taking notes | `sweeping` | memory consolidation / context tidying |
+| 🐕 sitting politely | `waiting` | a tool call awaits your approval (golden glow, auto-released on decision) |
+| ❓ question marks | `needsinput` | the agent asked you a question / needs a choice |
+| ❗ startled | `attention` | something wants a look |
+| 🎉 joyful jump | `happy` | celebration |
+| 👋 waving | `greet` | OpenLoomi just came online |
+| 😴 yawning + Zzz | `sleeping` | OpenLoomi is not running |
+| 😭 crying | `error` | an `[ERROR]` hit the log (8s, then recovers) |
+| 💢 fuming | `angry` | second error within five minutes — repeated failures look different from a hiccup |
+| 😍 heart eyes | `loved` | you petted it (hover 1.5s; 10s cooldown) |
 
 ## Layout
 
@@ -60,5 +85,5 @@ backend/
   watcher.js         OpenLoomi activity watcher (4 read-only sources + state machine)
   brain.js           speech bubble generation (rate-limited, offline fallback)
   config.js log.js   config & log (~/.openloomipet/)
-assets/loomi/        14 state PNGs (transparent)
+assets/loomi/        17 state PNGs (transparent)
 ```
