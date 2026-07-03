@@ -90,20 +90,27 @@ export function launchPet(): { ok: boolean; reason?: string } {
   if (!dir) {
     return { ok: false, reason: "pet app not found (set OPENLOOMI_PET_PATH or run from the monorepo)" };
   }
-  const electronBin = join(
-    dir,
-    "node_modules",
-    ".bin",
-    process.platform === "win32" ? "electron.cmd" : "electron",
-  );
-  if (!existsSync(electronBin)) {
-    return { ok: false, reason: `electron not installed in ${dir} (run npm install there)` };
+  // electron 可能装在 pet 自己的 node_modules（独立 npm install），也可能被
+  // pnpm hoisted 到 monorepo 根 node_modules —— 两处都找。
+  const binName = process.platform === "win32" ? "electron.cmd" : "electron";
+  const electronBin = [
+    join(dir, "node_modules", ".bin", binName),
+    resolve(dir, "../../node_modules/.bin", binName),
+  ].find((p) => existsSync(p));
+  if (!electronBin) {
+    return { ok: false, reason: `electron not installed for ${dir} (run install in the pet dir or monorepo root)` };
   }
   try {
+    // 剥掉会毒害 Electron 的继承环境：dev 脚本的 NODE_OPTIONS 带着相对路径
+    // 的 --require，在 pet 的 cwd 下解析不到会让进程秒退。
+    const env = { ...process.env };
+    delete env.NODE_OPTIONS;
+    delete env.ELECTRON_RUN_AS_NODE;
     const child = spawn(electronBin, ["."], {
       cwd: dir,
       detached: true,
       stdio: "ignore",
+      env,
     });
     child.unref();
     console.log(`[Pet] Launched desktop pet from ${dir} (pid ${child.pid})`);

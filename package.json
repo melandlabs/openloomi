@@ -40,6 +40,7 @@
     },
     "onlyBuiltDependencies": [
       "better-sqlite3",
+      "electron",
       "protobufjs",
       "sqlite-vec",
       "sqlite3"
