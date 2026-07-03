@@ -1,0 +1,146 @@
+'use strict';
+
+// 桌宠渲染层：状态贴图 + 气泡 + 拖动 + 右键菜单。
+// 数据只来自 preload 暴露的 window.pet（pet:state / pet:bubble / pet:config）。
+
+const loomi = document.getElementById('loomi');
+const img = document.getElementById('loomi-img');
+const bubble = document.getElementById('bubble');
+const prop = document.getElementById('prop');
+const menu = document.getElementById('menu');
+
+const STATES = [
+  'idle', 'roam', 'working', 'thinking', 'talking', 'juggling', 'sweeping',
+  'waiting', 'needsinput', 'happy', 'greet', 'attention', 'sleeping', 'error',
+];
+
+let muted = false;
+let bubbleTimer = null;
+
+// ---------- 状态 ----------
+function setState(s) {
+  const state = STATES.includes(s.state) ? s.state : 'idle';
+  loomi.classList.remove(...STATES);
+  loomi.classList.add(state);
+  const file = `../assets/loomi/loomi-${state}.png`;
+  if (!img.src.endsWith(`loomi-${state}.png`)) img.src = file;
+
+  if (s.icon && (state === 'working' || state === 'juggling' || state === 'sweeping')) {
+    prop.textContent = s.icon;
+    prop.classList.add('on');
+    prop.title = s.label || '';
+  } else {
+    prop.classList.remove('on');
+  }
+  if (state === 'sleeping') hideBubble();
+  window.pet.petLog('state', state + (s.tool ? ':' + s.tool : ''));
+}
+
+// ---------- 气泡 ----------
+// 读得完为先：停留时间按字数给足（10s 起步），连续台词排队不互抢，
+// 鼠标悬停时暂停倒计时，点一下手动关掉（关掉后立即放下一条）。
+const bubbleQueue = [];
+let bubbleHovered = false;
+
+function bubbleDuration(text) {
+  return Math.min(45000, Math.max(10000, text.length * 320));
+}
+
+function showBubble(text) {
+  if (muted || !text) return;
+  if (!bubble.classList.contains('hidden')) {
+    bubbleQueue.push(text);
+    if (bubbleQueue.length > 3) bubbleQueue.shift(); // 最多攒 3 条，太旧的丢掉
+    return;
+  }
+  bubble.textContent = text;
+  bubble.classList.remove('hidden');
+  armBubbleTimer(bubbleDuration(text));
+}
+
+function armBubbleTimer(ms) {
+  if (bubbleTimer) clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => {
+    if (bubbleHovered) { armBubbleTimer(3000); return; } // 正在看：续命再查
+    hideBubble();
+  }, ms);
+}
+
+function hideBubble() {
+  bubble.classList.add('hidden');
+  if (bubbleTimer) { clearTimeout(bubbleTimer); bubbleTimer = null; }
+  const next = bubbleQueue.shift();
+  if (next) setTimeout(() => showBubble(next), 400);
+}
+
+bubble.addEventListener('click', hideBubble);
+bubble.addEventListener('mouseenter', () => { bubbleHovered = true; });
+bubble.addEventListener('mouseleave', () => { bubbleHovered = false; });
+
+// ---------- 拖动（移动窗口）/ 点击 ----------
+let drag = null;
+loomi.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  try { loomi.setPointerCapture(e.pointerId); } catch {}
+  drag = { sx: e.screenX, sy: e.screenY, win: null, moved: false };
+  window.pet.getWinPos().then(([x, y]) => { if (drag) drag.win = [x, y]; });
+});
+loomi.addEventListener('pointermove', (e) => {
+  if (!drag || !drag.win) return;
+  const dx = e.screenX - drag.sx;
+  const dy = e.screenY - drag.sy;
+  if (Math.abs(dx) + Math.abs(dy) > 4) {
+    drag.moved = true;
+    loomi.classList.add('dragging');
+    window.pet.setWinPos(drag.win[0] + dx, drag.win[1] + dy);
+  }
+});
+loomi.addEventListener('pointerup', (e) => {
+  const wasDrag = drag && drag.moved;
+  loomi.classList.remove('dragging');
+  drag = null;
+  if (!wasDrag && e.button === 0) {
+    // 单击：有气泡先收起，否则唤起 OpenLoomi
+    if (!bubble.classList.contains('hidden')) hideBubble();
+    else window.pet.launchOpenLoomi();
+  }
+});
+
+// ---------- 右键菜单 ----------
+loomi.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  menu.classList.toggle('hidden');
+});
+menu.addEventListener('click', (e) => {
+  const op = e.target && e.target.dataset && e.target.dataset.op;
+  if (!op) return;
+  menu.classList.add('hidden');
+  if (op === 'launch') window.pet.launchOpenLoomi();
+  else if (op === 'mute') window.pet.toggleMute();
+  else if (op === 'log') window.pet.openLog();
+  else if (op === 'quit') window.pet.quit();
+});
+document.addEventListener('click', (e) => {
+  if (!menu.classList.contains('hidden') && !menu.contains(e.target) && e.target !== loomi) {
+    menu.classList.add('hidden');
+  }
+});
+
+// ---------- 空白处鼠标穿透 ----------
+// 窗口是透明矩形，只有落在 Loomi/气泡/菜单上的鼠标事件才归我们。
+document.addEventListener('mousemove', (e) => {
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const mine = el && (loomi.contains(el) || el === loomi || bubble.contains(el) || el === bubble || menu.contains(el) || el === menu);
+  window.pet.setIgnoreMouse(!mine);
+});
+
+// ---------- 接线 ----------
+window.pet.onState(setState);
+window.pet.onBubble((b) => showBubble(b && b.text));
+window.pet.onConfig((c) => {
+  muted = !!(c && c.muted);
+  const muteBtn = menu.querySelector('[data-op="mute"]');
+  if (muteBtn) muteBtn.textContent = muted ? '🔔 打开台词气泡' : '🔇 关闭台词气泡';
+  if (muted) hideBubble();
+});
+window.pet.getConfig().then((c) => { muted = !!(c && c.muted); });
