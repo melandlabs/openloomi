@@ -7,6 +7,7 @@ const loomi = document.getElementById('loomi');
 const img = document.getElementById('loomi-img');
 const bubble = document.getElementById('bubble');
 const prop = document.getElementById('prop');
+const statusChip = document.getElementById('status-chip');
 const menu = document.getElementById('menu');
 
 const STATES = [
@@ -32,8 +33,30 @@ function setState(s) {
   } else {
     prop.classList.remove('on');
   }
+  updateStatusChip(state, s);
   if (state === 'sleeping') hideBubble();
-  window.pet.petLog('state', state + (s.tool ? ':' + s.tool : ''));
+  window.pet.petLog('state', state + (s.tool ? ':' + s.tool : '') + (s.hint ? '·' + s.hint : ''));
+}
+
+// ---------- 脚下状态条 ----------
+// 干活时显示"图标 动作 · 对象名"；思考/等待也给一句，让状态肉眼可读。
+function updateStatusChip(state, s) {
+  let text = '';
+  if ((state === 'working' || state === 'juggling' || state === 'sweeping') && s.label) {
+    text = `${s.icon || ''} ${s.label}${s.hint ? ' · ' + s.hint : ''}`.trim();
+  } else if (state === 'thinking') {
+    text = '💭 思考中…';
+  } else if (state === 'waiting') {
+    text = '✋ 等你批准';
+  } else if (state === 'needsinput') {
+    text = '❓ 等你回复';
+  }
+  if (text) {
+    statusChip.textContent = text;
+    statusChip.classList.remove('hidden');
+  } else {
+    statusChip.classList.add('hidden');
+  }
 }
 
 // ---------- 气泡 ----------

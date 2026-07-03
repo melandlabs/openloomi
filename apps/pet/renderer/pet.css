@@ -102,6 +102,26 @@ html, body {
 }
 .bubble.hidden { opacity: 0; transform: translateX(-50%) translateY(4px); pointer-events: none; }
 
+/* ---------- 脚下状态条 ---------- */
+.status-chip {
+  margin-top: 4px;
+  max-width: 210px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1.5px solid rgba(51, 80, 140, 0.55);
+  color: #2b3a55;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgba(40, 60, 100, 0.18);
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+.status-chip.hidden { opacity: 0; }
+
 /* ---------- 右键菜单 ---------- */
 .menu {
   position: absolute;

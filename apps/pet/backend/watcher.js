@@ -42,24 +42,27 @@ const ROAM_EVERY_MS = 4 * 60 * 1000;
 const ROAM_LEN_MS = 12 * 1000;
 
 const TOOLS = {
-  Connector:  { icon: '🔌', label: '同步连接器' },
-  Memory:     { icon: '🧠', label: '整理记忆' },
-  Automation: { icon: '⏰', label: '跑任务' },
-  Agent:      { icon: '🤖', label: 'agent 干活' },
-  Skill:      { icon: '✨', label: '调用技能' },
-  Search:     { icon: '🔍', label: '检索上下文' },
+  Read:      { icon: '📄', label: '读文件' },
+  Exec:      { icon: '🛠️', label: '执行命令' },
+  Connector: { icon: '🔌', label: '同步连接器' },
+  Memory:    { icon: '🧠', label: '整理记忆' },
+  Agent:     { icon: '🤖', label: 'agent 干活' },
+  Skill:     { icon: '✨', label: '读技能' },
+  Search:    { icon: '🔍', label: '检索上下文' },
 };
 
+// audit 行 → {tool, hint}。hint 是给状态条看的具体对象（文件名/命令），
+// 只取短尾巴，绝不外传（hint 只进本地 UI，不进 brain 的 prompt）。
 function classifyAudit(type, detail) {
-  const d = String(detail || '').toLowerCase();
-  // 执行命令几乎都是聊天里的 agent 在干活（定时任务只是少数），归 Agent，
-  // 别标成"跑任务"误导台词。
-  if (type === 'command_exec') return 'Agent';
-  if (d.includes('/skills/') || d.includes('skill.md')) return 'Skill';
-  if (d.includes('memory')) return 'Memory';
-  if (d.includes('/rag/') || d.includes('document')) return 'Search';
-  if (d.includes('integration') || d.includes('connector')) return 'Connector';
-  return 'Search';
+  const d = String(detail || '');
+  const dl = d.toLowerCase();
+  const base = (d.split('/').pop() || '').slice(0, 24);
+  if (type === 'command_exec') return { tool: 'Exec', hint: d.trim().slice(0, 24) };
+  if (dl.includes('/skills/') || dl.endsWith('skill.md')) return { tool: 'Skill', hint: base };
+  if (dl.includes('memory')) return { tool: 'Memory', hint: base };
+  if (dl.includes('/rag/') || dl.includes('document')) return { tool: 'Search', hint: base };
+  if (dl.includes('integration') || dl.includes('connector')) return { tool: 'Connector', hint: base };
+  return { tool: 'Read', hint: base };
 }
 
 function stripText(s, max = 400) {
@@ -79,12 +82,15 @@ function createWatcher(handlers) {
 
   let base = 'sleeping';
   let baseTool = null;
+  let baseHint = null;
   let overlay = null;            // {state, until, tool}
   let lastEffective = null;
 
   let online = null;
   let lastActivity = 0;
   let lastChatTs = 0;            // 最近一次聊天消息（区分"聊天干活"和"后台家务"）
+  let turnUntil = 0;             // 回合窗口：用户提问后、回复到达前（上限 10 分钟）
+  let lastToolTs = 0;            // 最近一次工具活动；回合内工具间隙回落 thinking
   let idleSince = 0;
   let lastRoam = 0;
   let auditPos = -1;
@@ -92,25 +98,31 @@ function createWatcher(handlers) {
   let dbLastRowid = -1;
   let dbBroken = false;
 
+  const TURN_MAX_MS = 10 * 60 * 1000;
+  const TOOL_GAP_TO_THINKING_MS = 8 * 1000;
+
+  function turnActive() { return Date.now() < turnUntil; }
+
   // ── 状态输出 ───────────────────────────────────────────────────────────────
   function effective() {
     const now = Date.now();
-    if (overlay && overlay.until > now) return { state: overlay.state, tool: overlay.tool || null };
-    return { state: base, tool: baseTool };
+    if (overlay && overlay.until > now) return { state: overlay.state, tool: overlay.tool || null, hint: null };
+    return { state: base, tool: baseTool, hint: baseHint };
   }
 
   function publish() {
     const e = effective();
-    const key = e.state + ':' + (e.tool || '');
+    const key = e.state + ':' + (e.tool || '') + ':' + (e.hint || '');
     if (key === lastEffective) return;
     lastEffective = key;
     const t = e.tool && TOOLS[e.tool] ? TOOLS[e.tool] : null;
-    onState({ state: e.state, tool: e.tool, icon: t ? t.icon : null, label: t ? t.label : null });
+    onState({ state: e.state, tool: e.tool, icon: t ? t.icon : null, label: t ? t.label : null, hint: e.hint });
   }
 
-  function setBase(state, tool = null) {
+  function setBase(state, tool = null, hint = null) {
     base = state;
     baseTool = tool;
+    baseHint = hint;
     if (state === 'idle') { if (!idleSince) idleSince = Date.now(); }
     else idleSince = 0;
     publish();
@@ -205,14 +217,17 @@ function createWatcher(handlers) {
       auditPos = pos;
       if (!lines.length) return;
       const tally = {};
+      const hints = {};
       for (const line of lines.slice(0, 2000)) {
         let ev; try { ev = JSON.parse(line); } catch { continue; }
-        const tool = classifyAudit(ev.type, ev.detail);
+        const { tool, hint } = classifyAudit(ev.type, ev.detail);
         tally[tool] = (tally[tool] || 0) + 1;
+        if (hint) hints[tool] = hint; // 留每类最后一个对象名给状态条
       }
       const top = Object.keys(tally).sort((a, b) => tally[b] - tally[a])[0];
       if (top) {
-        setBase('working', top);
+        setBase('working', top, hints[top] || null);
+        lastToolTs = Date.now();
         markActive();
         // 聊天进行中不为"干活"单独发台词——回复台词马上就来，别抢戏；
         // 只有纯后台家务（近 2 分钟没聊天）才值得汇报一句。
@@ -267,13 +282,16 @@ function createWatcher(handlers) {
         }
       }
       if (errLine) {
-        // 出错也解除等待（会话已经翻车了，别一直举着手）
+        // 出错也解除等待和回合（会话已经翻车了，别一直举着手/装思考）
         permHold = null;
+        turnUntil = 0;
         if (overlay && (overlay.state === 'waiting' || overlay.state === 'needsinput')) overlay = null;
         flash('error', 8000);
         markActive();
         onMoment({ kind: 'error', detail: errLine });
-      } else if (sawAgent && !permHold) {
+      } else if (sawAgent && !permHold && !turnActive()) {
+        // 回合内不让 runtime 杂音（同步技能等日志行）打断 thinking——
+        // 回合内只有真实工具活动（audit）才切 working。
         setBase('working', 'Agent');
         markActive();
       }
@@ -312,9 +330,11 @@ function createWatcher(handlers) {
       // （轮询间隔内 user+assistant 一起到时，直接演最终幕）。
       const latest = fresh[0];
       if (latest.role === 'user') {
+        turnUntil = Date.now() + TURN_MAX_MS;   // 开回合：思考态可持续，工具间隙会回落回来
         setBase('thinking');
         markActive();
       } else if (latest.role === 'assistant') {
+        turnUntil = 0;                           // 收回合
         const text = extractText(latest.parts);
         setBase('idle');
         flash('talking', 6000);
@@ -330,7 +350,13 @@ function createWatcher(handlers) {
     const now = Date.now();
     if (overlay && overlay.until <= now) { overlay = null; publish(); }
     if (online) {
-      if ((base === 'working' || base === 'thinking') && lastActivity && now - lastActivity > QUIET_TO_IDLE_MS) {
+      if (turnActive()) {
+        // 回合内：working 是"工具正响着"的态，安静 8s 就回落 thinking——
+        // agent 在两次工具之间就是在思考，这才连续。
+        if (base === 'working' && lastToolTs && now - lastToolTs > TOOL_GAP_TO_THINKING_MS) {
+          setBase('thinking');
+        }
+      } else if ((base === 'working' || base === 'thinking') && lastActivity && now - lastActivity > QUIET_TO_IDLE_MS) {
         setBase('idle');
       }
       if (base === 'idle' && idleSince && now - idleSince > IDLE_TO_ROAM_MS && now - lastRoam > ROAM_EVERY_MS) {
