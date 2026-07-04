@@ -103,9 +103,12 @@ export function launchPet(): { ok: boolean; reason?: string } {
   try {
     // 剥掉会毒害 Electron 的继承环境：dev 脚本的 NODE_OPTIONS 带着相对路径
     // 的 --require，在 pet 的 cwd 下解析不到会让进程秒退。
-    const env = { ...process.env };
-    delete env.NODE_OPTIONS;
-    delete env.ELECTRON_RUN_AS_NODE;
+    // （解构剔除而非 delete —— biome lint/performance/noDelete）
+    const {
+      NODE_OPTIONS: _nodeOptions,
+      ELECTRON_RUN_AS_NODE: _electronRunAsNode,
+      ...env
+    } = process.env;
     const child = spawn(electronBin, ["."], {
       cwd: dir,
       detached: true,
