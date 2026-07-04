@@ -59,10 +59,11 @@ export function PetSettings() {
       if (data.enabled && data.launchError) {
         toast({
           type: "error",
-          description: t(
-            "settings.petLaunchError",
-            "Saved, but the pet could not be started: ",
-          ) + data.launchError,
+          description:
+            t(
+              "settings.petLaunchError",
+              "Saved, but the pet could not be started: ",
+            ) + data.launchError,
         });
       }
     } catch (error) {

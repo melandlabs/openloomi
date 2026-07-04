@@ -77,7 +77,10 @@ export function findPetDir(): string | null {
     resolve(process.cwd(), "apps/pet"),
   ].filter((p): p is string => Boolean(p));
   for (const dir of candidates) {
-    if (existsSync(join(dir, "main.js")) && existsSync(join(dir, "package.json"))) {
+    if (
+      existsSync(join(dir, "main.js")) &&
+      existsSync(join(dir, "package.json"))
+    ) {
       return dir;
     }
   }
@@ -88,7 +91,11 @@ export function launchPet(): { ok: boolean; reason?: string } {
   if (isPetRunning()) return { ok: true, reason: "already running" };
   const dir = findPetDir();
   if (!dir) {
-    return { ok: false, reason: "pet app not found (set OPENLOOMI_PET_PATH or run from the monorepo)" };
+    return {
+      ok: false,
+      reason:
+        "pet app not found (set OPENLOOMI_PET_PATH or run from the monorepo)",
+    };
   }
   // electron 可能装在 pet 自己的 node_modules（独立 npm install），也可能被
   // pnpm hoisted 到 monorepo 根 node_modules —— 两处都找。
@@ -98,7 +105,10 @@ export function launchPet(): { ok: boolean; reason?: string } {
     resolve(dir, "../../node_modules/.bin", binName),
   ].find((p) => existsSync(p));
   if (!electronBin) {
-    return { ok: false, reason: `electron not installed for ${dir} (run install in the pet dir or monorepo root)` };
+    return {
+      ok: false,
+      reason: `electron not installed for ${dir} (run install in the pet dir or monorepo root)`,
+    };
   }
   try {
     // 剥掉会毒害 Electron 的继承环境：dev 脚本的 NODE_OPTIONS 带着相对路径

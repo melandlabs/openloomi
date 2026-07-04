@@ -1,9 +1,16 @@
 /* OpenLoomiPet — 桌宠渲染层。窗口透明，只有 Loomi 与气泡可见。 */
 
-* { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+}
 
-html, body {
-  width: 100%; height: 100%;
+html,
+body {
+  width: 100%;
+  height: 100%;
   background: transparent;
   overflow: hidden;
   font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -11,7 +18,8 @@ html, body {
 
 #stage {
   position: relative;
-  width: 100%; height: 100%;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -21,52 +29,148 @@ html, body {
 
 /* ---------- Loomi 本体 ---------- */
 #loomi {
-  width: 132px; height: 132px;
+  width: 132px;
+  height: 132px;
   cursor: grab;
   touch-action: none;
   filter: drop-shadow(0 6px 9px rgba(60, 80, 120, 0.28));
 }
-#loomi img { width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; pointer-events: none; }
-#loomi.dragging { cursor: grabbing; animation: grabbed 0.45s ease-in-out infinite; }
+#loomi img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+#loomi.dragging {
+  cursor: grabbing;
+  animation: grabbed 0.45s ease-in-out infinite;
+}
 
 /* 状态动效：图换表情，CSS 补运动 */
-#loomi.idle { animation: bob 3.6s ease-in-out infinite; }
-#loomi.roam { animation: stroll 2.4s ease-in-out infinite; }
+#loomi.idle {
+  animation: bob 3.6s ease-in-out infinite;
+}
+#loomi.roam {
+  animation: stroll 2.4s ease-in-out infinite;
+}
 #loomi.working,
 #loomi.juggling,
 #loomi.thinking,
 #loomi.talking,
-#loomi.sweeping { animation: bob 2.2s ease-in-out infinite; }
-#loomi.sleeping { animation: breathe 4.5s ease-in-out infinite; }
+#loomi.sweeping {
+  animation: bob 2.2s ease-in-out infinite;
+}
+#loomi.sleeping {
+  animation: breathe 4.5s ease-in-out infinite;
+}
 #loomi.happy,
-#loomi.greet { animation: happyJump 0.6s ease-in-out 3; }
+#loomi.greet {
+  animation: happyJump 0.6s ease-in-out 3;
+}
 #loomi.waiting,
 #loomi.needsinput {
   animation: attn 0.6s ease-in-out infinite;
-  filter: drop-shadow(0 0 10px rgba(255, 190, 80, 0.95)) drop-shadow(0 6px 9px rgba(60, 80, 120, 0.28));
+  filter: drop-shadow(0 0 10px rgba(255, 190, 80, 0.95))
+    drop-shadow(0 6px 9px rgba(60, 80, 120, 0.28));
 }
-#loomi.attention { animation: attn 0.5s ease-in-out 4; }
+#loomi.attention {
+  animation: attn 0.5s ease-in-out 4;
+}
 #loomi.error {
   animation: errShake 0.42s ease-in-out 3;
-  filter: drop-shadow(0 0 9px rgba(232, 80, 55, 0.85)) drop-shadow(0 6px 9px rgba(60, 80, 120, 0.28));
+  filter: drop-shadow(0 0 9px rgba(232, 80, 55, 0.85))
+    drop-shadow(0 6px 9px rgba(60, 80, 120, 0.28));
 }
 #loomi.angry {
   animation: errShake 0.36s ease-in-out 4;
-  filter: drop-shadow(0 0 10px rgba(255, 120, 40, 0.9)) drop-shadow(0 6px 9px rgba(60, 80, 120, 0.28));
+  filter: drop-shadow(0 0 10px rgba(255, 120, 40, 0.9))
+    drop-shadow(0 6px 9px rgba(60, 80, 120, 0.28));
 }
-#loomi.done { animation: happyJump 0.55s ease-in-out 2; }
+#loomi.done {
+  animation: happyJump 0.55s ease-in-out 2;
+}
 #loomi.loved {
   animation: bob 1.2s ease-in-out infinite;
-  filter: drop-shadow(0 0 12px rgba(255, 105, 150, 0.85)) drop-shadow(0 6px 9px rgba(60, 80, 120, 0.28));
+  filter: drop-shadow(0 0 12px rgba(255, 105, 150, 0.85))
+    drop-shadow(0 6px 9px rgba(60, 80, 120, 0.28));
 }
 
-@keyframes bob        { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-@keyframes breathe    { 0%,100% { transform: scale(1); } 50% { transform: scale(1.035); } }
-@keyframes happyJump  { 0%,100% { transform: translateY(0); } 45% { transform: translateY(-16px); } }
-@keyframes attn       { 0%,100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-4px) rotate(-3deg); } 70% { transform: translateY(-4px) rotate(3deg); } }
-@keyframes errShake   { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
-@keyframes grabbed    { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
-@keyframes stroll     { 0%,100% { transform: translateX(-12px) translateY(0); } 25% { transform: translateX(0) translateY(-4px); } 50% { transform: translateX(12px) translateY(0); } 75% { transform: translateX(0) translateY(-4px); } }
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+@keyframes happyJump {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-16px);
+  }
+}
+@keyframes attn {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  30% {
+    transform: translateY(-4px) rotate(-3deg);
+  }
+  70% {
+    transform: translateY(-4px) rotate(3deg);
+  }
+}
+@keyframes errShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
+  }
+}
+@keyframes grabbed {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+@keyframes stroll {
+  0%,
+  100% {
+    transform: translateX(-12px) translateY(0);
+  }
+  25% {
+    transform: translateX(0) translateY(-4px);
+  }
+  50% {
+    transform: translateX(12px) translateY(0);
+  }
+  75% {
+    transform: translateX(0) translateY(-4px);
+  }
+}
 
 /* ---------- 头顶道具 ---------- */
 .prop {
@@ -75,11 +179,25 @@ html, body {
   line-height: 26px;
   opacity: 0;
   transform: translateY(4px);
-  transition: opacity 0.25s, transform 0.25s;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
   pointer-events: none;
 }
-.prop.on { opacity: 1; transform: translateY(0); animation: propFloat 1.6s ease-in-out infinite; }
-@keyframes propFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+.prop.on {
+  opacity: 1;
+  transform: translateY(0);
+  animation: propFloat 1.6s ease-in-out infinite;
+}
+@keyframes propFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
 
 /* ---------- 台词气泡 ---------- */
 .bubble {
@@ -97,10 +215,12 @@ html, body {
   line-height: 1.45;
   box-shadow: 0 4px 12px rgba(40, 60, 100, 0.25);
   z-index: 5;
-  transition: opacity 0.25s, transform 0.25s;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
 }
 .bubble::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: -8px;
   left: 50%;
@@ -109,7 +229,11 @@ html, body {
   border-top-color: #33508c;
   border-bottom: none;
 }
-.bubble.hidden { opacity: 0; transform: translateX(-50%) translateY(4px); pointer-events: none; }
+.bubble.hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(4px);
+  pointer-events: none;
+}
 
 /* ---------- 脚下状态条 ---------- */
 .status-chip {
@@ -129,7 +253,9 @@ html, body {
   transition: opacity 0.25s;
   pointer-events: none;
 }
-.status-chip.hidden { opacity: 0; }
+.status-chip.hidden {
+  opacity: 0;
+}
 
 /* ---------- 右键菜单 ---------- */
 .menu {
@@ -145,7 +271,9 @@ html, body {
   z-index: 10;
   min-width: 150px;
 }
-.menu.hidden { display: none; }
+.menu.hidden {
+  display: none;
+}
 .menu button {
   display: block;
   width: 100%;
@@ -157,4 +285,6 @@ html, body {
   color: #2b3a55;
   cursor: pointer;
 }
-.menu button:hover { background: #eef3fc; }
+.menu button:hover {
+  background: #eef3fc;
+}

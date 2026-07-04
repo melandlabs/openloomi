@@ -6,12 +6,12 @@ A desktop pet for OpenLoomi: the official Loomi fox sits on your desktop, watche
 
 ## How it senses OpenLoomi (all local, all read-only)
 
-| Source | Path / port | Drives |
-|---|---|---|
-| Process / local API | `openloomi.app` process, `127.0.0.1:3414/3415` (auto-detected) | awake / asleep / greeting on launch |
-| Audit stream | `~/.openloomi/logs/audit.jsonl` | working expression + tool icon overhead |
-| Main log | `~/.openloomi/logs/openloomi.log` | `[ERROR]` → error face; `Permission request/decision` → waiting (approval) / needs-input, auto-released on decision |
-| Message store | `~/.openloomi/data/data.db` (sqlite, read-only) | new prompt → thinking; new reply → talking + speech bubble |
+| Source              | Path / port                                                    | Drives                                                                                                              |
+| ------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Process / local API | `openloomi.app` process, `127.0.0.1:3414/3415` (auto-detected) | awake / asleep / greeting on launch                                                                                 |
+| Audit stream        | `~/.openloomi/logs/audit.jsonl`                                | working expression + tool icon overhead                                                                             |
+| Main log            | `~/.openloomi/logs/openloomi.log`                              | `[ERROR]` → error face; `Permission request/decision` → waiting (approval) / needs-input, auto-released on decision |
+| Message store       | `~/.openloomi/data/data.db` (sqlite, read-only)                | new prompt → thinking; new reply → talking + speech bubble                                                          |
 
 Nothing is written to OpenLoomi's data, and nothing leaves your machine except the optional bubble-generation call to your configured LLM provider.
 
@@ -19,11 +19,11 @@ Nothing is written to OpenLoomi's data, and nothing leaves your machine except t
 
 The pet ships **enabled by default** and starts automatically together with the OpenLoomi client.
 
-| Where | What it does |
-|---|---|
+| Where                                | What it does                                                                                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | **Settings → General → Desktop Pet** | One switch. Turning it **on** launches the pet immediately; turning it **off** stops it immediately. No client restart needed. |
-| `~/.openloomi/pet-settings.json` | Where the preference persists (`{ "enabled": true }`). Missing file = enabled. |
-| `GET/PUT /api/preferences/pet` | The API behind the switch (auth required). `GET` returns `{enabled, running}`; `PUT {enabled}` saves and applies on the spot. |
+| `~/.openloomi/pet-settings.json`     | Where the preference persists (`{ "enabled": true }`). Missing file = enabled.                                                 |
+| `GET/PUT /api/preferences/pet`       | The API behind the switch (auth required). `GET` returns `{enabled, running}`; `PUT {enabled}` saves and applies on the spot.  |
 
 How the plumbing works: at client startup the server (Tauri mode) reads the preference and, when enabled, spawns the pet from `apps/pet` (or `OPENLOOMI_PET_PATH`). The pet writes `~/.openloomipet/pet.pid` and honors `SIGTERM`, which is how the switch detects and stops it. A single-instance lock guarantees auto-launch and manual runs never stack two foxes.
 
@@ -55,25 +55,25 @@ or set `DEEPSEEK_API_KEY`. Without a key the pet still works — bubbles fall ba
 
 17 expressions cut from the official Loomi sheet (`assets/loomi-src/loomi-sheet-green.png`, mapping in `assets/loomi/grid-map.json`). The state machine is **turn-aware**: your prompt opens a turn; the first tool activity switches to the laptop pose and holds it until the reply lands.
 
-| Expression | State | When |
-|---|---|---|
-| 💻 typing on a laptop | `working` | agent is on the job — from its first tool call until the reply; the chip shows the concrete action (read file / run command / skill / memory / search / connector) |
-| 🤔 chin scratch | `thinking` | after your prompt, before the agent touches any tool |
-| 👉 explaining | `talking` | the reply just landed (with the speech bubble) |
-| 👍 thumbs up | `done` | flashes right after talking — turn completed |
-| 🧍 standing by | `idle` | OpenLoomi online, nothing to do |
-| 🚶 strolling | `roam` | idle for 10+ minutes, occasional wander |
-| ✉️ envelope leap | `juggling` | subagents fanned out |
-| ✍️ taking notes | `sweeping` | memory consolidation / context tidying |
-| 🐕 sitting politely | `waiting` | a tool call awaits your approval (golden glow, auto-released on decision) |
-| ❓ question marks | `needsinput` | the agent asked you a question / needs a choice |
-| ❗ startled | `attention` | something wants a look |
-| 🎉 joyful jump | `happy` | celebration |
-| 👋 waving | `greet` | OpenLoomi just came online |
-| 😴 yawning + Zzz | `sleeping` | OpenLoomi is not running |
-| 😭 crying | `error` | an `[ERROR]` hit the log (8s, then recovers) |
-| 💢 fuming | `angry` | second error within five minutes — repeated failures look different from a hiccup |
-| 😍 heart eyes | `loved` | you petted it (hover 1.5s; 10s cooldown) |
+| Expression            | State        | When                                                                                                                                                               |
+| --------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 💻 typing on a laptop | `working`    | agent is on the job — from its first tool call until the reply; the chip shows the concrete action (read file / run command / skill / memory / search / connector) |
+| 🤔 chin scratch       | `thinking`   | after your prompt, before the agent touches any tool                                                                                                               |
+| 👉 explaining         | `talking`    | the reply just landed (with the speech bubble)                                                                                                                     |
+| 👍 thumbs up          | `done`       | flashes right after talking — turn completed                                                                                                                       |
+| 🧍 standing by        | `idle`       | OpenLoomi online, nothing to do                                                                                                                                    |
+| 🚶 strolling          | `roam`       | idle for 10+ minutes, occasional wander                                                                                                                            |
+| ✉️ envelope leap      | `juggling`   | subagents fanned out                                                                                                                                               |
+| ✍️ taking notes       | `sweeping`   | memory consolidation / context tidying                                                                                                                             |
+| 🐕 sitting politely   | `waiting`    | a tool call awaits your approval (golden glow, auto-released on decision)                                                                                          |
+| ❓ question marks     | `needsinput` | the agent asked you a question / needs a choice                                                                                                                    |
+| ❗ startled           | `attention`  | something wants a look                                                                                                                                             |
+| 🎉 joyful jump        | `happy`      | celebration                                                                                                                                                        |
+| 👋 waving             | `greet`      | OpenLoomi just came online                                                                                                                                         |
+| 😴 yawning + Zzz      | `sleeping`   | OpenLoomi is not running                                                                                                                                           |
+| 😭 crying             | `error`      | an `[ERROR]` hit the log (8s, then recovers)                                                                                                                       |
+| 💢 fuming             | `angry`      | second error within five minutes — repeated failures look different from a hiccup                                                                                  |
+| 😍 heart eyes         | `loved`      | you petted it (hover 1.5s; 10s cooldown)                                                                                                                           |
 
 ## Layout
 
