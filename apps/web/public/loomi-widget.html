@@ -204,10 +204,70 @@
           transform: translate(-50%, -50%) rotate(2deg);
         }
       }
+
+      /* ---- Custom right-click menu ------------------------------------
+       The 168×168 window is tiny, so the menu is positional (anchored
+       down-right from the click) and clamped to the window bounds so
+       it never overflows or clips. Background uses blur + dark glass
+       so the menu reads against any wallpaper. */
+      #pet-menu {
+        position: fixed;
+        z-index: 9999;
+        min-width: 96px;
+        padding: 4px;
+        background: rgba(15, 23, 42, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        box-shadow: 0 16px 28px rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 12px;
+        color: #f1f5f9;
+        display: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      #pet-menu.visible {
+        display: block;
+      }
+      #pet-menu button {
+        display: block;
+        width: 100%;
+        padding: 6px 12px;
+        margin: 0;
+        background: transparent;
+        border: 0;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        border-radius: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #pet-menu button:hover,
+      #pet-menu button:focus-visible {
+        background: rgba(255, 255, 255, 0.08);
+        outline: 0;
+      }
+      #pet-menu hr {
+        border: 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        margin: 4px 2px;
+      }
     </style>
   </head>
   <body>
     <img class="fox" id="fox" data-state="idle" alt="Loomi" draggable="false" />
+
+    <div id="pet-menu" role="menu" aria-hidden="true">
+      <button type="button" data-op="open" role="menuitem">Open Loomi</button>
+      <hr />
+      <button type="button" data-op="quit" role="menuitem">Quit</button>
+    </div>
 
     <script>
       (function () {
@@ -272,6 +332,66 @@
             img.src = src;
           }
         }
+
+        // ---- Custom right-click menu ----------------------------------
+        // The 168×168 widget is too small for a system-tray dropdown and
+        // too prominent for an Inspector menu. We swallow the native
+        // context menu globally and render a small, in-window glass menu
+        // anchored to the click — clamped so it stays inside 168×168.
+        const petMenu = document.getElementById("pet-menu");
+        let petMenuOpen = false;
+
+        function openPetMenu(x, y) {
+          // Measure after first paint so getBoundingClientRect is real.
+          petMenu.style.left = "0px";
+          petMenu.style.top = "0px";
+          petMenu.classList.add("visible");
+          petMenu.setAttribute("aria-hidden", "false");
+          const r = petMenu.getBoundingClientRect();
+          // Anchor: down-right from cursor, clamped to 168×168.
+          const winW = document.documentElement.clientWidth || 168;
+          const winH = document.documentElement.clientHeight || 168;
+          const left = Math.max(0, Math.min(winW - r.width, x));
+          const top = Math.max(0, Math.min(winH - r.height, y));
+          petMenu.style.left = left + "px";
+          petMenu.style.top = top + "px";
+          petMenuOpen = true;
+        }
+
+        function closePetMenu() {
+          if (!petMenuOpen) return;
+          petMenu.classList.remove("visible");
+          petMenu.setAttribute("aria-hidden", "true");
+          petMenuOpen = false;
+        }
+
+        window.addEventListener("contextmenu", function (e) {
+          e.preventDefault();
+          openPetMenu(e.clientX, e.clientY);
+        });
+
+        // Click anywhere outside the menu closes it. We use `click` (not
+        // `mousedown`) so a click on a menu button completes its full
+        // mousedown → mouseup → click cycle on the button first; an
+        // earlier `mousedown` listener that hides the menu via display:none
+        // suppresses the synthetic click before it bubbles to the menu.
+        document.addEventListener("click", function (e) {
+          if (petMenuOpen && !petMenu.contains(e.target)) closePetMenu();
+        });
+
+        // Lose focus → close. The pet window is small enough that any
+        // out-of-window click usually means the user moved on.
+        window.addEventListener("blur", closePetMenu);
+
+        petMenu.addEventListener("click", function (e) {
+          const op = e.target && e.target.dataset && e.target.dataset.op;
+          if (!op) return;
+          closePetMenu();
+          const t = window.__TAURI__;
+          if (!t || !t.event || !t.event.emit) return;
+          if (op === "open") t.event.emit("pet:open-dashboard");
+          else if (op === "quit") t.event.emit("pet:quit");
+        });
 
         // ---- Drag (whole window) vs click (no drag) --------------------
         // In Tauri: call `getCurrentWebviewWindow().startDragging()` so the

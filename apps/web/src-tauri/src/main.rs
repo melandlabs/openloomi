@@ -506,6 +506,15 @@ fn main() {
                 });
             });
 
+            // Pet right-click menu's "Quit" entry funnels into the same
+            // ExitRequested -> cleanup -> exit pipeline as the tray's
+            // "Quit" item. Calling `exit(0)` re-fires ExitRequested;
+            // `lifecycle::cleanup_done()` gates re-entry so we don't loop.
+            let pet_to_quit = app_handle.clone();
+            app_handle.listen("pet:quit", move |_event| {
+                pet_to_quit.exit(0);
+            });
+
             Ok(())
         })
         .build(tauri::generate_context!())
