@@ -52,6 +52,116 @@ Field-specific requirements:
 
 3. "description" — written so it is useful as future search context, e.g. "Editing chronicle.md in VS Code, comparing two prompt designs in the right pane."`;
 
+// Transient upstream statuses worth retrying. 408/409/425/429 = request-side
+// throttling, 5xx + 529 = server-side overload. All others (400/401/403/404/413)
+// are fatal — they will not recover on their own.
+const RETRYABLE_UPSTREAM_STATUSES = new Set([
+  408, 409, 425, 429, 500, 502, 503, 504, 529,
+]);
+
+class RetryableUpstreamError extends Error {
+  readonly status: number;
+  readonly retryAfterMs: number | undefined;
+  constructor(message: string, status: number, retryAfterMs?: number) {
+    super(message);
+    this.name = "RetryableUpstreamError";
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+class FatalUpstreamError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "FatalUpstreamError";
+    this.status = status;
+  }
+}
+
+// Parses the standard `Retry-After` header — either a delta-seconds integer
+// or an HTTP-date — into a millisecond delay. Capped at 30s so a misbehaving
+// upstream cannot stall the request indefinitely.
+function parseRetryAfterHeader(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1000, 30_000);
+  }
+  const dateMs = Date.parse(header);
+  if (Number.isFinite(dateMs)) {
+    return Math.min(Math.max(0, dateMs - Date.now()), 30_000);
+  }
+  return undefined;
+}
+
+function classifyUpstreamError(
+  status: number,
+  message: string,
+  retryAfterMs: number | undefined,
+): Error {
+  if (RETRYABLE_UPSTREAM_STATUSES.has(status)) {
+    return new RetryableUpstreamError(message, status, retryAfterMs);
+  }
+  return new FatalUpstreamError(message, status);
+}
+
+function isTransientNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message || "";
+  return (
+    msg.includes("fetch failed") ||
+    msg.includes("ECONNRESET") ||
+    msg.includes("ETIMEDOUT") ||
+    msg.includes("ENOTFOUND") ||
+    msg.includes("EAI_AGAIN") ||
+    msg.includes("socket hang up")
+  );
+}
+
+// Exponential backoff with jitter, preferring the upstream's `Retry-After`
+// when present. 4 attempts at base 1s gives worst-case ~7s of waiting on top
+// of the request time, which is below the typical Chronicle capture cadence.
+async function withUpstreamRetry<T>(
+  fn: () => Promise<T>,
+  opts: { maxAttempts?: number } = {},
+): Promise<T> {
+  const maxAttempts = opts.maxAttempts ?? 4;
+  const baseDelayMs = 1000;
+  const maxDelayMs = 15_000;
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const retryable =
+        err instanceof RetryableUpstreamError || isTransientNetworkError(err);
+      const fatal = err instanceof FatalUpstreamError;
+      if (fatal || attempt >= maxAttempts || !retryable) {
+        throw err;
+      }
+      const exp = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
+      const jittered = exp * (0.8 + Math.random() * 0.4);
+      const retryAfterMs =
+        err instanceof RetryableUpstreamError ? err.retryAfterMs : undefined;
+      const delay =
+        retryAfterMs !== undefined
+          ? Math.min(retryAfterMs, maxDelayMs)
+          : jittered;
+      console.warn(
+        `[Chronicle] Retryable upstream error (attempt ${attempt}/${maxAttempts}, status=${
+          err instanceof RetryableUpstreamError ? err.status : "network"
+        }), backing off ${Math.round(delay)}ms:`,
+        err instanceof Error ? err.message : err,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastErr;
+}
+
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -89,42 +199,30 @@ export async function POST(request: Request) {
     let analysis: AnalysisResult | null = null;
     let lastErr: unknown = null;
 
-    if (useCustom) {
-      // Custom endpoint — single attempt (no retry loop for external APIs;
-      // a second try with the same payload almost never helps).
-      try {
-        analysis = await analyzeScreenshotWithCustomVisionLlm({
-          imageBuffer,
-          apiUrl: visionLlm.apiUrl,
-          apiKey: visionLlm.apiKey,
-          model: visionLlm.model || "gpt-4o-mini",
-        });
-      } catch (err) {
-        lastErr = err;
-        console.error("[Chronicle] Custom vision LLM failed:", err);
-      }
-    } else {
-      // One synchronous retry: the upstream model occasionally drops the
-      // connection on its first try with vision payloads, but a re-issue with
-      // the same body almost always succeeds. We cap at 2 total attempts —
-      // adding more turns the user-visible latency on a real failure into a
-      // multi-minute hang.
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          analysis = await analyzeScreenshotWithMessagesAPI({
+    try {
+      if (useCustom) {
+        // External vision endpoint — also goes through withUpstreamRetry so
+        // a 529 from the user's provider is treated the same as one from the
+        // internal proxy.
+        analysis = await withUpstreamRetry(() =>
+          analyzeScreenshotWithCustomVisionLlm({
+            imageBuffer,
+            apiUrl: visionLlm.apiUrl,
+            apiKey: visionLlm.apiKey,
+            model: visionLlm.model || "gpt-4o-mini",
+          }),
+        );
+      } else {
+        analysis = await withUpstreamRetry(() =>
+          analyzeScreenshotWithMessagesAPI({
             imageBuffer,
             cloudToken,
             requestUrl: request.url,
-          });
-          break;
-        } catch (err) {
-          lastErr = err;
-          console.warn(
-            `[Chronicle] Analysis attempt ${attempt} threw:`,
-            err instanceof Error ? err.message : err,
-          );
-        }
+          }),
+        );
       }
+    } catch (err) {
+      lastErr = err;
     }
 
     if (!analysis) {
@@ -274,8 +372,13 @@ async function analyzeScreenshotWithMessagesAPI(params: {
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
-    throw new Error(
+    const retryAfterMs = parseRetryAfterHeader(
+      response.headers.get("retry-after"),
+    );
+    throw classifyUpstreamError(
+      response.status,
       `Messages API ${response.status}: ${errText.slice(0, 300)}`,
+      retryAfterMs,
     );
   }
 
@@ -373,8 +476,13 @@ async function analyzeScreenshotWithCustomVisionLlm(params: {
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
-    throw new Error(
+    const retryAfterMs = parseRetryAfterHeader(
+      response.headers.get("retry-after"),
+    );
+    throw classifyUpstreamError(
+      response.status,
       `Custom vision LLM ${response.status} from ${targetUrl}: ${errText.slice(0, 300)}`,
+      retryAfterMs,
     );
   }
 
