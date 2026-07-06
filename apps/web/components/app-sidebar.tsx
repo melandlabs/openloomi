@@ -1012,6 +1012,63 @@ export function AppSidebar() {
                         </Tooltip>
                       )}
 
+                      {/* Loop - proactive execution dashboard */}
+                      {isNavVisible("loop") && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              className={cn(
+                                "w-full gap-2 px-3 py-2 h-auto rounded-md transition-colors flex items-center",
+                                isCollapsed
+                                  ? "justify-center"
+                                  : "justify-start",
+                                pathname === "/loop"
+                                  ? "text-primary"
+                                  : "text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-hover-foreground",
+                              )}
+                              onClick={() => {
+                                startTransition(() => {
+                                  router.push("/loop");
+                                  if (isMobile) {
+                                    setIsCollapsed(true);
+                                    window.dispatchEvent(
+                                      new CustomEvent(
+                                        "openloomi:close-sidebar",
+                                      ),
+                                    );
+                                  }
+                                });
+                              }}
+                              aria-current={
+                                pathname === "/loop" ? "page" : undefined
+                              }
+                            >
+                              <RemixIcon
+                                name="robot_2"
+                                size={SIDEBAR_NAV_ICON_SIZE}
+                                filled={pathname === "/loop"}
+                                className={
+                                  pathname === "/loop" ? "text-primary" : ""
+                                }
+                              />
+                              {!isCollapsed && (
+                                <span
+                                  className={cn(
+                                    "truncate font-normal",
+                                    pathname === "/loop"
+                                      ? "text-primary"
+                                      : "text-sidebar-foreground",
+                                  )}
+                                >
+                                  {t("nav.loop", "Loop")}
+                                </span>
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                        </Tooltip>
+                      )}
+
                       {/* Library - standalone page entry */}
                       {isNavVisible("workspace") && (
                         <Tooltip>

@@ -70,10 +70,37 @@ async function findJobByName(userId: string, name: string) {
   return jobs.find((j: { name: string }) => j.name === name) ?? null;
 }
 
+/**
+ * Resolve the timezone to attach to loop's cron rows. Priority:
+ *   1. `prefs.timezone` — the user normally sets this from their browser
+ *      via the settings panel PUT; for a containerised web server this is
+ *      *the* source of truth since the server's own `Intl` is usually UTC.
+ *   2. the runtime's IANA timezone via `Intl.DateTimeFormat()` — works for
+ *      CLI / Tauri where the runtime is on the user's machine.
+ *   3. `"UTC"` — never fall back here in production; kept only for SSR /
+ *      sandboxed envs without a working Intl.
+ *
+ * We *don't* default to "UTC" because that produces the 8h drift the user
+ * reported: croner's `nextRun()` is wall-clock-anchored to the supplied
+ * timezone, so a 09:00 cron in UTC fires at 17:00 in CST.
+ */
+function resolveTimezone(prefs?: { timezone?: string }): string {
+  const fromPrefs = (prefs?.timezone ?? "").trim();
+  if (fromPrefs) return fromPrefs;
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) return tz;
+  } catch {
+    /* SSR / sandboxed env without Intl — fall through */
+  }
+  return "UTC";
+}
+
 /** Compute the ScheduleConfig for one loop job from current prefs. */
 function scheduleFor(
   kind: LoopJobKind,
   prefs: ReturnType<typeof readPreferences>,
+  timezone: string,
 ): ScheduleConfig {
   if (kind === "tick") {
     const minutes = Math.max(1, Math.round(prefs.intervalSec / 60));
@@ -82,7 +109,12 @@ function scheduleFor(
   const time = kind === "brief" ? prefs.briefTime : prefs.wrapTime;
   const expr = briefTimeToCron(time);
   if (!expr) return { type: "interval-minutes", minutes: 60 }; // safe fallback
-  return { type: "cron", expression: expr };
+  // CRITICAL: include `timezone` in the ScheduleConfig. `updateJob`'s
+  // recompute path (`computeNextRun(updates.schedule, now)`) feeds
+  // `schedule.timezone` straight to croner — if it's missing, croner
+  // falls back to UTC and the row's `next_run_at` lands on a UTC wall
+  // clock instead of the user's local one (the original 8h drift bug).
+  return { type: "cron", expression: expr, timezone };
 }
 
 function jobConfigFor(kind: LoopJobKind) {
@@ -121,6 +153,7 @@ export async function ensureLoopJobs(
   }
   activeUserId = uid;
   const enabled = prefs.enabled;
+  const timezone = resolveTimezone(prefs);
   const summary = {
     created: [] as string[],
     updated: [] as string[],
@@ -129,7 +162,7 @@ export async function ensureLoopJobs(
 
   for (const kind of Object.keys(LOOP_JOB_NAMES) as LoopJobKind[]) {
     const name = LOOP_JOB_NAMES[kind];
-    const schedule = scheduleFor(kind, prefs);
+    const schedule = scheduleFor(kind, prefs, timezone);
     const job = jobConfigFor(kind);
     const desiredEnabled = enabled;
 
@@ -141,9 +174,12 @@ export async function ensureLoopJobs(
         schedule,
         job,
         enabled: desiredEnabled,
+        timezone,
       });
       summary.created.push(name);
-      log(`[scheduler] created ${name} enabled=${desiredEnabled}`);
+      log(
+        `[scheduler] created ${name} enabled=${desiredEnabled} tz=${timezone}`,
+      );
       continue;
     }
 
@@ -155,6 +191,7 @@ export async function ensureLoopJobs(
       (schedule.type !== "interval-minutes" ||
         existing.intervalMinutes === schedule.minutes);
     const sameEnabled = existing.enabled === desiredEnabled;
+    const sameTimezone = (existing.timezone ?? "UTC") === timezone;
 
     const existingCfgStr =
       typeof existing.jobConfig === "string"
@@ -162,7 +199,7 @@ export async function ensureLoopJobs(
         : JSON.stringify(existing.jobConfig);
     const sameHandler = existingCfgStr.includes(`"handler":"loop.${kind}"`);
 
-    if (sameSchedule && sameEnabled && sameHandler) {
+    if (sameSchedule && sameEnabled && sameHandler && sameTimezone) {
       summary.skipped.push(name);
       continue;
     }
@@ -171,10 +208,22 @@ export async function ensureLoopJobs(
     if (!sameSchedule) patch.schedule = schedule;
     if (!sameEnabled) patch.enabled = desiredEnabled;
     if (!sameHandler) patch.job = job;
+    if (!sameTimezone) {
+      // `updateJob` only recomputes `nextRunAt` when `updates.schedule` is
+      // also supplied (see lib/cron/service.ts updateJob — the recompute
+      // lives inside the `if (updates.schedule)` branch). For Loop a
+      // timezone drift alone is enough to invalidate the existing
+      // `nextRunAt` because croner anchors the cron to wall-clock in that
+      // tz. So when we're patching timezone, we *also* re-supply the
+      // schedule so the row gets a fresh nextRunAt computed against the
+      // new tz.
+      patch.timezone = timezone;
+      patch.schedule = schedule;
+    }
 
     await updateJob(uid, existing.id, patch);
     summary.updated.push(name);
-    log(`[scheduler] updated ${name} enabled=${desiredEnabled}`);
+    log(`[scheduler] updated ${name} enabled=${desiredEnabled} tz=${timezone}`);
   }
 
   lastEnsuredAt = Date.now();

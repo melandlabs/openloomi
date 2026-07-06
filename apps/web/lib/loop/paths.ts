@@ -40,6 +40,8 @@ export const LOOP_PATHS = {
   migrated: join(LOOP_HOME, "migrated.json"),
   log: join(LOOP_HOME, "loop.log"),
   inbox: join(LOOP_HOME, "inbox"),
+  /** Per-connector lastSyncAt — read by watcher, written after each pass. */
+  syncState: join(LOOP_HOME, "sync-state.json"),
 } as const;
 
 export function ensureDirs(): void {

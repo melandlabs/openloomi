@@ -49,7 +49,6 @@ function writeJsonAtomic(p: string, obj: unknown): void {
   const tmp = `${p}.tmp`;
   writeFileSync(tmp, JSON.stringify(obj, null, 2));
   // rename is atomic on POSIX (best-effort on Windows)
-  // biome-ignore lint/performance/noDelete: tmp file intentionally removed after rename
   try {
     require("node:fs").renameSync(tmp, p);
   } catch {

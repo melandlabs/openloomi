@@ -11,6 +11,7 @@ export { LOOP_HOME, LOOP_PATHS, ensureDirs, migrate } from "./paths";
 export { decisions, signals, readStatus, writeStatus, log } from "./store";
 export { runDecision, dismissDecision, promoteDecision } from "./runner";
 export { run as runTick } from "./tick";
+export { runOnce as runWatcher } from "./watcher";
 export { build as buildBrief, buildAndEnqueue as enqueueBrief } from "./brief";
 export { build as buildWrap, buildAndEnqueue as enqueueWrap } from "./wrap";
 export {

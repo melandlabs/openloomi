@@ -647,17 +647,54 @@ export const ScheduledJobsPanel = forwardRef<
       }
       return t("agent.panels.scheduledJobsPanel.onceAt", {
         defaultValue: "Once at {{time}}",
-        time: formatDateShort(scheduledAt),
+        time: formatDateShort(scheduledAt, job.timezone),
       });
     }
     return "Unknown";
   };
 
-  // Format date: YYYY-MM-DD HH:mm
-  const formatDateShort = (dateStr: string) => {
+  // Format date: YYYY-MM-DD HH:mm, **anchored to the supplied IANA tz**.
+  // We can't use `date.getHours()` because it returns the host browser's
+  // local time — and on dev boxes / containers the host is usually UTC,
+  // which mis-reads Asia/Shanghai-anchored crons as off-by-8h. We use
+  // `Intl.DateTimeFormat({ timeZone })` with the runtime's default
+  // locale (omit `locale` arg) so we don't trip over locale availability
+  // quirks in Tauri webviews, and re-pad every part defensively so the
+  // output is always exactly `YYYY-MM-DD HH:mm`.
+  const formatDateShort = (dateStr: string, timezone: string) => {
     const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return dateStr;
+    const tz = timezone && timezone.length > 0 ? timezone : undefined;
     const pad = (n: number) => String(n).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    try {
+      const parts = new Intl.DateTimeFormat(undefined, {
+        timeZone: tz,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        hourCycle: "h23",
+      }).formatToParts(date);
+      const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+      // Re-pad every field so `YYYY-MM-DD HH:mm` is invariant across
+      // locales (some render `year: "numeric"` as `26` instead of `2026`).
+      const y = pad(
+        Number.parseInt(get("year"), 10) || date.getUTCFullYear(),
+      ).slice(0, 4);
+      const m = pad(
+        Number.parseInt(get("month"), 10) || date.getUTCMonth() + 1,
+      );
+      const d = pad(Number.parseInt(get("day"), 10) || date.getUTCDate());
+      const h = pad(Number.parseInt(get("hour"), 10) || 0);
+      const mi = pad(Number.parseInt(get("minute"), 10) || 0);
+      return `${y}-${m}-${d} ${h}:${mi}`;
+    } catch {
+      // Invalid tz string or Intl unsupported — fall back to the legacy
+      // browser-local display so we don't show `NaN-NaN-NaN`.
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
   };
 
   const getStatusBadge = (status: string | null) => {
@@ -818,7 +855,7 @@ export const ScheduledJobsPanel = forwardRef<
               </span>
               <span className="text-xs shrink-0">
                 {job.lastRunAt
-                  ? formatDateShort(job.lastRunAt)
+                  ? formatDateShort(job.lastRunAt, job.timezone)
                   : t("common.never", "Never")}
               </span>
             </div>
@@ -828,7 +865,7 @@ export const ScheduledJobsPanel = forwardRef<
               </span>
               <span className="text-xs shrink-0">
                 {job.nextRunAt
-                  ? formatDateShort(job.nextRunAt)
+                  ? formatDateShort(job.nextRunAt, job.timezone)
                   : t(
                       "agent.panels.scheduledJobsPanel.notScheduled",
                       "Not scheduled",
@@ -897,7 +934,7 @@ export const ScheduledJobsPanel = forwardRef<
               </span>
               <span className="text-xs shrink-0">
                 {job.lastRunAt
-                  ? formatDateShort(job.lastRunAt)
+                  ? formatDateShort(job.lastRunAt, job.timezone)
                   : t("common.never", "Never")}
               </span>
             </div>

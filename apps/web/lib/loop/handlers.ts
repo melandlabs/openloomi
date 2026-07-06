@@ -48,8 +48,17 @@ async function handleTick(
   // tick.ts exports the function as `run`; we call it directly. Its return
   // is synchronous (LoopTickResult), so we wrap with Promise.resolve to
   // satisfy the runAsJob contract.
-  const { run } = await import("./tick");
-  return runAsJob(() => Promise.resolve(run()), context);
+  const { run, setActiveUser } = await import("./tick");
+  const { runOnce: runWatcher } = await import("./watcher");
+  return runAsJob(async () => {
+    // First, have the watcher pull any new events from connected
+    // integrations. The watch pass appends directly to signals.jsonl, and
+    // the tick's 2h lookback will pick up everything we just wrote.
+    setActiveUser(context.userId);
+    const watchResult = await runWatcher({ userId: context.userId });
+    const tickResult = await run({ userId: context.userId });
+    return { ...tickResult, watch: watchResult };
+  }, context);
 }
 
 /** Handler for `loop.brief` — build a morning brief card and enqueue it. */

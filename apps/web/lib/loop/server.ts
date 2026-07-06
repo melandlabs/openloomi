@@ -13,7 +13,7 @@ import { listConnectors, refreshConnectors } from "./connectors";
 import { decisions, log, readStatus, signals } from "./store";
 import { readPreferences, writePreferences } from "./preferences";
 import { dismissDecision, promoteDecision, runDecision } from "./runner";
-import { run as runTick } from "./tick";
+import { run as runTick, setActiveUser as setTickActiveUser } from "./tick";
 import { buildAndEnqueue as buildWrap, build as buildWrapOnly } from "./wrap";
 import type {
   DecisionStatus,
@@ -238,8 +238,14 @@ export async function triggerWrap(
 }
 
 /** POST /api/loop/tick */
-export function triggerTick(): LoopTickResult {
-  return runTick();
+export async function triggerTick(
+  opts: { userId?: string } = {},
+): Promise<LoopTickResult> {
+  // The web /api/loop/tick route always passes the session userId. CLI and
+  // tests may not — in that case we just run without enrich (graceful
+  // degradation, decisions still land with base confidence).
+  if (opts.userId) setTickActiveUser(opts.userId);
+  return runTick({ userId: opts.userId });
 }
 
 /** GET /api/loop/preferences | PUT same path */

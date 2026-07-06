@@ -33,6 +33,24 @@ import { DEFAULT_LOOP_PREFERENCES } from "./types";
 const TICK_LOOKBACK_MS = 2 * 60 * 60 * 1000; // 2h
 const TICK_BATCH = 200;
 
+/**
+ * The Loop runs as a single-user-per-process pipeline. We mirror the
+ * scheduler's `setActiveUser` pattern so callers (cron handlers, the web
+ * `/api/loop/tick` route, the CLI) can tell the tick which user it should
+ * enrich against without threading a `userId` through every layer.
+ */
+let activeUserId: string | null = null;
+
+/** Set the user the next `run()` invocation will enrich against. */
+export function setActiveUser(userId: string | null): void {
+  activeUserId = userId;
+}
+
+/** Read the currently-active user. Useful for diagnostics / logging. */
+export function getActiveUser(): string | null {
+  return activeUserId;
+}
+
 function nowMs(): number {
   return Date.now();
 }
@@ -74,13 +92,20 @@ export interface TickOptions {
   force?: boolean;
   /** Optional: callers can pre-supply a list of signals (for tests). */
   inputSignals?: LoopSignal[];
+  /**
+   * Explicit userId for enrichment (contact / project / history lookups).
+   * Falls back to the module-level `activeUserId` set via `setActiveUser`
+   * (mirrored from scheduler.ts). When neither is set, enrich degrades
+   * to a no-op and decisions land with the base 0.6 confidence.
+   */
+  userId?: string;
 }
 
 /**
  * Run one tick. Returns a structured result with counts and any decisions
  * that were newly enqueued. Errors per-signal are collected, not thrown.
  */
-export function run(opts: TickOptions = {}): LoopTickResult {
+export async function run(opts: TickOptions = {}): Promise<LoopTickResult> {
   ensureDirs();
   // Lazy migrate on first tick so legacy data shows up before any decision
   // is enqueued. Safe to call repeatedly — no-op after the first run.
@@ -128,16 +153,45 @@ export function run(opts: TickOptions = {}): LoopTickResult {
         result.muted += 1;
         continue;
       }
+      // Enrich: ask the memory subsystem for the contact, project, and
+      // related decisions that match this signal. Best-effort — if the
+      // memory call fails the candidate still gets persisted with the
+      // base confidence and a single "Source: …" why-line. Lazy-imported
+      // because enrich transitively pulls `@/lib/insights/search`, which
+      // imports `lib/env/constants` → `server-only` and breaks the CLI
+      // when `--userId` is not provided.
+      const enrichUserId = opts.userId ?? activeUserId;
+      let context: Record<string, unknown> = {
+        why: [`Source: ${sig.source}:${sig.type}`],
+        memory_refs: [],
+      };
+      let confidence = 0.6;
+      if (enrichUserId) {
+        const { enrich, enrichToContext } = await import("./enrich");
+        const enriched = await enrich({
+          userId: enrichUserId,
+          signal: sig,
+          candidate,
+          baseConfidence: 0.6,
+        }).catch((e) => {
+          log(`tick enrich error: ${sig.id}: ${(e as Error).message}`);
+          return null;
+        });
+        if (enriched) {
+          context = enrichToContext(enriched) as unknown as Record<
+            string,
+            unknown
+          >;
+          confidence = enriched.confidence;
+        }
+      }
       const dec: LoopDecision = decisions.add({
         signal_id: sig.id,
         type: candidate.type,
         title: candidate.title,
         action: candidate.action,
-        context: {
-          why: [`Source: ${sig.source}:${sig.type}`],
-          memory_refs: [],
-        },
-        confidence: 0.6,
+        context: context as LoopDecision["context"],
+        confidence,
         source_signal: sig,
         dialogue: candidateDialogue(sig, candidate.type),
         nextStep: candidateNextStep(candidate.type),

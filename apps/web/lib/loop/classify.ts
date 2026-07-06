@@ -61,7 +61,7 @@ export function isHardSkipped(
   return null;
 }
 
-interface DecisionCandidate {
+export interface DecisionCandidate {
   type: DecisionType;
   title: string;
   action: LoopAction;

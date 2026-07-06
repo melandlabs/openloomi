@@ -21,6 +21,28 @@ import { Switch } from "@/components/ui/switch";
 
 const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
+// ---- First-launch notice helpers -----------------------------------
+// Module-scoped so re-renders don't recreate them. The storage key is
+// namespaced + versioned so a future copy change can re-fire by
+// bumping the suffix.
+const LOOP_NOTICE_KEY = "openloomi.loop.noticeSeen.v1";
+
+function hasSeenLoopNotice(): boolean {
+  try {
+    return window.localStorage.getItem(LOOP_NOTICE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markLoopNoticeSeen(): void {
+  try {
+    window.localStorage.setItem(LOOP_NOTICE_KEY, "1");
+  } catch {
+    /* private mode etc — best-effort */
+  }
+}
+
 type LoopPreferencesResponse = {
   preferences: {
     enabled: boolean;
@@ -29,6 +51,12 @@ type LoopPreferencesResponse = {
     intervalSec: number;
     noReplySkip: boolean;
     promotionSkip: boolean;
+    /**
+     * Echoed back from the server — client never reads it directly into
+     * the form, but `data.preferences.timezone` is consumed in
+     * `handleSave`'s success branch to refresh the in-flight draft state.
+     */
+    timezone?: string;
   };
 };
 
@@ -37,6 +65,15 @@ type DraftState = {
   briefTime: string;
   wrapTime: string;
   intervalSec: number;
+  /**
+   * IANA timezone from `Intl.DateTimeFormat()` of the host running this
+   * component (i.e. the user's browser). Sent on PUT so the server-side
+   * cron rows anchor to the user's wall-clock 09:00 / 21:00 instead of
+   * the server's Intl (which in a container is usually `UTC`, producing
+   * the 8h drift the user reported). Not user-editable; hidden from the
+   * form.
+   */
+  timezone: string;
 };
 
 function emptyDraft(): DraftState {
@@ -45,7 +82,17 @@ function emptyDraft(): DraftState {
     briefTime: "09:00",
     wrapTime: "21:00",
     intervalSec: 600,
+    timezone: "",
   };
+}
+
+/** Best-effort read of the browser's IANA timezone. SSR-safe. */
+function resolveBrowserTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
 }
 
 function validate(draft: DraftState): string | null {
@@ -68,17 +115,40 @@ export function LoopSettings() {
       const response = await fetch("/api/loop/preferences");
       if (!response.ok) return;
       const data = (await response.json()) as LoopPreferencesResponse;
-      setDraft({
+      // Always supply the current browser TZ on save — even if the server
+      // has a stale one from a previous session, a re-save re-anchors the
+      // cron rows to wherever the user is now. This handles the "user
+      // travels" case as a free side effect.
+      const browserTz = resolveBrowserTimezone();
+      const next: DraftState = {
         enabled: data.preferences.enabled,
         briefTime: data.preferences.briefTime,
         wrapTime: data.preferences.wrapTime,
         intervalSec: data.preferences.intervalSec,
-      });
+        timezone: browserTz,
+      };
+      setDraft(next);
       setDirty(false);
+      // First-launch notice. Loop is on by default; some platforms
+      // (Gmail, Calendar, GitHub, Slack) get polled every 10 minutes. We
+      // surface a one-time toast the first time the user opens this
+      // settings panel and sees Loop enabled, so they can flip it off
+      // here if they prefer. The flag lives in localStorage because
+      // it's a UI hint, not a server-side preference.
+      if (next.enabled && !hasSeenLoopNotice()) {
+        markLoopNoticeSeen();
+        toast({
+          type: "info",
+          description: t(
+            "settings.loopNoticeDescription",
+            "Loop is on — Loomi is reading Gmail / Calendar / GitHub / Slack in the background to fill your morning brief. Toggle off here if you'd rather not.",
+          ),
+        });
+      }
     } catch (error) {
       console.error("[Loop Settings] Failed to load", error);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -122,6 +192,10 @@ export function LoopSettings() {
         briefTime: data.preferences.briefTime,
         wrapTime: data.preferences.wrapTime,
         intervalSec: data.preferences.intervalSec,
+        // Server is the source of truth for TZ post-save (it echoes back
+        // what it stored); fall back to the browser if it cleared the
+        // field for any reason.
+        timezone: data.preferences.timezone || resolveBrowserTimezone(),
       });
       setDirty(false);
       toast({

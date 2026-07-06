@@ -8,7 +8,7 @@
  *   tsx apps/web/lib/loop/cli.ts <command> [args]
  *
  * Commands:
- *   tick                       run one tick (signals → classify → enqueue)
+ *   tick [--userId <id>]       run one tick (signals → classify → enqueue)
  *   analyze                    alias for `tick` (legacy naming)
  *   inbox [--status=X]         list decisions (default: all)
  *   run <id> [--dry]           invoke agent on a decision
@@ -42,7 +42,7 @@ import {
   listDecisions,
   getPreferences,
 } from "./server";
-import { run as runTick } from "./tick";
+import { run as runTick, setActiveUser } from "./tick";
 import { decisions, signals } from "./store";
 import { readPreferences, writePreferences } from "./preferences";
 import type { DecisionStatus } from "./types";
@@ -81,7 +81,7 @@ function usage(): string {
   return `Usage: loop <command> [args]
 
 Commands:
-  tick                       run one tick
+  tick [--userId <id>]       run one tick
   analyze                    alias for tick
   inbox [--status=X]         list decisions (default: all)
   run <id> [--dry]           invoke agent on a decision
@@ -107,7 +107,13 @@ async function main(): Promise<number> {
     switch (cmd) {
       case "tick":
       case "analyze": {
-        const out = runTick();
+        // Optional `--userId <id>` — pass-through so the CLI can enrich
+        // against the same user the web route would. Without it we run
+        // un-enriched (base confidence only).
+        const userId =
+          typeof args.flags.userId === "string" ? args.flags.userId : undefined;
+        if (userId) setActiveUser(userId);
+        const out = await runTick({ userId });
         process.stdout.write(JSON.stringify(out, null, 2));
         return 0;
       }

@@ -113,6 +113,14 @@ export interface LoopPreferences {
   /** Hard-skip patterns. */
   noReplySkip: boolean;
   promotionSkip: boolean;
+  /**
+   * IANA timezone the brief/wrap cron rows should be anchored to. Empty
+   * (or omitted) means "derive from the host's `Intl.DateTimeFormat`". The
+   * settings panel populates this from `Intl.DateTimeFormat().resolvedOptions().timeZone`
+   * on PUT so a containerised server (whose Intl is usually UTC) still
+   * honours the user's wall-clock 09:00 / 21:00.
+   */
+  timezone?: string;
 }
 
 export const DEFAULT_LOOP_PREFERENCES: LoopPreferences = {

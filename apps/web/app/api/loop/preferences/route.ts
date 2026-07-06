@@ -21,13 +21,39 @@ const ALLOWED_KEYS: (keyof LoopPreferences)[] = [
   "intervalSec",
   "noReplySkip",
   "promotionSkip",
+  "timezone",
 ];
 
 const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
+/**
+ * IANA timezone sanity check. We don't try to canonicalise (V8's
+ * `Intl.DateTimeFormat({ timeZone })` would, but that throws on invalid
+ * inputs, and we want non-fatal gating). Loose check: looks like
+ * "Region/City" or "Etc/UTC", length-bounded so a 64kB string can't
+ * land in `config.json`.
+ */
+const TIMEZONE_RE = /^[A-Za-z_]+(?:\/[A-Za-z_+\-]+){0,3}$/;
+
 export async function GET() {
   try {
-    return NextResponse.json({ preferences: getPreferences() });
+    const prefs = getPreferences();
+    // Self-heal: even if the user never clicks Save, opening the Loop
+    // settings panel should re-anchor any cron rows whose `timezone`
+    // drifted (e.g. created by an older code path with `timezone=UTC`).
+    // Soft-fails so a DB hiccup doesn't break the GET — the user still
+    // sees their prefs; they just may not see the underlying rows healed.
+    try {
+      const session = await auth();
+      const userId = session?.user?.id;
+      if (userId) {
+        const { ensureLoopJobs } = await import("@/lib/loop");
+        await ensureLoopJobs(prefs, userId);
+      }
+    } catch (healErr) {
+      console.warn("[loop] GET-side ensureLoopJobs failed:", healErr);
+    }
+    return NextResponse.json({ preferences: prefs });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "preferences failed" },
@@ -69,6 +95,20 @@ export async function PUT(req: Request) {
         { error: "intervalSec must be >= 30" },
         { status: 400 },
       );
+    }
+    // `timezone` is optional. When supplied it must be a plausible IANA
+    // string; an empty string clears it (server Intl takes over).
+    if (body.timezone !== undefined && body.timezone !== null) {
+      if (
+        typeof body.timezone !== "string" ||
+        body.timezone.length > 64 ||
+        (body.timezone.length > 0 && !TIMEZONE_RE.test(body.timezone))
+      ) {
+        return NextResponse.json(
+          { error: "timezone must be a valid IANA name like Asia/Shanghai" },
+          { status: 400 },
+        );
+      }
     }
     // Resolve the current user. When undefined (CLI direct call without
     // auth) we fall back to a plain writePreferences so the config file
