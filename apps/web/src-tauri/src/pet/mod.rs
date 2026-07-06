@@ -4,6 +4,7 @@
 // each concern (window lifecycle, decision-data watcher, macOS dock
 // policy) can be reasoned about and unit-tested on its own.
 
+#[cfg(target_os = "macos")]
 mod dock;
 mod watcher;
 mod window;
