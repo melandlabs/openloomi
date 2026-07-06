@@ -148,10 +148,15 @@ export async function GET(
         endingBefore: null,
         onlyEnable: false,
       });
-      if (bots.bots.length === 0) {
+      // Skip the system "default" bot (created by ensureUserDefaultBot as a
+      // generic storage target for Chronicle / manual insights). It has no
+      // message surface; refreshing it would fall through to the unknown-
+      // adapter throw in lib/insights/processor.ts.
+      const refreshable = bots.bots.filter((b) => b.adapter !== "default");
+      if (refreshable.length === 0) {
         return Response.json([], { status: 200 });
       }
-      targetBotIds = bots.bots.map((b) => b.id);
+      targetBotIds = refreshable.map((b) => b.id);
     } else {
       const botRecord = await botExists({ id, userId });
       if (!botRecord) {

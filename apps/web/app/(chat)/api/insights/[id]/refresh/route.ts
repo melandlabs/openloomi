@@ -49,6 +49,14 @@ export async function POST(
 
     const { insight: insightRecord, bot } = record;
 
+    // System "default" bot (created by ensureUserDefaultBot as a generic
+    // storage target for Chronicle / manual insights) has no message
+    // surface — refreshing it falls through to the unknown-adapter throw
+    // in lib/insights/processor.ts. Return the original insight unchanged.
+    if (bot.adapter === "default") {
+      return Response.json({ insight: insightRecord }, { status: 200 });
+    }
+
     // Get groups that the insight belongs to
     const groups = insightRecord.groups ?? [];
     if (groups.length === 0) {
