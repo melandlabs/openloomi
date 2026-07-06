@@ -25,7 +25,7 @@ import { toast } from "@/components/toast";
 import { fetchWithAuth } from "@/lib/utils";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { ChronicleSettings } from "@/components/personalization/personalization-chronicle-settings";
-import { PetSettings } from "@/components/pet-settings";
+import { LoopSettings } from "@/components/loop-settings";
 
 type ProfileResponse = {
   user: {
@@ -556,12 +556,12 @@ export function UserProfileSettings() {
         <ChronicleSettings open />
       </div>
 
-      {/* Desktop pet (apps/pet) */}
+      {/* Loop (proactive execution brain) */}
       <div className="w-full px-1 sm:px-0 space-y-4">
         <p className="px-0 pb-0 text-base font-semibold text-foreground-secondary">
-          {t("settings.petSectionTitle", "Desktop Pet")}
+          {t("settings.loopSectionTitle", "Loop (proactive execution)")}
         </p>
-        <PetSettings />
+        <LoopSettings />
       </div>
 
       {/* Change full name */}

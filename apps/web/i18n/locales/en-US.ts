@@ -20,13 +20,15 @@ const en = {
   settings: {
     ...baseEn.settings,
     aiSettingsTitle: "API Settings",
-    petSectionTitle: "Desktop Pet",
-    petEnableLabel: "Show the desktop pet",
-    petEnableDescription:
-      "A Loomi fox on your desktop that mirrors what OpenLoomi is doing. Starts together with the app.",
-    petRunning: "Running",
-    petSaveError: "Failed to save desktop pet setting.",
-    petLaunchError: "Saved, but the pet could not be started: ",
+    loopSectionTitle: "Loop (proactive execution)",
+    loopEnableLabel: "Enable the Loop",
+    loopEnableDescription:
+      "Continuously pulls external signals (Gmail, Calendar, GitHub, Slack), classifies them into typed decisions, and surfaces them to the desktop pet.",
+    loopBriefTimeLabel: "Morning brief time",
+    loopWrapTimeLabel: "Evening wrap time",
+    loopIntervalLabel: "Tick interval (seconds)",
+    loopSaveError: "Failed to save Loop settings.",
+    loopSaveOk: "Loop settings saved.",
     aiSettingsDescription:
       "Configure per-user API settings for compatible AI providers.",
     conversationModelsTitle: "Conversation models",
