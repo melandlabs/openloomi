@@ -68,12 +68,29 @@ export function register() {
       // Weixin listener is started on-demand by WeixinListenerInit (frontend component)
       // after user authentication, not here, to avoid duplicate poll loops.
 
-      // Desktop pet (apps/pet): auto-launch alongside the client when enabled
-      // in settings (default ON). Soft-fails when the pet app is not present
-      // (e.g. packaged builds without the monorepo checkout).
-      import("./lib/pet/launcher")
-        .then(({ maybeAutoLaunchPet }) => maybeAutoLaunchPet())
-        .catch((e) => console.warn("[Pet] Failed to auto-launch:", e));
+      // Loop cron handlers + scheduler: register the three custom handler
+      // names ("loop.tick" / "loop.brief" / "loop.wrap") so the existing
+      // local-scheduler can dispatch Loop's ScheduledJob rows through the
+      // cron executor. ensureLoopJobs() runs idempotently and soft-fails on
+      // any DB / fs error so the rest of the runtime is unaffected.
+      import("./lib/loop/handlers")
+        .then(({ registerLoopHandlers }) => {
+          try {
+            registerLoopHandlers();
+          } catch (e) {
+            console.warn("[Loop] Handler registration failed:", e);
+          }
+        })
+        .catch((e) => console.warn("[Loop] Handler import failed:", e));
+      import("./lib/loop/scheduler")
+        .then(({ start: startLoopScheduler }) => {
+          // Awaited via .catch — startLoopScheduler is async but we don't
+          // need to block instrumentation on it.
+          startLoopScheduler().catch((e: unknown) =>
+            console.warn("[Loop] start failed:", e),
+          );
+        })
+        .catch((e) => console.warn("[Loop] Scheduler import failed:", e));
     }
   }
 }

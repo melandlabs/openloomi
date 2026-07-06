@@ -39,7 +39,8 @@
     "tauri:dev": "node ./scripts/run-cross-env.cjs IS_TAURI=true PORT=3515 pnpm tauri dev --config src-tauri/tauri.conf.dev.json",
     "tauri:build": "pnpm tauri build && node scripts/check-cli-bundled.js . && node scripts/optimize-tauri-bundle.js",
     "tauri:build:debug": "node ./scripts/run-cross-env.cjs IS_TAURI=true SKIP_TYPE_CHECK=true NODE_OPTIONS=--max-old-space-size=16384 tsx lib/db/migrate && next build && pnpm tauri build && node scripts/optimize-tauri-bundle.js",
-    "db:generate:sqlite": "drizzle-kit generate --config=drizzle.config.sqlite.ts"
+    "db:generate:sqlite": "drizzle-kit generate --config=drizzle.config.sqlite.ts",
+    "loop": "node ./scripts/loop-cli.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^1.0.0",

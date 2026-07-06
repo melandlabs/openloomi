@@ -67,6 +67,20 @@ export async function GET(request: Request) {
       );
     }
 
+    // Loop / proactive-execution rows live in scheduled_jobs too. Once we
+    // know which desktop user we're servicing, ensure their three loop
+    // rows (tick / brief / wrap) are present and reflect current prefs.
+    // Soft-fails so the rest of the scheduler boot is unaffected.
+    try {
+      const { syncLoopJobsForUser } = await import("@/lib/loop");
+      await syncLoopJobsForUser(userId);
+    } catch (e) {
+      console.warn(
+        "[SchedulerAPI] Loop job sync failed (non-fatal):",
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+
     // Start the scheduler if it is not running; subsequent GETs refresh runtime context.
     if (!getSchedulerStatus().isRunning) {
       await startLocalScheduler();
