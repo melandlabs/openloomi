@@ -13,6 +13,7 @@ import {
 import type {
   MemoryDeprecateRecordsInput,
   MemoryRecord,
+  MemorySummary,
   MemoryStorageAdapter,
 } from "../../../../packages/ai/src/memory/contracts";
 
@@ -32,6 +33,7 @@ function makeRecord(
 
 class InMemoryMemoryStorageAdapter implements MemoryStorageAdapter {
   records: MemoryRecord[] = [];
+  summaries: MemorySummary[] = [];
   deprecateCalls: MemoryDeprecateRecordsInput[] = [];
 
   async acquireLock() {
@@ -41,13 +43,15 @@ class InMemoryMemoryStorageAdapter implements MemoryStorageAdapter {
   async listCandidates() {
     return [];
   }
-  async saveSummaries() {}
+  async saveSummaries(summaries: MemorySummary[]) {
+    this.summaries.push(...summaries);
+  }
   async transitionRecords() {}
   async queryRaw() {
     return { items: [...this.records], hasMore: false };
   }
   async querySummaries() {
-    return { items: [], hasMore: false };
+    return { items: [...this.summaries], hasMore: false };
   }
   async deprecateRecords(input: MemoryDeprecateRecordsInput): Promise<number> {
     this.deprecateCalls.push(input);
@@ -352,6 +356,112 @@ describe("deprecateMemoryRecords", () => {
     expect(adapter.records).toHaveLength(1);
     expect(adapter.records[0]?.text).toBe("important fact");
     expect(adapter.records[0]?.deprecatedAt).toBeDefined();
+  });
+
+  it("connects persisted summaries to soft-deprecated raw records and audit retrieval", async () => {
+    const adapter = new InMemoryMemoryStorageAdapter();
+    adapter.records = [
+      makeRecord("r1", { text: "prefers morning planning" }),
+      makeRecord("r2", { text: "prefers calendar review on Mondays" }),
+      makeRecord("r3", { text: "unrelated active raw record" }),
+    ];
+    const summary: MemorySummary = {
+      summaryId: "summary-morning-planning",
+      userId: "u1",
+      summaryTier: "L1",
+      sourceTier: "short",
+      startTimestamp: 1700000000000,
+      endTimestamp: 1700000002000,
+      messageCount: 2,
+      sourceRecordIds: ["r1", "r2"],
+      keyPoints: ["User prefers morning planning and Monday calendar review."],
+      keywords: ["planning", "calendar"],
+      summaryText:
+        "User prefers morning planning and Monday calendar review.",
+      qualityScore: 0.91,
+      createdAt: 1700000003000,
+      updatedAt: 1700000003000,
+    };
+    const summaryCandidates: MemorySummaryCandidate[] = [
+      {
+        clusterKey: "planning-preferences",
+        competitionKey: "planning-preferences",
+        recordIds: summary.sourceRecordIds,
+        evidenceCount: summary.sourceRecordIds.length,
+        score: 0.91,
+        priority: 0.91,
+        reasonCodes: ["strong_repeated_evidence"],
+        sourceAction: "preserve",
+      },
+    ];
+
+    await adapter.saveSummaries([summary]);
+    const deprecationPlan = buildMemoryDeprecationEntries({
+      persistedSummaryIds: [summary.summaryId],
+      summaryCandidates,
+    });
+    const result = await deprecateMemoryRecords({
+      userId: "u1",
+      entries: deprecationPlan.entries,
+      store: adapter,
+      now: 1700000004000,
+    });
+
+    expect(result.persistedCount).toBe(2);
+    expect(deprecationPlan.bySummary[summary.summaryId]).toEqual(["r1", "r2"]);
+
+    const defaultRawRetrieval = filterDeprecatedRecords(
+      (await adapter.queryRaw()).items,
+    );
+    expect(defaultRawRetrieval.records.map((record) => record.id)).toEqual([
+      "r3",
+    ]);
+    expect(defaultRawRetrieval.hiddenDeprecatedCount).toBe(2);
+
+    const auditRawRetrieval = filterDeprecatedRecords(
+      (await adapter.queryRaw()).items,
+      { includeDeprecated: true },
+    );
+    expect(auditRawRetrieval.records.map((record) => record.id)).toEqual([
+      "r1",
+      "r2",
+      "r3",
+    ]);
+    expect(
+      auditRawRetrieval.records
+        .filter((record) => record.supersededBySummaryId === summary.summaryId)
+        .map((record) => ({
+          id: record.id,
+          deprecatedAt: record.deprecatedAt,
+          deprecationReason: record.deprecationReason,
+        })),
+    ).toEqual([
+      {
+        id: "r1",
+        deprecatedAt: 1700000004000,
+        deprecationReason: `summarized_into:${summary.summaryId}`,
+      },
+      {
+        id: "r2",
+        deprecatedAt: 1700000004000,
+        deprecationReason: `summarized_into:${summary.summaryId}`,
+      },
+    ]);
+
+    const summaryRetrieval = await adapter.querySummaries();
+    expect(summaryRetrieval.items).toEqual([summary]);
+    expect(summaryRetrieval.items[0]?.sourceRecordIds).toEqual(["r1", "r2"]);
+
+    const repeatResult = await deprecateMemoryRecords({
+      userId: "u1",
+      entries: deprecationPlan.entries,
+      store: adapter,
+      now: 1700000005000,
+    });
+    expect(repeatResult.persistedCount).toBe(0);
+    expect(
+      adapter.records.filter((record) => record.deprecatedAt !== undefined),
+    ).toHaveLength(2);
   });
 });
 

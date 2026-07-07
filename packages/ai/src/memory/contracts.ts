@@ -257,6 +257,11 @@ export interface MemoryForgettingRunInput {
   userId: string;
   now?: number;
   dryRun?: boolean;
+  /**
+   * Soft-deprecate raw source records after their summary is saved.
+   * Defaults to true. Dry runs still skip all writes.
+   */
+  deprecateSourceRecords?: boolean;
 }
 
 export interface MemoryForgettingRunResult {
@@ -270,6 +275,15 @@ export interface MemoryForgettingRunResult {
   createdSummaries: number;
   transitionedRecords: number;
   archivedDetailRecords: number;
+  deprecationStatus?:
+    | "disabled"
+    | "dry-run"
+    | "failed"
+    | "no-op"
+    | "persisted";
+  deprecationPlannedRecords?: number;
+  deprecatedRecords?: number;
+  deprecationReasonCodes?: string[];
 }
 
 export type MemorySearchHit =

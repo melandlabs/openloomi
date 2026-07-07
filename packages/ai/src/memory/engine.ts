@@ -1,3 +1,7 @@
+import {
+  buildMemoryDeprecationEntries,
+  type MemorySummaryCandidate,
+} from "../../memory-consolidation/src/pipeline";
 import type {
   MemoryForgettingRunInput,
   MemoryForgettingRunResult,
@@ -9,6 +13,7 @@ import type {
   MemorySummarizer,
   ScoredMemoryRecord,
 } from "./contracts";
+import { deprecateMemoryRecords } from "./deprecation";
 import {
   bucketStart,
   type MemoryForgettingPolicy,
@@ -141,6 +146,7 @@ export function createMemoryForgettingEngine(
       const startedAt = Date.now();
       const now = runInput.now ?? startedAt;
       const dryRun = runInput.dryRun ?? false;
+      const deprecateSourceRecords = runInput.deprecateSourceRecords !== false;
       const lockKey = `${policy.lock.keyPrefix}:${runInput.userId}`;
 
       const lock = await input.storage.acquireLock({
@@ -169,6 +175,12 @@ export function createMemoryForgettingEngine(
       let createdSummaries = 0;
       let transitionedRecords = 0;
       let archivedDetailRecords = 0;
+      let deprecationStatus:
+        | MemoryForgettingRunResult["deprecationStatus"]
+        | undefined;
+      let deprecationPlannedRecords = 0;
+      let deprecatedRecords = 0;
+      const deprecationReasonCodes = new Set<string>();
 
       try {
         const phases: Array<{
@@ -257,6 +269,49 @@ export function createMemoryForgettingEngine(
 
             if (!dryRun) {
               await input.storage.saveSummaries([summary]);
+              const summaryCandidate: MemorySummaryCandidate = {
+                clusterKey: group.groupId,
+                competitionKey: group.groupId,
+                recordIds: summary.sourceRecordIds,
+                evidenceCount: summary.sourceRecordIds.length,
+                score: draft.qualityScore ?? 1,
+                priority: draft.qualityScore ?? 1,
+                reasonCodes: ["strong_repeated_evidence"],
+                sourceAction: "preserve",
+              };
+              const deprecationPlan = buildMemoryDeprecationEntries({
+                persistedSummaryIds: [summary.summaryId],
+                summaryCandidates: [summaryCandidate],
+              });
+              try {
+                const deprecationResult = await deprecateMemoryRecords({
+                  userId: runInput.userId,
+                  entries: deprecationPlan.entries,
+                  enabled: deprecateSourceRecords,
+                  store: input.storage,
+                  now,
+                });
+                deprecationPlannedRecords += deprecationResult.plannedCount;
+                deprecatedRecords += deprecationResult.persistedCount;
+                if (
+                  deprecationStatus !== "failed" &&
+                  (deprecationStatus !== "persisted" ||
+                    deprecationResult.status === "persisted")
+                ) {
+                  deprecationStatus = deprecationResult.status;
+                }
+                for (const reasonCode of deprecationResult.reasonCodes) {
+                  deprecationReasonCodes.add(reasonCode);
+                }
+              } catch {
+                const plannedIds = new Set(
+                  deprecationPlan.entries.flatMap((entry) => entry.recordIds),
+                );
+                deprecationStatus = "failed";
+                deprecationPlannedRecords += plannedIds.size;
+                deprecationReasonCodes.add("adapter_deprecate_records_error");
+              }
+
               await input.storage.transitionRecords({
                 userId: runInput.userId,
                 ids: summary.sourceRecordIds,
@@ -294,6 +349,10 @@ export function createMemoryForgettingEngine(
         createdSummaries,
         transitionedRecords,
         archivedDetailRecords,
+        deprecationStatus,
+        deprecationPlannedRecords,
+        deprecatedRecords,
+        deprecationReasonCodes: [...deprecationReasonCodes],
       };
     },
   };
