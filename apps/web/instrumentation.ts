@@ -65,8 +65,9 @@ export function register() {
       import("./lib/integrations/qqbot/ws-listener")
         .then(({ startAllQQListeners }) => startAllQQListeners())
         .catch((e) => console.warn("[QQBot] Failed to start listener:", e));
-      // Weixin listener is started on-demand by WeixinListenerInit (frontend component)
-      // after user authentication, not here, to avoid duplicate poll loops.
+      import("./lib/integrations/weixin/ws-listener")
+        .then(({ startAllWeixinListeners }) => startAllWeixinListeners())
+        .catch((e) => console.warn("[Weixin] Failed to start listener:", e));
 
       // Loop cron handlers + scheduler: register the three custom handler
       // names ("loop.tick" / "loop.brief" / "loop.wrap") so the existing
