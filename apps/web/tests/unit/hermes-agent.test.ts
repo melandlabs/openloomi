@@ -370,6 +370,7 @@ function textContent(text) {
 
 let promptId;
 let sessionId = "hermes-session-1";
+let waitForCancel = false;
 
 const rl = readline.createInterface({ input: process.stdin });
 rl.on("line", (line) => {
@@ -381,6 +382,9 @@ rl.on("line", (line) => {
 
   if (!message.method && message.id === "permission-1") {
     append("permission-responses.jsonl", message);
+    if (waitForCancel) {
+      return;
+    }
     const optionId = message.result?.outcome?.optionId || message.result?.outcome?.outcome;
     update(sessionId, {
       sessionUpdate: "agent_message_chunk",
@@ -429,6 +433,7 @@ rl.on("line", (line) => {
         return;
       }
       if (prompt.includes("permission")) {
+        waitForCancel = prompt.includes("permission wait");
         append("permission-requests.jsonl", { prompt });
         send({
           id: "permission-1",
