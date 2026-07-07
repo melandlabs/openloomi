@@ -36,9 +36,6 @@ const DISMISS_KEY_PREFIX = "openloomi.update.dismissed.";
  *  3. On "Update now": calls `startUpdateDownload`, polls progress every 1s.
  *  4. When download is `done`, swaps the banner copy to "Install & restart" and
  *     triggers the installer + relaunch on confirm.
- *
- * Dismissal is sticky per-version: dismissing v0.6.4 won't suppress a later
- * v0.6.5 banner.
  */
 export function UpdateBanner() {
   const [phase, setPhase] = useState<Phase>("idle");
