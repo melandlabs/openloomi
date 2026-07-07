@@ -128,6 +128,52 @@ describe("native agent runner", () => {
     expect(agent.config?.thinkingLevel).toBeUndefined();
   });
 
+  it("uses Hermes env defaults without reading Anthropic-compatible settings", async () => {
+    const agent = new CapturingAgent();
+    const getUserLlmProviderConfig = vi.fn();
+    const host: NativeAgentHost = {
+      registry: createRegistry(agent),
+      prepareRequest: (body) =>
+        resolveNativeAgentProviderRequest(body, {
+          OPENLOOMI_AGENT_PROVIDER: "hermes",
+          OPENLOOMI_AGENT_HERMES_COMMAND: "env-hermes",
+          OPENLOOMI_AGENT_HERMES_PROFILE: "env-profile",
+          OPENLOOMI_AGENT_HERMES_TIMEOUT_MS: "5000",
+        }),
+      getUserLlmProviderConfig,
+      logger: silentLogger,
+    };
+
+    const run = await runNativeAgentRequest(
+      {
+        prompt: "use env hermes",
+        modelConfig: {
+          apiKey: "anthropic-key-that-should-not-leak",
+          baseUrl: "https://anthropic-compatible.example.test",
+          thinkingLevel: "low",
+        },
+      },
+      createContext(),
+      host,
+    );
+
+    await collectMessages(run.generator);
+
+    expect(getUserLlmProviderConfig).not.toHaveBeenCalled();
+    expect(agent.config).toMatchObject({
+      provider: "hermes",
+      providerConfig: {
+        hermesPath: "env-hermes",
+        profile: "env-profile",
+        timeoutMs: 5000,
+      },
+    });
+    expect(agent.config?.apiKey).toBeUndefined();
+    expect(agent.config?.baseUrl).toBeUndefined();
+    expect(agent.config?.model).toBeUndefined();
+    expect(agent.config?.thinkingLevel).toBeUndefined();
+  });
+
   it("lets request provider override OpenCode env default", async () => {
     const agent = new CapturingAgent();
     const getUserLlmProviderConfig = vi.fn(async () => ({

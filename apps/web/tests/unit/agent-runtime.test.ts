@@ -4,6 +4,7 @@ import {
   type AgentRuntimePermissionRequest,
 } from "@openloomi/ai/agent/runtime";
 import { AgentRegistry } from "@openloomi/ai/agent/registry";
+import { hermesPlugin } from "@/lib/ai/extensions/agent/hermes";
 import type {
   AgentConfig,
   AgentMessage,
@@ -38,6 +39,20 @@ describe("agent runtime", () => {
 
     expect(registry.create({ provider: "custom-cli" })).toBe(agent);
     expect(registry.getRegistered()).toContain("custom-cli");
+  });
+
+  it("registers and creates the Hermes provider plugin", () => {
+    const registry = new AgentRegistry();
+
+    registry.register(hermesPlugin);
+
+    const agent = registry.create({ provider: "hermes" });
+    expect(agent.provider).toBe("hermes");
+    expect(registry.getMetadata("hermes")).toMatchObject({
+      type: "hermes",
+      supportsStreaming: true,
+      supportsSandbox: false,
+    });
   });
 
   it("runs through the shared runtime and surfaces permission request events", async () => {

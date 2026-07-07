@@ -9,12 +9,21 @@ type EnvSource = Record<string, string | undefined>;
 const DEFAULT_AGENT_PROVIDER: AgentProvider = "claude";
 const ENV_PROVIDER_KEY = "OPENLOOMI_AGENT_PROVIDER";
 const OPENCODE_PROVIDER = "opencode";
-const SUPPORTED_ENV_PROVIDERS = new Set(["claude", OPENCODE_PROVIDER]);
+const HERMES_PROVIDER = "hermes";
+const SUPPORTED_ENV_PROVIDERS = new Set([
+  "claude",
+  OPENCODE_PROVIDER,
+  HERMES_PROVIDER,
+]);
 
 export function getConfiguredDefaultAgentProvider(
   env: EnvSource = process.env,
 ): AgentProvider {
-  return resolveEnvAgentProvider(env) ?? DEFAULT_AGENT_PROVIDER;
+  const provider = resolveEnvAgentProvider(env) ?? DEFAULT_AGENT_PROVIDER;
+  if (provider === HERMES_PROVIDER) {
+    validateHermesUnsupportedEnvConfig(env);
+  }
+  return provider;
 }
 
 export function resolveNativeAgentProviderRequest(
@@ -24,6 +33,15 @@ export function resolveNativeAgentProviderRequest(
   const provider =
     resolveRequestAgentProvider(body.provider) ??
     getConfiguredDefaultAgentProvider(env);
+
+  if (provider === HERMES_PROVIDER) {
+    return {
+      ...body,
+      provider,
+      modelConfig: resolveHermesModelConfig(body),
+      providerConfig: resolveHermesEnvConfig(env).providerConfig,
+    };
+  }
 
   if (provider !== OPENCODE_PROVIDER) {
     return {
@@ -81,11 +99,62 @@ function resolveEnvAgentProvider(env: EnvSource): AgentProvider | undefined {
   const provider = rawProvider.toLowerCase();
   if (!SUPPORTED_ENV_PROVIDERS.has(provider)) {
     throwConfigError(
-      `Unsupported ${ENV_PROVIDER_KEY}: ${rawProvider}. Supported values: claude, opencode.`,
+      `Unsupported ${ENV_PROVIDER_KEY}: ${rawProvider}. Supported values: claude, opencode, hermes.`,
     );
   }
 
   return provider as AgentProvider;
+}
+
+function resolveHermesModelConfig(body: NativeAgentRequest) {
+  const requestModel = normalizeOptionalString(body.modelConfig?.model);
+  if (requestModel) {
+    throwConfigError(
+      "Hermes model selection is not supported by this ACP MVP. Configure Hermes model selection through Hermes profile/config instead.",
+    );
+  }
+
+  return body.modelConfig;
+}
+
+function resolveHermesEnvConfig(env: EnvSource) {
+  validateHermesUnsupportedEnvConfig(env);
+
+  const providerConfig: Record<string, unknown> = {};
+  const command = normalizeOptionalString(env.OPENLOOMI_AGENT_HERMES_COMMAND);
+  const profile = normalizeOptionalString(env.OPENLOOMI_AGENT_HERMES_PROFILE);
+  const timeoutMs = parsePositiveIntegerEnv(
+    env,
+    "OPENLOOMI_AGENT_HERMES_TIMEOUT_MS",
+  );
+
+  if (command) {
+    providerConfig.hermesPath = command;
+  }
+  if (profile) {
+    providerConfig.profile = profile;
+  }
+  if (timeoutMs !== undefined) {
+    providerConfig.timeoutMs = timeoutMs;
+  }
+
+  return {
+    providerConfig,
+  };
+}
+
+function validateHermesUnsupportedEnvConfig(env: EnvSource) {
+  if (normalizeOptionalString(env.OPENLOOMI_AGENT_HERMES_MODEL)) {
+    throwConfigError(
+      "OPENLOOMI_AGENT_HERMES_MODEL is not supported by this ACP MVP. Configure Hermes model selection through Hermes profile/config instead.",
+    );
+  }
+
+  if (normalizeOptionalString(env.OPENLOOMI_AGENT_HERMES_PROVIDER)) {
+    throwConfigError(
+      "OPENLOOMI_AGENT_HERMES_PROVIDER is not supported by this ACP MVP. Configure Hermes provider selection through Hermes profile/config instead.",
+    );
+  }
 }
 
 function resolveOpenCodeEnvConfig(env: EnvSource) {

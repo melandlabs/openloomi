@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { buildHermesAcpCommand } from "@/lib/ai/extensions/agent/hermes/command";
 import { buildOpenCodeRunCommand } from "@/lib/ai/extensions/agent/opencode/command";
 import {
   getConfiguredDefaultAgentProvider,
@@ -13,6 +14,11 @@ const AGENT_ENV_KEYS = [
   "OPENLOOMI_AGENT_OPENCODE_AGENT",
   "OPENLOOMI_AGENT_OPENCODE_TIMEOUT_MS",
   "OPENLOOMI_AGENT_OPENCODE_ALLOW_AUTO_APPROVE",
+  "OPENLOOMI_AGENT_HERMES_COMMAND",
+  "OPENLOOMI_AGENT_HERMES_PROFILE",
+  "OPENLOOMI_AGENT_HERMES_TIMEOUT_MS",
+  "OPENLOOMI_AGENT_HERMES_MODEL",
+  "OPENLOOMI_AGENT_HERMES_PROVIDER",
 ];
 
 let originalEnv: NodeJS.ProcessEnv;
@@ -44,8 +50,17 @@ describe("native agent provider env resolver", () => {
     expect(getConfiguredDefaultAgentProvider()).toBe("opencode");
   });
 
+  it("uses Hermes from env when the request does not specify a provider", () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
+
+    const request = resolveNativeAgentProviderRequest(baseRequest());
+
+    expect(request.provider).toBe("hermes");
+    expect(getConfiguredDefaultAgentProvider()).toBe("hermes");
+  });
+
   it("lets request provider override env provider", () => {
-    process.env.OPENLOOMI_AGENT_PROVIDER = "opencode";
+    process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
 
     const request = resolveNativeAgentProviderRequest({
       ...baseRequest(),
@@ -184,6 +199,91 @@ describe("native agent provider env resolver", () => {
     expect(request.providerConfig).toMatchObject({
       allowAutoApprove: false,
     });
+  });
+
+  it("parses Hermes command, profile, and timeout from env", () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
+    process.env.OPENLOOMI_AGENT_HERMES_COMMAND = "env-hermes";
+    process.env.OPENLOOMI_AGENT_HERMES_PROFILE = "coding";
+    process.env.OPENLOOMI_AGENT_HERMES_TIMEOUT_MS = "3000";
+
+    const request = resolveNativeAgentProviderRequest(baseRequest());
+
+    expect(request.providerConfig).toEqual({
+      hermesPath: "env-hermes",
+      profile: "coding",
+      timeoutMs: 3000,
+    });
+  });
+
+  it.each(["0", "-1", "1.5", "slow"])(
+    "fails clearly for invalid Hermes timeout %s",
+    (rawValue) => {
+      process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
+      process.env.OPENLOOMI_AGENT_HERMES_TIMEOUT_MS = rawValue;
+
+      expect(() => resolveNativeAgentProviderRequest(baseRequest())).toThrow(
+        /OPENLOOMI_AGENT_HERMES_TIMEOUT_MS/,
+      );
+    },
+  );
+
+  it("rejects Hermes model env because ACP model switching is not supported in this MVP", () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
+    process.env.OPENLOOMI_AGENT_HERMES_MODEL = "nous/hermes";
+
+    expect(() => resolveNativeAgentProviderRequest(baseRequest())).toThrow(
+      /OPENLOOMI_AGENT_HERMES_MODEL is not supported/,
+    );
+  });
+
+  it("rejects Hermes provider env because ACP provider switching is not supported in this MVP", () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
+    process.env.OPENLOOMI_AGENT_HERMES_PROVIDER = "openrouter";
+
+    expect(() => resolveNativeAgentProviderRequest(baseRequest())).toThrow(
+      /OPENLOOMI_AGENT_HERMES_PROVIDER is not supported/,
+    );
+  });
+
+  it("rejects request model for Hermes because ACP model switching is not supported in this MVP", () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
+
+    expect(() =>
+      resolveNativeAgentProviderRequest({
+        ...baseRequest(),
+        modelConfig: { model: "request/model" },
+      }),
+    ).toThrow(/Hermes model selection is not supported/);
+  });
+
+  it("does not let request providerConfig override Hermes server-side config or inject flags", () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
+    process.env.OPENLOOMI_AGENT_HERMES_COMMAND = "env-hermes";
+    process.env.OPENLOOMI_AGENT_HERMES_PROFILE = "env-profile";
+    process.env.OPENLOOMI_AGENT_HERMES_TIMEOUT_MS = "3000";
+
+    const request = resolveNativeAgentProviderRequest({
+      ...baseRequest(),
+      providerConfig: {
+        hermesPath: "request-hermes",
+        profile: "request-profile",
+        timeoutMs: 1,
+        extraArgs: ["--yolo"],
+        yolo: true,
+        env: { HERMES_YOLO_MODE: "1" },
+      },
+    });
+    const command = buildHermesAcpCommand(request.providerConfig);
+
+    expect(request.providerConfig).toEqual({
+      hermesPath: "env-hermes",
+      profile: "env-profile",
+      timeoutMs: 3000,
+    });
+    expect(command.command).toBe("env-hermes");
+    expect(command.args).toEqual(["--profile", "env-profile", "acp"]);
+    expect(command.args).not.toContain("--yolo");
   });
 });
 

@@ -10,3 +10,4 @@ export {
   createOpenCodeAgent,
   OpenCodeAgent,
 } from "./agent/opencode";
+export { hermesPlugin, createHermesAgent, HermesAgent } from "./agent/hermes";

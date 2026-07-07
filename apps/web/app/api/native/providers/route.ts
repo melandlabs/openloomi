@@ -13,17 +13,23 @@ import {
   getAgentRegistry,
   getAllAgentMetadata,
 } from "@openloomi/ai/agent/registry";
+import { hermesPlugin } from "@/lib/ai/extensions/agent/hermes";
 import { opencodePlugin } from "@/lib/ai/extensions/agent/opencode";
 import { getConfiguredDefaultAgentProvider } from "@/lib/ai/native-agent/provider-env";
 
 // Register lightweight built-in Agent plugins used by this metadata route.
 const registry = getAgentRegistry();
 registry.register(opencodePlugin);
+registry.register(hermesPlugin);
 
 function getProviderMetadata(): AgentProviderMetadata[] {
   const metadataByType = new Map<string, AgentProviderMetadata>();
 
-  for (const metadata of [CLAUDE_METADATA, opencodePlugin.metadata]) {
+  for (const metadata of [
+    CLAUDE_METADATA,
+    opencodePlugin.metadata,
+    hermesPlugin.metadata,
+  ]) {
     metadataByType.set(metadata.type, metadata);
   }
 
