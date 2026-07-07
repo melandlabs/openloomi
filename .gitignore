@@ -127,6 +127,9 @@ apps/skills/
 # Local notes
 Note.md
 
+# Loomi pet design sources
+apps/web/public/loomi-pet/design/
+
 # Tauri bundled app resources (contains embedded .env with secrets)
 **/*.app/Contents/Resources/_up_/
 
