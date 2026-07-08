@@ -192,6 +192,33 @@ accounted for in \`loop.log\`.
     safely dropped from the decision queue. They remain visible in \`signals.jsonl\` for
     debugging and can be promoted to a typed classifier branch later if needed.
 
+  Co-equal pass — deadline extraction. While you build each payload above, also scan its
+  \`body\` / \`text\` / \`description\` / \`title\` / \`path\` (obsidian) for natural-language
+  deadlines. Common patterns:
+
+    - "by <weekday> <time>"          → next occurrence of that weekday
+    - "before EOD" / "by EOD"        → 17:00 local on signal's date
+    - "due <YYYY-MM-DD>"             → 23:59:59 of that date
+    - "by <YYYY-MM-DD HH:MM>"        → that exact instant
+    - "within 24 hours" / "ASAP"     → now + 24h
+    - obsidian frontmatter \`due:: YYYY-MM-DD\` → that date at 09:00
+
+  If a deadline is found, attach a \`_deadlineHint\` field to the synthesized payload
+  (same object you just shaped above — keep them in lockstep):
+
+    _deadlineHint: {
+      deadlineAt: "<ISO8601 with timezone>",
+      message:    "<≤140-char excerpt that contained the deadline>",
+      notifyAt:   "<ISO8601, default deadlineAt minus 60 minutes>",
+      confidence: <0..1, your subjective confidence>
+    }
+
+  If no deadline is found, omit \`_deadlineHint\` entirely. Do not invent deadlines
+  from vague phrases like "soon" or "next week" — confidence must be ≥ 0.7 to
+  emit the hint. The hint is read by §5 and the TS-side classifier rule in \`classify.ts\`
+  (the \`deadline_reminder\` branch — co-equal with rsvp / draft_reply / review_pr /
+  slack_reply / todo / obsidian_note_changed).
+
 If you don't know a tool's schema, call \`Skill composio execute GMAIL_GET_SCHEMA\` (or the equivalent \`<TOOL>_GET_SCHEMA\` action) to inspect it before invoking the tool.
 
 ## 3. Write each new signal to disk
@@ -305,6 +332,12 @@ lib-level classifier exactly):
     - github_pr where user_is_reviewer                               -> review_pr   (github_review)
     - github_issue open with assignee_login                           -> todo        (todo)
     - slack_message with mentions_me                                  -> draft_reply (slack_reply)
+    - signal with _deadlineHint.confidence ≥ 0.7                     -> deadline_reminder (deadline_notify)
+      (skip when the same signal also matches the email /rsvp|invit|.../ or
+       /please|could you|can you|need|asap|urgent|deadline|review/ rule — those
+       produce draft_reply instead; replying is more actionable than a separate
+       reminder, and a calendar event will be created when the user clicks Run
+       on the draft_reply decision.)
     - obsidian_note_changed in projects/ or plans/                    -> release_plan (release_plan)
     - obsidian_note_changed in people/                                -> todo          (contact_update)
     - obsidian_note_changed in customers/                             -> requirement_synthesis (requirement_synthesis)
@@ -335,6 +368,39 @@ where <json> is (FIELD PLACEMENT IS STRICT — see warning below):
   "source_signal": <original signal object>
 }
 \`\`\`
+
+For \`deadline_reminder\` decisions, the ingest-decision JSON is:
+
+\`\`\`json
+{
+  "signal_id": "<sig id>",
+  "type":      "deadline_reminder",
+  "title":     "Deadline <weekday <time>: <subject or filename, ≤60 chars>",
+  "action": {
+    "kind":   "deadline_notify",
+    "params": {
+      "source":     "email" | "calendar" | "obsidian" | "insight",
+      "sourceRef":  { "messageId": "...", "eventId": "...", "path": "...", "insightId": "..." },
+      "deadlineAt": "<ISO8601 from _deadlineHint.deadlineAt>",
+      "message":    "<≤140-char excerpt>",
+      "notifyAt":   "<ISO8601 from _deadlineHint.notifyAt>",
+      "channel":    "calendar"
+    }
+  },
+  "context": {
+    "why":          [ "<bullet>", ... ],
+    "memory_refs":  [ ... ],
+    "insight_refs": [ ... ],
+    "person":       "<sender name or email, or null>",
+    "project_ref":  "<openloomi-memory project path or id, or null>",
+    "_deadlineHint": { "deadlineAt", "message", "notifyAt", "confidence" }
+  },
+  "confidence":    0.85,
+  "source_signal": <original signal object>
+}
+\`\`\`
+
+Same FIELD-PLACEMENT WARNING as above: \`memory_refs\` / \`insight_refs\` / \`person\` / \`project_ref\` MUST live INSIDE \`context\`. \`_deadlineHint\` is also nested under \`context\` so the CLI's hoist rule on every read sees one consistent shape.
 
 ⚠️ FIELD-PLACEMENT WARNING ⚠️
 - \`memory_refs\`, \`insight_refs\`, \`person\`, \`project_ref\` MUST live INSIDE \`context\` (nested), NEVER at the top level of the decision object.

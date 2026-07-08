@@ -730,7 +730,8 @@
       /* ============================================================
          Layout: DECISION  (Forms 4/5/8 · todo / draft_reply /
                                        review_pr / slack_reply /
-                                       rsvp / release_plan)
+                                       rsvp / release_plan /
+                                       deadline_reminder)
          Demo: .decision-card full structure (source-chain,
                recommendation-line, confidence-row, dialogue-strip,
                evidence-pills, action-button)
@@ -1545,6 +1546,7 @@
           draft_reply: "✎",
           review_pr: "◇",
           slack_reply: "▷",
+          deadline_reminder: "◷",
           release_plan: "❖",
           todo: "▤",
           brief: "☀",
@@ -1555,6 +1557,7 @@
           draft_reply: "Send the drafted reply",
           review_pr: "Post review summary",
           slack_reply: "Reply in thread",
+          deadline_reminder: "Add calendar reminder",
           release_plan: "Open release plan",
           todo: "Add to today's todos",
         };
@@ -1630,6 +1633,15 @@
             { action: "open", label: "↗ Open plan", variant: "primary" },
             { action: "dismiss", label: "Dismiss", variant: "danger" },
           ],
+          deadline_reminder: [
+            {
+              action: "run",
+              label: "✓ Add reminder",
+              variant: "primary",
+              body: { channel: "calendar" },
+            },
+            { action: "dismiss", label: "Skip", variant: "danger" },
+          ],
           todo: [
             { action: "run", label: "✓ Add", variant: "primary" },
             { action: "dismiss", label: "Skip", variant: "danger" },
@@ -1656,6 +1668,7 @@
           draft_reply: "DRAFT_REPLY",
           review_pr: "REVIEW_PR",
           slack_reply: "SLACK_REPLY",
+          deadline_reminder: "DEADLINE",
           release_plan: "RELEASE_PLAN",
           todo: "TODO",
           brief: "BRIEF",
@@ -2238,8 +2251,8 @@
         //               detail page. Falls back to in-webview navigation
         //               when the page is loaded without `__TAURI__`.
         //   `run`     → POST prompt to `/api/native/agent` (SSE stream).
-        //               The agent uses Composio MCP to actually execute
-        //               the action (send email, post PR review, etc.)
+        //               The agent calls composio (skill or CLI) to actually
+        //               execute the action (send email, post PR review, etc.)
         //               and emits a structured `result` event when done.
         //   `dismiss` → POST prompt to `/api/native/agent` (SSE stream).
         //               The agent marks the decision dismissed via the
@@ -2258,7 +2271,7 @@
         //   comment at the top of `apps/web/app/api/native/agent/route.ts`
         //   for the original reasoning. Streaming through the agent
         //   sidesteps that ceiling and gives the user live progress
-        //   ("Calling GMAIL_SEND_MESSAGE…") instead of a black box.
+        //   ("Calling composio gmail send_message…") instead of a black box.
         //
         //   For "dismiss" this is overkill (mark-dismissed is fast),
         //   but routing it through the agent keeps every action on the
@@ -2304,22 +2317,24 @@
             );
           } else if (action === "run") {
             const toolHints = {
-              rsvp: "RSVP — use GOOGLECALENDAR_RSVP (or similar calendar tool) with the user's response from `sub_action.response`.",
+              rsvp: "Send the RSVP — call the googlecalendar composio tool with `responseStatus: <sub_action.response>` (accepted / declined / tentative) on the event from `action.params.eventId`. Skill: `Skill composio execute GOOGLECALENDAR_EVENTS_MODIFY on googlecalendar with {...}`. CLI: `composio googlecalendar events_modify --json {...}`.",
               draft_reply:
-                "Send the drafted email — use GMAIL_SEND_MESSAGE with the subject/body from the decision's `context.draft` if present, otherwise draft from `decision.title`.",
+                "Send the drafted email — call the gmail composio tool with the subject/body from `context.draft` if present, otherwise draft from `decision.title`. Skill: `Skill composio execute GMAIL_SEND_MESSAGE on gmail with {...}`. CLI: `composio gmail send_message --json {...}`.",
               review_pr:
-                "Post a PR review — use GITHUB_POST_REVIEW with the verdict from `sub_action.verdict` (approve / comment / request_changes).",
+                "Post a PR review — call the github composio tool with the verdict from `sub_action.verdict` (approve / comment / request_changes) on PR `params.number` in `params.repo`. Skill: `Skill composio execute GITHUB_CREATE_REVIEW on github with {...}`. CLI: `composio github create_review --json {...}`.",
               slack_reply:
-                "Post the Slack reply — use SLACK_SEND_MESSAGE in the channel from `context.channel`.",
+                "Post the Slack reply — call the slack composio tool in the channel from `context.channel`, replying in-thread to `params.ts` if present. Skill: `Skill composio execute SLACK_SEND_MESSAGE on slack with {...}`. CLI: `composio slack send_message --json {...}`.",
+              deadline_reminder:
+                'Create a deadline reminder — default: call the googlecalendar composio tool (skill: `Skill composio execute GOOGLECALENDAR_CREATE_EVENT on googlecalendar` or CLI: `composio googlecalendar create_event`) with `params.message` as the title and `params.notifyAt` → `params.deadlineAt` as the time window (or all-day on `params.deadlineAt`\'s date). If `params.channel === "slack"`, send a DM via the slack composio tool instead. Emit a single SSE `result` event whose `content` describes what you did (include the calendar event id / Slack ts / `skipped: <reason>`) — the system records `completed_at` and `result` automatically.',
               release_plan:
                 "Don't actually release — just produce a concrete plan summary in the result event.",
               todo: "Add the todo — use TODO_WRITE (or any todo tool available) with the decision's `title`.",
             };
             const hint =
               toolHints[dec.type] ||
-              `Use the most appropriate Composio MCP tool for type "${dec.type}" to carry out the action.`;
+              `Use the most appropriate composio tool for type "${dec.type}" to carry out the action (call \`Skill composio execute <TOOL>_GET_SCHEMA on <toolkit>\` first if you don't know the exact slug).`;
             base.push(
-              `Action: execute this decision by actually performing it via Composio MCP tools.`,
+              `Action: execute this decision by actually performing it via composio (skill or CLI, whichever is on $PATH).`,
               ``,
               `Tool guidance:`,
               `- ${hint}`,
@@ -2497,6 +2512,43 @@
           const action = btn.dataset.action;
           if (action === "close") {
             const t = window.__TAURI__;
+            // Resolve a Tauri WebviewWindow handle from the global Tauri
+            // API. Tauri 2.x exposes `getCurrentWebviewWindow`; older
+            // builds may still have `getCurrentWindow`. Both are safe to
+            // call — we just need an object with `.hide()` and
+            // `.setIgnoreCursorEvents()`.
+            const win =
+              t && t.window
+                ? t.window.getCurrentWebviewWindow
+                  ? t.window.getCurrentWebviewWindow()
+                  : t.window.getCurrentWindow
+                    ? t.window.getCurrentWindow()
+                    : null
+                : null;
+
+            // Primary path: hide the window directly. More reliable than
+            // the pet:close-card event roundtrip — the OS-level hide
+            // takes effect immediately and doesn't depend on the Rust
+            // listener.
+            if (win && typeof win.hide === "function") {
+              try {
+                win.hide();
+              } catch (_) {
+                /* fall through */
+              }
+            }
+            // Defensive: turn off cursor events so even if the OS-level
+            // hide is delayed / doesn't take effect, the 360×420 region
+            // stops intercepting mouse events. Reset by the loop:state /
+            // loop:decision listeners below when the card re-shows.
+            if (win && typeof win.setIgnoreCursorEvents === "function") {
+              try {
+                win.setIgnoreCursorEvents(true);
+              } catch (_) {}
+            }
+            // Secondary path: still emit pet:close-card so the Rust host
+            // can run its own hide + bubble-restore logic (see
+            // main.rs:599-602).
             if (t && t.event && t.event.emit) t.event.emit("pet:close-card");
             // Even without Tauri, hide the card locally so the click
             // produces a visible effect (e.g. when previewing the page
@@ -2578,6 +2630,23 @@
         const tauri = window.__TAURI__;
         if (tauri && tauri.event && tauri.event.listen) {
           tauri.event.listen("loop:decision", (e) => {
+            // The previous × click set setIgnoreCursorEvents(true) so
+            // the card would stop blocking clicks. Restore it now that
+            // the card has content to show again.
+            if (tauri && tauri.window) {
+              try {
+                const w = tauri.window.getCurrentWebviewWindow
+                  ? tauri.window.getCurrentWebviewWindow()
+                  : tauri.window.getCurrentWindow
+                    ? tauri.window.getCurrentWindow()
+                    : null;
+                if (w && typeof w.setIgnoreCursorEvents === "function") {
+                  w.setIgnoreCursorEvents(false);
+                }
+              } catch (_) {
+                /* non-fatal */
+              }
+            }
             const p = (e && e.payload) || {};
             const next = p && p.id ? p : null;
             // If we had a scheduled action for THIS decision and the
@@ -2602,6 +2671,23 @@
             apply();
           });
           tauri.event.listen("loop:state", (e) => {
+            // The previous × click set setIgnoreCursorEvents(true) so
+            // the card would stop blocking clicks. Restore it now that
+            // the card has content to show again.
+            if (tauri && tauri.window) {
+              try {
+                const w = tauri.window.getCurrentWebviewWindow
+                  ? tauri.window.getCurrentWebviewWindow()
+                  : tauri.window.getCurrentWindow
+                    ? tauri.window.getCurrentWindow()
+                    : null;
+                if (w && typeof w.setIgnoreCursorEvents === "function") {
+                  w.setIgnoreCursorEvents(false);
+                }
+              } catch (_) {
+                /* non-fatal */
+              }
+            }
             const p = (e && e.payload) || {};
             state =
               (typeof p === "object" && p.state) ||

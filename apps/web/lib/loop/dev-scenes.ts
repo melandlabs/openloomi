@@ -519,6 +519,57 @@ export const DEV_SCENES: Record<SceneKey, DevScene> = {
           payload: { path: "plans/q3_release.md" },
         },
       }),
+      // Deadline reminder — deadline_reminder card.
+      {
+        id: "dec-deadline-demo-001",
+        type: "deadline_reminder",
+        title: "Deadline Fri 5:00 PM: Q3 OKR draft to leadership",
+        action: {
+          kind: "deadline_notify",
+          params: {
+            source: "email",
+            sourceRef: { messageId: "msg-deadline-demo-001" },
+            deadlineAt: "2026-07-10T17:00:00-07:00",
+            message:
+              "Please send the Q3 OKR draft to leadership by Friday 5pm.",
+            notifyAt: "2026-07-10T16:00:00-07:00",
+            channel: "calendar",
+          },
+        },
+        source_signal: {
+          id: "sig_dev_deadline",
+          ts: nowIso(),
+          source: "gmail",
+          type: "email",
+          payload: {
+            messageId: "msg-deadline-demo-001",
+            threadId: "thr_dev_deadline",
+            from: "ceo@example.com",
+            subject: "Q3 OKR draft — please send by Friday",
+            snippet:
+              "Please send the Q3 OKR draft to leadership by Friday 5pm.",
+            _deadlineHint: {
+              deadlineAt: "2026-07-10T17:00:00-07:00",
+              message: "by Friday 5pm",
+              notifyAt: "2026-07-10T16:00:00-07:00",
+              confidence: 0.95,
+            },
+          },
+        },
+        context: {
+          _origin: "manual",
+          subject: "Q3 OKR draft — please send by Friday",
+          from: "ceo@example.com",
+          _deadlineHint: {
+            deadlineAt: "2026-07-10T17:00:00-07:00",
+            message: "by Friday 5pm",
+            notifyAt: "2026-07-10T16:00:00-07:00",
+            confidence: 0.95,
+          },
+        },
+        ts: "2026-07-08T09:00:00-07:00",
+        status: "pending",
+      } as LoopDecision,
     ],
   },
 };

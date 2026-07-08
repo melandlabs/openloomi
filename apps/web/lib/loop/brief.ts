@@ -73,6 +73,7 @@ function writeBrief(s: BriefSnapshot): void {
 
 const PRIORITY: Record<string, number> = {
   rsvp: 1,
+  deadline_reminder: 1,
   review_pr: 2,
   draft_reply: 3,
   slack_reply: 4,

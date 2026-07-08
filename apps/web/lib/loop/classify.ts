@@ -123,6 +123,80 @@ export function classify(signal: LoopSignal): DecisionCandidate | null {
     };
   }
 
+  // ---- deadline_reminder rule (co-equal with rsvp / draft_reply / etc.) ----
+  const deadlineHint = p._deadlineHint as
+    | {
+        deadlineAt: string;
+        message: string;
+        notifyAt?: string;
+        confidence?: number;
+      }
+    | undefined;
+  if (
+    deadlineHint &&
+    typeof deadlineHint.deadlineAt === "string" &&
+    typeof deadlineHint.message === "string" &&
+    (deadlineHint.confidence ?? 1) >= 0.7 &&
+    (signal.type === "email" ||
+      signal.type === "calendar_event" ||
+      signal.type === "obsidian_note_changed" ||
+      signal.type === "insight")
+  ) {
+    const sourceMap: Record<
+      string,
+      "email" | "calendar" | "obsidian" | "insight"
+    > = {
+      email: "email",
+      calendar_event: "calendar",
+      obsidian_note_changed: "obsidian",
+      insight: "insight",
+    };
+    const source = sourceMap[signal.type];
+    if (source) {
+      // Mutual exclusion with draft_reply: when the signal is an email, let
+      // the email branch below emit draft_reply (draft_reply wins when both
+      // rules match — replying is more actionable than a separate reminder).
+      // For calendar_event / obsidian_note_changed / insight there is no
+      // competing branch, so the deadline_reminder fires here.
+      if (signal.type !== "email") {
+        const deadlineAt = deadlineHint.deadlineAt;
+        const notifyAt =
+          deadlineHint.notifyAt ||
+          new Date(
+            new Date(deadlineAt).getTime() - 60 * 60 * 1000,
+          ).toISOString();
+        const sourceRef: Record<string, unknown> = {};
+        if (p.messageId) sourceRef.messageId = p.messageId;
+        if (p.eventId) sourceRef.eventId = p.eventId;
+        if (p.path) sourceRef.path = p.path;
+        const when = new Date(deadlineAt).toLocaleString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+        const subject = String(p.subject ?? p.title ?? p.path ?? "Deadline");
+        return {
+          type: "deadline_reminder",
+          title: `Deadline ${when}: ${subject}`.slice(0, 120),
+          action: {
+            kind: "deadline_notify",
+            params: {
+              source,
+              sourceRef,
+              deadlineAt,
+              message: deadlineHint.message,
+              notifyAt,
+              channel: "calendar",
+            },
+          },
+          confidence: deadlineHint.confidence,
+        };
+      }
+    }
+  }
+
   if (signal.type === "email") {
     if (/(rsvp|invit|meeting|join.*call|calendar)/.test(text)) {
       return {

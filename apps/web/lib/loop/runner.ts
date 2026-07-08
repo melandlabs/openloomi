@@ -197,6 +197,20 @@ function buildPrompt(decision: LoopDecision, mode: "dry" | "run"): string {
   if (Array.isArray(decision.context?.why) && decision.context.why.length) {
     parts.push("", "Why:", ...decision.context.why.map((w) => `- ${w}`));
   }
+  if (decision.action?.kind === "deadline_notify") {
+    parts.push(
+      "",
+      'How to execute action.kind === "deadline_notify":',
+      "- Default behavior: create a calendar event on the googlecalendar toolkit via composio",
+      "  (skill: `Skill composio execute GOOGLECALENDAR_CREATE_EVENT on googlecalendar with {...}`",
+      "   or CLI: `composio googlecalendar create_event --json {...}` — pick whichever is on $PATH).",
+      '  Title: "Deadline: <params.message>". Start: `params.notifyAt`. End: `params.deadlineAt` (or all-day on `params.deadlineAt`\'s date).',
+      '- If `params.channel === "slack"`, send a DM to the user instead via the slack toolkit',
+      "  (skill: `Skill composio execute SLACK_SEND_MESSAGE on slack with {...}`",
+      '   or CLI: `composio slack send_message --json {...}`) with text "<params.message> — due <params.deadlineAt>".',
+      "- Emit a single SSE `result` event whose `content` describes what you did — the system will record `completed_at` and `result` automatically. Include the calendar event id (or `skipped: <reason>` if you could not execute) so the user has a trail.",
+    );
+  }
   if (mode === "dry") {
     parts.push(
       "",

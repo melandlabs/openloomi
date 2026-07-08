@@ -87,6 +87,23 @@ function defaultDialogue(dec: LoopDecision): string {
       return "A PR tagged you as reviewer — take a look?";
     case "slack_reply":
       return "Someone @-mentioned you on Slack — want me to grab context first?";
+    case "deadline_reminder": {
+      const p = (dec.action?.params ?? {}) as {
+        deadlineAt?: string;
+        message?: string;
+      };
+      const when = p.deadlineAt
+        ? new Date(p.deadlineAt).toLocaleString("en-US", {
+            weekday: "long",
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : "soon";
+      const quote = p.message ? ` ("${p.message.slice(0, 80)}…") ` : " ";
+      return `This has a ${when} deadline${quote}— want me to add a calendar reminder?`;
+    }
     default:
       return `New decision (${dec.type}): ${dec.title}`;
   }
