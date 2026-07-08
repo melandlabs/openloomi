@@ -16,6 +16,7 @@ import { SessionAuthChecker } from "@/components/session-auth-checker";
 import { ConversationApiOnboardingGuard } from "@/components/conversation-api-onboarding-guard";
 import { ScreenMemoryCaptureProvider } from "@/components/chronicle/screen-memory-provider";
 import { LoopNavBridge } from "@/components/loop/loop-nav-bridge";
+import { PetChatBridge } from "@/components/pet/pet-chat-bridge";
 
 export default async function Layout({
   children,
@@ -53,6 +54,16 @@ export default async function Layout({
                         components/loop/loop-nav-bridge.tsx for the why.
                       */}
                       <LoopNavBridge />
+                      {/*
+                        PetChatBridge forwards the
+                        openloomi:send-chat-message DOM event (fired by
+                        the Rust host when the pet card's
+                        "Guide me to connect more" CTA is clicked) into
+                        the chat composer via
+                        useChatContext().sendMessage(...). See
+                        components/pet/pet-chat-bridge.tsx for the why.
+                      */}
+                      <PetChatBridge />
                       <SidePanelShell>{children}</SidePanelShell>
                     </GlobalInsightDrawerProvider>
                   </ChatContextProvider>

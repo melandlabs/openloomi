@@ -672,6 +672,38 @@ fn main() {
                 }
             });
 
+            // Pet card "Guide me to connect more" CTA → show the main
+            // window and dispatch a new openloomi:send-chat-message
+            // DOM event with the chat prompt. The new PetChatBridge
+            // mounted in the (chat) layout listens for this event and
+            // forwards it to the chat composer via
+            // useChatContext().sendMessage(). Mirrors the
+            // `pet:open-decision` event-payload pattern (same escape
+            // helper for the JS literal so backslashes / quotes /
+            // newlines can't break the eval). English prompt by
+            // design — loomi-card.html is a static asset with no
+            // runtime i18n, and the agent can translate the response
+            // server-side.
+            let guide_app = app_handle.clone();
+            app_handle.listen("pet:guide-connect-more", move |_event| {
+                tray::show_main_window(&guide_app);
+                if let Some(window) = guide_app.get_webview_window("main") {
+                    let prompt = "Please help me connect more available connectors via Composio \
+(Gmail, Slack, Google Calendar, GitHub, Linear, Obsidian, etc.). \
+List the platforms I haven't connected yet, then walk me through \
+authorizing each one. Begin with Gmail if it's not connected.";
+                    let escaped = prompt
+                        .replace('\\', "\\\\")
+                        .replace('"', "\\\"")
+                        .replace('\n', "\\n");
+                    let js = format!(
+                        "window.dispatchEvent(new CustomEvent('openloomi:send-chat-message', {{ detail: {{ text: \"{}\" }} }}))",
+                        escaped
+                    );
+                    let _ = window.eval(&js);
+                }
+            });
+
             // B2b: "Open brief" / "Open wrap" inside the card. Brief and
             // wrap are not decisions — they're aggregate views
             // (morning brief, evening wrap) persisted to

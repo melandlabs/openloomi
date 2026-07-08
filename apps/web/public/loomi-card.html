@@ -256,6 +256,34 @@
         height: 30px;
       }
 
+      /* Single-column footer variant for layouts that surface one
+         full-width CTA (e.g. the connection layout's
+         "Guide me to connect more" button). The default `.footer` is
+         a 3-col grid tuned for decision layouts (Run / Cancel / Open
+         dashboard) — this variant resets to one column and lets the
+         single button stretch edge-to-edge. Picked up by the existing
+         `button.primary` styles for the blue fill / hover / shadow so
+         it visually matches the no-api-key footer CTA. */
+      .footer.single-col {
+        grid-template-columns: 1fr;
+      }
+      .footer.single-col button {
+        padding: 9px 12px;
+        font-size: 11px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .footer-cta-icon {
+        font-size: 13px;
+        line-height: 1;
+        font-weight: 700;
+      }
+      .footer-cta-label {
+        white-space: nowrap;
+      }
+
       /* ---------- Inline status banner (between decision body + footer) ----------
          Sits one line above the footer so the user sees an unmistakable
          "Running… → Sent ✓ → closing…" trail without losing the action
@@ -1241,6 +1269,12 @@
         <div class="queue-section">
           <div class="queue-label" id="queue-label">PENDING QUEUE · 0</div>
           <div class="queue-rows" id="connection-queue"></div>
+        </div>
+        <div class="footer single-col">
+          <button class="primary" data-action="guide-connect-more" type="button">
+            <span class="footer-cta-icon">＋</span>
+            <span class="footer-cta-label">Guide me to connect more</span>
+          </button>
         </div>
       </section>
 
@@ -2725,6 +2759,27 @@
             // Even without Tauri, hide the card locally so the click
             // produces a visible effect (e.g. when previewing the page
             // standalone in a browser).
+            card.style.opacity = "0";
+            setTimeout(() => {
+              card.style.display = "none";
+            }, 160);
+            return;
+          }
+          // Connection layout "Guide me to connect more" CTA → ask
+          // the Rust host to surface the main window and dispatch an
+          // `openloomi:send-chat-message` DOM event with the chat
+          // prompt. The PetChatBridge mounted in the (chat) layout
+          // forwards that text into the chat composer via
+          // useChatContext().sendMessage(...). Mirrors the
+          // `pet:open-ai-settings` flow above; without Tauri (designer
+          // / standalone preview) we fall back to the connectors page
+          // so the click still produces a visible effect.
+          if (action === "guide-connect-more") {
+            const t = window.__TAURI__;
+            if (t && t.event && t.event.emit)
+              t.event.emit("pet:guide-connect-more");
+            else
+              window.location.href = "/connectors?addPlatform=true";
             card.style.opacity = "0";
             setTimeout(() => {
               card.style.display = "none";
