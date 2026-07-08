@@ -4,7 +4,6 @@
     "index",
     "what-is-openloomi",
     "getting-started",
-    "openloomi-ctl",
     "chat",
     "connectors",
     "messaging-apps",
@@ -16,6 +15,7 @@
     "benchmark",
     "glossary",
     "use-cases",
-    "changelog"
+    "changelog",
+    "openloomi-ctl"
   ]
 }
