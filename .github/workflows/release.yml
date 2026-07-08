@@ -382,6 +382,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: "${{ secrets.ED_APPLE_SIGNING_IDENTITY }}"
           SIGNING_IDENTITY: "${{ secrets.ED_APPLE_SIGNING_IDENTITY }}"
           SKIP_SIGNING: "false"
+          # macos-15-intel runner hits the 10s preflight timeout on the
+          # Mine77 release URL. Skip in CI; real download happens elsewhere.
+          SKIP_RENDER_ENGINE_PREFLIGHT: "true"
 
       - name: Verify bundled CLI (macOS x64)
         working-directory: ./apps/web
