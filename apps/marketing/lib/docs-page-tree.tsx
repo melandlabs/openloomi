@@ -21,7 +21,6 @@ const DOC_TITLES = new Map([
   ["/docs", "Welcome"],
   ["/docs/what-is-openloomi", "What is OpenLoomi?"],
   ["/docs/getting-started", "Getting Started"],
-  ["/docs/openloomi-ctl", "OpenLoomi CLI"],
   ["/docs/chat", "Chat"],
   ["/docs/connectors", "Connectors"],
   ["/docs/messaging-apps", "Messaging Apps"],
@@ -34,6 +33,8 @@ const DOC_TITLES = new Map([
   ["/docs/glossary", "Glossary"],
   ["/docs/use-cases", "Use Cases"],
   ["/docs/changelog", "Changelog"],
+  ["/docs/reference", "Reference"],
+  ["/docs/reference/openloomi-ctl", "OpenLoomi CLI"],
   ["/docs/changelog/openloomi-0.6.0", "OpenLoomi 0.6.0"],
   ["/docs/changelog/openloomi-0.5.0", "OpenLoomi 0.5.0"],
   ["/docs/changelog/openloomi-0.4.0", "OpenLoomi 0.4.0"],
@@ -45,7 +46,6 @@ const DOC_TITLES = new Map([
 const DOC_ICON_NAMES = new Map([
   ["/docs/what-is-openloomi", "FaRocket"],
   ["/docs/getting-started", "FaRocket"],
-  ["/docs/openloomi-ctl", "FaTerminal"],
   ["/docs/chat", "FaComments"],
   ["/docs/connectors", "FaPlug"],
   ["/docs/messaging-apps", "FaCommentDots"],
@@ -58,6 +58,7 @@ const DOC_ICON_NAMES = new Map([
   ["/docs/glossary", "FaBook"],
   ["/docs/use-cases", "FaLightbulb"],
   ["/docs/changelog", "FaBolt"],
+  ["/docs/reference/openloomi-ctl", "FaTerminal"],
 ]);
 
 const DOC_ICONS: Record<string, IconType> = {
@@ -75,9 +76,6 @@ const DOC_ICONS: Record<string, IconType> = {
   FaTerminal,
   FaTools,
 };
-
-const REFERENCE_SECTION_NAME = "Reference";
-const OPENLOOMI_CLI_URL = "/docs/openloomi-ctl";
 
 function getDocIcon(url: string) {
   const iconName = DOC_ICON_NAMES.get(url);
@@ -136,44 +134,12 @@ function renameNode(node: PageTree.Node): PageTree.Node {
   return node;
 }
 
-function groupReferenceSection(children: PageTree.Node[]): PageTree.Node[] {
-  const groupedChildren: PageTree.Node[] = [];
-
-  for (let index = 0; index < children.length; index += 1) {
-    const node = children[index];
-    const nextNode = children[index + 1];
-
-    if (
-      node.type === "separator" &&
-      node.name === REFERENCE_SECTION_NAME &&
-      nextNode?.type === "page" &&
-      nextNode.url === OPENLOOMI_CLI_URL
-    ) {
-      groupedChildren.push({
-        $id: "reference",
-        type: "folder",
-        name: REFERENCE_SECTION_NAME,
-        collapsible: true,
-        defaultOpen: false,
-        children: [nextNode],
-      } satisfies PageTree.Folder);
-      index += 1;
-      continue;
-    }
-
-    groupedChildren.push(node);
-  }
-
-  return groupedChildren;
-}
-
 export function getDocsPageTree(): PageTree.Root {
   const tree = source.getPageTree();
-  const children = groupReferenceSection(tree.children.map(renameNode));
 
   return {
     ...tree,
     name: "OpenLoomi Docs",
-    children,
+    children: tree.children.map(renameNode),
   };
 }

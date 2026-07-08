@@ -38,23 +38,12 @@ function countMarkdownH1(filePath) {
     .length;
 }
 
-function isMetaNavigationItem(page) {
-  const separatorPattern = /^---(?:\[[^\]]+])?.*---$/;
-  const linkPattern = /^(?:external:)?(?:\[[^\]]+])?\[[^\]]+]\([^)]+\)$/;
-
-  return separatorPattern.test(page) || linkPattern.test(page);
-}
-
 function assertMetaPages(metaPath, baseDir) {
   const meta = readJson(metaPath);
 
   assert.ok(Array.isArray(meta.pages), `${metaPath} must define pages[]`);
 
   for (const page of meta.pages) {
-    if (isMetaNavigationItem(page)) {
-      continue;
-    }
-
     const candidates = [
       path.join(baseDir, `${page}.mdx`),
       path.join(baseDir, page, "index.mdx"),
@@ -72,6 +61,10 @@ assertMetaPages(
   path.join(docsDir, "changelog", "meta.json"),
   path.join(docsDir, "changelog"),
 );
+assertMetaPages(
+  path.join(docsDir, "reference", "meta.json"),
+  path.join(docsDir, "reference"),
+);
 
 const docsPageTreeSource = fs.readFileSync(docsPageTreePath, "utf8");
 
@@ -86,7 +79,11 @@ assert.match(
   "docs page tree must keep the changelog folder collapsible",
 );
 
-for (const dir of [docsDir, path.join(docsDir, "changelog")]) {
+for (const dir of [
+  docsDir,
+  path.join(docsDir, "changelog"),
+  path.join(docsDir, "reference"),
+]) {
   for (const fileName of fs
     .readdirSync(dir)
     .filter((file) => file.endsWith(".mdx"))) {
