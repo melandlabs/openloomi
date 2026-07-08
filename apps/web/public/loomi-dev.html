@@ -332,6 +332,13 @@
         background: var(--good);
         box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18);
       }
+      .connectors .dot.unknown {
+        /* Neutral grey for entries that arrived via the FALLBACK
+           sentinel (no probe yet). Outlined ring rather than a glow,
+           to keep it visually quieter than the red "broken" pill. */
+        background: var(--muted);
+        box-shadow: 0 0 0 3px rgba(241, 245, 249, 0.18);
+      }
       .connectors .label {
         font-size: 10px;
         color: var(--muted);
@@ -824,9 +831,12 @@
           // means the click "nothing happens" symptom is an env-var
           // mismatch (NODE_ENV=production, OPENLOOMI_DEV not set).
           try {
-            const res = await fetch("/api/loop/dev/scene", {
-              credentials: "include",
-            });
+            const res = await fetch(
+              `${window.__OPENLOOMI_API__ || ""}/api/loop/dev/scene`,
+              {
+                credentials: "include",
+              },
+            );
             if (res.ok) {
               setBanner("ok", "dev API ready");
               return true;
@@ -875,9 +885,12 @@
 
         async function loadScenes() {
           try {
-            const res = await fetch("/api/loop/dev/scene", {
-              credentials: "include",
-            });
+            const res = await fetch(
+              `${window.__OPENLOOMI_API__ || ""}/api/loop/dev/scene`,
+              {
+                credentials: "include",
+              },
+            );
             if (!res.ok) {
               scenesEl.innerHTML =
                 '<div style="padding:16px;text-align:center;color:var(--muted);font-size:11px">Banner above explains why.</div>';
@@ -915,12 +928,15 @@
             }
           }
           try {
-            const res = await fetch("/api/loop/dev/scene", {
-              method: "POST",
-              credentials: "include",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ scene: scene.key }),
-            });
+            const res = await fetch(
+              `${window.__OPENLOOMI_API__ || ""}/api/loop/dev/scene`,
+              {
+                method: "POST",
+                credentials: "include",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ scene: scene.key }),
+              },
+            );
             const data = await res.json();
             if (!res.ok || !data.ok) {
               throw new Error(data.error || `HTTP ${res.status}`);
@@ -999,14 +1015,17 @@
         async function loadConnectors(opts) {
           const refresh = !!(opts && opts.refresh);
           try {
-            const res = await fetch("/api/loop/connectors", {
-              method: refresh ? "POST" : "GET",
-              credentials: "include",
-              headers: refresh
-                ? { "Content-Type": "application/json" }
-                : undefined,
-              body: refresh ? JSON.stringify({ refresh: true }) : undefined,
-            });
+            const res = await fetch(
+              `${window.__OPENLOOMI_API__ || ""}/api/loop/connectors`,
+              {
+                method: refresh ? "POST" : "GET",
+                credentials: "include",
+                headers: refresh
+                  ? { "Content-Type": "application/json" }
+                  : undefined,
+                body: refresh ? JSON.stringify({ refresh: true }) : undefined,
+              },
+            );
             if (!res.ok) return;
             const data = await res.json();
             const items = data.items || [];
@@ -1034,23 +1053,36 @@
           const dot = document.getElementById("dot-" + slug);
           const meta = document.getElementById("meta-" + slug);
           if (!dot || !meta) return;
-          if (entry && entry.connected) {
+          // Three states now: probed+ok (green), probed+off (red),
+          // unprobed sentinel (neutral grey). Without the third
+          // branch, fresh installs would render the dev panel as
+          // "all broken" even when nothing is actually broken.
+          if (entry && entry.probed !== true) {
+            dot.classList.remove("ok");
+            dot.classList.add("unknown");
+            meta.textContent = "pending probe";
+          } else if (entry && entry.connected) {
             dot.classList.add("ok");
+            dot.classList.remove("unknown");
             meta.textContent =
               entry.accountCount +
               " acct · " +
               (entry.lastError ? "err" : "ok");
           } else {
             dot.classList.remove("ok");
+            dot.classList.remove("unknown");
             meta.textContent = entry ? entry.lastError || "off" : "off";
           }
         }
 
         async function refreshCount() {
           try {
-            const res = await fetch("/api/loop/state", {
-              credentials: "include",
-            });
+            const res = await fetch(
+              `${window.__OPENLOOMI_API__ || ""}/api/loop/state`,
+              {
+                credentials: "include",
+              },
+            );
             if (!res.ok) return;
             const data = await res.json();
             const c = data.counts || {};
@@ -1068,10 +1100,13 @@
         resetBtn.addEventListener("click", async () => {
           resetBtn.disabled = true;
           try {
-            const res = await fetch("/api/loop/dev/reset", {
-              method: "POST",
-              credentials: "include",
-            });
+            const res = await fetch(
+              `${window.__OPENLOOMI_API__ || ""}/api/loop/dev/reset`,
+              {
+                method: "POST",
+                credentials: "include",
+              },
+            );
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data.ok) {
               throw new Error(data.error || `HTTP ${res.status}`);

@@ -28,6 +28,7 @@ use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use super::{PET_BUBBLE_LABEL, PET_DEV_LABEL, PET_LABEL};
+use crate::constants;
 
 /// Logical (CSS) width of the dev panel window. Matches `--w` in
 /// `loomi-dev.html`. Wider than the bubble so the pet-state chip grid
@@ -79,6 +80,7 @@ pub fn build_dev_panel_window(
         PET_DEV_LABEL,
         WebviewUrl::App("loomi-dev.html".into()),
     )
+    .initialization_script(&constants::api_init_script())
     .title("Loomi · dev panel")
     .inner_size(DEV_PANEL_W, DEV_PANEL_H)
     .min_inner_size(DEV_PANEL_W, DEV_PANEL_H)

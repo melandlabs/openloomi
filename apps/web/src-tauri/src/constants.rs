@@ -21,3 +21,15 @@ pub const NEXTJS_BASE_URL: &str = "http://localhost";
 pub fn nextjs_url() -> String {
     format!("{}:{}", NEXTJS_BASE_URL, NEXTJS_PORT)
 }
+
+/// JS snippet injected into a webview before any user script runs.
+/// Sets `window.__OPENLOOMI_API__` to the Next.js server URL so the
+/// pet/bubble/card HTML files (served from the Tauri asset protocol,
+/// origin `tauri://localhost`) can build absolute fetch URLs against
+/// the Next.js HTTP server. Relative paths would resolve to
+/// `tauri://localhost/api/...` and 404 inside the Tauri asset
+/// resolver. Compile-time selected: dev → 3515, prod → 3414.
+#[inline]
+pub fn api_init_script() -> String {
+    format!("window.__OPENLOOMI_API__ = '{}';", nextjs_url())
+}

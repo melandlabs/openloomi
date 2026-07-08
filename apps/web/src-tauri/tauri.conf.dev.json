@@ -5,7 +5,8 @@
   "identifier": "com.openloomi.app",
   "build": {
     "beforeDevCommand": "node scripts/run-tauri-dev.js",
-    "devUrl": "http://localhost:3515"
+    "devUrl": "http://localhost:3515",
+    "frontendDist": "../public"
   },
   "app": {
     "withGlobalTauri": true,
@@ -70,7 +71,8 @@
       "signingIdentity": null
     },
     "resources": [
-      "../../../skills/**/*"
+      "../../../skills/**/*",
+      "resources/render-engine-manifest.json"
     ]
   },
   "plugins": {

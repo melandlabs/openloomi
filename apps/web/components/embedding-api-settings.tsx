@@ -573,22 +573,6 @@ export function EmbeddingApiSettings() {
               type="button"
               variant="outline"
               size="sm"
-              disabled={!setting || busy}
-              onClick={resetSettings}
-            >
-              {resetting && (
-                <RemixIcon
-                  name="loader_2"
-                  size="size-4"
-                  className="animate-spin"
-                />
-              )}
-              {t("settings.aiSettingsResetButton", "Reset")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
               disabled={!canTest || busy}
               onClick={testSettings}
             >
@@ -600,6 +584,22 @@ export function EmbeddingApiSettings() {
                 />
               )}
               {t("settings.aiSettingsTestButton", "Test")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!setting || busy}
+              onClick={resetSettings}
+            >
+              {resetting && (
+                <RemixIcon
+                  name="loader_2"
+                  size="size-4"
+                  className="animate-spin"
+                />
+              )}
+              {t("settings.aiSettingsResetButton", "Reset")}
             </Button>
             <Button
               type="button"

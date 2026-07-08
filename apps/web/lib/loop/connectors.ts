@@ -54,6 +54,7 @@ const FALLBACK_CONNECTORS: ConnectorEntry[] = [
     label: "Gmail",
     connected: false,
     accountCount: 0,
+    probed: false,
     fetchedAt: "",
   },
   {
@@ -61,6 +62,7 @@ const FALLBACK_CONNECTORS: ConnectorEntry[] = [
     label: "Google Calendar",
     connected: false,
     accountCount: 0,
+    probed: false,
     fetchedAt: "",
   },
   {
@@ -68,6 +70,7 @@ const FALLBACK_CONNECTORS: ConnectorEntry[] = [
     label: "GitHub",
     connected: false,
     accountCount: 0,
+    probed: false,
     fetchedAt: "",
   },
   {
@@ -75,6 +78,7 @@ const FALLBACK_CONNECTORS: ConnectorEntry[] = [
     label: "Slack",
     connected: false,
     accountCount: 0,
+    probed: false,
     fetchedAt: "",
   },
   {
@@ -82,6 +86,7 @@ const FALLBACK_CONNECTORS: ConnectorEntry[] = [
     label: "Linear",
     connected: false,
     accountCount: 0,
+    probed: false,
     fetchedAt: "",
   },
   {
@@ -89,6 +94,7 @@ const FALLBACK_CONNECTORS: ConnectorEntry[] = [
     label: "Obsidian",
     connected: false,
     accountCount: 0,
+    probed: false,
     fetchedAt: "",
   },
 ];
@@ -132,9 +138,19 @@ function readCache(): ConnectorCache | null {
     const stamp = topLevel ?? entryMax;
     if (!stamp) return null;
     if (Date.now() - new Date(stamp).getTime() > CACHE_TTL_MS) return null;
+    // Defensively treat any cache entry that lacks `probed` as
+    // probed: true. Cron-executor and other external writers may have
+    // written the snapshot before the field existed; if it's in the
+    // cache, an agent did the work — just normalize the shape so the
+    // UI doesn't render it as "Pending first probe".
+    const connectors = (raw.connectors as ConnectorEntry[]).map((c) =>
+      typeof (c as { probed?: unknown }).probed === "boolean"
+        ? c
+        : { ...c, probed: true },
+    );
     return {
       fetchedAt: stamp,
-      connectors: raw.connectors as ConnectorCache["connectors"],
+      connectors,
     };
   } catch {
     return null;
@@ -175,6 +191,12 @@ export function writeConnectorSnapshot(connectors: ConnectorEntry[]): void {
  * list — useful for tests that want a deterministic "no data" baseline.
  * Live refresh goes through `refreshConnectors()` which dispatches an
  * agent probe via the bridge.
+ *
+ * On cache miss, this delegates to `refreshConnectors({ silent: true })`
+ * so the user never sees "all OFF" right after install — the first
+ * open of the Loomi Online card auto-probes (short 6s timeout) and the
+ * pill row repaints to truth within a couple of seconds. The cache is
+ * the fast path; the probe is the recovery.
  */
 export async function listConnectors(
   opts: { force?: boolean } = {},
@@ -183,8 +205,82 @@ export async function listConnectors(
     const cached = readCache();
     if (cached) return cached.connectors;
   }
-  const stamp = new Date().toISOString();
-  return FALLBACK_CONNECTORS.map((c) => ({ ...c, fetchedAt: stamp }));
+  // Cache miss (or force=true) → delegate to refresh. When called from
+  // the regular UI path, this fires a short-timeout silent probe
+  // asynchronously and returns the FALLBACK sentinel — the UI renders
+  // "Pending first probe" pills immediately and the probe lands in the
+  // background. Without this delegation, every fresh install sees the
+  // lying "all offline" state for the entire first session.
+  return refreshConnectors({ silent: true });
+}
+
+const PROBE_TIMEOUT_MS = 6 * 1000;
+const PROBE_COOLDOWN_MS = 30 * 1000;
+
+interface ConnectorCacheWithCooldown {
+  fetchedAt?: unknown;
+  connectors?: unknown;
+  /**
+   * Set when `refreshConnectors({silent:true})` hits its 6s timeout
+   * and no agent probe result was available. Subsequent calls within
+   * `PROBE_COOLDOWN_MS` will skip the probe entirely and short-circuit
+   * to the FALLBACK sentinel — so a user double-clicking the card
+   * after opening it twice in a row doesn't burn another agent round
+   * trip on a hung or slowly-loading prompt.
+   */
+  probeCooldownUntil?: unknown;
+}
+
+function readProbeCooldown(): number {
+  try {
+    if (!existsSync(LOOP_PATHS.connectors)) return 0;
+    const raw = JSON.parse(
+      readFileSync(LOOP_PATHS.connectors, "utf8"),
+    ) as ConnectorCacheWithCooldown;
+    const v = raw.probeCooldownUntil;
+    if (typeof v !== "string") return 0;
+    const t = new Date(v).getTime();
+    if (Number.isNaN(t)) return 0;
+    return t;
+  } catch {
+    return 0;
+  }
+}
+
+function writeProbeCooldownMarker(): void {
+  // Stamp a cooldown marker on the existing cache file (or write a
+  // barebones one if the file doesn't exist yet) so a second cold
+  // open within PROBE_COOLDOWN_MS skips the probe. We *don't* clobber
+  // a previously-persisted snapshot — the goal is "don't hammer the
+  // agent when it's slow", not "forget what we last learned".
+  try {
+    let existing: ConnectorCacheWithCooldown = {};
+    if (existsSync(LOOP_PATHS.connectors)) {
+      try {
+        existing = JSON.parse(
+          readFileSync(LOOP_PATHS.connectors, "utf8"),
+        ) as ConnectorCacheWithCooldown;
+      } catch {
+        existing = {};
+      }
+    }
+    ensureDirs();
+    writeFileSync(
+      LOOP_PATHS.connectors,
+      JSON.stringify(
+        {
+          ...existing,
+          probeCooldownUntil: new Date(
+            Date.now() + PROBE_COOLDOWN_MS,
+          ).toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
+  } catch {
+    /* swallow — cooldown is an optimization, not a correctness lever */
+  }
 }
 
 /**
@@ -192,6 +288,13 @@ export async function listConnectors(
  * agent via `composio-bridge.ts`. The agent inspects the active
  * composio surfaces (skill / CLI / insights) and returns a fresh
  * snapshot, which we persist via `writeConnectorSnapshot` and return.
+ *
+ * `opts.silent = true` wraps the probe in a short `PROBE_TIMEOUT_MS`
+ * (6s) timeout and falls back to the cache / FALLBACK on timeout,
+ * including writing a `probeCooldownUntil` marker so a rapid re-open
+ * within `PROBE_COOLDOWN_MS` skips the probe entirely. Used by
+ * `listConnectors()`'s cache-miss path so the user's first card open
+ * doesn't block on a potentially-slow agent call.
  *
  * Failure modes (in order of preference):
  *
@@ -204,9 +307,51 @@ export async function listConnectors(
  *      the UI can still render the row. Caller should surface a
  *      "stale" hint to the user.
  */
-export async function refreshConnectors(): Promise<ConnectorEntry[]> {
-  const { probeConnectorState } = await import("./composio-bridge");
-  const probed = await probeConnectorState();
+export async function refreshConnectors(
+  opts: { silent?: boolean } = {},
+): Promise<ConnectorEntry[]> {
+  // `silent` mode additionally consults the cooldown marker — if we're
+  // still inside the post-timeout window, skip the probe entirely and
+  // return whatever the cache (or FALLBACK) has. This prevents a stuck
+  // or slow agent from being hammered on rapid card re-opens.
+  if (opts.silent && Date.now() < readProbeCooldown()) {
+    const cached = readCache();
+    if (cached) return cached.connectors;
+    return FALLBACK_CONNECTORS;
+  }
+
+  const probe: Promise<ConnectorEntry[] | null> = (async () => {
+    const { probeConnectorState } = await import("./composio-bridge");
+    return probeConnectorState();
+  })();
+
+  // `silent` mode wraps the probe in a short timeout so the first card
+  // open is bounded — we don't want to keep the user waiting on a hung
+  // agent. On timeout, write the cooldown marker and fall back to
+  // whatever's on disk (or FALLBACK).
+  let probed: ConnectorEntry[] | null;
+  if (opts.silent) {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      probed = await Promise.race<ConnectorEntry[] | null>([
+        probe,
+        new Promise<ConnectorEntry[] | null>((resolve) => {
+          timer = setTimeout(() => resolve(null), PROBE_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    if (!probed || probed.length === 0) {
+      writeProbeCooldownMarker();
+      const cached = readCache();
+      if (cached) return cached.connectors;
+      return FALLBACK_CONNECTORS;
+    }
+    return probed;
+  }
+
+  probed = await probe;
   if (probed && probed.length > 0) {
     return probed;
   }
@@ -215,6 +360,5 @@ export async function refreshConnectors(): Promise<ConnectorEntry[]> {
   if (cached) {
     return cached.connectors;
   }
-  const stamp = new Date().toISOString();
-  return FALLBACK_CONNECTORS.map((c) => ({ ...c, fetchedAt: stamp }));
+  return FALLBACK_CONNECTORS;
 }

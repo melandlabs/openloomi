@@ -139,6 +139,14 @@ export interface ConnectorEntry {
   connected: boolean;
   accountCount: number;
   lastError?: string;
+  /**
+   * Provenance flag. `true` means an agent probe actually emitted this
+   * row; `false` (or absent for compat) means it's a "haven't asked yet"
+   * sentinel from the FALLBACK list. UIs use this to distinguish "we know
+   * this is offline" from "we don't know yet" — the two render with
+   * different pills (red `Offline` vs. neutral `Pending first probe`).
+   */
+  probed?: boolean;
   fetchedAt: string;
 }
 

@@ -8,8 +8,48 @@ import { createTauriProductionAuthModule } from "./app/(auth)/tauri";
 // Initialize auth module (reuses file storage logic)
 const tauriAuthModule = createTauriProductionAuthModule();
 
+// CORS for `/api/*` consumed by Tauri webviews that live on the
+// `tauri://localhost` asset-protocol origin. The pet/bubble/card HTML
+// files in `public/` are served as Tauri assets, so the webview's
+// effective origin is `tauri://localhost`, while their API calls hit
+// Next.js's HTTP server — a different origin. Without these headers
+// the browser blocks the response, so the card's
+// `refreshConnectors` polling silently fails.
+//
+// We use a single fixed origin (`tauri://localhost`) because the
+// pet/bubble/card always live at the same Tauri origin in both dev
+// and prod. If you also need to test the card HTML directly in a
+// regular browser at `http://localhost:3515`, echo the request's
+// `Origin` header instead and `Vary: Origin` on the response.
+//
+// The non-OPTIONS response headers are added by `next.config.js`'s
+// `headers()` config (single source of truth lives there); this file
+// only short-circuits the OPTIONS preflight to a 204.
+const TAURI_ORIGIN = "tauri://localhost";
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": TAURI_ORIGIN,
+  "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, X-Requested-With",
+  "Access-Control-Allow-Credentials": "true",
+  "Access-Control-Max-Age": "600",
+};
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ========== CORS preflight for /api/* ==========
+  // Each API route only exports the methods it implements
+  // (GET/POST/etc.), so an unhandled OPTIONS would return 405. The
+  // browser rejects preflights on non-2xx, so we short-circuit them
+  // here. Non-OPTIONS requests fall through to the normal auth/route
+  // handler and get CORS headers attached on the way out.
+  if (request.method === "OPTIONS" && pathname.startsWith("/api/")) {
+    return new NextResponse(null, {
+      status: 204,
+      headers: CORS_HEADERS,
+    });
+  }
 
   // ========== Original filter logic (fully preserved) ==========
   if (pathname === "/api/stripe/webhook") return NextResponse.next();

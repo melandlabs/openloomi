@@ -328,6 +328,43 @@ const securityHeaders = [
   },
 ];
 
+// CORS headers for API routes consumed by Tauri webviews that live
+// on the `tauri://localhost` asset-protocol origin. The pet/bubble/
+// card HTML files in `public/` are served as Tauri assets (so the
+// webview's effective origin is `tauri://localhost`), but they call
+// `/api/*` on the Next.js server — a different origin. Without these
+// headers the browser blocks the response, so the card's
+// `refreshConnectors` polling silently fails.
+//
+// We use a single fixed origin (tauri://localhost) rather than a
+// dynamic `Origin` echo because the pet/bubble/card always live at
+// the same Tauri origin across dev and prod. If you also want to test
+// the card HTML directly in a regular browser at
+// `http://localhost:3515`, add a second header set keyed on a
+// `Vary: Origin` + a per-request `Access-Control-Allow-Origin`.
+const tauriApiCorsHeaders = [
+  {
+    key: "Access-Control-Allow-Origin",
+    value: "tauri://localhost",
+  },
+  {
+    key: "Access-Control-Allow-Methods",
+    value: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+  },
+  {
+    key: "Access-Control-Allow-Headers",
+    value: "Content-Type, Authorization, X-Requested-With",
+  },
+  {
+    key: "Access-Control-Allow-Credentials",
+    value: "true",
+  },
+  {
+    key: "Access-Control-Max-Age",
+    value: "600",
+  },
+];
+
 export default {
   ...nextConfig,
   async headers() {
@@ -335,6 +372,10 @@ export default {
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+      {
+        source: "/api/:path*",
+        headers: tauriApiCorsHeaders,
       },
     ];
   },

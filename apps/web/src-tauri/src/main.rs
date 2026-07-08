@@ -580,6 +580,24 @@ fn main() {
                 }
             });
 
+            // Pet card "Open AI settings" CTA (from the no-api-key
+            // layout) → show the main window and ask the Next.js side
+            // to navigate to the AI settings page with the
+            // missing-key banner pre-armed. The React
+            // `AiApiSettings` component already keys off
+            // `?reason=missing-api-key` to render the info banner +
+            // "Required for chat" badge and to auto-redirect back to
+            // /chat on a successful save.
+            let open_ai_settings_app = app_handle.clone();
+            app_handle.listen("pet:open-ai-settings", move |_event| {
+                tray::show_main_window(&open_ai_settings_app);
+                if let Some(window) = open_ai_settings_app.get_webview_window("main") {
+                    let _ = window.eval(
+                        "window.dispatchEvent(new CustomEvent('openloomi:navigate-ai-settings'))",
+                    );
+                }
+            });
+
             // B2: bubble click → open the card (which the user can act
             // on). If the card doesn't have a current decision payload
             // (e.g. everything got dismissed in flight), the card

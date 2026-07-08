@@ -145,6 +145,13 @@ uniformly.
                  Same as googlecalendar — pull unfiltered insights and let the
                  classifier drop non-matching channels.
 
+    IMPORTANT — notifications do NOT carry the PR's \`state\`. After you
+    collect notifications, follow each PR's \`subject.url\` (or call
+    \`GITHUB_GET_PULL_REQUEST\` on github) to fetch the actual PR's
+    \`state\` ("open" / "closed" / "merged") and write THAT into the
+    signal's \`payload.state\`. Without this, the classifier below can't
+    filter out closed/merged PRs and you'll surface dead reviews.
+
   slack
     composio skill (if installed):
                  \`Skill composio execute SLACK_LIST_MESSAGES on slack
@@ -302,7 +309,8 @@ lib-level classifier exactly):
     - calendar_event with my_response in [needsAction, undefined]  -> rsvp        (calendar_rsvp)
     - email with /rsvp|invit|meeting|join.*call|calendar/i in subj   -> draft_reply (email_reply)
     - email with /please|could you|can you|need|asap|urgent/i        -> draft_reply (email_reply)
-    - github_pr where user_is_reviewer                               -> review_pr   (github_review)
+    - github_pr where state == "open" AND (user_is_reviewer OR requested_reviewers is empty)
+                                                                      -> review_pr   (github_review)
     - github_issue open with assignee_login                           -> todo        (todo)
     - slack_message with mentions_me                                  -> draft_reply (slack_reply)
     - obsidian_note_changed in projects/ or plans/                    -> release_plan (release_plan)

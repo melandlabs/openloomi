@@ -6,7 +6,8 @@
   "build": {
     "beforeDevCommand": "node scripts/run-tauri-dev.js",
     "beforeBuildCommand": "node scripts/run-tauri-build.js",
-    "devUrl": "http://localhost:3515"
+    "devUrl": "http://localhost:3515",
+    "frontendDist": "../.next/standalone/apps/web/public"
   },
   "app": {
     "withGlobalTauri": true,
@@ -82,7 +83,8 @@
       "../.next/standalone/apps/web/public/**/*",
       "../.env",
       "resources/loading.html",
-      "resources/render-engine/**/*"
+      "resources/render-engine/**/*",
+      "resources/render-engine-manifest.json"
     ],
     "windows": {
       "certificateThumbprint": null,

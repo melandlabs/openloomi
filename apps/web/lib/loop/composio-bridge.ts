@@ -357,6 +357,11 @@ export async function probeConnectorState(
       ...(typeof c.lastError === "string" && c.lastError
         ? { lastError: c.lastError }
         : {}),
+      // `probed: true` — this row came back from a real agent probe
+      // (even if the agent reported the toolkit as disconnected), so
+      // the UI should render a real "Reachable" / "Offline" pill, not
+      // the "Pending first probe" sentinel.
+      probed: true,
       fetchedAt: stamp,
     };
   });
@@ -374,6 +379,11 @@ export async function probeConnectorState(
       connected: false,
       accountCount: 0,
       lastError: t.localOnlyMessage ?? "agent did not report this toolkit",
+      // `probed: true` — even the backfill came out of a probe attempt,
+      // the agent just forgot to emit it. The UI shouldn't render
+      // these as "Pending first probe" — they're "Offline (no agent
+      // report)" which is a *known* state, not an unknown one.
+      probed: true,
       fetchedAt: stamp,
     });
   }

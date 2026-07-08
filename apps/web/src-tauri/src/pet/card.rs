@@ -15,6 +15,7 @@ use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use super::PET_CARD_LABEL;
+use crate::constants;
 
 /// Logical (CSS) width of the card window. Matches `--card-w` in
 /// `loomi-card.html`.
@@ -41,6 +42,7 @@ pub fn build_card_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow>
         PET_CARD_LABEL,
         WebviewUrl::App("loomi-card.html".into()),
     )
+    .initialization_script(&constants::api_init_script())
     .title("Loomi · card")
     .inner_size(CARD_W, CARD_H)
     .min_inner_size(CARD_W, CARD_H)

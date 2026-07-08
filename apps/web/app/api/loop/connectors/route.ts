@@ -1,5 +1,6 @@
 /**
- * GET  /api/loop/connectors          → cached (60s TTL)
+ * GET  /api/loop/connectors               → cached
+ * GET  /api/loop/connectors?refresh=1     → force refresh
  * POST /api/loop/connectors  {refresh:true} → force refresh
  */
 
@@ -9,9 +10,17 @@ import { connectors } from "@/lib/loop";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const items = await connectors();
+    // `?refresh=1` is a convenience for callers that can't easily POST a
+    // JSON body (e.g., `<img src>`, simple `fetch()` probes, server
+    // components). The actual refresh path is identical to POST
+    // `{refresh:true}` — full 120s probe timeout, no silent-mode
+    // short-circuit. Use POST when you want a controlled refresh and
+    // don't mind the wait.
+    const url = new URL(req.url);
+    const refresh = url.searchParams.get("refresh") === "1";
+    const items = await connectors({ refresh });
     return NextResponse.json({ items });
   } catch (e) {
     return NextResponse.json(

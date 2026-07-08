@@ -475,6 +475,18 @@
       .connector-status.off {
         color: var(--muted);
       }
+      /* "Pending first probe" pill — neutral grey for entries that
+         arrived via the FALLBACK sentinel instead of a real probe.
+         Renders the row in a calm "we haven't asked yet" tone rather
+         than the alarming red `Offline` so the very first card open
+         after install doesn't look like every channel is broken. */
+      .connector-dot.unknown {
+        background: var(--muted);
+        opacity: 0.6;
+      }
+      .connector-status.unknown {
+        color: var(--muted);
+      }
 
       .queue-section {
         display: flex;
@@ -1233,6 +1245,67 @@
       </section>
 
       <!-- ============================================================
+           LAYOUT: NO-API-KEY  (Form 0 · missing provider config)
+           Surfaces the "no LLM reachable" state on the pet card, in
+           the same visual style as the other six forms. Mirrors the
+           connection layout's header chrome but routes to the AI
+           settings page on click instead of the loop dashboard.
+           ============================================================ -->
+      <section data-layout="no-api-key">
+        <div class="header">
+          <span class="icon">🔑</span>
+          <span class="type-label">SETUP</span>
+          <span class="pill">MISSING</span>
+          <span class="spacer"></span>
+          <button
+            class="close"
+            data-action="close"
+            type="button"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div class="connection-title">API key needed</div>
+        <div class="connection-sub">
+          Add an LLM provider so I can start running decisions.
+        </div>
+        <div class="connector-list" id="no-api-key-requirements">
+          <div class="connector-row">
+            <span class="connector-dot"></span>
+            <span>
+              <span class="connector-name">API key</span>
+              <span class="connector-meta"
+                >Anthropic-compatible credential</span
+              >
+            </span>
+            <span class="connector-status off">REQUIRED</span>
+          </div>
+          <div class="connector-row">
+            <span class="connector-dot"></span>
+            <span>
+              <span class="connector-name">Endpoint</span>
+              <span class="connector-meta">Base URL for the provider</span>
+            </span>
+            <span class="connector-status off">REQUIRED</span>
+          </div>
+          <div class="connector-row">
+            <span class="connector-dot"></span>
+            <span>
+              <span class="connector-name">Model</span>
+              <span class="connector-meta">Model identifier to call</span>
+            </span>
+            <span class="connector-status off">REQUIRED</span>
+          </div>
+        </div>
+        <div class="footer">
+          <button class="primary" data-action="open-ai-settings" type="button">
+            Open AI settings
+          </button>
+        </div>
+      </section>
+
+      <!-- ============================================================
            LAYOUT: PIPELINE  (Form 2)
            ============================================================ -->
       <section data-layout="pipeline">
@@ -1385,7 +1458,8 @@
         <!-- Footer is JS-rendered per decision.type (see TYPE_ACTIONS in
              the inline script below). RSVP gets 4 buttons
              (Yes/No/Maybe/Skip); every other type gets 2-3 typed
-             buttons (Send/Edit/Discard, Approve/Comment/Changes, etc.).
+             buttons (Send/Edit/Discard, Approve/Comment, etc.). Each
+             button gets a native tooltip from its `tip` field.
              A decision without a known type falls back to the legacy
              Run/Dismiss/Open trio. -->
         <div class="footer" id="dec-footer"></div>
@@ -1516,6 +1590,22 @@
         let decision = null;
         let pendingList = [];
         let connectors = [];
+        // AI provider configuration status. Cached result of the
+        // `hasUsableConversationApiConfiguration` predicate, evaluated
+        // against `/api/preferences/ai`. `null` = not yet fetched,
+        // `true` = usable configuration present, `false` = no LLM
+        // reachable (the new card layout surfaces this). The raw
+        // payload is stashed so `renderNoApiKey()` can decorate the
+        // requirement rows with per-row status dots if we want to.
+        let apiConfigured = null;
+        let aiSettings = null;
+        // One-shot gate for the missing-key auto-show: when the first
+        // `refreshAiConfig()` resolves to `false`, we emit
+        // `pet:open-card` exactly once per session so the Rust host
+        // opens the card for the user. After that the user is in
+        // control — they can close the card and reopen it manually
+        // via the bubble. Cleared on page load; never re-armed.
+        let noApiKeyAutoShown = false;
         let busy = false;
         // One-shot action scheduled via /api/loop/action/schedule. Set
         // when the user clicks Run / Dismiss / Send / Approve / etc.;
@@ -1572,67 +1662,124 @@
         // RSVP, draft_reply, and review_pr all look identical even though
         // they ask for very different user input. Mapping each type to
         // its natural buttons (Yes/No/Maybe, Send/Edit/Discard,
-        // Approve/Comment/Changes, …) means the user sees the action
+        // Approve/Comment, …) means the user sees the action
         // they actually want to take, not a generic proxy.
+        // Each entry may also set `tip` — when present, the render
+        // loop copies it to the button's `title` attribute so the
+        // user gets a native tooltip explaining the consequence.
         const TYPE_ACTIONS = {
           rsvp: [
             {
               action: "run",
               label: "✓ Yes",
               variant: "primary",
+              tip: "Confirm attendance — Loomi adds it to your calendar and replies 'yes' to the host",
               body: { response: "yes" },
             },
             {
               action: "run",
               label: "✗ No",
               variant: "ghost",
+              tip: "Decline the invite — Loomi sends a polite 'can't make it' reply to the host",
               body: { response: "no" },
             },
             {
               action: "run",
               label: "◐ Maybe",
               variant: "ghost",
+              tip: "Tentative reply — leaves the response as 'maybe' on the host's side, no calendar block",
               body: { response: "maybe" },
             },
-            { action: "dismiss", label: "Skip", variant: "danger" },
+            {
+              action: "dismiss",
+              label: "Skip",
+              variant: "danger",
+              tip: "Don't reply — leave the invite pending for a later pass",
+            },
           ],
           draft_reply: [
-            { action: "run", label: "▶ Send", variant: "primary" },
-            { action: "open", label: "↗ Edit", variant: "ghost" },
-            { action: "dismiss", label: "Discard", variant: "danger" },
+            {
+              action: "run",
+              label: "▶ Send",
+              variant: "primary",
+              tip: "Send the drafted email as-is, no edits",
+            },
+            {
+              action: "open",
+              label: "↗ Edit",
+              variant: "ghost",
+              tip: "Open the draft in the dashboard to tweak the body before sending",
+            },
+            {
+              action: "dismiss",
+              label: "Discard",
+              variant: "danger",
+              tip: "Drop the draft — no message will be sent; the thread stays unread",
+            },
           ],
           review_pr: [
             {
               action: "run",
               label: "✓ Approve",
               variant: "primary",
+              tip: "Post an approval — use this when the diff looks good and you want to unblock the merge",
               body: { verdict: "approve" },
             },
             {
               action: "run",
               label: "✎ Comment",
               variant: "ghost",
+              tip: "Post a neutral review note (no approve / request-changes verdict) — for questions, nits, or FYIs",
               body: { verdict: "comment" },
-            },
-            {
-              action: "run",
-              label: "⚠ Changes",
-              variant: "danger",
-              body: { verdict: "request_changes" },
             },
           ],
           slack_reply: [
-            { action: "run", label: "▶ Send", variant: "primary" },
-            { action: "open", label: "↗ Edit", variant: "ghost" },
-            { action: "dismiss", label: "Skip", variant: "danger" },
+            {
+              action: "run",
+              label: "▶ Send",
+              variant: "primary",
+              tip: "Post the drafted reply to the channel as-is",
+            },
+            {
+              action: "open",
+              label: "↗ Edit",
+              variant: "ghost",
+              tip: "Open the draft in the dashboard to tweak the message before posting",
+            },
+            {
+              action: "dismiss",
+              label: "Skip",
+              variant: "danger",
+              tip: "Don't post — leave the message unread, the draft is discarded",
+            },
           ],
           release_plan: [
-            { action: "open", label: "↗ Open plan", variant: "primary" },
-            { action: "dismiss", label: "Dismiss", variant: "danger" },
+            {
+              action: "open",
+              label: "↗ Open plan",
+              variant: "primary",
+              tip: "Open the release plan in the dashboard for full review",
+            },
+            {
+              action: "dismiss",
+              label: "Dismiss",
+              variant: "danger",
+              tip: "Close the card without opening the plan — you can still find it in the dashboard later",
+            },
           ],
           todo: [
-            { action: "run", label: "✓ Add", variant: "primary" },
-            { action: "dismiss", label: "Skip", variant: "danger" },
+            {
+              action: "run",
+              label: "✓ Add",
+              variant: "primary",
+              tip: "Add to your todo list — Loomi tracks it across surfaces and the dashboard",
+            },
+            {
+              action: "dismiss",
+              label: "Skip",
+              variant: "danger",
+              tip: "Don't add — drop the suggestion, no todo is created",
+            },
           ],
           brief: [
             { action: "open", label: "View details", variant: "primary" },
@@ -1716,6 +1863,16 @@
         };
 
         function chooseLayout() {
+          // 0. Missing-API-key takes priority over everything else —
+          //    without an LLM the loop can't do anything, so the user
+          //    needs to be nudged toward the settings page first. This
+          //    beats the dev panel override on purpose: if a fresh
+          //    user opens the dev panel before configuring their key,
+          //    the missing-setup CTA is more useful than a demo form.
+          //    `null` (not yet fetched) lets the rest of the router run
+          //    so we don't flicker the no-api-key card during the first
+          //    ~100ms before `/api/preferences/ai` resolves.
+          if (apiConfigured === false) return "no-api-key";
           // 1. Dev panel override wins. Lets the user demo any form
           //    regardless of whether the watcher would agree.
           if (devForm && DEV_FORM_LAYOUT[devForm])
@@ -1750,6 +1907,52 @@
           renderDecision();
           renderBrief();
           renderWrap();
+          renderNoApiKey();
+        }
+
+        // No-API-key layout is fully static HTML (title, three
+        // requirement rows, single CTA). The MVP just toggles row
+        // status dots based on which fields are missing in the cached
+        // `aiSettings` payload — green dot when the row is satisfied,
+        // orange "MISSING" when not. Falls back to "REQUIRED" on every
+        // row when `aiSettings` hasn't loaded yet.
+        function renderNoApiKey() {
+          if (!aiSettings) return;
+          const rows = document.querySelectorAll(
+            "#no-api-key-requirements .connector-row",
+          );
+          if (!rows.length) return;
+          const userSetting = (aiSettings.settings || []).find(
+            (s) => s.providerType === "anthropic_compatible",
+          );
+          const sysDefault = (aiSettings.systemDefaults || {})
+            .anthropic_compatible || { hasApiKey: false };
+          const checks = [
+            {
+              label: "API key",
+              ok:
+                (userSetting && userSetting.hasApiKey) || sysDefault.hasApiKey,
+            },
+            {
+              label: "Endpoint",
+              ok: !!userSetting && Boolean((userSetting.baseUrl || "").trim()),
+            },
+            {
+              label: "Model",
+              ok: !!userSetting && Boolean((userSetting.model || "").trim()),
+            },
+          ];
+          rows.forEach((row, i) => {
+            const check = checks[i];
+            if (!check) return;
+            const dot = row.querySelector(".connector-dot");
+            const status = row.querySelector(".connector-status");
+            if (dot) dot.classList.toggle("on", check.ok);
+            if (status) {
+              status.classList.toggle("off", !check.ok);
+              status.textContent = check.ok ? "READY" : "REQUIRED";
+            }
+          });
         }
 
         // Sort the pending queue so the most important items surface
@@ -1800,14 +2003,31 @@
               row.className = "connector-row";
               const account =
                 c.accountCount > 1 ? " · " + c.accountCount + " accounts" : "";
-              const status = c.connected ? "OK" : "OFF";
+              // `probed !== true` means this row came from the FALLBACK
+              // sentinel — i.e. no agent probe has ever succeeded for
+              // this toolkit in this session. Render the neutral
+              // "Pending first probe" pill instead of the red
+              // "Offline" pill so a cold-cache open doesn't lie.
+              const isUnknown = c.probed !== true;
+              const status = isUnknown ? "—" : c.connected ? "OK" : "OFF";
+              const dotClass = isUnknown ? "unknown" : c.connected ? "on" : "";
+              const statusClass = isUnknown
+                ? "unknown"
+                : c.connected
+                  ? ""
+                  : "off";
+              const meta = isUnknown
+                ? "Awaiting first probe"
+                : c.connected
+                  ? "Reachable" + esc(account)
+                  : c.lastError || "Offline";
               row.innerHTML = `
-                <span class="connector-dot ${c.connected ? "on" : ""}"></span>
+                <span class="connector-dot ${dotClass}"></span>
                 <div>
                   <span class="connector-name">${esc(c.label || c.id)}</span>
-                  <span class="connector-meta">${c.connected ? "Reachable" + esc(account) : c.lastError || "Offline"}</span>
+                  <span class="connector-meta">${esc(meta)}</span>
                 </div>
-                <span class="connector-status ${c.connected ? "" : "off"}">${status}</span>
+                <span class="connector-status ${statusClass}">${status}</span>
               `;
               cl.appendChild(row);
             }
@@ -2069,6 +2289,7 @@
             btn.className = a.variant || "";
             btn.dataset.action = a.action;
             btn.textContent = a.label;
+            if (a.tip) btn.title = a.tip;
             // Stash the optional body (e.g. { response: "yes" }) on the
             // node. Read by the delegated click handler in postAction so
             // every action — including future ones — flows through the
@@ -2429,16 +2650,19 @@
             action === "run" || action === "dismiss" ? action : "dismiss";
           let schedule = null;
           try {
-            const res = await fetch("/api/loop/action/schedule", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({
-                decision_id: id,
-                action: apiAction,
-                ...(body && typeof body === "object" ? { body } : {}),
-              }),
-            });
+            const res = await fetch(
+              `${window.__OPENLOOMI_API__ || ""}/api/loop/action/schedule`,
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                  decision_id: id,
+                  action: apiAction,
+                  ...(body && typeof body === "object" ? { body } : {}),
+                }),
+              },
+            );
             if (!res.ok) {
               const text = await res.text().catch(() => "");
               throw new Error(
@@ -2507,6 +2731,23 @@
             }, 160);
             return;
           }
+          // Missing-API-key CTA → ask the Rust host to surface the
+          // AI settings page in the main window. We close the card
+          // locally first so the click feels responsive before the
+          // window swap lands; the Rust listener (in main.rs) calls
+          // `show_main_window` then dispatches
+          // `openloomi:navigate-ai-settings`, which the Next.js
+          // chat home page handles via router.push.
+          if (action === "open-ai-settings") {
+            const t = window.__TAURI__;
+            if (t && t.event && t.event.emit)
+              t.event.emit("pet:open-ai-settings");
+            card.style.opacity = "0";
+            setTimeout(() => {
+              card.style.display = "none";
+            }, 160);
+            return;
+          }
           // Per-type action body is stashed on the button DOM node by
           // renderDecisionFooter(); read it here so the delegated
           // handler doesn't need to know about per-type bodies.
@@ -2564,14 +2805,76 @@
         // ---------- Connector refresh ----------
         async function refreshConnectors() {
           try {
-            const res = await fetch("/api/loop/connectors", {
-              credentials: "include",
-            });
+            const res = await fetch(
+              `${window.__OPENLOOMI_API__ || ""}/api/loop/connectors`,
+              {
+                credentials: "include",
+              },
+            );
             if (!res.ok) return;
             const data = await res.json().catch(() => ({}));
             connectors = Array.isArray(data?.items) ? data.items : [];
             apply();
           } catch (_) {}
+        }
+
+        // ---------- AI config refresh ----------
+        // Mirrors `refreshConnectors` but reads `/api/preferences/ai`
+        // and evaluates the same predicate as
+        // `hasUsableConversationApiConfiguration` in
+        // `apps/web/lib/ai/conversation-api-configuration.ts` (copied
+        // inline — the card HTML is a standalone asset, no shared
+        // module). On `false` we also kick the Rust host once via
+        // `pet:open-card` so a fresh user sees the missing-key card
+        // without having to click the bubble first.
+        function evaluateAiConfigured(payload) {
+          if (!payload || !payload.settings || !payload.systemDefaults)
+            return false;
+          const userSetting = (payload.settings || []).find(
+            (s) => s.providerType === "anthropic_compatible",
+          );
+          const sysDefault =
+            (payload.systemDefaults || {}).anthropic_compatible || {};
+          const hasText = (v) => Boolean(v && String(v).trim());
+          const hasUserConfig = Boolean(
+            userSetting &&
+            userSetting.enabled &&
+            userSetting.hasApiKey &&
+            hasText(userSetting.baseUrl) &&
+            hasText(userSetting.model),
+          );
+          return hasUserConfig || Boolean(sysDefault.hasApiKey);
+        }
+
+        async function refreshAiConfig() {
+          let payload = null;
+          try {
+            const res = await fetch(
+              `${window.__OPENLOOMI_API__ || ""}/api/preferences/ai`,
+              { credentials: "include" },
+            );
+            if (res.ok) {
+              payload = await res.json().catch(() => null);
+            }
+          } catch (_) {}
+          // Network failure → leave `apiConfigured` null so we don't
+          // permanently hide the connection layout. The next
+          // `openloomi:ai-settings-changed` event will retry.
+          if (!payload) return;
+          aiSettings = payload;
+          apiConfigured = evaluateAiConfigured(payload);
+          apply();
+          // Auto-show the card exactly once per session when the user
+          // has no usable configuration. Mirrors how the watcher
+          // opens the card on first-pending-decision: the Rust host
+          // owns window lifecycle, the webview just signals intent.
+          if (apiConfigured === false && !noApiKeyAutoShown) {
+            noApiKeyAutoShown = true;
+            const t = window.__TAURI__;
+            if (t && t.event && t.event.emit) {
+              t.event.emit("pet:open-card");
+            }
+          }
         }
 
         // ---------- Tauri event wiring ----------
@@ -2663,6 +2966,17 @@
           });
         }
 
+        // AI settings saved → re-evaluate the missing-key state. The
+        // React side dispatches this DOM event from
+        // `apps/web/components/ai-api-settings.tsx` after a successful
+        // save or reset (see `AI_SETTINGS_CHANGED_EVENT`). This is a
+        // plain `window` event (not a Tauri event) because the
+        // settings page lives in the main webview, not in this
+        // card webview.
+        window.addEventListener("openloomi:ai-settings-changed", () => {
+          refreshAiConfig();
+        });
+
         // Clear devForm when the user dismisses the decision that the
         // dev panel injected, so the card returns to natural routing.
         function clearDevFormIfMatches(clearedId) {
@@ -2675,6 +2989,7 @@
 
         // Initial fetch + render
         refreshConnectors();
+        refreshAiConfig();
         apply();
       })();
     </script>

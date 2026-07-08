@@ -31,6 +31,13 @@ export interface LoopStateBarConnector {
   label: string;
   connected: boolean;
   accountCount: number;
+  /**
+   * Provenance flag. `true` = row came from a real agent probe; `false`
+   * (or absent for compat) = row is the FALLBACK sentinel from a fresh
+   * install. The pill row uses this to render a neutral "Pending
+   * probe" pill instead of a misleading grey "offline" pill.
+   */
+  probed?: boolean;
 }
 
 export interface LoopStateBarData {
@@ -210,28 +217,51 @@ export function LoopStateBar({
             {t("loop.connectorsLoading", "Loading…")}
           </span>
         ) : (
-          data.connectors.map((c) => (
-            <span
-              key={c.id}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
-                c.connected
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                  : "border-border bg-muted text-muted-foreground",
-              )}
-            >
+          data.connectors.map((c) => {
+            // Three-way pill: probed + connected (green), probed +
+            // disconnected (grey), or unprobed sentinel (dashed
+            // neutral). The third branch is the one this component
+            // historically hid — cold-cache opens rendered the
+            // disconnected branch, which lied about reality.
+            const isUnknown = c.probed !== true;
+            return (
               <span
+                key={c.id}
                 className={cn(
-                  "size-1.5 rounded-full",
-                  c.connected ? "bg-emerald-500" : "bg-muted-foreground/40",
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
+                  isUnknown
+                    ? "border-dashed border-border bg-muted/40 text-muted-foreground"
+                    : c.connected
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                      : "border-border bg-muted text-muted-foreground",
                 )}
-              />
-              {c.label}
-              {c.connected && c.accountCount > 1 ? (
-                <span className="ml-0.5 text-[10px]">×{c.accountCount}</span>
-              ) : null}
-            </span>
-          ))
+                title={
+                  isUnknown
+                    ? "No probe yet — first tick / refresh will resolve this"
+                    : undefined
+                }
+              >
+                <span
+                  className={cn(
+                    "size-1.5 rounded-full",
+                    isUnknown
+                      ? "bg-muted-foreground/40"
+                      : c.connected
+                        ? "bg-emerald-500"
+                        : "bg-muted-foreground/40",
+                  )}
+                />
+                {c.label}
+                {isUnknown ? (
+                  <span className="ml-0.5 text-[10px] italic">
+                    Pending probe
+                  </span>
+                ) : c.connected && c.accountCount > 1 ? (
+                  <span className="ml-0.5 text-[10px]">×{c.accountCount}</span>
+                ) : null}
+              </span>
+            );
+          })
         )}
         <Button
           type="button"

@@ -10,6 +10,7 @@ use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use super::PET_BUBBLE_LABEL;
+use crate::constants;
 
 /// Logical (CSS) width of the bubble window. Matches `--bubble-w` in
 /// `loomi-bubble.html`. The host reads this to anchor the bubble above
@@ -44,6 +45,7 @@ pub fn build_bubble_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindo
         PET_BUBBLE_LABEL,
         WebviewUrl::App("loomi-bubble.html".into()),
     )
+    .initialization_script(&constants::api_init_script())
     .title("Loomi · bubble")
     .inner_size(BUBBLE_W, BUBBLE_H)
     .min_inner_size(BUBBLE_W, BUBBLE_H)

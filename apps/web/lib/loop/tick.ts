@@ -207,6 +207,13 @@ async function runAgentic(opts: TickOptions): Promise<LoopTickResult> {
           connected: Boolean(c.connected),
           accountCount: Number(c.accountCount ?? 0),
           ...(c.lastError ? { lastError: String(c.lastError) } : {}),
+          // `probed: true` — the agent probe at tick time produced
+          // these, even for toolkits it reported as disconnected. The
+          // UI distinguishes "probe says offline" (render: red
+          // `Offline`) from "haven't asked yet" (render: neutral
+          // `Pending first probe`). Without this, every tick-written
+          // cache would land as "unknown" in the UI.
+          probed: true,
           fetchedAt: stamp,
         })),
       );

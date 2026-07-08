@@ -71,9 +71,18 @@ fn get_manifest_path() -> Option<PathBuf> {
 }
 
 fn load_render_engine_manifest() -> Option<RenderEngineManifest> {
-    let manifest_path = get_manifest_path()?;
-    let content = std::fs::read_to_string(manifest_path).ok()?;
-    serde_json::from_str(&content).ok()
+    // Prefer a manifest on disk so dev builds / hot-reloads pick up edits.
+    if let Some(manifest_path) = get_manifest_path() {
+        if let Ok(content) = std::fs::read_to_string(&manifest_path) {
+            if let Ok(parsed) = serde_json::from_str(&content) {
+                return Some(parsed);
+            }
+        }
+    }
+    // Fall back to the manifest embedded at compile time. This guarantees
+    // `get_download_spec()` can resolve the platform key even when the
+    // bundled file is missing (e.g. plain `cargo run` without a .app bundle).
+    serde_json::from_str(include_str!("../resources/render-engine-manifest.json")).ok()
 }
 
 fn get_download_spec() -> Option<RuntimeDownloadSpec> {

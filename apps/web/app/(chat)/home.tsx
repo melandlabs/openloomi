@@ -152,6 +152,22 @@ export function Home() {
       window.removeEventListener("openloomi:navigate-settings", handler);
   }, [router]);
 
+  // Pet card "Open AI settings" CTA (no-api-key layout) → land the
+  // user on the AI settings page with the missing-key banner and
+  // "Required for chat" badge pre-armed. The Rust host dispatches
+  // `openloomi:navigate-ai-settings` after showing the main window
+  // (see main.rs `pet:open-ai-settings` listener). Reuses the
+  // existing banner / auto-redirect-on-save flow in
+  // `components/ai-api-settings.tsx` — no changes there.
+  useEffect(() => {
+    const handler = () => {
+      router.push("/?page=ai-api-settings&reason=missing-api-key");
+    };
+    window.addEventListener("openloomi:navigate-ai-settings", handler);
+    return () =>
+      window.removeEventListener("openloomi:navigate-ai-settings", handler);
+  }, [router]);
+
   // The pet card's "Open brief / Open wrap / Open plan / ↗ Edit" buttons
   // route through `openloomi:navigate-decision` and are handled by
   // <LoopNavBridge /> in the (chat) layout — that listener resolves the
