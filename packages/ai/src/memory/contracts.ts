@@ -275,12 +275,7 @@ export interface MemoryForgettingRunResult {
   createdSummaries: number;
   transitionedRecords: number;
   archivedDetailRecords: number;
-  deprecationStatus?:
-    | "disabled"
-    | "dry-run"
-    | "failed"
-    | "no-op"
-    | "persisted";
+  deprecationStatus?: "disabled" | "dry-run" | "failed" | "no-op" | "persisted";
   deprecationPlannedRecords?: number;
   deprecatedRecords?: number;
   deprecationReasonCodes?: string[];

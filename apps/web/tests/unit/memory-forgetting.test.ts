@@ -140,7 +140,9 @@ class InMemoryStorageAdapter implements MemoryStorageAdapter {
     query: MemorySummarySearchQuery,
   ): Promise<MemoryPageResult<MemorySummary>> {
     return {
-      items: this.summaries.filter((summary) => summary.userId === query.userId),
+      items: this.summaries.filter(
+        (summary) => summary.userId === query.userId,
+      ),
       hasMore: false,
     };
   }
@@ -576,8 +578,9 @@ describe("memory forgetting engine", () => {
     });
     expect(defaultRetrieval.rawCount).toBe(0);
     expect(defaultRetrieval.summaryCount).toBe(2);
-    expect(defaultRetrieval.items.every((item) => item.sourceType === "summary"))
-      .toBe(true);
+    expect(
+      defaultRetrieval.items.every((item) => item.sourceType === "summary"),
+    ).toBe(true);
 
     const auditRawRecords = await storage.queryRaw({
       userId: "u1",
@@ -606,12 +609,14 @@ describe("memory forgetting engine", () => {
       dryRun: false,
     });
     expect(repeatResult.createdSummaries).toBe(0);
-    expect(storage.records.map((record) => ({
-      id: record.id,
-      deprecatedAt: record.deprecatedAt,
-      deprecationReason: record.deprecationReason,
-      supersededBySummaryId: record.supersededBySummaryId,
-    }))).toEqual(deprecatedSnapshot);
+    expect(
+      storage.records.map((record) => ({
+        id: record.id,
+        deprecatedAt: record.deprecatedAt,
+        deprecationReason: record.deprecationReason,
+        supersededBySummaryId: record.supersededBySummaryId,
+      })),
+    ).toEqual(deprecatedSnapshot);
   });
 
   it("keeps consolidation successful with no-op diagnostics when deprecation adapter is missing", async () => {
@@ -672,8 +677,9 @@ describe("memory forgetting engine", () => {
       "adapter_missing_deprecate_records",
     );
     expect(storage.summaries).toHaveLength(1);
-    expect(storage.records.every((record) => record.deprecatedAt === undefined))
-      .toBe(true);
+    expect(
+      storage.records.every((record) => record.deprecatedAt === undefined),
+    ).toBe(true);
   });
 
   it("keeps consolidation successful with failed diagnostics when deprecation adapter throws", async () => {
@@ -729,8 +735,9 @@ describe("memory forgetting engine", () => {
     expect(storage.deprecateCalls).toBe(1);
     expect(storage.transitionCalls).toBe(1);
     expect(storage.records.every((record) => record.tier === "mid")).toBe(true);
-    expect(storage.records.every((record) => record.deprecatedAt === undefined))
-      .toBe(true);
+    expect(
+      storage.records.every((record) => record.deprecatedAt === undefined),
+    ).toBe(true);
   });
 });
 

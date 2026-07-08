@@ -376,8 +376,7 @@ describe("deprecateMemoryRecords", () => {
       sourceRecordIds: ["r1", "r2"],
       keyPoints: ["User prefers morning planning and Monday calendar review."],
       keywords: ["planning", "calendar"],
-      summaryText:
-        "User prefers morning planning and Monday calendar review.",
+      summaryText: "User prefers morning planning and Monday calendar review.",
       qualityScore: 0.91,
       createdAt: 1700000003000,
       updatedAt: 1700000003000,
