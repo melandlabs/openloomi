@@ -76,6 +76,9 @@ const DOC_ICONS: Record<string, IconType> = {
   FaTools,
 };
 
+const REFERENCE_SECTION_NAME = "Reference";
+const OPENLOOMI_CLI_URL = "/docs/openloomi-ctl";
+
 function getDocIcon(url: string) {
   const iconName = DOC_ICON_NAMES.get(url);
   const Icon = iconName ? DOC_ICONS[iconName] : undefined;
@@ -133,12 +136,44 @@ function renameNode(node: PageTree.Node): PageTree.Node {
   return node;
 }
 
+function groupReferenceSection(children: PageTree.Node[]): PageTree.Node[] {
+  const groupedChildren: PageTree.Node[] = [];
+
+  for (let index = 0; index < children.length; index += 1) {
+    const node = children[index];
+    const nextNode = children[index + 1];
+
+    if (
+      node.type === "separator" &&
+      node.name === REFERENCE_SECTION_NAME &&
+      nextNode?.type === "page" &&
+      nextNode.url === OPENLOOMI_CLI_URL
+    ) {
+      groupedChildren.push({
+        $id: "reference",
+        type: "folder",
+        name: REFERENCE_SECTION_NAME,
+        collapsible: true,
+        defaultOpen: false,
+        children: [nextNode],
+      } satisfies PageTree.Folder);
+      index += 1;
+      continue;
+    }
+
+    groupedChildren.push(node);
+  }
+
+  return groupedChildren;
+}
+
 export function getDocsPageTree(): PageTree.Root {
   const tree = source.getPageTree();
+  const children = groupReferenceSection(tree.children.map(renameNode));
 
   return {
     ...tree,
     name: "OpenLoomi Docs",
-    children: tree.children.map(renameNode),
+    children,
   };
 }

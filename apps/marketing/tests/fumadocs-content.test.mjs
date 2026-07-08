@@ -13,26 +13,36 @@ function readJson(filePath) {
 
 function parseFrontmatter(filePath) {
   const source = fs.readFileSync(filePath, "utf8");
-  const match = source.match(/^---\n([\s\S]*?)\n---/);
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return {};
 
   return Object.fromEntries(
     match[1]
-      .split("\n")
+      .split(/\r?\n/)
       .map((line) => line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/))
       .filter(Boolean)
-      .map(([, key, value]) => [key, value.replace(/^["']|["']$/g, "")]),
+      .map(([, key, value]) => [
+        key,
+        value.trim().replace(/^["']|["']$/g, ""),
+      ]),
   );
 }
 
 function countMarkdownH1(filePath) {
   const source = fs
     .readFileSync(filePath, "utf8")
-    .replace(/^---\n[\s\S]*?\n---/, "")
+    .replace(/^---\r?\n[\s\S]*?\r?\n---/, "")
     .replace(/```[\s\S]*?```/g, "");
 
   return source.split("\n").filter((line) => /^#(?!#)\s+/.test(line.trim()))
     .length;
+}
+
+function isMetaNavigationItem(page) {
+  const separatorPattern = /^---(?:\[[^\]]+])?.*---$/;
+  const linkPattern = /^(?:external:)?(?:\[[^\]]+])?\[[^\]]+]\([^)]+\)$/;
+
+  return separatorPattern.test(page) || linkPattern.test(page);
 }
 
 function assertMetaPages(metaPath, baseDir) {
@@ -41,6 +51,10 @@ function assertMetaPages(metaPath, baseDir) {
   assert.ok(Array.isArray(meta.pages), `${metaPath} must define pages[]`);
 
   for (const page of meta.pages) {
+    if (isMetaNavigationItem(page)) {
+      continue;
+    }
+
     const candidates = [
       path.join(baseDir, `${page}.mdx`),
       path.join(baseDir, page, "index.mdx"),
