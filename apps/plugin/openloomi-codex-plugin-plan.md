@@ -475,4 +475,3 @@ Required tests:
 - Which OpenLoomi command should expose stable connector readiness?
 - Should a future local setup page use an `openloomi://` deep link, a localhost
   page with a short-lived nonce, or both?
-
