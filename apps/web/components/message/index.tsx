@@ -47,7 +47,10 @@ import {
   LibraryItemRow,
   type LibraryItem,
 } from "@/components/library/library-item-row";
-import { sessionRelativePathFromStoredPath } from "@/lib/files/open-workspace-file-locally";
+import {
+  workspaceFileReferenceFromStoredPath,
+  workspaceSessionFileReferenceFromStoredPath,
+} from "@/lib/files/open-workspace-file-locally";
 import { collectToolOutputFilesFromParts } from "./message-output-files";
 import { normalizeExtractedArtifactPath } from "@/lib/files/extract-artifact-paths";
 import { format } from "date-fns";
@@ -132,6 +135,30 @@ const PurePreviewMessage = ({
     setMessages: contextSetMessages,
   } = useChatContext();
   const [, copyToClipboard] = useCopyToClipboard();
+
+  const openMessageFilePreviewPanel = useCallback(
+    (file: { path: string; name: string; type: string; taskId?: string }) => {
+      const storedReference = workspaceSessionFileReferenceFromStoredPath(
+        file.path,
+      );
+      if (storedReference) {
+        openFilePreviewPanel({ ...file, ...storedReference });
+        return;
+      }
+
+      if (file.taskId) {
+        const reference = workspaceFileReferenceFromStoredPath(
+          file.path,
+          file.taskId,
+        );
+        openFilePreviewPanel({ ...file, ...reference });
+        return;
+      }
+
+      openFilePreviewPanel(file);
+    },
+    [openFilePreviewPanel],
+  );
 
   const { insightData, mutateInsightList } = useInsightPagination();
 
@@ -531,16 +558,19 @@ const PurePreviewMessage = ({
     );
 
     return files.map((f) => {
-      const rel = sessionRelativePathFromStoredPath(f.path, chatId);
+      const workspaceFile = workspaceFileReferenceFromStoredPath(
+        f.path,
+        chatId,
+      );
       return {
-        id: `${message.id}-${rel}`,
+        id: `${message.id}-${workspaceFile.taskId}-${workspaceFile.path}`,
         kind: "workspace_file",
         title: f.name,
         date: new Date(0), // epoch - date not shown for chat output files
         groupKey: "chat-output",
         workspaceFile: {
-          taskId: chatId,
-          path: rel,
+          taskId: workspaceFile.taskId,
+          path: workspaceFile.path,
           name: f.name,
           type: f.type,
         },
@@ -707,7 +737,7 @@ const PurePreviewMessage = ({
                                 }
                                 taskId={chatId}
                                 onPreviewFile={(file) => {
-                                  openFilePreviewPanel(file);
+                                  openMessageFilePreviewPanel(file);
                                 }}
                               />
                             )}
@@ -773,7 +803,9 @@ const PurePreviewMessage = ({
                                     <MarkdownWithCitations
                                       onCitationClick={handleCitationClick}
                                       insights={insightData.items}
-                                      onPreviewFile={openFilePreviewPanel}
+                                      onPreviewFile={
+                                        openMessageFilePreviewPanel
+                                      }
                                     >
                                       {textContent}
                                     </MarkdownWithCitations>
@@ -790,7 +822,9 @@ const PurePreviewMessage = ({
                                     <MarkdownWithCitations
                                       onCitationClick={handleCitationClick}
                                       insights={insightData.items}
-                                      onPreviewFile={openFilePreviewPanel}
+                                      onPreviewFile={
+                                        openMessageFilePreviewPanel
+                                      }
                                     >
                                       {textContent}
                                     </MarkdownWithCitations>
@@ -1239,7 +1273,7 @@ const PurePreviewMessage = ({
                       viewMode="list"
                       t={t as (key: string, fallback?: string) => string}
                       onOpenFile={(wf) =>
-                        openFilePreviewPanel({
+                        openMessageFilePreviewPanel({
                           path: wf.path,
                           name: wf.name,
                           type: wf.type ?? "",

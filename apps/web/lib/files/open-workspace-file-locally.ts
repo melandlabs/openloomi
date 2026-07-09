@@ -46,6 +46,35 @@ export function sessionRelativePathFromStoredPath(
   return base.replace(/^\/+/, "");
 }
 
+export type WorkspaceFileReference = {
+  taskId: string;
+  path: string;
+};
+
+export function workspaceSessionFileReferenceFromStoredPath(
+  filePath: string,
+): WorkspaceFileReference | null {
+  const norm = filePath.trim().replace(/\\/g, "/");
+  const match = norm.match(/(?:^|\/)\.openloomi\/sessions\/([^/]+)\/(.+)$/i);
+  const taskId = match?.[1]?.trim();
+  const path = match?.[2]?.replace(/^\/+/, "");
+  if (!taskId || !path) return null;
+  return { taskId, path };
+}
+
+export function workspaceFileReferenceFromStoredPath(
+  filePath: string,
+  fallbackTaskId: string,
+): WorkspaceFileReference {
+  const storedReference = workspaceSessionFileReferenceFromStoredPath(filePath);
+  if (storedReference) return storedReference;
+
+  return {
+    taskId: fallbackTaskId,
+    path: sessionRelativePathFromStoredPath(filePath, fallbackTaskId),
+  };
+}
+
 function looksLikeAbsolutePath(filePath: string): boolean {
   return (
     filePath.startsWith("/") ||
