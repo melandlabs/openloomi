@@ -67,13 +67,13 @@ Acceptance criteria:
 ## Phase 4: User-Approved OpenLoomi Install Flow
 
 Goal: support mentor-requested automatic installation when OpenLoomi is missing,
-while avoiding silent or unsafe installs.
+while keeping the artifact source official and the install path default.
 
 Deliverables:
 
 - `install_openloomi` next action;
 - install instructions for unsupported environments;
-- user-approved installer flow for supported platforms;
+- user-approved automatic installer flow for supported platforms;
 - official artifact source selection;
 - version and integrity checks where available;
 - post-install `setup-status` recheck.
@@ -82,7 +82,10 @@ Acceptance criteria:
 
 - the plugin can detect missing OpenLoomi;
 - the user is told what will be installed before installation starts;
-- the plugin never silently downloads or executes installers;
+- the plugin installs only after an explicit user install intent or
+  confirmation;
+- supported installers use default installation paths unless the user
+  explicitly chooses an interactive/manual path;
 - install results are reported as structured status;
 - failures return actionable next steps.
 
@@ -189,7 +192,7 @@ Required tests:
 - missing install returns `INSTALL_REQUIRED`;
 - missing token returns `LOGIN_REQUIRED`;
 - missing AI provider returns `AI_PROVIDER_REQUIRED`;
-- user-approved install flow does not run silently;
+- user-approved install flow can run automatic default-path installation;
 - no secret values are printed;
 - one-shot prompt succeeds when ready;
 - connector missing config returns setup handoff;

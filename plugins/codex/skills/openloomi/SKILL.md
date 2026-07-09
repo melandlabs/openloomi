@@ -18,7 +18,7 @@ Before taking action, check plugin readiness:
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" setup-status
 ```
 
-If the bridge returns `ready: false`, explain the `nextAction` and stop. Do not
+If the bridge returns `ready: false`, follow the reported `nextAction`. Do not
 ask the user to paste API keys, OAuth tokens, connector secrets, or OpenLoomi
 auth tokens into Codex chat.
 
@@ -28,20 +28,22 @@ For installation guidance, call:
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" install-instructions
 ```
 
-If the user explicitly approves installing OpenLoomi from an official artifact,
-call:
+If the user asks to install OpenLoomi or explicitly approves installation, call:
 
 ```bash
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" install-openloomi --confirm
 ```
 
 The bridge resolves the official GitHub release artifact for the current
-platform and architecture automatically. Only pass `--artifact-url` when the
-user explicitly provides an official allowlisted artifact URL as an override.
-Only add `--launch` when the user explicitly approves launching the downloaded
-installer. Add `--sha256 "<official checksum>"` only when the user wants to
-require a specific checksum; otherwise the bridge verifies GitHub release digest
-metadata when available.
+platform and architecture automatically, downloads it, and installs it with the
+default installer path when automatic installation is supported. Only pass
+`--artifact-url` when the user explicitly provides an official allowlisted
+artifact URL as an override. Add `--download-only` only when the user asks to
+download without installing. Add `--launch` only when the user asks to use the
+interactive installer UI instead of default automatic installation. Add
+`--sha256 "<official checksum>"` only when the user wants to require a specific
+checksum; otherwise the bridge verifies GitHub release digest metadata when
+available.
 
 For AI provider setup guidance, call:
 

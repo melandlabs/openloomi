@@ -120,8 +120,9 @@ user confirmation.
 ### Missing Install
 
 If OpenLoomi is not installed, the plugin should support a user-approved install
-flow. The install flow must use official OpenLoomi artifacts, avoid silent
-execution, and clearly explain what will be installed before taking action.
+flow. The install flow must use official OpenLoomi artifacts, resolve the
+current platform's release asset automatically, and install with the default
+installer path where automatic installation is supported.
 
 ## Discovery Strategy
 
@@ -312,7 +313,10 @@ check must preserve the no-secrets contract.
 
 ## Non-Goals
 
-- Do not silently download, install, or build OpenLoomi.
+- Do not download or install OpenLoomi without an explicit user installation
+  intent or confirmation.
+- Do not install from unofficial artifacts or default to custom install paths.
+- Do not build OpenLoomi from source automatically.
 - Do not ask users to paste API keys, OAuth tokens, or auth tokens into Codex
   chat.
 - Do not pass secrets as command-line arguments.

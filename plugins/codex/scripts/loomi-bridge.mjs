@@ -16,10 +16,11 @@ import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 
-const BRIDGE_VERSION = "0.5.0";
+const BRIDGE_VERSION = "0.6.0";
 const PLUGIN_PHASE = "one-shot-execution";
 const COMMAND_TIMEOUT_MS = 5000;
 const RUN_TIMEOUT_MS = 120000;
+const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 const RELEASE_LOOKUP_TIMEOUT_MS = 30000;
 const INSTALL_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 const DOWNLOAD_STALL_TIMEOUT_MS = 30000;
@@ -105,8 +106,9 @@ function installInstructions() {
     ready: false,
     installPlan: plan,
     instructions: [
-      "Install OpenLoomi from an official release artifact or provide a source checkout with a staged openloomi-ctl.",
-      "The bridge will not download or launch an installer unless install-openloomi is called with --confirm.",
+      "Install OpenLoomi from the official release artifact or provide a source checkout with a staged openloomi-ctl.",
+      "The bridge will not download or install OpenLoomi unless install-openloomi is called with --confirm.",
+      "On supported platforms, install-openloomi --confirm downloads the official artifact and installs it with the default installer path.",
       "After installation, re-run setup-status from the Codex plugin.",
     ],
     bridge: {
@@ -127,10 +129,25 @@ async function installOpenLoomi(args) {
       nextAction: "confirm_install_openloomi",
       reason: "INSTALL_CONFIRMATION_REQUIRED",
       installPlan: plan,
-      command: "install-openloomi --confirm [--sha256 <sha256>] [--launch]",
+      command:
+        "install-openloomi --confirm [--sha256 <sha256>] [--download-only] [--launch]",
       safety:
-        "No download or installer launch has been performed. Re-run with --confirm to resolve and download the official OpenLoomi release artifact.",
+        "No download or installation has been performed. Re-run with --confirm to resolve, download, and install the official OpenLoomi release artifact with the default installer path.",
     });
+    return;
+  }
+
+  if (flags.downloadOnly && flags.launch) {
+    writeJson(
+      {
+        ready: false,
+        nextAction: "choose_install_mode",
+        reason: "INVALID_INSTALL_FLAGS",
+        message:
+          "Use either --download-only or --launch, not both. Omit both for default automatic installation.",
+      },
+      1,
+    );
     return;
   }
 
@@ -171,6 +188,7 @@ async function installOpenLoomi(args) {
         message:
           "The --sha256 value must be a 64-character SHA-256 hex digest, optionally prefixed with sha256:.",
         downloaded: false,
+        installed: false,
         launched: false,
         artifact: summarizeArtifact(artifact),
       },
@@ -222,6 +240,7 @@ async function installOpenLoomi(args) {
           actualSha256,
           sha256Source,
           downloaded: true,
+          installed: false,
           launched: false,
           artifact: summarizeArtifact(artifact),
         },
@@ -231,18 +250,114 @@ async function installOpenLoomi(args) {
     }
   }
 
-  if (flags.launch) {
-    launchInstaller(download.path);
+  if (flags.downloadOnly) {
+    writeJson({
+      ready: false,
+      nextAction: "install_downloaded_artifact",
+      reason: "INSTALLER_DOWNLOADED",
+      downloaded: true,
+      installed: false,
+      launched: false,
+      artifact: {
+        ...summarizeArtifact(artifact),
+        sha256Verified: Boolean(expectedSha256),
+        sha256Source,
+        installerPath: DEBUG_DISCOVERY ? download.path : null,
+        installerPathPresent: true,
+      },
+      message:
+        "The installer was downloaded after explicit confirmation. Re-run without --download-only to install with the default installer path.",
+    });
+    return;
   }
 
+  const installResult = await installDownloadedArtifact(download.path, {
+    interactive: flags.launch,
+  });
+
+  if (!installResult.supported) {
+    writeJson(
+      {
+        ready: false,
+        nextAction: "launch_installer_or_install_manually",
+        reason: installResult.reason,
+        message: installResult.message,
+        downloaded: true,
+        installed: false,
+        launched: false,
+        installer: summarizeInstallerResult(installResult),
+        artifact: {
+          ...summarizeArtifact(artifact),
+          sha256Verified: Boolean(expectedSha256),
+          sha256Source,
+          installerPath: DEBUG_DISCOVERY ? download.path : null,
+          installerPathPresent: true,
+        },
+      },
+      1,
+    );
+    return;
+  }
+
+  if (
+    (installResult.exitCode !== null &&
+      !isSuccessfulInstallExitCode(installResult.exitCode)) ||
+    installResult.signal
+  ) {
+    writeJson(
+      {
+        ready: false,
+        nextAction: "retry_install_openloomi",
+        reason: "AUTOMATIC_INSTALL_FAILED",
+        message:
+          "The OpenLoomi installer exited with a non-zero status while using the default install path.",
+        downloaded: true,
+        installed: false,
+        launched: installResult.launched,
+        installer: summarizeInstallerResult(installResult),
+        artifact: {
+          ...summarizeArtifact(artifact),
+          sha256Verified: Boolean(expectedSha256),
+          sha256Source,
+          installerPath: DEBUG_DISCOVERY ? download.path : null,
+          installerPathPresent: true,
+        },
+      },
+      1,
+    );
+    return;
+  }
+
+  const postInstallStatus = installResult.requiresUserCompletion
+    ? null
+    : await buildSetupStatus();
+  const installed = postInstallStatus ? postInstallStatus.installed : false;
+  const ready = postInstallStatus ? postInstallStatus.ready : false;
+  const nextAction = postInstallStatus
+    ? postInstallStatus.nextAction
+    : "complete_installer_then_rerun_setup_status";
+  const reason = postInstallStatus
+    ? postInstallStatus.installed
+      ? "INSTALL_COMPLETE"
+      : "INSTALL_EXITED_BUT_NOT_DISCOVERED"
+    : "INSTALLER_LAUNCHED";
+
   writeJson({
-    ready: false,
-    nextAction: flags.launch
-      ? "rerun_setup_status"
-      : "run_downloaded_installer",
-    reason: flags.launch ? "INSTALLER_LAUNCHED" : "INSTALLER_DOWNLOADED",
+    ready,
+    nextAction,
+    reason,
     downloaded: true,
-    launched: Boolean(flags.launch),
+    installed,
+    launched: installResult.launched,
+    installer: summarizeInstallerResult(installResult),
+    postInstallStatus: postInstallStatus
+      ? {
+          installed: postInstallStatus.installed,
+          ready: postInstallStatus.ready,
+          nextAction: postInstallStatus.nextAction,
+          reason: postInstallStatus.reason,
+        }
+      : null,
     artifact: {
       ...summarizeArtifact(artifact),
       sha256Verified: Boolean(expectedSha256),
@@ -250,9 +365,9 @@ async function installOpenLoomi(args) {
       installerPath: DEBUG_DISCOVERY ? download.path : null,
       installerPathPresent: true,
     },
-    message: flags.launch
-      ? "The installer was launched after explicit confirmation. Re-run setup-status after installation completes."
-      : "The installer was downloaded after explicit confirmation. Set OPENLOOMI_DEBUG_DISCOVERY=1 to show the local installer path, or re-run with --launch to start it after explicit user approval.",
+    message: installResult.requiresUserCompletion
+      ? "The installer was launched after explicit confirmation. Complete the installer UI, then re-run setup-status."
+      : "The installer completed using the default install path. Continue with the reported nextAction.",
   });
 }
 
@@ -311,8 +426,10 @@ function getInstallPlan() {
     requiredUserAction:
       "Review the install plan, then re-run install-openloomi with --confirm. Passing --artifact-url is optional and only accepted for allowlisted official sources.",
     safety: [
-      "The plugin never downloads an installer without --confirm.",
-      "The plugin never launches an installer without --launch.",
+      "The plugin never downloads or installs OpenLoomi without --confirm.",
+      "On Windows, supported installers run silently with the default installer path.",
+      "Use --download-only to resolve and download without installing.",
+      "Use --launch to start the interactive installer UI instead of the default automatic install path.",
       "The plugin verifies GitHub release SHA-256 digest metadata when available.",
       "Use --sha256 to require a specific official checksum.",
       "Local installer paths are hidden unless OPENLOOMI_DEBUG_DISCOVERY=1 is set.",
@@ -325,6 +442,7 @@ function parseFlags(args) {
     artifactUrl: null,
     baseUrl: null,
     confirm: false,
+    downloadOnly: false,
     launch: false,
     model: null,
     permissionMode: null,
@@ -342,6 +460,11 @@ function parseFlags(args) {
 
     if (arg === "--launch") {
       flags.launch = true;
+      continue;
+    }
+
+    if (arg === "--download-only") {
+      flags.downloadOnly = true;
       continue;
     }
 
@@ -1128,6 +1251,125 @@ function launchInstaller(filePath) {
   });
 
   child.unref();
+}
+
+async function installDownloadedArtifact(filePath, options) {
+  if (options.interactive) {
+    launchInstaller(filePath);
+
+    return {
+      supported: true,
+      automatic: false,
+      launched: true,
+      requiresUserCompletion: true,
+      mode: "interactive-installer-ui",
+      command: getInstallerCommandLabel(filePath),
+      args: [],
+      exitCode: null,
+      signal: null,
+      stdoutPresent: false,
+      stderrPresent: false,
+    };
+  }
+
+  const command = getDefaultInstallCommand(filePath);
+
+  if (!command) {
+    return {
+      supported: false,
+      automatic: false,
+      launched: false,
+      requiresUserCompletion: true,
+      mode: "unsupported-default-install",
+      reason: "AUTOMATIC_INSTALL_UNSUPPORTED",
+      message: `Automatic default-path installation is not supported for ${process.platform} ${path.extname(filePath) || "artifacts"} yet. Re-run with --launch to open the installer UI, or install OpenLoomi manually from the downloaded official artifact.`,
+      command: getInstallerCommandLabel(filePath),
+      args: [],
+      exitCode: null,
+      signal: null,
+      stdoutPresent: false,
+      stderrPresent: false,
+    };
+  }
+
+  const result = await runCommandWithInput(
+    command.command,
+    command.args,
+    "",
+    INSTALL_TIMEOUT_MS,
+  );
+
+  return {
+    supported: true,
+    automatic: true,
+    launched: false,
+    requiresUserCompletion: false,
+    mode: command.mode,
+    command: command.label,
+    args: command.safeArgs,
+    exitCode: result.exitCode,
+    signal: result.signal,
+    restartRequired: result.exitCode === 3010,
+    stdoutPresent: hasValue(result.stdout),
+    stderrPresent: hasValue(result.stderr),
+  };
+}
+
+function getDefaultInstallCommand(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+
+  if (process.platform !== "win32") {
+    return null;
+  }
+
+  if (extension === ".exe") {
+    return {
+      mode: "windows-nsis-silent-default-path",
+      command: filePath,
+      args: ["/S"],
+      label: "installer-exe",
+      safeArgs: ["/S"],
+    };
+  }
+
+  if (extension === ".msi") {
+    return {
+      mode: "windows-msi-silent-default-path",
+      command: "msiexec.exe",
+      args: ["/i", filePath, "/qn", "/norestart"],
+      label: "msiexec.exe",
+      safeArgs: ["/i", "<installer>", "/qn", "/norestart"],
+    };
+  }
+
+  return null;
+}
+
+function summarizeInstallerResult(result) {
+  return {
+    supported: result.supported,
+    automatic: result.automatic,
+    launched: result.launched,
+    requiresUserCompletion: result.requiresUserCompletion,
+    mode: result.mode,
+    command: result.command,
+    args: result.args,
+    exitCode: result.exitCode,
+    signal: result.signal,
+    restartRequired: Boolean(result.restartRequired),
+    stdoutPresent: result.stdoutPresent,
+    stderrPresent: result.stderrPresent,
+  };
+}
+
+function isSuccessfulInstallExitCode(exitCode) {
+  return exitCode === 0 || exitCode === 3010;
+}
+
+function getInstallerCommandLabel(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+
+  return extension ? `installer${extension}` : "installer";
 }
 
 function getPermissionMode(value) {
