@@ -293,6 +293,42 @@ export type MemorySearchHit =
       summary: MemorySummary;
     };
 
+export interface MemorySearchGraphRetrievalOwnerScope {
+  userId: string;
+  workspaceId?: string;
+  tenantId?: string;
+}
+
+export interface MemorySearchGraphRetrievalAuditTrail {
+  ownerScope: MemorySearchGraphRetrievalOwnerScope;
+  nodeId: string;
+  sourceNodeIds: string[];
+  edgeIds: string[];
+  operationIds: string[];
+  reasonCodes: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemorySearchGraphRetrievalResult {
+  ownerScope: MemorySearchGraphRetrievalOwnerScope;
+  rankedNodeIds: string[];
+  hiddenDeprecatedNodeIds: string[];
+  expandedClusterIds: string[];
+  auditTrail?: MemorySearchGraphRetrievalAuditTrail[];
+  reasonCodes: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemorySearchGraphRetrievalDiagnostic {
+  status: "applied" | "no-op" | "failed";
+  reasonCodes: string[];
+  result?: MemorySearchGraphRetrievalResult;
+  error?: {
+    name: string;
+    message: string;
+  };
+}
+
 export interface MemorySemanticRecallResult {
   items: Array<
     MemorySemanticRecallHit & {
@@ -308,4 +344,5 @@ export interface MemorySearchWithFallbackResult {
   rawCount: number;
   summaryCount: number;
   hasMore: boolean;
+  graphRetrieval?: MemorySearchGraphRetrievalDiagnostic;
 }

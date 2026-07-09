@@ -1,24 +1,25 @@
-import {
-  createMemoryForgettingEngine,
-  createMemoryQueryApi,
-  type MemoryForgettingPolicyOverrides,
-  type MemoryLockHandle,
-  type MemoryPageResult,
-  type MemoryRecord,
-  type MemoryTier,
-  type MemorySemanticRecallHit,
-  type MemorySemanticRecallQuery,
-  type MemorySearchQuery,
-  type MemorySearchWithFallbackResult,
-  type MemoryStorageAdapter,
-  type MemorySummary,
-  type MemorySummarySearchQuery,
-} from "../../ai/src/memory";
 import type { MemoryConsolidationRuntimeRelationKeys } from "../../ai/memory-consolidation/src/runtime";
 import type {
   MemoryConsolidationShadowDiagnosticsRunResult,
   RunMemoryConsolidationShadowDiagnosticsInput,
 } from "../../ai/memory-consolidation/src/shadow";
+import {
+  type MemoryForgettingPolicyOverrides,
+  type MemoryLockHandle,
+  type MemoryPageResult,
+  type MemoryQueryGraphRetrievalOptions,
+  type MemoryRecord,
+  type MemorySearchQuery,
+  type MemorySearchWithFallbackResult,
+  type MemorySemanticRecallHit,
+  type MemorySemanticRecallQuery,
+  type MemoryStorageAdapter,
+  type MemorySummary,
+  type MemorySummarySearchQuery,
+  type MemoryTier,
+  createMemoryForgettingEngine,
+  createMemoryQueryApi,
+} from "../../ai/src/memory";
 import { cosineSimilarity } from "./embedding";
 import type {
   IndexedDBManager,
@@ -209,6 +210,7 @@ type NativeSemanticSearchManager = IndexedDBManager & {
     scanLimit?: number;
     threshold?: number;
     includeArchived?: boolean;
+    includeDeprecated?: boolean;
     platform?: string;
     botId?: string;
     channel?: string;
@@ -345,6 +347,7 @@ export function createIndexedDBMemoryStorageAdapter(
         pageSize: pageSize + 1,
         reverse: query.reverse ?? true,
         includeArchived: false,
+        includeDeprecated: query.includeDeprecated,
         memoryStages: query.tiers as MemoryStage[] | undefined,
         platform:
           typeof query.dimensions?.platform === "string"
@@ -400,6 +403,7 @@ export function createIndexedDBMemoryStorageAdapter(
           limit: Math.max(limit * 5, limit),
           threshold,
           includeArchived: false,
+          includeDeprecated: query.includeDeprecated,
           platform,
           botId,
           channel,
@@ -422,6 +426,9 @@ export function createIndexedDBMemoryStorageAdapter(
             }),
           )
           .filter((hit) => {
+            if (!query.includeDeprecated && hit.record.deprecatedAt !== undefined) {
+              return false;
+            }
             if (query.tiers && !query.tiers.includes(hit.record.tier)) {
               return false;
             }
@@ -437,6 +444,7 @@ export function createIndexedDBMemoryStorageAdapter(
       const raw = await manager.queryMessages({
         userId: query.userId,
         includeArchived: false,
+        includeDeprecated: query.includeDeprecated,
         pageSize: scanLimit,
         reverse: true,
         memoryStages: query.tiers as MemoryStage[] | undefined,
@@ -635,9 +643,15 @@ export async function queryMemoryWithFallback(
   query: MemorySearchQuery & {
     minRawResultsWithoutFallback?: number;
   },
+  options?: {
+    graphRetrieval?: MemoryQueryGraphRetrievalOptions;
+  },
 ): Promise<MemorySearchWithFallbackResult> {
   // Unified read path: prefer raw hits; when insufficient, append summary hits.
   const storage = createIndexedDBMemoryStorageAdapter(manager);
-  const api = createMemoryQueryApi({ storage });
+  const api = createMemoryQueryApi({
+    storage,
+    graphRetrieval: options?.graphRetrieval,
+  });
   return api.queryWithFallback(query);
 }

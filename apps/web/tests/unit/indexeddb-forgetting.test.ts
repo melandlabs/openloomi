@@ -1,4 +1,14 @@
+import {
+  type MemoryGraphSnapshot,
+  type OwnerScope,
+  createGraphAwareRetrievalDryRunRetriever,
+} from "@openloomi/memory-consolidation";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  createIndexedDBMemoryStorageAdapter,
+  queryMemoryWithFallback,
+  runMemoryForgettingCycle,
+} from "../../../../packages/indexeddb/src/forgetting";
 import type {
   IndexedDBManager,
   MemoryStage,
@@ -6,11 +16,6 @@ import type {
   RawMessage,
   RawMessageQuery,
 } from "../../../../packages/indexeddb/src/manager";
-import {
-  createIndexedDBMemoryStorageAdapter,
-  queryMemoryWithFallback,
-  runMemoryForgettingCycle,
-} from "../../../../packages/indexeddb/src/forgetting";
 import { sqliteRunMemoryForgettingCycleForUser } from "../../../../packages/indexeddb/src/sqlite-client";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -55,6 +60,9 @@ class InMemoryManager {
     }
     if (!query.includeArchived) {
       items = items.filter((item) => item.archivedAt === undefined);
+    }
+    if (!query.includeDeprecated) {
+      items = items.filter((item) => item.deprecatedAt === undefined);
     }
     if (query.keywords?.length) {
       const keys = query.keywords.map((item) => item.toLowerCase());
@@ -211,6 +219,9 @@ function createRaw(input: {
   embeddingDimensions?: number;
   embeddingUpdatedAt?: number;
   metadata?: Record<string, unknown>;
+  deprecatedAt?: number;
+  deprecationReason?: string;
+  supersededBySummaryId?: string;
 }): RawMessage {
   return {
     messageId: input.messageId,
@@ -232,6 +243,9 @@ function createRaw(input: {
     importanceScore: 0,
     isPinned: false,
     metadata: input.metadata,
+    deprecatedAt: input.deprecatedAt,
+    deprecationReason: input.deprecationReason,
+    supersededBySummaryId: input.supersededBySummaryId,
   };
 }
 
@@ -675,6 +689,262 @@ describe("indexeddb forgetting bridge", () => {
     expect(manager.accessedIds).toContain("r1");
   });
 
+  it("passes graph-aware retrieval options through the fallback query wrapper", async () => {
+    const now = Date.now();
+    const manager = new InMemoryManager();
+    const ownerScope = { userId: "u1" } satisfies OwnerScope;
+    const snapshot = {
+      ownerScope,
+      nodes: [
+        {
+          id: "r-old",
+          ownerScope,
+          type: "raw",
+          visibility: "deprecated",
+          createdAt: now,
+        },
+        {
+          id: "summary-language",
+          ownerScope,
+          type: "summary",
+          visibility: "default",
+          createdAt: now,
+        },
+        {
+          id: "r-fresh",
+          ownerScope,
+          type: "raw",
+          visibility: "default",
+          createdAt: now,
+        },
+      ],
+      edges: [
+        {
+          id: "edge:r-old:summary-language",
+          ownerScope,
+          fromNodeId: "r-old",
+          toNodeId: "summary-language",
+          kind: "supersede",
+          weight: 1,
+          evidenceNodeIds: ["r-old"],
+          reasonCodes: ["summary_sedimentation"],
+          createdAt: now,
+        },
+      ],
+      clusters: [
+        {
+          clusterId: "cluster:language",
+          ownerScope,
+          nodeIds: ["r-old", "summary-language"],
+          lifecycleStatus: "superseded",
+          representativeNodeId: "summary-language",
+          supportScore: 0.9,
+          updatedAt: now,
+          reasonCodes: ["summary_sedimentation"],
+        },
+      ],
+      capturedAt: now,
+    } satisfies MemoryGraphSnapshot;
+
+    manager.rawMessages = [
+      createRaw({
+        messageId: "r-old",
+        userId: "u1",
+        stage: "short",
+        timestampSec: 3000,
+        text: "old language preference",
+        deprecatedAt: now,
+        deprecationReason: "summarized_into:summary-language",
+        supersededBySummaryId: "summary-language",
+      }),
+      createRaw({
+        messageId: "r-fresh",
+        userId: "u1",
+        stage: "short",
+        timestampSec: 1000,
+        text: "fresh project context",
+      }),
+    ];
+    manager.summaries = [
+      {
+        summaryId: "summary-language",
+        userId: "u1",
+        summaryTier: "L1",
+        sourceTier: "short",
+        startTimestamp: 100_000,
+        endTimestamp: 2_000_000,
+        messageCount: 1,
+        sourceRecordIds: ["r-old"],
+        keyPoints: ["prefers concise language"],
+        keywords: ["language"],
+        keywordsText: "language",
+        summaryText: "User prefers concise language.",
+        createdAt: 2_000_000,
+        updatedAt: 2_000_000,
+      },
+    ];
+
+    const result = await queryMemoryWithFallback(
+      manager as unknown as IndexedDBManager,
+      {
+        userId: "u1",
+        pageSize: 3,
+        minRawResultsWithoutFallback: 3,
+      },
+      {
+        graphRetrieval: {
+          enabled: true,
+          retriever: createGraphAwareRetrievalDryRunRetriever(),
+          snapshotProvider: async (input) => {
+            expect(input.baselineNodeIds).toEqual([
+              "summary-language",
+              "r-fresh",
+            ]);
+            return snapshot;
+          },
+        },
+      },
+    );
+
+    expect(result.graphRetrieval?.status).toBe("applied");
+    expect(result.graphRetrieval?.result?.hiddenDeprecatedNodeIds).toEqual([]);
+    expect(
+      result.items.map((item) =>
+        item.sourceType === "summary" ? item.summary.summaryId : item.record.id,
+      ),
+    ).toEqual(["summary-language", "r-fresh"]);
+    expect(manager.accessedIds).toEqual(["r-fresh"]);
+  });
+
+  it("includes soft-deprecated raw records only for audit queries", async () => {
+    const now = Date.now();
+    const manager = new InMemoryManager();
+    const ownerScope = { userId: "u1" } satisfies OwnerScope;
+    const snapshot = {
+      ownerScope,
+      nodes: [
+        {
+          id: "r-old",
+          ownerScope,
+          type: "raw",
+          visibility: "deprecated",
+          createdAt: now,
+        },
+        {
+          id: "summary-language",
+          ownerScope,
+          type: "summary",
+          visibility: "default",
+          createdAt: now,
+        },
+        {
+          id: "r-fresh",
+          ownerScope,
+          type: "raw",
+          visibility: "default",
+          createdAt: now,
+        },
+      ],
+      edges: [
+        {
+          id: "edge:r-old:summary-language",
+          ownerScope,
+          fromNodeId: "r-old",
+          toNodeId: "summary-language",
+          kind: "supersede",
+          weight: 1,
+          evidenceNodeIds: ["r-old"],
+          reasonCodes: ["summary_sedimentation"],
+          createdAt: now,
+        },
+      ],
+      clusters: [
+        {
+          clusterId: "cluster:language",
+          ownerScope,
+          nodeIds: ["r-old", "summary-language"],
+          lifecycleStatus: "superseded",
+          representativeNodeId: "summary-language",
+          supportScore: 0.9,
+          updatedAt: now,
+          reasonCodes: ["summary_sedimentation"],
+        },
+      ],
+      capturedAt: now,
+    } satisfies MemoryGraphSnapshot;
+
+    manager.rawMessages = [
+      createRaw({
+        messageId: "r-old",
+        userId: "u1",
+        stage: "short",
+        timestampSec: 3000,
+        text: "old language preference",
+        deprecatedAt: now,
+        deprecationReason: "summarized_into:summary-language",
+        supersededBySummaryId: "summary-language",
+      }),
+      createRaw({
+        messageId: "r-fresh",
+        userId: "u1",
+        stage: "short",
+        timestampSec: 1000,
+        text: "fresh project context",
+      }),
+    ];
+    manager.summaries = [
+      {
+        summaryId: "summary-language",
+        userId: "u1",
+        summaryTier: "L1",
+        sourceTier: "short",
+        startTimestamp: 100_000,
+        endTimestamp: 2_000_000,
+        messageCount: 1,
+        sourceRecordIds: ["r-old"],
+        keyPoints: ["prefers concise language"],
+        keywords: ["language"],
+        keywordsText: "language",
+        summaryText: "User prefers concise language.",
+        createdAt: 2_000_000,
+        updatedAt: 2_000_000,
+      },
+    ];
+
+    const result = await queryMemoryWithFallback(
+      manager as unknown as IndexedDBManager,
+      {
+        userId: "u1",
+        pageSize: 3,
+        minRawResultsWithoutFallback: 3,
+        includeDeprecated: true,
+      },
+      {
+        graphRetrieval: {
+          enabled: true,
+          retriever: createGraphAwareRetrievalDryRunRetriever(),
+          snapshotProvider: async (input) => {
+            expect(input.baselineNodeIds).toEqual([
+              "r-old",
+              "summary-language",
+              "r-fresh",
+            ]);
+            return snapshot;
+          },
+        },
+      },
+    );
+
+    expect(result.graphRetrieval?.status).toBe("applied");
+    expect(result.graphRetrieval?.result?.hiddenDeprecatedNodeIds).toEqual([]);
+    expect(
+      result.items.map((item) =>
+        item.sourceType === "summary" ? item.summary.summaryId : item.record.id,
+      ),
+    ).toEqual(["summary-language", "r-old", "r-fresh"]);
+    expect(manager.accessedIds).toEqual(["r-old", "r-fresh"]);
+  });
+
   it("recalls raw memories semantically from stored MemoryRecord embeddings", async () => {
     const now = Date.now();
     const manager = new InMemoryManager();
@@ -703,6 +973,17 @@ describe("indexeddb forgetting bridge", () => {
         timestampSec: Math.floor((now - DAY_MS) / 1000) + 2,
         text: "matching text without an embedding",
       }),
+      createRaw({
+        messageId: "semantic-deprecated",
+        userId: "u1",
+        stage: "short",
+        timestampSec: Math.floor((now - DAY_MS) / 1000) + 3,
+        text: "deprecated project alpha contract amount",
+        embedding: [1, 0],
+        deprecatedAt: now,
+        deprecationReason: "summarized_into:semantic-summary",
+        supersededBySummaryId: "semantic-summary",
+      }),
     ];
 
     const storage = createIndexedDBMemoryStorageAdapter(
@@ -725,5 +1006,22 @@ describe("indexeddb forgetting bridge", () => {
     expect(hits?.map((hit) => hit.record.id)).toEqual(["semantic-near"]);
     expect(hits?.[0]?.record.embedding).toEqual([1, 0]);
     expect(hits?.[0]?.similarity).toBeCloseTo(1);
+
+    const auditHits = await storage.semanticRecallRaw?.({
+      userId: "u1",
+      queryEmbedding: [1, 0],
+      limit: 3,
+      threshold: 0.5,
+      tiers: ["short"],
+      includeDeprecated: true,
+      dimensions: {
+        platform: "slack",
+        botId: "bot-1",
+      },
+    });
+
+    expect(auditHits?.map((hit) => hit.record.id)).toEqual(
+      expect.arrayContaining(["semantic-near", "semantic-deprecated"]),
+    );
   });
 });

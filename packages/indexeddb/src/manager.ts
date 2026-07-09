@@ -330,6 +330,7 @@ class IndexedDBManager implements RawMessageStorageManager {
         const offset = query.offset ?? 0;
         const pageSize = query.pageSize ?? query.limit ?? 50;
         const includeArchived = query.includeArchived ?? false;
+        const includeDeprecated = query.includeDeprecated ?? false;
         let matchedCount = 0;
 
         // Determine if we need fuzzy matching (channel/person with "includes")
@@ -499,6 +500,11 @@ class IndexedDBManager implements RawMessageStorageManager {
             }
 
             if (!includeArchived && message.archivedAt !== undefined) {
+              cursor.continue();
+              return;
+            }
+
+            if (!includeDeprecated && message.deprecatedAt !== undefined) {
               cursor.continue();
               return;
             }

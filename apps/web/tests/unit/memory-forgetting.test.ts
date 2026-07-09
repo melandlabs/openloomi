@@ -1,10 +1,15 @@
+import {
+  type MemoryGraphClusterSnapshot,
+  type MemoryGraphEdge,
+  type MemoryGraphNode,
+  type MemoryGraphSnapshot,
+  type OwnerScope,
+  createGraphAwareRetrievalDryRunRetriever,
+} from "@openloomi/memory-consolidation";
 import { describe, expect, it } from "vitest";
 import {
-  createMemoryForgettingEngine,
-  createMemoryQueryApi,
-  filterDeprecatedRecords,
-  normalizeMemoryRecordForIngest,
-  normalizeMemoryRecordsForIngest,
+  DEFAULT_MEMORY_FORGETTING_POLICY,
+  DefaultMemoryRecordScorer,
   type MemoryDeprecateRecordsInput,
   type MemoryLockHandle,
   type MemoryPageResult,
@@ -13,12 +18,15 @@ import {
   type MemoryStorageAdapter,
   type MemorySummary,
   type MemorySummarySearchQuery,
-  DEFAULT_MEMORY_FORGETTING_POLICY,
+  RuleBasedMemorySummarizer,
+  createMemoryForgettingEngine,
+  createMemoryQueryApi,
+  filterDeprecatedRecords,
+  normalizeMemoryRecordForIngest,
+  normalizeMemoryRecordsForIngest,
   resolveMemoryForgettingPolicy,
   summaryTierForTransition,
   transitionTargetTier,
-  DefaultMemoryRecordScorer,
-  RuleBasedMemorySummarizer,
 } from "../../../../packages/ai/src/memory";
 
 class InMemoryStorageAdapter implements MemoryStorageAdapter {
@@ -187,6 +195,86 @@ function createRecord(
     deprecatedAt: input.deprecatedAt,
     deprecationReason: input.deprecationReason,
     supersededBySummaryId: input.supersededBySummaryId,
+  };
+}
+
+function createSummary(
+  input: Partial<MemorySummary> & { summaryId: string },
+): MemorySummary {
+  return {
+    summaryId: input.summaryId,
+    userId: input.userId ?? "u1",
+    summaryTier: input.summaryTier ?? "L1",
+    sourceTier: input.sourceTier ?? "short",
+    startTimestamp: input.startTimestamp ?? 100,
+    endTimestamp: input.endTimestamp ?? 1000,
+    messageCount: input.messageCount ?? 2,
+    sourceRecordIds: input.sourceRecordIds ?? ["r-old"],
+    keyPoints: input.keyPoints ?? ["preference"],
+    keywords: input.keywords ?? ["language"],
+    summaryText: input.summaryText ?? "User prefers concise language.",
+    dimensions: input.dimensions,
+    qualityScore: input.qualityScore,
+    createdAt: input.createdAt ?? 1000,
+    updatedAt: input.updatedAt ?? 1000,
+  };
+}
+
+const GRAPH_NOW = 1_700_000_000_000;
+const graphOwnerScope = { userId: "u1" } satisfies OwnerScope;
+
+function graphNode(
+  id: string,
+  type: MemoryGraphNode["type"],
+  visibility: MemoryGraphNode["visibility"] = "default",
+): MemoryGraphNode {
+  return {
+    id,
+    ownerScope: graphOwnerScope,
+    type,
+    visibility,
+    createdAt: GRAPH_NOW,
+  };
+}
+
+function supersedeEdge(fromNodeId: string, toNodeId: string): MemoryGraphEdge {
+  return {
+    id: `edge:${fromNodeId}:${toNodeId}`,
+    ownerScope: graphOwnerScope,
+    fromNodeId,
+    toNodeId,
+    kind: "supersede",
+    weight: 1,
+    evidenceNodeIds: [fromNodeId],
+    reasonCodes: ["summary_sedimentation"],
+    createdAt: GRAPH_NOW,
+  };
+}
+
+function languageCluster(): MemoryGraphClusterSnapshot {
+  return {
+    clusterId: "cluster:language",
+    ownerScope: graphOwnerScope,
+    nodeIds: ["r-old", "summary-language"],
+    lifecycleStatus: "superseded",
+    representativeNodeId: "summary-language",
+    supportScore: 0.9,
+    updatedAt: GRAPH_NOW,
+    reasonCodes: ["summary_sedimentation"],
+  };
+}
+
+function graphRetrievalSnapshot(): MemoryGraphSnapshot {
+  return {
+    ownerScope: graphOwnerScope,
+    nodes: [
+      graphNode("r-old", "raw", "deprecated"),
+      graphNode("summary-language", "summary"),
+      graphNode("r-fresh", "raw"),
+    ],
+    edges: [supersedeEdge("r-old", "summary-language")],
+    clusters: [languageCluster()],
+    capturedAt: GRAPH_NOW,
   };
 }
 
@@ -911,5 +999,359 @@ describe("memory query api", () => {
     expect(result.items.length).toBe(2);
     expect(result.items[0]?.sourceType).toBe("summary");
     expect(result.items[1]?.sourceType).toBe("raw");
+  });
+
+  it("keeps fallback retrieval baseline when graph retrieval is not enabled", async () => {
+    const rawRecords = [
+      createRecord({ id: "r1", userId: "u1", timestamp: 2000 }),
+      createRecord({ id: "r2", userId: "u1", timestamp: 1000 }),
+    ];
+    let compareCalls = 0;
+    let snapshotCalls = 0;
+
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: rawRecords, hasMore: false }),
+      querySummaries: async () => ({ items: [], hasMore: false }),
+      markRecordsAccessed: async () => {},
+    };
+
+    const api = createMemoryQueryApi({
+      storage,
+      graphRetrieval: {
+        retriever: {
+          async compare() {
+            compareCalls += 1;
+            return createGraphAwareRetrievalDryRunRetriever().compare({
+              ownerScope: graphOwnerScope,
+              query: "language",
+              baselineNodeIds: [],
+              snapshot: graphRetrievalSnapshot(),
+              visibilityMode: "default",
+            });
+          },
+        },
+        snapshotProvider: async () => {
+          snapshotCalls += 1;
+          return graphRetrievalSnapshot();
+        },
+      },
+    });
+
+    const result = await api.queryWithFallback({
+      userId: "u1",
+      pageSize: 2,
+      minRawResultsWithoutFallback: 2,
+    });
+
+    expect(compareCalls).toBe(0);
+    expect(snapshotCalls).toBe(0);
+    expect(result.graphRetrieval).toBeUndefined();
+    expect(result.items.map((item) => item.timestamp)).toEqual([2000, 1000]);
+  });
+
+  it("applies graph-aware retrieval to prioritize summaries and hide deprecated raw hits", async () => {
+    const rawRecords = [
+      createRecord({
+        id: "r-old",
+        userId: "u1",
+        timestamp: 3000,
+        deprecatedAt: 2500,
+        deprecationReason: "summarized_into:summary-language",
+        supersededBySummaryId: "summary-language",
+      }),
+      createRecord({ id: "r-fresh", userId: "u1", timestamp: 1000 }),
+    ];
+    const summary = createSummary({
+      summaryId: "summary-language",
+      endTimestamp: 2000,
+      sourceRecordIds: ["r-old"],
+    });
+    const accessedIds: string[][] = [];
+
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: rawRecords, hasMore: false }),
+      querySummaries: async () => ({ items: [summary], hasMore: false }),
+      markRecordsAccessed: async (input) => {
+        accessedIds.push(input.ids);
+      },
+    };
+
+    const api = createMemoryQueryApi({
+      storage,
+      graphRetrieval: {
+        enabled: true,
+        retriever: createGraphAwareRetrievalDryRunRetriever(),
+        snapshotProvider: async (input) => {
+          expect(input.ownerScope).toEqual(graphOwnerScope);
+          expect(input.baselineNodeIds).toEqual([
+            "r-old",
+            "summary-language",
+            "r-fresh",
+          ]);
+          return graphRetrievalSnapshot();
+        },
+      },
+    });
+
+    const result = await api.queryWithFallback({
+      userId: "u1",
+      keywords: ["language"],
+      pageSize: 3,
+      minRawResultsWithoutFallback: 3,
+    });
+
+    expect(result.graphRetrieval?.status).toBe("applied");
+    expect(result.graphRetrieval?.result?.hiddenDeprecatedNodeIds).toEqual([
+      "r-old",
+    ]);
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0]).toMatchObject({
+      sourceType: "summary",
+      summary,
+    });
+    expect(result.items[1]).toMatchObject({
+      sourceType: "raw",
+      record: rawRecords[1],
+    });
+    expect(accessedIds).toEqual([["r-fresh"]]);
+  });
+
+  it("returns graph audit results when includeDeprecated is requested", async () => {
+    const rawRecords = [
+      createRecord({
+        id: "r-old",
+        userId: "u1",
+        timestamp: 3000,
+        deprecatedAt: 2500,
+        supersededBySummaryId: "summary-language",
+      }),
+      createRecord({ id: "r-fresh", userId: "u1", timestamp: 1000 }),
+    ];
+    const summary = createSummary({
+      summaryId: "summary-language",
+      endTimestamp: 2000,
+      sourceRecordIds: ["r-old"],
+    });
+    const accessedIds: string[][] = [];
+
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: rawRecords, hasMore: false }),
+      querySummaries: async () => ({ items: [summary], hasMore: false }),
+      markRecordsAccessed: async (input) => {
+        accessedIds.push(input.ids);
+      },
+    };
+
+    const api = createMemoryQueryApi({
+      storage,
+      graphRetrieval: {
+        enabled: true,
+        retriever: createGraphAwareRetrievalDryRunRetriever(),
+        snapshotProvider: async () => graphRetrievalSnapshot(),
+      },
+    });
+
+    const result = await api.queryWithFallback({
+      userId: "u1",
+      keywords: ["language"],
+      pageSize: 3,
+      minRawResultsWithoutFallback: 3,
+      includeDeprecated: true,
+    });
+
+    expect(result.graphRetrieval?.status).toBe("applied");
+    expect(result.graphRetrieval?.result?.hiddenDeprecatedNodeIds).toEqual([]);
+    expect(result.graphRetrieval?.result?.auditTrail).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: "summary-language",
+          sourceNodeIds: ["r-old"],
+        }),
+        expect.objectContaining({
+          nodeId: "r-old",
+          reasonCodes: expect.arrayContaining(["deprecated_raw_included"]),
+        }),
+      ]),
+    );
+    expect(
+      result.items.map((item) =>
+        item.sourceType === "summary" ? item.summary.summaryId : item.record.id,
+      ),
+    ).toEqual(["summary-language", "r-old", "r-fresh"]);
+    expect(accessedIds).toEqual([["r-old", "r-fresh"]]);
+  });
+
+  it("returns graph retrieval no-op diagnostics when graph capabilities are missing", async () => {
+    const rawRecords = [
+      createRecord({ id: "r1", userId: "u1", timestamp: 2000 }),
+    ];
+
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: rawRecords, hasMore: false }),
+      querySummaries: async () => ({ items: [], hasMore: false }),
+      markRecordsAccessed: async () => {},
+    };
+
+    const api = createMemoryQueryApi({
+      storage,
+      graphRetrieval: {
+        enabled: true,
+        retriever: createGraphAwareRetrievalDryRunRetriever(),
+      },
+    });
+
+    const result = await api.queryWithFallback({
+      userId: "u1",
+      pageSize: 1,
+    });
+
+    expect(result.items).toEqual([
+      {
+        sourceType: "raw",
+        timestamp: 2000,
+        record: rawRecords[0],
+      },
+    ]);
+    expect(result.graphRetrieval).toEqual({
+      status: "no-op",
+      reasonCodes: ["graph_retrieval_missing_snapshot_provider"],
+    });
+  });
+
+  it("keeps baseline retrieval when graph retriever returns a different owner scope", async () => {
+    const rawRecords = [
+      createRecord({ id: "r1", userId: "u1", timestamp: 2000 }),
+      createRecord({ id: "r2", userId: "u1", timestamp: 1000 }),
+    ];
+
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: rawRecords, hasMore: false }),
+      querySummaries: async () => ({ items: [], hasMore: false }),
+      markRecordsAccessed: async () => {},
+    };
+
+    const api = createMemoryQueryApi({
+      storage,
+      graphRetrieval: {
+        enabled: true,
+        retriever: {
+          async compare() {
+            return {
+              ownerScope: { userId: "foreign-user" },
+              rankedNodeIds: ["r2"],
+              hiddenDeprecatedNodeIds: ["r1"],
+              expandedClusterIds: [],
+              reasonCodes: ["foreign_scope_result"],
+            };
+          },
+        },
+        snapshotProvider: async () => ({
+          ownerScope: graphOwnerScope,
+          nodes: [
+            graphNode("r1", "raw"),
+            graphNode("r2", "raw"),
+          ],
+          edges: [],
+          clusters: [],
+          capturedAt: GRAPH_NOW,
+        }),
+      },
+    });
+
+    const result = await api.queryWithFallback({
+      userId: "u1",
+      pageSize: 2,
+      minRawResultsWithoutFallback: 2,
+    });
+
+    expect(result.items.map((item) => item.timestamp)).toEqual([2000, 1000]);
+    expect(result.graphRetrieval).toEqual({
+      status: "no-op",
+      reasonCodes: ["graph_retrieval_owner_scope_mismatch"],
+    });
+  });
+
+  it("preserves non-hidden baseline hits when graph ranking is partial", async () => {
+    const rawRecords = [
+      createRecord({ id: "r1", userId: "u1", timestamp: 2000 }),
+      createRecord({ id: "r2", userId: "u1", timestamp: 1000 }),
+    ];
+
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: rawRecords, hasMore: false }),
+      querySummaries: async () => ({ items: [], hasMore: false }),
+      markRecordsAccessed: async () => {},
+    };
+
+    const api = createMemoryQueryApi({
+      storage,
+      graphRetrieval: {
+        enabled: true,
+        retriever: {
+          async compare() {
+            return {
+              ownerScope: graphOwnerScope,
+              rankedNodeIds: ["r2"],
+              hiddenDeprecatedNodeIds: [],
+              expandedClusterIds: [],
+              reasonCodes: ["partial_graph_ranking"],
+            };
+          },
+        },
+        snapshotProvider: async () => ({
+          ownerScope: graphOwnerScope,
+          nodes: [
+            graphNode("r1", "raw"),
+            graphNode("r2", "raw"),
+          ],
+          edges: [],
+          clusters: [],
+          capturedAt: GRAPH_NOW,
+        }),
+      },
+    });
+
+    const result = await api.queryWithFallback({
+      userId: "u1",
+      pageSize: 2,
+      minRawResultsWithoutFallback: 2,
+    });
+
+    expect(
+      result.items.map((item) =>
+        item.sourceType === "raw" ? item.record.id : item.summary.summaryId,
+      ),
+    ).toEqual(["r2", "r1"]);
+    expect(result.graphRetrieval?.status).toBe("applied");
   });
 });

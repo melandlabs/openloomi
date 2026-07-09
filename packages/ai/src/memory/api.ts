@@ -1,24 +1,28 @@
 import type {
   MemorySearchHit,
-  MemorySearchQuery,
+  MemorySearchWithFallbackResult,
   MemorySemanticRecallQuery,
   MemorySemanticRecallResult,
-  MemorySearchWithFallbackResult,
   MemoryStorageAdapter,
 } from "./contracts";
+import {
+  type MemoryQueryGraphRetrievalOptions,
+  type MemoryQueryGraphRetrievalQuery,
+  applyGraphAwareRetrieval,
+} from "./graph-aware-query";
+export type {
+  MemoryQueryGraphRetrievalQuery,
+  MemoryQueryGraphRetrievalOptions,
+  MemoryQueryGraphRetrievalSnapshotInput,
+} from "./graph-aware-query";
 
-export interface QueryWithFallbackInput extends MemorySearchQuery {
-  /**
-   * When raw results are below this number, query summaries as fallback.
-   * Defaults to pageSize (or 50).
-   */
-  minRawResultsWithoutFallback?: number;
-}
+export type QueryWithFallbackInput = MemoryQueryGraphRetrievalQuery;
 
 export interface CreateMemoryQueryApiInput {
   storage: MemoryStorageAdapter;
   defaultPageSize?: number;
   markRawAccessOnRead?: boolean;
+  graphRetrieval?: MemoryQueryGraphRetrievalOptions;
 }
 
 export interface MemoryQueryApi {
@@ -128,7 +132,13 @@ export function createMemoryQueryApi(
       const merged = [...rawHits, ...summaryHits].sort(
         (a, b) => b.timestamp - a.timestamp,
       );
-      const items = merged.slice(0, pageSize);
+      const graphApplication = await applyGraphAwareRetrieval({
+        options: input.graphRetrieval,
+        query: queryInput,
+        baselineHits: merged,
+        pageSize,
+      });
+      const items = graphApplication?.items ?? merged.slice(0, pageSize);
 
       if (markRawAccessOnRead && input.storage.markRecordsAccessed) {
         const rawIds = items
@@ -149,6 +159,9 @@ export function createMemoryQueryApi(
         summaryCount: summaryHits.length,
         hasMore:
           rawResult.hasMore || summaryHasMore || merged.length > pageSize,
+        ...(graphApplication
+          ? { graphRetrieval: graphApplication.diagnostic }
+          : {}),
       };
     },
   };
