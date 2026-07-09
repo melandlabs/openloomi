@@ -3742,6 +3742,30 @@
           return base.join("\n");
         }
 
+        async function archiveOpenedBriefOrWrap(id, layout) {
+          if (!id || (layout !== "brief" && layout !== "wrap")) return;
+          try {
+            const res = await fetch(
+              "/api/loop/decision/" + encodeURIComponent(id),
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  action: "dismiss",
+                  reason: `opened ${layout} details`,
+                }),
+              },
+            );
+            if (!res.ok) return;
+            const t = window.__TAURI__;
+            if (t && t.event && t.event.emit) {
+              t.event.emit("loop:decision-cleared", { id });
+            }
+          } catch (_) {
+            /* non-fatal: watcher keeps the card pending if archive fails */
+          }
+        }
+
         async function postAction(action, body) {
           if (!decision || !decision.id) {
             setStatus("error", "No pending decision — try refreshing.");
@@ -3763,6 +3787,7 @@
             // `/brief` / `/wrap` (the dedicated pages that read
             // brief.json / wrap.json directly).
             const t = window.__TAURI__;
+            const decisionId = decision.id;
             const activeLayout = document.querySelector("[data-layout].active")
               ?.dataset.layout;
             if (t && t.event && t.event.emit) {
@@ -3783,6 +3808,9 @@
                 window.location.href =
                   "/loop/" + encodeURIComponent(decision.id);
               }
+            }
+            if (activeLayout === "brief" || activeLayout === "wrap") {
+              archiveOpenedBriefOrWrap(decisionId, activeLayout);
             }
             return;
           }
