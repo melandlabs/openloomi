@@ -32,12 +32,16 @@ If the user explicitly approves installing OpenLoomi from an official artifact,
 call:
 
 ```bash
-node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" install-openloomi --confirm --artifact-url "<official OpenLoomi installer URL>"
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" install-openloomi --confirm
 ```
 
+The bridge resolves the official GitHub release artifact for the current
+platform and architecture automatically. Only pass `--artifact-url` when the
+user explicitly provides an official allowlisted artifact URL as an override.
 Only add `--launch` when the user explicitly approves launching the downloaded
-installer. Prefer adding `--sha256 "<official checksum>"` when official checksum
-metadata is available.
+installer. Add `--sha256 "<official checksum>"` only when the user wants to
+require a specific checksum; otherwise the bridge verifies GitHub release digest
+metadata when available.
 
 For AI provider setup guidance, call:
 

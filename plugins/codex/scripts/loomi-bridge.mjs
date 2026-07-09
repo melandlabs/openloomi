@@ -7,7 +7,9 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   statSync,
+  unlinkSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
 import https from "node:https";
@@ -18,8 +20,18 @@ const BRIDGE_VERSION = "0.5.0";
 const PLUGIN_PHASE = "one-shot-execution";
 const COMMAND_TIMEOUT_MS = 5000;
 const RUN_TIMEOUT_MS = 120000;
+const RELEASE_LOOKUP_TIMEOUT_MS = 30000;
+const INSTALL_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
+const DOWNLOAD_STALL_TIMEOUT_MS = 30000;
 const MAX_COMMAND_OUTPUT = 4096;
 const DEBUG_DISCOVERY = process.env.OPENLOOMI_DEBUG_DISCOVERY === "1";
+const OFFICIAL_RELEASE_SOURCE = {
+  owner: "melandlabs",
+  repo: "openloomi",
+  latestReleaseApi:
+    "https://api.github.com/repos/melandlabs/openloomi/releases/latest",
+  releasePage: "https://github.com/melandlabs/openloomi/releases",
+};
 
 const COMMANDS = new Set([
   "configure-ai-provider",
@@ -30,6 +42,15 @@ const COMMANDS = new Set([
   "setup-status",
   "version",
 ]);
+
+class BridgeError extends Error {
+  constructor(reason, message, details = {}) {
+    super(message);
+    this.name = "BridgeError";
+    this.reason = reason;
+    this.details = details;
+  }
+}
 
 function writeJson(payload, exitCode = 0) {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
@@ -106,60 +127,103 @@ async function installOpenLoomi(args) {
       nextAction: "confirm_install_openloomi",
       reason: "INSTALL_CONFIRMATION_REQUIRED",
       installPlan: plan,
-      command:
-        "install-openloomi --confirm --artifact-url <official OpenLoomi installer URL> [--sha256 <sha256>] [--launch]",
+      command: "install-openloomi --confirm [--sha256 <sha256>] [--launch]",
       safety:
-        "No download or installer launch has been performed. Re-run with --confirm only after reviewing the artifact source.",
+        "No download or installer launch has been performed. Re-run with --confirm to resolve and download the official OpenLoomi release artifact.",
     });
     return;
   }
 
-  if (!flags.artifactUrl) {
+  let artifact;
+
+  try {
+    artifact = flags.artifactUrl
+      ? getManualInstallerArtifact(flags.artifactUrl)
+      : await resolveOfficialInstallerArtifact();
+  } catch (error) {
+    const normalized = normalizeBridgeError(
+      error,
+      "ARTIFACT_RESOLUTION_FAILED",
+    );
+
     writeJson(
       {
         ready: false,
-        nextAction: "provide_official_artifact_url",
-        reason: "ARTIFACT_URL_REQUIRED",
+        nextAction: "retry_install_openloomi",
+        reason: normalized.reason,
         installPlan: plan,
-        message:
-          "A confirmed install requires --artifact-url pointing to an official OpenLoomi release artifact.",
+        message: normalized.message,
+        ...normalized.details,
       },
       1,
     );
     return;
   }
 
-  const artifact = validateArtifactUrl(flags.artifactUrl);
+  const argumentSha256 = flags.sha256 ? normalizeSha256(flags.sha256) : null;
 
-  if (!artifact.valid) {
+  if (flags.sha256 && !argumentSha256) {
     writeJson(
       {
         ready: false,
-        nextAction: "provide_official_artifact_url",
-        reason: "ARTIFACT_URL_NOT_ALLOWED",
-        message: artifact.reason,
-        allowedHosts: getAllowedArtifactHosts(),
+        nextAction: "provide_valid_checksum",
+        reason: "INVALID_SHA256_ARGUMENT",
+        message:
+          "The --sha256 value must be a 64-character SHA-256 hex digest, optionally prefixed with sha256:.",
+        downloaded: false,
+        launched: false,
+        artifact: summarizeArtifact(artifact),
       },
       1,
     );
     return;
   }
 
-  const download = await downloadInstallerArtifact(artifact.url);
+  let download;
 
-  if (flags.sha256) {
+  try {
+    download = await downloadInstallerArtifact(artifact);
+  } catch (error) {
+    const normalized = normalizeBridgeError(error, "DOWNLOAD_FAILED");
+
+    writeJson(
+      {
+        ready: false,
+        nextAction: "retry_install_openloomi",
+        reason: normalized.reason,
+        message: normalized.message,
+        artifact: summarizeArtifact(artifact),
+        downloaded: false,
+        launched: false,
+        ...normalized.details,
+      },
+      1,
+    );
+    return;
+  }
+
+  const expectedSha256 = argumentSha256 || artifact.sha256;
+  const sha256Source = flags.sha256
+    ? "argument"
+    : artifact.sha256
+      ? "github-release-digest"
+      : null;
+
+  if (expectedSha256) {
     const actualSha256 = await sha256File(download.path);
 
-    if (actualSha256.toLowerCase() !== flags.sha256.toLowerCase()) {
+    if (actualSha256.toLowerCase() !== expectedSha256.toLowerCase()) {
       writeJson(
         {
           ready: false,
           nextAction: "provide_valid_artifact",
           reason: "ARTIFACT_SHA256_MISMATCH",
-          expectedSha256: flags.sha256,
+          expectedSha256,
           actualSha256,
+          sha256Source,
           downloaded: true,
           launched: false,
+          artifact: summarizeArtifact(artifact),
         },
         1,
       );
@@ -180,14 +244,15 @@ async function installOpenLoomi(args) {
     downloaded: true,
     launched: Boolean(flags.launch),
     artifact: {
-      url: artifact.url.toString(),
-      sha256Verified: Boolean(flags.sha256),
+      ...summarizeArtifact(artifact),
+      sha256Verified: Boolean(expectedSha256),
+      sha256Source,
       installerPath: DEBUG_DISCOVERY ? download.path : null,
       installerPathPresent: true,
     },
     message: flags.launch
       ? "The installer was launched after explicit confirmation. Re-run setup-status after installation completes."
-      : "The installer was downloaded after explicit confirmation. Set OPENLOOMI_DEBUG_DISCOVERY=1 to show the local installer path, or re-run with --launch to start it.",
+      : "The installer was downloaded after explicit confirmation. Set OPENLOOMI_DEBUG_DISCOVERY=1 to show the local installer path, or re-run with --launch to start it after explicit user approval.",
   });
 }
 
@@ -239,13 +304,17 @@ function getInstallPlan() {
     platform: process.platform,
     arch: process.arch,
     supported: ["darwin", "linux", "win32"].includes(process.platform),
-    officialReleasePage: "https://github.com/openloomi/openloomi/releases",
+    officialReleasePage: OFFICIAL_RELEASE_SOURCE.releasePage,
+    officialReleaseApi: OFFICIAL_RELEASE_SOURCE.latestReleaseApi,
+    artifactResolution:
+      "The bridge resolves the latest official GitHub release asset for the current platform and architecture.",
     requiredUserAction:
-      "Review the official artifact URL, then re-run install-openloomi with --confirm.",
+      "Review the install plan, then re-run install-openloomi with --confirm. Passing --artifact-url is optional and only accepted for allowlisted official sources.",
     safety: [
       "The plugin never downloads an installer without --confirm.",
       "The plugin never launches an installer without --launch.",
-      "Use --sha256 when official checksum metadata is available.",
+      "The plugin verifies GitHub release SHA-256 digest metadata when available.",
+      "Use --sha256 to require a specific official checksum.",
       "Local installer paths are hidden unless OPENLOOMI_DEBUG_DISCOVERY=1 is set.",
     ],
   };
@@ -462,12 +531,15 @@ function validateArtifactUrl(value) {
 
   if (
     url.hostname === "github.com" &&
-    !url.pathname.toLowerCase().startsWith("/openloomi/openloomi/")
+    !url.pathname
+      .toLowerCase()
+      .startsWith(
+        `/${OFFICIAL_RELEASE_SOURCE.owner}/${OFFICIAL_RELEASE_SOURCE.repo}/`,
+      )
   ) {
     return {
       valid: false,
-      reason:
-        "GitHub artifact URLs must come from the openloomi/openloomi repository.",
+      reason: `GitHub artifact URLs must come from the ${OFFICIAL_RELEASE_SOURCE.owner}/${OFFICIAL_RELEASE_SOURCE.repo} repository.`,
     };
   }
 
@@ -481,24 +553,317 @@ function getAllowedArtifactHosts() {
   return ["github.com", "openloomi.ai", "www.openloomi.ai"];
 }
 
-async function downloadInstallerArtifact(url) {
+function getManualInstallerArtifact(value) {
+  const artifact = validateArtifactUrl(value);
+
+  if (!artifact.valid) {
+    throw new BridgeError("ARTIFACT_URL_NOT_ALLOWED", artifact.reason, {
+      allowedHosts: getAllowedArtifactHosts(),
+      officialRepository: `${OFFICIAL_RELEASE_SOURCE.owner}/${OFFICIAL_RELEASE_SOURCE.repo}`,
+    });
+  }
+
+  return {
+    url: artifact.url,
+    source: "manual-official-url",
+    name: getInstallerFilename(artifact.url),
+    size: null,
+    sha256: null,
+    releaseTag: null,
+    releaseUrl: null,
+  };
+}
+
+async function resolveOfficialInstallerArtifact() {
+  const release = await fetchJson(
+    new URL(OFFICIAL_RELEASE_SOURCE.latestReleaseApi),
+  );
+  const assets = Array.isArray(release.assets) ? release.assets : [];
+  const asset = selectInstallerAsset(assets);
+
+  if (!asset) {
+    throw new BridgeError(
+      "ARTIFACT_RESOLUTION_FAILED",
+      `No supported OpenLoomi installer asset was found for ${process.platform}/${process.arch} in the latest official release.`,
+      {
+        platform: process.platform,
+        arch: process.arch,
+        releaseTag: release.tag_name || null,
+        releaseUrl: release.html_url || OFFICIAL_RELEASE_SOURCE.releasePage,
+      },
+    );
+  }
+
+  const artifact = validateArtifactUrl(asset.browser_download_url);
+
+  if (!artifact.valid) {
+    throw new BridgeError("ARTIFACT_RESOLUTION_FAILED", artifact.reason, {
+      releaseTag: release.tag_name || null,
+      releaseUrl: release.html_url || OFFICIAL_RELEASE_SOURCE.releasePage,
+    });
+  }
+
+  return {
+    url: artifact.url,
+    source: "github-release-latest",
+    name: asset.name || getInstallerFilename(artifact.url),
+    size: Number.isSafeInteger(asset.size) ? asset.size : null,
+    sha256: normalizeSha256(asset.digest),
+    releaseTag: release.tag_name || null,
+    releaseUrl: release.html_url || OFFICIAL_RELEASE_SOURCE.releasePage,
+  };
+}
+
+function selectInstallerAsset(assets) {
+  const preferences = getInstallerAssetPreferences();
+  const downloadAssets = assets.filter(
+    (asset) => asset && typeof asset.browser_download_url === "string",
+  );
+
+  for (const preference of preferences) {
+    const candidates = downloadAssets
+      .filter((asset) => assetMatchesPreference(asset, preference))
+      .sort((left, right) => (right.size || 0) - (left.size || 0));
+
+    if (candidates.length > 0) {
+      return candidates[0];
+    }
+  }
+
+  for (const preference of preferences) {
+    const candidates = downloadAssets
+      .filter((asset) => assetMatchesExtension(asset, preference))
+      .sort((left, right) => (right.size || 0) - (left.size || 0));
+
+    if (candidates.length === 1) {
+      return candidates[0];
+    }
+  }
+
+  return null;
+}
+
+function getInstallerAssetPreferences() {
+  const x64Tokens = ["x64", "x86_64", "amd64"];
+  const arm64Tokens = ["arm64", "aarch64"];
+
+  if (process.platform === "win32" && process.arch === "x64") {
+    return [
+      { extensions: [".exe"], archTokens: x64Tokens },
+      { extensions: [".msi"], archTokens: x64Tokens },
+    ];
+  }
+
+  if (process.platform === "win32" && process.arch === "arm64") {
+    return [
+      { extensions: [".exe"], archTokens: arm64Tokens },
+      { extensions: [".msi"], archTokens: arm64Tokens },
+    ];
+  }
+
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    return [{ extensions: [".dmg"], archTokens: arm64Tokens }];
+  }
+
+  if (process.platform === "darwin" && process.arch === "x64") {
+    return [{ extensions: [".dmg"], archTokens: x64Tokens }];
+  }
+
+  if (process.platform === "linux" && process.arch === "arm64") {
+    return [
+      { extensions: [".deb"], archTokens: arm64Tokens },
+      { extensions: [".rpm"], archTokens: arm64Tokens },
+      { extensions: [".appimage"], archTokens: arm64Tokens },
+    ];
+  }
+
+  if (process.platform === "linux" && process.arch === "x64") {
+    return [
+      { extensions: [".deb"], archTokens: x64Tokens },
+      { extensions: [".rpm"], archTokens: x64Tokens },
+      { extensions: [".appimage"], archTokens: x64Tokens },
+    ];
+  }
+
+  return [];
+}
+
+function assetMatchesPreference(asset, preference) {
+  const matchText = getAssetMatchText(asset);
+
+  return (
+    assetMatchesExtension(asset, preference) &&
+    preference.archTokens.some((token) =>
+      matchText.includes(token.toLowerCase()),
+    )
+  );
+}
+
+function assetMatchesExtension(asset, preference) {
+  const matchText = getAssetMatchText(asset);
+
+  if (
+    matchText.includes(".blockmap") ||
+    matchText.includes(".sig") ||
+    matchText.includes(".sha")
+  ) {
+    return false;
+  }
+
+  return preference.extensions.some((extension) =>
+    matchText.includes(extension.toLowerCase()),
+  );
+}
+
+function getAssetMatchText(asset) {
+  const name = String(asset.name || "");
+  const url = String(asset.browser_download_url || "");
+
+  return `${name} ${url}`.toLowerCase();
+}
+
+async function fetchJson(url, redirectCount = 0) {
+  const text = await fetchText(url, {
+    accept: "application/vnd.github+json",
+    redirectCount,
+    reason: "ARTIFACT_RESOLUTION_FAILED",
+    timeoutMs: RELEASE_LOOKUP_TIMEOUT_MS,
+  });
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new BridgeError(
+      "ARTIFACT_RESOLUTION_FAILED",
+      "The official OpenLoomi release response was not valid JSON.",
+      {
+        officialReleaseApi: OFFICIAL_RELEASE_SOURCE.latestReleaseApi,
+      },
+    );
+  }
+}
+
+function fetchText(url, options) {
+  return new Promise((resolve, reject) => {
+    if (options.redirectCount > 5) {
+      reject(
+        new BridgeError(
+          options.reason,
+          "Too many redirects while resolving the official OpenLoomi release.",
+        ),
+      );
+      return;
+    }
+
+    const request = https.get(
+      url,
+      {
+        headers: {
+          Accept: options.accept,
+          "Accept-Encoding": "identity",
+          "User-Agent": "Codex-OpenLoomi-Install",
+        },
+      },
+      (response) => {
+        const statusCode = response.statusCode || 0;
+        const location = response.headers.location;
+
+        if (statusCode >= 300 && statusCode < 400 && location) {
+          response.resume();
+          fetchText(new URL(location, url), {
+            ...options,
+            redirectCount: options.redirectCount + 1,
+          })
+            .then(resolve)
+            .catch(reject);
+          return;
+        }
+
+        if (statusCode !== 200) {
+          response.resume();
+          reject(
+            new BridgeError(
+              options.reason,
+              `Official OpenLoomi release lookup failed with HTTP ${statusCode}.`,
+              {
+                officialReleaseApi: OFFICIAL_RELEASE_SOURCE.latestReleaseApi,
+              },
+            ),
+          );
+          return;
+        }
+
+        let body = "";
+
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          body += chunk;
+
+          if (body.length > 2_000_000) {
+            request.destroy();
+            reject(
+              new BridgeError(
+                options.reason,
+                "Official OpenLoomi release lookup returned an unexpectedly large response.",
+              ),
+            );
+          }
+        });
+        response.on("end", () => resolve(body));
+        response.on("error", reject);
+      },
+    );
+
+    request.setTimeout(options.timeoutMs, () => {
+      request.destroy();
+      reject(
+        new BridgeError(
+          options.reason,
+          "Timed out while resolving the official OpenLoomi release.",
+          {
+            timeoutMs: options.timeoutMs,
+          },
+        ),
+      );
+    });
+    request.on("error", reject);
+  });
+}
+
+async function downloadInstallerArtifact(artifact) {
   const downloadDir = path.join(os.tmpdir(), "openloomi-codex-plugin");
-  const destination = path.join(downloadDir, getInstallerFilename(url));
+  const destination = path.join(
+    downloadDir,
+    getInstallerFilename(artifact.url, artifact.name),
+  );
+  const partialDestination = `${destination}.partial`;
 
   mkdirSync(downloadDir, {
     recursive: true,
   });
 
-  await downloadUrl(url, destination);
+  safeUnlink(partialDestination);
 
-  return {
-    path: destination,
-  };
+  try {
+    const download = await downloadUrl(artifact.url, partialDestination, {
+      expectedSize: artifact.size,
+    });
+
+    renameSync(partialDestination, destination);
+
+    return {
+      path: destination,
+      bytes: download.bytes,
+    };
+  } catch (error) {
+    safeUnlink(partialDestination);
+    throw error;
+  }
 }
 
-function getInstallerFilename(url) {
-  const parsedPath = decodeURIComponent(url.pathname);
-  const basename = path.basename(parsedPath);
+function getInstallerFilename(url, suggestedName = null) {
+  const parsedPath = decodeURIComponent(url.pathname || "");
+  const basename = suggestedName || path.basename(parsedPath);
   const fallbackName = `openloomi-installer-${Date.now()}${getInstallerExtension()}`;
   const filename = basename && basename !== "/" ? basename : fallbackName;
 
@@ -517,44 +882,216 @@ function getInstallerExtension() {
   return ".AppImage";
 }
 
-function downloadUrl(url, destination, redirectCount = 0) {
+function downloadUrl(url, destination, options = {}, redirectCount = 0) {
   return new Promise((resolve, reject) => {
     if (redirectCount > 5) {
-      reject(new Error("Too many redirects while downloading installer."));
+      reject(
+        new BridgeError(
+          "DOWNLOAD_FAILED",
+          "Too many redirects while downloading the OpenLoomi installer.",
+        ),
+      );
       return;
     }
 
-    const request = https.get(url, (response) => {
-      const statusCode = response.statusCode || 0;
-      const location = response.headers.location;
+    let settled = false;
+    let file = null;
+    let receivedBytes = 0;
+    let overallTimer = null;
+    let stallTimer = null;
 
-      if (statusCode >= 300 && statusCode < 400 && location) {
-        response.resume();
-        downloadUrl(new URL(location, url), destination, redirectCount + 1)
-          .then(resolve)
-          .catch(reject);
+    const finish = (callback, value) => {
+      if (settled) {
         return;
       }
 
-      if (statusCode !== 200) {
-        response.resume();
-        reject(new Error(`Installer download failed with HTTP ${statusCode}.`));
-        return;
+      settled = true;
+      clearTimeout(overallTimer);
+      clearTimeout(stallTimer);
+      callback(value);
+    };
+
+    const fail = (error) => {
+      if (file) {
+        file.destroy();
       }
 
-      const file = createWriteStream(destination, {
-        flags: "w",
-      });
+      finish(reject, error);
+    };
 
-      response.pipe(file);
-      file.on("finish", () => {
-        file.close(resolve);
-      });
-      file.on("error", reject);
+    const resetStallTimer = () => {
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        request.destroy();
+        fail(
+          new BridgeError(
+            "DOWNLOAD_STALLED",
+            "The OpenLoomi installer download stopped receiving data.",
+            {
+              stallTimeoutMs: DOWNLOAD_STALL_TIMEOUT_MS,
+            },
+          ),
+        );
+      }, DOWNLOAD_STALL_TIMEOUT_MS);
+    };
+
+    const request = https.get(
+      url,
+      {
+        headers: {
+          Accept: "application/octet-stream",
+          "Accept-Encoding": "identity",
+          "User-Agent": "Codex-OpenLoomi-Install",
+        },
+      },
+      (response) => {
+        const statusCode = response.statusCode || 0;
+        const location = response.headers.location;
+
+        if (statusCode >= 300 && statusCode < 400 && location) {
+          response.resume();
+          clearTimeout(overallTimer);
+          clearTimeout(stallTimer);
+          downloadUrl(
+            new URL(location, url),
+            destination,
+            options,
+            redirectCount + 1,
+          )
+            .then(resolve)
+            .catch(reject);
+          return;
+        }
+
+        if (statusCode !== 200) {
+          response.resume();
+          fail(
+            new BridgeError(
+              "DOWNLOAD_FAILED",
+              `OpenLoomi installer download failed with HTTP ${statusCode}.`,
+            ),
+          );
+          return;
+        }
+
+        resetStallTimer();
+
+        file = createWriteStream(destination, {
+          flags: "w",
+        });
+
+        response.on("data", (chunk) => {
+          receivedBytes += chunk.length;
+          resetStallTimer();
+        });
+        response.on("error", fail);
+        response.pipe(file);
+        file.on("finish", () => {
+          file.close(() => {
+            if (
+              Number.isSafeInteger(options.expectedSize) &&
+              receivedBytes !== options.expectedSize
+            ) {
+              fail(
+                new BridgeError(
+                  "DOWNLOAD_SIZE_MISMATCH",
+                  "The downloaded OpenLoomi installer size did not match the official release metadata.",
+                  {
+                    expectedBytes: options.expectedSize,
+                    actualBytes: receivedBytes,
+                  },
+                ),
+              );
+              return;
+            }
+
+            finish(resolve, {
+              bytes: receivedBytes,
+            });
+          });
+        });
+        file.on("error", fail);
+      },
+    );
+
+    overallTimer = setTimeout(() => {
+      request.destroy();
+      fail(
+        new BridgeError(
+          "DOWNLOAD_TIMED_OUT",
+          "Timed out while downloading the OpenLoomi installer.",
+          {
+            timeoutMs: INSTALL_DOWNLOAD_TIMEOUT_MS,
+          },
+        ),
+      );
+    }, INSTALL_DOWNLOAD_TIMEOUT_MS);
+
+    request.setTimeout(DOWNLOAD_STALL_TIMEOUT_MS, () => {
+      request.destroy();
+      fail(
+        new BridgeError(
+          "DOWNLOAD_STALLED",
+          "The OpenLoomi installer download connection was inactive.",
+          {
+            stallTimeoutMs: DOWNLOAD_STALL_TIMEOUT_MS,
+          },
+        ),
+      );
     });
-
-    request.on("error", reject);
+    request.on("error", fail);
   });
+}
+
+function normalizeBridgeError(error, fallbackReason) {
+  if (error instanceof BridgeError) {
+    return {
+      reason: error.reason,
+      message: error.message,
+      details: error.details,
+    };
+  }
+
+  return {
+    reason: fallbackReason,
+    message: error instanceof Error ? error.message : String(error),
+    details: {},
+  };
+}
+
+function summarizeArtifact(artifact) {
+  return {
+    url: artifact.url.toString(),
+    source: artifact.source,
+    name: artifact.name,
+    size: artifact.size,
+    sha256Present: Boolean(artifact.sha256),
+    releaseTag: artifact.releaseTag,
+    releaseUrl: artifact.releaseUrl,
+  };
+}
+
+function normalizeSha256(value) {
+  if (!hasValue(value)) {
+    return null;
+  }
+
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/^sha256[:=\s]+/, "");
+
+  return /^[a-f0-9]{64}$/.test(normalized) ? normalized : null;
+}
+
+function safeUnlink(filePath) {
+  try {
+    if (existsSync(filePath)) {
+      unlinkSync(filePath);
+    }
+  } catch {
+    // Best effort cleanup for temporary download files.
+  }
 }
 
 function sha256File(filePath) {
