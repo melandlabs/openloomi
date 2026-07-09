@@ -1272,10 +1272,7 @@ describe("memory query api", () => {
         },
         snapshotProvider: async () => ({
           ownerScope: graphOwnerScope,
-          nodes: [
-            graphNode("r1", "raw"),
-            graphNode("r2", "raw"),
-          ],
+          nodes: [graphNode("r1", "raw"), graphNode("r2", "raw")],
           edges: [],
           clusters: [],
           capturedAt: GRAPH_NOW,
@@ -1330,10 +1327,7 @@ describe("memory query api", () => {
         },
         snapshotProvider: async () => ({
           ownerScope: graphOwnerScope,
-          nodes: [
-            graphNode("r1", "raw"),
-            graphNode("r2", "raw"),
-          ],
+          nodes: [graphNode("r1", "raw"), graphNode("r2", "raw")],
           edges: [],
           clusters: [],
           capturedAt: GRAPH_NOW,

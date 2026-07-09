@@ -426,7 +426,10 @@ export function createIndexedDBMemoryStorageAdapter(
             }),
           )
           .filter((hit) => {
-            if (!query.includeDeprecated && hit.record.deprecatedAt !== undefined) {
+            if (
+              !query.includeDeprecated &&
+              hit.record.deprecatedAt !== undefined
+            ) {
               return false;
             }
             if (query.tiers && !query.tiers.includes(hit.record.tier)) {
