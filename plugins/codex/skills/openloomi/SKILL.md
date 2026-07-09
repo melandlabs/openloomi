@@ -56,6 +56,13 @@ For bridge metadata, call:
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" version
 ```
 
-Task execution is reserved for a later implementation phase. When it becomes
-available, call the bridge with stdin-based prompt passing so the prompt is not
-placed in command-line arguments.
+When `setup-status` returns `ready: true`, run a one-shot task by passing the
+user task over stdin:
+
+```bash
+printf "%s" "<user task>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
+```
+
+The bridge invokes `openloomi-ctl --one-shot --stdin --json --permission-mode
+deny` by default. Only pass `--permission-mode ask` or `--permission-mode allow`
+when the user explicitly asks for a different permission mode.

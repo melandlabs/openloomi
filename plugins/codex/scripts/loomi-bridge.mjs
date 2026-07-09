@@ -14,9 +14,10 @@ import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 
-const BRIDGE_VERSION = "0.4.0";
-const PLUGIN_PHASE = "ai-provider-setup";
+const BRIDGE_VERSION = "0.5.0";
+const PLUGIN_PHASE = "one-shot-execution";
 const COMMAND_TIMEOUT_MS = 5000;
+const RUN_TIMEOUT_MS = 120000;
 const MAX_COMMAND_OUTPUT = 4096;
 const DEBUG_DISCOVERY = process.env.OPENLOOMI_DEBUG_DISCOVERY === "1";
 
@@ -36,6 +37,10 @@ function writeJson(payload, exitCode = 0) {
 }
 
 async function setupStatus() {
+  writeJson(await buildSetupStatus());
+}
+
+async function buildSetupStatus() {
   const discovery = await discoverOpenLoomi();
   const token = getTokenStatus();
   const aiProvider = getAiProviderStatus();
@@ -64,10 +69,10 @@ async function setupStatus() {
     },
   };
 
-  writeJson({
+  return {
     ...baseStatus,
     ...getReadinessDecision(discovery, token, aiProvider),
-  });
+  };
 }
 
 function installInstructions() {
@@ -253,6 +258,7 @@ function parseFlags(args) {
     confirm: false,
     launch: false,
     model: null,
+    permissionMode: null,
     provider: null,
     sha256: null,
   };
@@ -300,6 +306,17 @@ function parseFlags(args) {
 
     if (arg.startsWith("--model=")) {
       flags.model = arg.slice("--model=".length);
+      continue;
+    }
+
+    if (arg === "--permission-mode") {
+      flags.permissionMode = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--permission-mode=")) {
+      flags.permissionMode = arg.slice("--permission-mode=".length);
       continue;
     }
 
@@ -576,6 +593,128 @@ function launchInstaller(filePath) {
   child.unref();
 }
 
+function getPermissionMode(value) {
+  const allowed = new Set(["allow", "ask", "deny"]);
+
+  if (allowed.has(value)) {
+    return value;
+  }
+
+  return "deny";
+}
+
+function runOpenLoomiOneShot({ ctlPath, permissionMode, prompt }) {
+  return runCommandWithInput(
+    ctlPath,
+    ["--one-shot", "--stdin", "--json", "--permission-mode", permissionMode],
+    prompt,
+    RUN_TIMEOUT_MS,
+  );
+}
+
+function runCommandWithInput(command, args, input, timeoutMs) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      shell: process.platform === "win32" && /\.(cmd|bat)$/i.test(command),
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill();
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      stdout = appendLimited(stdout, chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = appendLimited(stderr, chunk);
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({
+        exitCode: 1,
+        signal: null,
+        stdout,
+        stderr: error.message,
+      });
+    });
+    child.on("close", (exitCode, signal) => {
+      clearTimeout(timer);
+      resolve({
+        exitCode,
+        signal,
+        stdout,
+        stderr,
+      });
+    });
+
+    child.stdin.end(input);
+  });
+}
+
+function normalizeRunFailure(result) {
+  const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
+
+  if (output.includes("login") || output.includes("auth")) {
+    return {
+      nextAction: "login_openloomi",
+      reason: "LOGIN_REQUIRED",
+      openloomi: summarizeRunProcess(result),
+    };
+  }
+
+  if (
+    output.includes("api key") ||
+    output.includes("model provider") ||
+    output.includes("ai provider")
+  ) {
+    return {
+      nextAction: "configure_ai_provider",
+      reason: "AI_PROVIDER_REQUIRED",
+      openloomi: summarizeRunProcess(result),
+    };
+  }
+
+  if (output.includes("connector") || output.includes("integration")) {
+    return {
+      nextAction: "configure_connectors",
+      reason: "CONNECTOR_SETUP_REQUIRED",
+      openloomi: summarizeRunProcess(result),
+    };
+  }
+
+  return {
+    nextAction: "inspect_openloomi_error",
+    reason: "OPENLOOMI_RUN_FAILED",
+    openloomi: summarizeRunProcess(result),
+    error: parseJsonOrText(result.stderr || result.stdout),
+  };
+}
+
+function summarizeRunProcess(result) {
+  return {
+    exitCode: result.exitCode,
+    signal: result.signal,
+    stdoutPresent: hasValue(result.stdout),
+    stderrPresent: hasValue(result.stderr),
+  };
+}
+
+function parseJsonOrText(value) {
+  if (!hasValue(value)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {
+      text: value.trim(),
+    };
+  }
+}
+
 function version() {
   writeJson({
     name: "openloomi-codex-bridge",
@@ -586,21 +725,70 @@ function version() {
 }
 
 async function run() {
-  await readStdin();
+  const flags = parseFlags(process.argv.slice(3));
+  const prompt = await readStdin();
 
-  writeJson(
-    {
-      ready: false,
-      nextAction: "setup_status",
-      reason: "RUN_NOT_IMPLEMENTED",
-      command: "run",
-      phase: PLUGIN_PHASE,
-      implemented: false,
-      message:
-        "Task execution is implemented in a later phase. Run setup-status to inspect OpenLoomi readiness first.",
+  if (!hasValue(prompt)) {
+    writeJson(
+      {
+        ready: false,
+        nextAction: "provide_stdin_prompt",
+        reason: "PROMPT_REQUIRED",
+        message:
+          "Pass the task prompt over stdin. Do not place long prompts or secrets in command-line arguments.",
+      },
+      1,
+    );
+    return;
+  }
+
+  const setup = await buildSetupStatus();
+
+  if (!setup.ready) {
+    writeJson(
+      {
+        ...setup,
+        ran: false,
+        command: "run",
+        message:
+          "OpenLoomi is not ready for one-shot execution. Complete the reported nextAction first.",
+      },
+      1,
+    );
+    return;
+  }
+
+  const permissionMode = getPermissionMode(flags.permissionMode);
+  const result = await runOpenLoomiOneShot({
+    ctlPath: setup.ctlPath,
+    permissionMode,
+    prompt,
+  });
+
+  if (result.exitCode !== 0) {
+    writeJson(
+      {
+        ready: false,
+        ran: true,
+        ...normalizeRunFailure(result),
+      },
+      1,
+    );
+    return;
+  }
+
+  writeJson({
+    ready: true,
+    ran: true,
+    nextAction: "done",
+    reason: "RUN_COMPLETE",
+    result: parseJsonOrText(result.stdout),
+    openloomi: {
+      exitCode: result.exitCode,
+      signal: result.signal,
+      stderrPresent: hasValue(result.stderr),
     },
-    1,
-  );
+  });
 }
 
 function help() {
