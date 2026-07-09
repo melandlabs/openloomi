@@ -521,12 +521,13 @@ const PurePreviewMessage = ({
 
   /**
    * Convert tool output paths to LibraryItem same as "My Files / Dialog Space" for LibraryItemRow rendering.
-   * Files already displayed via NativeToolCall are excluded to prevent duplicate display.
+   * Temporary helper files already shown in NativeToolCall are hidden, while final artifacts stay visible
+   * at the bottom of the assistant message so users can open them without scrolling back to the tool card.
    */
   const assistantOutputLibraryItems = useMemo((): LibraryItem[] => {
     if (message.role !== "assistant") return [];
     const files = collectToolOutputFilesFromParts(filteredParts).filter(
-      (f) => !nativeToolDisplayedFilePaths.has(f.path),
+      (f) => !nativeToolDisplayedFilePaths.has(f.path) || !f.isTemporary,
     );
 
     return files.map((f) => {
