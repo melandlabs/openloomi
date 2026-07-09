@@ -3,7 +3,7 @@ name: openloomi-loop
 description: "openloomi's Loop — the proactive execution brain. Loop runs inside the main web app (apps/web/lib/loop/) and is reached through its HTTP API. Use this skill to inspect state, run a tick, schedule / cancel decision actions, and tune preferences. Triggers: 'openloomi loop', 'loop tick', 'loop schedule', 'loop inbox', 'loop run', 'proactive decisions', 'signal → decision → execute', 'pull signals', 'decision queue'"
 allowed-tools: Bash(curl *), Bash(jq *), Bash(cat ~/.openloomi/token *), Bash(base64 -d *), Bash(ls ~/.openloomi/loop/*)
 metadata:
-  version: 0.8.0
+  version: 0.7.1
 ---
 
 > **Note:** If you haven't downloaded or installed openloomi yet, please refer to [Getting Started](https://openloomi.ai/docs/getting-started) for installation instructions.
