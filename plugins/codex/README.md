@@ -45,7 +45,7 @@ User installs the Codex plugin
   -> plugin installs or guides installation if OpenLoomi is missing
   -> plugin verifies openloomi-ctl
   -> plugin guides first-use AI provider setup
-  -> plugin checks login and readiness
+  -> plugin initializes or reuses a guest/session token
   -> plugin runs a one-shot OpenLoomi task
   -> plugin shows related OpenLoomi skills and workflows
 ```
@@ -172,6 +172,11 @@ For source checkouts, check project markers and likely CLI locations:
   "ctlPath": "<resolved openloomi-ctl path>",
   "version": "openloomi-ctl 0.7.0",
   "tokenPresent": true,
+  "session": {
+    "tokenPresent": true,
+    "guestBootstrapSupported": true,
+    "guestBootstrapMode": "local-openloomi-api"
+  },
   "aiProviderConfigured": true,
   "connectorStatusAvailable": false,
   "apiReachable": false,
@@ -186,7 +191,8 @@ Common `nextAction` values:
 install_openloomi
 provide_install_or_repo_path
 build_or_stage_openloomi_ctl
-login_openloomi
+initialize_openloomi_session
+open_openloomi
 configure_ai_provider
 configure_connectors
 show_openloomi_skills
@@ -200,11 +206,19 @@ OPENLOOMI_CTL_NOT_FOUND
 OPENLOOMI_CTL_INVALID
 SOURCE_FOUND_CLI_NOT_BUILT
 INSTALL_REQUIRED
-LOGIN_REQUIRED
+SESSION_INITIALIZATION_REQUIRED
+READY_SESSION_BOOTSTRAP_PENDING
 AI_PROVIDER_REQUIRED
 CONNECTOR_SETUP_REQUIRED
 READY
 ```
+
+OpenLoomi guest mode is supported. A missing token should not be treated as a
+requirement for account registration or manual login. When OpenLoomi is
+installed and the AI provider appears configured, the bridge may initialize a
+guest/session token through the local OpenLoomi API and write the standard
+`~/.openloomi/token` file. If the local API is not reachable, the bridge may
+launch OpenLoomi and ask the user to let OpenLoomi initialize its guest session.
 
 ## First-Use AI Provider Setup
 
@@ -258,7 +272,7 @@ AI provider setup, and one-shot flows are stable.
 
 ## Secret Handling
 
-Codex must never receive or print:
+Codex chat, argv, stdout, and stderr must never receive or print:
 
 - model provider API keys;
 - OAuth access tokens or refresh tokens;
@@ -271,6 +285,7 @@ Allowed status-only checks:
 ```text
 OPENLOOMI_AUTH_TOKEN present/missing
 ~/.openloomi/token present/missing
+guest/session initialization available/unavailable
 AI provider configured/missing
 connector configured/missing
 local API reachable/unreachable
@@ -297,6 +312,10 @@ Example safe output:
 ```
 
 The bridge may report key names and presence. It must not print values.
+
+The bridge may receive a guest/session token from the local OpenLoomi API only
+to write the standard `~/.openloomi/token` file. It must keep the token out of
+argv, stdout, stderr, logs, and the Codex transcript.
 
 ## One-Shot Execution
 

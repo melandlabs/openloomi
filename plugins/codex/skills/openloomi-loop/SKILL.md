@@ -23,7 +23,8 @@ node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" setup-status
 ```
 
 If `ready: false`, follow the reported `nextAction` and do not continue the
-loop task yet. Never ask for API keys, OAuth tokens, connector secrets, or
+loop task yet. Guest/session initialization must happen through OpenLoomi-owned
+surfaces. Never ask for API keys, OAuth tokens, connector secrets, or
 OpenLoomi auth tokens in Codex chat.
 
 When `ready: true`, pass the user request over stdin to the bridge:

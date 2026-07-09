@@ -60,7 +60,9 @@ Acceptance criteria:
 - packaged install detected;
 - source checkout detected;
 - source checkout without CLI returns `SOURCE_FOUND_CLI_NOT_BUILT`;
-- missing login returns `LOGIN_REQUIRED`;
+- missing guest/session token does not require account registration;
+- missing guest/session token can return `READY_SESSION_BOOTSTRAP_PENDING`
+  when install and provider checks are satisfied;
 - missing AI provider returns `AI_PROVIDER_REQUIRED`;
 - no secret values are printed.
 
@@ -121,14 +123,18 @@ Acceptance criteria:
 
 ## Phase 6: One-Shot Execution
 
-Goal: run a simple task through the local OpenLoomi runtime.
+Goal: run a simple task through the local OpenLoomi runtime without requiring
+registered-account login when guest mode is available.
 
 Deliverables:
 
 - `run` bridge command;
+- guest/session bootstrap through the local OpenLoomi API;
+- `initialize-session` bridge command for isolated guest/session setup checks;
 - stdin-based prompt passing;
 - JSON output handling;
-- error normalization for install, login, provider setup, and connector blocks.
+- error normalization for install, session initialization, provider setup, and
+  connector blocks.
 
 Execution command:
 
@@ -139,6 +145,8 @@ openloomi-ctl --one-shot --stdin --json --permission-mode deny
 Acceptance criteria:
 
 - one-shot prompt succeeds when ready;
+- guest users can run through the plugin after OpenLoomi initializes a local
+  session token;
 - prompt is passed over stdin;
 - command arguments do not include secrets or long prompt text;
 - JSON output is returned to Codex in a readable form.
@@ -191,7 +199,8 @@ Required tests:
 - source checkout detected;
 - source checkout without CLI returns `SOURCE_FOUND_CLI_NOT_BUILT`;
 - missing install returns `INSTALL_REQUIRED`;
-- missing token returns `LOGIN_REQUIRED`;
+- missing token can be initialized through guest/session bootstrap;
+- session bootstrap failure returns `SESSION_INITIALIZATION_REQUIRED`;
 - missing AI provider returns `AI_PROVIDER_REQUIRED`;
 - user-approved install flow can run automatic default-path installation;
 - no secret values are printed;

@@ -10,20 +10,24 @@ import {
   renameSync,
   statSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 
-const BRIDGE_VERSION = "0.6.0";
-const PLUGIN_PHASE = "one-shot-execution";
+const BRIDGE_VERSION = "0.7.0";
+const PLUGIN_PHASE = "guest-session-bootstrap";
 const COMMAND_TIMEOUT_MS = 5000;
 const RUN_TIMEOUT_MS = 120000;
 const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 const RELEASE_LOOKUP_TIMEOUT_MS = 30000;
 const INSTALL_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 const DOWNLOAD_STALL_TIMEOUT_MS = 30000;
+const SESSION_BOOTSTRAP_TIMEOUT_MS = 30000;
+const SESSION_BOOTSTRAP_POLL_MS = 2000;
+const SESSION_API_TIMEOUT_MS = 5000;
 const MAX_COMMAND_OUTPUT = 4096;
 const DEBUG_DISCOVERY = process.env.OPENLOOMI_DEBUG_DISCOVERY === "1";
 const OFFICIAL_RELEASE_SOURCE = {
@@ -37,6 +41,7 @@ const OFFICIAL_RELEASE_SOURCE = {
 const COMMANDS = new Set([
   "configure-ai-provider",
   "help",
+  "initialize-session",
   "install-openloomi",
   "install-instructions",
   "run",
@@ -59,7 +64,7 @@ const WORKFLOW_GUIDANCE = [
       "Use OpenLoomi loop workflow for this Codex task. Keep connector and memory operations inside OpenLoomi runtime.",
     nextActionsWhenBlocked: [
       "install_openloomi",
-      "login_openloomi",
+      "initialize_openloomi_session",
       "configure_ai_provider",
       "configure_connectors",
     ],
@@ -81,7 +86,7 @@ const WORKFLOW_GUIDANCE = [
       "Use OpenLoomi memory workflow for this Codex task. Keep memory reads and writes inside OpenLoomi runtime.",
     nextActionsWhenBlocked: [
       "install_openloomi",
-      "login_openloomi",
+      "initialize_openloomi_session",
       "configure_ai_provider",
       "configure_connectors",
     ],
@@ -103,7 +108,7 @@ const WORKFLOW_GUIDANCE = [
       "Use OpenLoomi connector readiness workflow. Report setup status only and keep OAuth or API secrets inside OpenLoomi-owned surfaces.",
     nextActionsWhenBlocked: [
       "install_openloomi",
-      "login_openloomi",
+      "initialize_openloomi_session",
       "configure_connectors",
     ],
     safety: [
@@ -124,7 +129,7 @@ const WORKFLOW_GUIDANCE = [
       "Use OpenLoomi handoff workflow for this Codex task. Create a follow-up or delegated Loomi task when supported by the runtime.",
     nextActionsWhenBlocked: [
       "install_openloomi",
-      "login_openloomi",
+      "initialize_openloomi_session",
       "configure_ai_provider",
       "configure_connectors",
     ],
@@ -167,6 +172,11 @@ async function buildSetupStatus() {
     aiProviderConfigured: aiProvider.configured,
     connectorStatusAvailable: false,
     apiReachable: false,
+    session: {
+      tokenPresent: token.present,
+      guestBootstrapSupported: true,
+      guestBootstrapMode: "local-openloomi-api",
+    },
     discoverySource: discovery.source,
     sourceRoot: DEBUG_DISCOVERY ? discovery.sourceRoot : null,
     sourceRootPresent: Boolean(discovery.sourceRoot),
@@ -1578,6 +1588,382 @@ function runOpenLoomiOneShot({ ctlPath, permissionMode, prompt }) {
   );
 }
 
+async function initializeSession() {
+  const setup = await buildSetupStatus();
+
+  if (!setup.installed) {
+    writeJson(
+      {
+        ...setup,
+        ready: false,
+        nextAction: "install_openloomi",
+        reason: "INSTALL_REQUIRED",
+        message:
+          "OpenLoomi must be installed before the plugin can initialize a guest/session token.",
+      },
+      1,
+    );
+    return;
+  }
+
+  const session = await ensureOpenLoomiSession();
+
+  writeJson(
+    {
+      ready: session.ready,
+      nextAction: session.ready ? "setup_status" : session.nextAction,
+      reason: session.ready ? "SESSION_READY" : session.reason,
+      message: session.message,
+      session: session.session,
+    },
+    session.ready ? 0 : 1,
+  );
+}
+
+async function ensureOpenLoomiSession() {
+  const token = getTokenStatus();
+
+  if (token.present) {
+    return {
+      ready: true,
+      message: "OpenLoomi session token is already available.",
+      session: {
+        tokenPresent: true,
+        initialized: false,
+        source: token.checked.find((item) => item.present)?.source || "unknown",
+      },
+    };
+  }
+
+  const firstAttempt = await tryInitializeGuestSessionFromLocalApi();
+
+  if (firstAttempt.ready) {
+    return firstAttempt;
+  }
+
+  const discovery = await discoverOpenLoomi();
+  const launch = launchOpenLoomiForSession(discovery.ctlPath);
+
+  if (launch.launched) {
+    const deadline = Date.now() + SESSION_BOOTSTRAP_TIMEOUT_MS;
+
+    while (Date.now() < deadline) {
+      await sleep(SESSION_BOOTSTRAP_POLL_MS);
+
+      const fileToken = getTokenStatus();
+      if (fileToken.present) {
+        return {
+          ready: true,
+          message:
+            "OpenLoomi started and wrote a local guest/session token for Codex.",
+          session: {
+            tokenPresent: true,
+            initialized: true,
+            source: fileToken.checked.find((item) => item.present)?.source,
+            launch,
+          },
+        };
+      }
+
+      const retry = await tryInitializeGuestSessionFromLocalApi();
+      if (retry.ready) {
+        return {
+          ...retry,
+          session: {
+            ...retry.session,
+            launch,
+          },
+        };
+      }
+    }
+  }
+
+  return {
+    ready: false,
+    nextAction: "open_openloomi",
+    reason: "SESSION_INITIALIZATION_REQUIRED",
+    message:
+      "OpenLoomi is installed, but the plugin could not initialize a local guest/session token. Open OpenLoomi once so it can create a guest session, then retry from Codex.",
+    session: {
+      tokenPresent: false,
+      guestSupported: true,
+      attempts: firstAttempt.session?.attempts || [],
+      launch,
+    },
+  };
+}
+
+async function tryInitializeGuestSessionFromLocalApi() {
+  const attempts = [];
+
+  for (const baseUrl of getLocalApiBaseUrls()) {
+    const result = await requestGuestToken(baseUrl);
+    attempts.push(summarizeSessionAttempt(result));
+
+    if (result.token) {
+      saveOpenLoomiToken(result.token);
+
+      return {
+        ready: true,
+        message:
+          "Initialized an OpenLoomi guest session through the local OpenLoomi API.",
+        session: {
+          tokenPresent: true,
+          initialized: true,
+          guest: true,
+          source: "local-openloomi-api",
+          baseUrl,
+          attempts,
+        },
+      };
+    }
+  }
+
+  return {
+    ready: false,
+    session: {
+      tokenPresent: false,
+      attempts,
+    },
+  };
+}
+
+async function requestGuestToken(baseUrl) {
+  if (typeof fetch !== "function") {
+    return {
+      baseUrl,
+      reason: "FETCH_UNAVAILABLE",
+    };
+  }
+
+  try {
+    const guestResponse = await fetchWithTimeout(
+      `${baseUrl}/api/auth/guest?redirectUrl=/`,
+      {
+        method: "POST",
+        redirect: "manual",
+      },
+      SESSION_API_TIMEOUT_MS,
+    );
+    const cookieHeader = toCookieHeader(
+      getSetCookieHeaders(guestResponse.headers),
+    );
+
+    if (!cookieHeader) {
+      return {
+        baseUrl,
+        status: guestResponse.status,
+        reason: "SESSION_COOKIE_MISSING",
+      };
+    }
+
+    const tokenResponse = await fetchWithTimeout(
+      `${baseUrl}/api/auth/token`,
+      {
+        headers: {
+          Cookie: cookieHeader,
+        },
+        redirect: "manual",
+      },
+      SESSION_API_TIMEOUT_MS,
+    );
+
+    if (!tokenResponse.ok) {
+      return {
+        baseUrl,
+        status: tokenResponse.status,
+        reason: "TOKEN_REQUEST_FAILED",
+      };
+    }
+
+    const payload = await tokenResponse.json();
+
+    if (!hasValue(payload?.token)) {
+      return {
+        baseUrl,
+        status: tokenResponse.status,
+        reason: "TOKEN_MISSING",
+      };
+    }
+
+    return {
+      baseUrl,
+      status: tokenResponse.status,
+      token: payload.token,
+      reason: "TOKEN_CREATED",
+    };
+  } catch (error) {
+    return {
+      baseUrl,
+      reason: error?.name === "AbortError" ? "API_TIMEOUT" : "API_UNREACHABLE",
+    };
+  }
+}
+
+function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  return fetch(url, {
+    ...options,
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timer));
+}
+
+function getSetCookieHeaders(headers) {
+  if (typeof headers.getSetCookie === "function") {
+    return headers.getSetCookie();
+  }
+
+  const header = headers.get("set-cookie");
+  return header ? splitSetCookieHeader(header) : [];
+}
+
+function splitSetCookieHeader(header) {
+  return String(header)
+    .split(/,(?=\s*[^;,\s]+=)/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function toCookieHeader(setCookieHeaders) {
+  return setCookieHeaders
+    .map((entry) => entry.split(";")[0]?.trim())
+    .filter(Boolean)
+    .join("; ");
+}
+
+function summarizeSessionAttempt(result) {
+  return {
+    baseUrl: result.baseUrl,
+    status: result.status || null,
+    reason: result.reason,
+    tokenCreated: Boolean(result.token),
+  };
+}
+
+function getLocalApiBaseUrls() {
+  const configured = normalizeLocalApiUrl(process.env.OPENLOOMI_API_URL);
+
+  return unique([
+    configured,
+    "http://localhost:3414",
+    "http://127.0.0.1:3414",
+    "http://localhost:3515",
+    "http://127.0.0.1:3515",
+  ]);
+}
+
+function normalizeLocalApiUrl(value) {
+  if (!hasValue(value)) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+
+    if (!localHosts.has(host)) {
+      return null;
+    }
+
+    url.pathname = "";
+    url.search = "";
+    url.hash = "";
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function saveOpenLoomiToken(token) {
+  const tokenPath = getOpenLoomiTokenPath();
+  mkdirSync(path.dirname(tokenPath), { recursive: true });
+  writeFileSync(tokenPath, Buffer.from(token, "utf8").toString("base64"), {
+    mode: 0o600,
+  });
+}
+
+function launchOpenLoomiForSession(ctlPath) {
+  const appPath = findOpenLoomiAppForCtl(ctlPath);
+
+  if (!appPath) {
+    return {
+      launched: false,
+      reason: "APP_EXECUTABLE_NOT_FOUND",
+    };
+  }
+
+  try {
+    const child = spawn(appPath, [], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false,
+    });
+    child.unref();
+
+    return {
+      launched: true,
+      reason: "APP_LAUNCHED",
+      ...debugPath("appPath", appPath),
+    };
+  } catch {
+    return {
+      launched: false,
+      reason: "APP_LAUNCH_FAILED",
+      ...debugPath("appPath", appPath),
+    };
+  }
+}
+
+function findOpenLoomiAppForCtl(ctlPath) {
+  const normalizedCtlPath = normalizePath(ctlPath);
+
+  if (!normalizedCtlPath) {
+    return null;
+  }
+
+  const dirs = [];
+  let current = path.dirname(normalizedCtlPath);
+
+  for (
+    let index = 0;
+    index < 6 && current && current !== path.dirname(current);
+    index += 1
+  ) {
+    dirs.push(current);
+    current = path.dirname(current);
+  }
+
+  const candidates = unique(
+    dirs.flatMap((directory) =>
+      getOpenLoomiAppNames().map((name) => path.join(directory, name)),
+    ),
+  );
+
+  return candidates.find(isFile) || null;
+}
+
+function getOpenLoomiAppNames() {
+  if (process.platform === "win32") {
+    return ["openloomi.exe", "OpenLoomi.exe"];
+  }
+
+  if (process.platform === "darwin") {
+    return ["openloomi", "OpenLoomi"];
+  }
+
+  return ["openloomi", "OpenLoomi", "openloomi.AppImage", "OpenLoomi.AppImage"];
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 function runCommandWithInput(command, args, input, timeoutMs) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -1624,8 +2010,10 @@ function normalizeRunFailure(result) {
 
   if (output.includes("login") || output.includes("auth")) {
     return {
-      nextAction: "login_openloomi",
-      reason: "LOGIN_REQUIRED",
+      nextAction: "initialize_openloomi_session",
+      reason: "SESSION_INITIALIZATION_REQUIRED",
+      message:
+        "OpenLoomi needs a local guest or signed-in session token before one-shot execution. OpenLoomi guest sessions are supported; no registered login is required by the Codex plugin.",
       openloomi: summarizeRunProcess(result),
     };
   }
@@ -1718,6 +2106,24 @@ async function run() {
         command: "run",
         message:
           "OpenLoomi is not ready for one-shot execution. Complete the reported nextAction first.",
+      },
+      1,
+    );
+    return;
+  }
+
+  const session = await ensureOpenLoomiSession();
+
+  if (!session.ready) {
+    writeJson(
+      {
+        ready: false,
+        ran: false,
+        command: "run",
+        nextAction: session.nextAction,
+        reason: session.reason,
+        message: session.message,
+        session: session.session,
       },
       1,
     );
@@ -2084,19 +2490,22 @@ function getReadinessDecision(discovery, token, aiProvider) {
     };
   }
 
-  if (!token.present) {
-    return {
-      ready: false,
-      nextAction: "login_openloomi",
-      reason: "LOGIN_REQUIRED",
-    };
-  }
-
   if (!aiProvider.configured) {
     return {
       ready: false,
       nextAction: "configure_ai_provider",
       reason: "AI_PROVIDER_REQUIRED",
+    };
+  }
+
+  if (!token.present) {
+    return {
+      ready: true,
+      nextAction: "run",
+      reason: "READY_SESSION_BOOTSTRAP_PENDING",
+      sessionInitializationRequired: true,
+      message:
+        "OpenLoomi is installed and provider setup appears available. The bridge will initialize a local guest/session token on run when possible.",
     };
   }
 
@@ -2116,7 +2525,7 @@ function getTokenStatus() {
     },
   ];
 
-  const tokenPath = path.join(os.homedir(), ".openloomi", "token");
+  const tokenPath = getOpenLoomiTokenPath();
 
   checked.push({
     key: "~/.openloomi/token",
@@ -2128,6 +2537,10 @@ function getTokenStatus() {
     present: checked.some((item) => item.present),
     checked,
   };
+}
+
+function getOpenLoomiTokenPath() {
+  return path.join(os.homedir(), ".openloomi", "token");
 }
 
 function getAiProviderStatus() {
@@ -2430,6 +2843,9 @@ async function main() {
       break;
     case "help":
       help();
+      break;
+    case "initialize-session":
+      await initializeSession();
       break;
     case "install-openloomi":
       await installOpenLoomi(process.argv.slice(3));

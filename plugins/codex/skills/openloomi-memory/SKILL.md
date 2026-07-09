@@ -22,8 +22,9 @@ Then check readiness:
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" setup-status
 ```
 
-If `ready: false`, follow the reported `nextAction`. Connector or login setup
-must happen through OpenLoomi-owned surfaces, not Codex chat.
+If `ready: false`, follow the reported `nextAction`. Connector setup and
+guest/session initialization must happen through OpenLoomi-owned surfaces, not
+Codex chat.
 
 When `ready: true`, pass the user request over stdin to the bridge:
 

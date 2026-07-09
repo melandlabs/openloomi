@@ -22,6 +22,15 @@ If the bridge returns `ready: false`, follow the reported `nextAction`. Do not
 ask the user to paste API keys, OAuth tokens, connector secrets, or OpenLoomi
 auth tokens into Codex chat.
 
+OpenLoomi guest sessions are supported. A missing token is not a request for
+account registration or manual token entry. When the bridge reports
+`initialize_openloomi_session` or `open_openloomi`, initialize a guest/session
+through OpenLoomi-owned surfaces:
+
+```bash
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" initialize-session
+```
+
 For installation guidance, call:
 
 ```bash
@@ -91,3 +100,8 @@ printf "%s" "<user task>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
 The bridge invokes `openloomi-ctl --one-shot --stdin --json --permission-mode
 deny` by default. Only pass `--permission-mode ask` or `--permission-mode allow`
 when the user explicitly asks for a different permission mode.
+
+If no token exists yet, `run` first attempts to initialize an OpenLoomi guest
+session through the local OpenLoomi API. If that cannot complete, follow the
+reported `SESSION_INITIALIZATION_REQUIRED` next action instead of asking for a
+login token in Codex chat.
