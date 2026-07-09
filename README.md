@@ -22,7 +22,7 @@
 
 ## What is OpenLoomi?
 
-OpenLoomi is an open-source AI coworker and workspace for builders who want local-first work memory around their AI agents. It connects your work tools so AI can understand people, projects, decisions, and follow-ups before it acts with human approval.
+OpenLoomi is an open-source AI coworker and workspace for builders who want local-first work memory around their AI agents. It connects your work tools and screen so AI can understand people, projects, decisions, and follow-ups before it acts with human approval.
 
 ## Quick Start
 
@@ -74,6 +74,10 @@ Requires Node.js 22+, pnpm 9+, Rust 1.75+, and on Windows: Visual Studio Build T
 ## App Screenshots
 
 <table>
+<tr>
+<td><img src="screenshots/app/loomi-pet.gif" alt="Loomi Pet" width="100%"></td>
+<td><img src="screenshots/app/loomi-proactive-task.gif" alt="Proactive Tasks" width="100%"></td>
+</tr>
 <tr>
 <td><img src="screenshots/app/docx.gif" alt="Document preview" width="100%"></td>
 <td><img src="screenshots/app/excel.gif" alt="Spreadsheet preview" width="100%"></td>
