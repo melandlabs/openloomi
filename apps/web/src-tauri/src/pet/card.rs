@@ -51,6 +51,7 @@ pub fn build_card_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow>
     .decorations(false)
     .transparent(true)
     .always_on_top(true)
+    .visible_on_all_workspaces(true)
     .skip_taskbar(true)
     .shadow(false)
     .visible(false)
@@ -83,18 +84,25 @@ pub fn build_card_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow>
 /// when there is a pending decision. If the window doesn't exist yet
 /// the first call builds it.
 pub fn show_card_window(app: &AppHandle) {
+    super::aux_position::clear_card_manual_position();
+    super::aux_position::reposition_card_to_pet(app);
     if let Some(w) = app.get_webview_window(PET_CARD_LABEL) {
+        let _ = w.set_ignore_cursor_events(false);
         let _ = w.show();
         let _ = w.set_focus();
         let _ = w.set_always_on_top(true);
+        let _ = w.set_visible_on_all_workspaces(true);
         return;
     }
     if let Err(e) = build_card_window(app) {
         log::warn!("[loop-pet] show_card_window: build failed: {e}");
     }
     if let Some(w) = app.get_webview_window(PET_CARD_LABEL) {
+        let _ = w.set_ignore_cursor_events(false);
         let _ = w.show();
         let _ = w.set_focus();
+        let _ = w.set_always_on_top(true);
+        let _ = w.set_visible_on_all_workspaces(true);
     }
 }
 

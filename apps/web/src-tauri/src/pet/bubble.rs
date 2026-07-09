@@ -54,6 +54,7 @@ pub fn build_bubble_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindo
     .decorations(false)
     .transparent(true)
     .always_on_top(true)
+    .visible_on_all_workspaces(true)
     .skip_taskbar(true)
     .shadow(false)
     .visible(false)
@@ -103,6 +104,7 @@ pub fn show_bubble_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(PET_BUBBLE_LABEL) {
         let _ = w.show();
         let _ = w.set_always_on_top(true);
+        let _ = w.set_visible_on_all_workspaces(true);
         let _ = w.set_focus();
         // Tell the bubble's JS to (re)arm its auto-dismiss timer. The
         // bubble owns the dismiss lifecycle (see

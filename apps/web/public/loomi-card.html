@@ -146,6 +146,15 @@
         align-items: center;
         gap: 6px;
         flex: 0 0 auto;
+        cursor: grab;
+      }
+      .header:active {
+        cursor: grabbing;
+      }
+      .header button,
+      .header [data-action],
+      .header a {
+        cursor: pointer;
       }
       .header .icon {
         font-size: 14px;
@@ -1777,6 +1786,67 @@
         const card = document.getElementById("card");
         const toast = document.getElementById("toast");
         const layouts = document.querySelectorAll("[data-layout]");
+
+        function getCurrentWindow() {
+          const t = window.__TAURI__;
+          if (!t) return null;
+          if (
+            t.webviewWindow &&
+            typeof t.webviewWindow.getCurrentWebviewWindow === "function"
+          ) {
+            return t.webviewWindow.getCurrentWebviewWindow();
+          }
+          if (t.window && typeof t.window.getCurrentWebviewWindow === "function") {
+            return t.window.getCurrentWebviewWindow();
+          }
+          if (t.window && typeof t.window.getCurrentWindow === "function") {
+            return t.window.getCurrentWindow();
+          }
+          if (t.window && typeof t.window.getCurrent === "function") {
+            return t.window.getCurrent();
+          }
+          return null;
+        }
+
+        function restoreCursorEvents() {
+          const win = getCurrentWindow();
+          if (win && typeof win.setIgnoreCursorEvents === "function") {
+            try {
+              win.setIgnoreCursorEvents(false);
+            } catch (_) {
+              /* non-fatal */
+            }
+          }
+          return win;
+        }
+
+        function isInteractiveTarget(target) {
+          return Boolean(
+            target &&
+              target.closest &&
+              target.closest(
+                "button,a,input,textarea,select,[contenteditable='true'],[data-action],[data-editor-action]",
+              ),
+          );
+        }
+
+        card.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          if (isInteractiveTarget(e.target)) return;
+          const header =
+            e.target && e.target.closest ? e.target.closest(".header") : null;
+          if (!header) return;
+          const win = restoreCursorEvents();
+          if (win && typeof win.startDragging === "function") {
+            try {
+              const t = window.__TAURI__;
+              if (t && t.event && t.event.emit) t.event.emit("pet:card-drag-start");
+              win.startDragging();
+            } catch (_) {
+              /* native drag is best-effort */
+            }
+          }
+        });
 
         // ---------- State store ----------
         let state = "idle";

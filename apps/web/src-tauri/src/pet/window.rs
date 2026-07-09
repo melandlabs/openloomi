@@ -56,6 +56,7 @@ pub fn build_pet_window(app: &AppHandle) -> tauri::Result<()> {
     .decorations(false)
     .transparent(true)
     .always_on_top(true)
+    .visible_on_all_workspaces(true)
     .skip_taskbar(true)
     .shadow(false)
     .visible(true)
@@ -74,6 +75,7 @@ pub fn build_pet_window(app: &AppHandle) -> tauri::Result<()> {
     .decorations(false)
     .transparent(true)
     .always_on_top(true)
+    .visible_on_all_workspaces(true)
     .skip_taskbar(true)
     .shadow(false)
     .visible(true)
@@ -94,6 +96,7 @@ pub fn show_pet_window(app: &AppHandle) {
         let _ = w.show();
         let _ = w.set_focus();
         let _ = w.set_always_on_top(true);
+        let _ = w.set_visible_on_all_workspaces(true);
     }
 }
 

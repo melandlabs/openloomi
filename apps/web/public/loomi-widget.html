@@ -456,7 +456,7 @@
             }
           }
           try {
-            fox.setPointerCapture(e.pointerId);
+            document.body.setPointerCapture(e.pointerId);
           } catch (_) {}
         }
 
@@ -472,7 +472,7 @@
         function onPointerUp(e) {
           document.body.classList.remove("dragging");
           try {
-            fox.releasePointerCapture(e.pointerId);
+            document.body.releasePointerCapture(e.pointerId);
           } catch (_) {}
           // Click only fires if the pointer didn't travel far — anything
           // beyond DRAG_THRESHOLD counts as a drag, not a click.
@@ -495,10 +495,10 @@
           }
         }
 
-        fox.addEventListener("pointerdown", onPointerDown);
-        fox.addEventListener("pointermove", onPointerMove);
-        fox.addEventListener("pointerup", onPointerUp);
-        fox.addEventListener("pointercancel", onPointerUp);
+        document.body.addEventListener("pointerdown", onPointerDown);
+        document.body.addEventListener("pointermove", onPointerMove);
+        document.body.addEventListener("pointerup", onPointerUp);
+        document.body.addEventListener("pointercancel", onPointerUp);
 
         // ---- Tauri bridge ----------------------------------------------
         // Only attach the listener when running inside Tauri. When the

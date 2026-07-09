@@ -18,7 +18,8 @@ mod watcher;
 mod window;
 
 pub use aux_position::{
-    reposition_bubble_to_pet, reposition_card_to_pet, spawn_position_poller,
+    clear_card_manual_position, reposition_bubble_to_pet, reposition_card_to_pet,
+    set_card_manual_position, spawn_position_poller,
 };
 pub use bubble::{
     build_bubble_window, hide_bubble_window, show_bubble_window, BUBBLE_H, BUBBLE_W,
@@ -131,4 +132,3 @@ pub async fn emit_dev_state(
     let _ = app.emit_to(PET_BUBBLE_LABEL, "loop:state", payload);
     Ok(())
 }
-

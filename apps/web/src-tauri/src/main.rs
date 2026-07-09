@@ -627,6 +627,13 @@ fn main() {
                 pet::show_card_window(&open_card_app);
             });
 
+            // Card header drag → let the user manually park the card.
+            // The aux-position poller respects this until the pet moves
+            // again, at which point card following resumes.
+            app_handle.listen("pet:card-drag-start", move |_event| {
+                pet::set_card_manual_position(true);
+            });
+
             // B2: card × button → close card, restore bubble only if there's still
             // a pending decision surfacing. Without this gate the bubble
             // pops up empty ("All clear") when the user dismissed the
