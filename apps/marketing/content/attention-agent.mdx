@@ -1,0 +1,142 @@
+---
+title: "Attention Agent"
+description: "The always-on desktop companion — a quiet tap on the desk the moment you need a reminder"
+icon: "FaPaw"
+---
+
+# Attention Agent
+
+> At 9 AM, the moment you sit down at your desk, before you've even opened your inbox, a small fox (Loomi) peeks out in the bottom-right corner of your screen with a bubble that reads: "Sarah's meeting invite still needs an RSVP — due today at 11."
+>
+> That's the Attention Agent — the always-on desktop companion built into OpenLoomi. It doesn't fight for your attention; it nudges you, gently, at the moments that matter.
+
+The Attention Agent is a transparent little fox named **Loomi** that lives on top of your desktop. 168×168, always-on-top, with its own expression animations. It proactively tells you "what's waiting for you today", but it never interrupts what you're doing. Close the main OpenLoomi window and Loomi doesn't go away — it retreats into the system tray and comes back the moment you tap it.
+
+<p align="center">
+  <img
+    src="/img/pic/function/AttentionAgent.png"
+    alt="Loomi delivering a morning briefing inside OpenLoomi"
+    width="720"
+  />
+</p>
+
+> In the screenshot above: it's 9 AM, Loomi has slid a morning briefing panel onto your desktop showing **8 unread emails**, **0 calendar conflicts**, **1 PR review** waiting, and the top three items you actually need to act on today — with a single **View details** button that takes you straight to the full thread in [Chat](/docs/chat).
+
+> 💡 **The Attention Agent is the messenger, [Loop](/docs/loop) is the brain.** Loomi only ever surfaces what Loop has decided you should see — tap any bubble and you land in the full [Chat](/docs/chat) thread.
+
+---
+
+## Overview
+
+The Attention Agent is not a chat window, not a toolbar, and not a notification centre. It's more like a partner at your desk — appearing only in the few key moments when you actually need a reminder:
+
+- 🔔 **A new email arrives — but only the one that truly needs your reply**
+- ⏰ **A calendar event slides past your usual response window**
+- 📋 **At 9 AM sharp, today's to-do glides gently into your view**
+- ✅ **At 6 PM, you get a recap of what was handled for you today**
+- ❓ **You asked the main window something with a long answer — Loomi pops a one-line summary first**
+
+The principle: **never intrusive, only present in the right instant.**
+
+---
+
+## When Loomi Shows Up
+
+### ☀️ 9 AM — Today's To-Do
+
+Every morning at 9 AM, Loomi pulls today's items from your email, calendar, Linear, Slack, and code-review queue, ranks them by priority, and slides a small card into the corner of your screen. A glance is enough to know what's ahead.
+
+The actual ranking and decision-card generation comes from [Loop](/docs/loop); the Attention Agent is just the messenger.
+
+### ✉️ Incoming email — only the ones that need you
+
+Not every email triggers a bubble. Loomi only pops up when **all three** of these hold:
+
+- The sender is on the "important contacts" list in [OpenLoomi Memory](/docs/memory)
+- The subject or body contains an action word — _"RSVP"_, _"please confirm"_, _"reply"_, _"get back to me"_
+- The email has passed your usual reply window (default 4 hours) and is still unanswered
+
+Which platforms Loomi reads from depends on your [Connectors](/docs/connectors) — toggle a connector off and the Attention Agent stops seeing those signals.
+
+### 📅 Calendar invites past their RSVP window
+
+When a meeting invite has been sitting unanswered for over 24 hours, Loomi sways gently at your desk until you respond. Tap the bubble to accept, decline, or propose a new time without ever opening your calendar app.
+
+### 🌙 6 PM — Today's Done
+
+Every evening at 6 PM, Loomi delivers a recap of what [Loop](/docs/loop) handled for you during the day — emails sent, RSVPs logged, Linear tickets closed. The goal: a clean mental inbox before you log off.
+
+### 🪟 When the main window is closed
+
+Close the main OpenLoomi window and Loomi doesn't disappear. It shrinks into the system tray (Windows / Linux) or the menu bar (macOS), still watching the door for new reminders.
+
+---
+
+## Gestures
+
+Loomi isn't a one-way notifier. It responds to a handful of gestures:
+
+| Gesture                | How                               | What Happens                                                                                         |
+| ---------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Tap a bubble**       | Click the bubble next to Loomi    | Opens the matching detail view — a [Chat](/docs/chat) thread for emails, a calendar card for invites |
+| **Drag Loomi**         | Drag Loomi anywhere on screen     | Loomi remembers the spot and stays there next time                                                   |
+| **Right-click Loomi**  | Right-click for the context menu  | Pause reminders · Check now · Open main window · Quit                                                |
+| **Double-click Loomi** | Double-click                      | Summons the main OpenLoomi window directly                                                           |
+| **Reply to it**        | Tap a bubble → _"I'll handle it"_ | The main window pre-fills a reply draft; you just confirm                                            |
+
+If you don't want to be interrupted in a moment — say, during a demo — right-click and pick **Pause reminders for 1 hour**. Loomi quiets down and slips on a little sleep-mask animation. You can also set recurring quiet hours (e.g. evenings, weekends) in **Settings → Attention Agent**.
+
+---
+
+## How to Find It
+
+The Attention Agent is on by default. After installing the OpenLoomi desktop app:
+
+1. **First launch** — Loomi walks out from the bottom-right corner and introduces itself.
+2. **Can't find it?** — Click the OpenLoomi icon in the system tray (Windows / Linux) or menu bar (macOS), then pick **Show Attention Agent**.
+3. **Want to turn it off?** — Right-click Loomi → Quit, or open the main OpenLoomi window → **Settings → Attention Agent**.
+
+> 💡 Loomi is **transparent** by default — it doesn't get in the way of your work. If you'd like it more visible, the settings panel lets you add a faint background, adjust the scale (default 168×168), or pin it above full-screen apps.
+
+---
+
+## Tips
+
+- **Let Loomi sit on a second monitor.** If you use a primary display for focus work, dragging Loomi to your secondary screen gives you reminders without breaking your flow.
+- **Tune the quiet hours.** Schedule pause windows around deep-work blocks, recurring meetings, or after-hours — so Loomi only nudges you when you're actually available to act.
+- **Pair it with Loop.** Loomi alone is a polite messenger; pair it with [Loop](/docs/loop) and you get the full proactive desk — Loop decides what matters, Loomi makes sure you actually see it.
+- **Trust the memory layer.** Loomi's "important contacts" list comes from [OpenLoomi Memory](/docs/memory). The more you use OpenLoomi, the smarter the filter gets — give it a week before you tune anything.
+
+---
+
+## FAQ
+
+### Does Loomi watch everything I do?
+
+No. Loomi only reads signals tied to you from the **platforms you've explicitly connected** (email, calendar, chat). It does not read your screen, keyboard, or clipboard. See [Privacy & Security](/docs/privacy-security) for the full breakdown of what the Attention Agent does and doesn't see.
+
+### Can I have it remind me of only certain things?
+
+Yes. In the main OpenLoomi window → **Settings → Attention Agent**, you can toggle each reminder source independently:
+
+- Email reminders (the ones that need a reply)
+- Calendar reminders (overdue RSVP)
+- Today's to-do (every day at 9 AM)
+- Today's done (every day at 6 PM)
+
+Each can have its own schedule or be turned off entirely.
+
+### Does it eat up resources?
+
+The Attention Agent is lightweight — just a 168×168 transparent window, no continuous network calls. All the heavy lifting ("scan email / calendar") runs in OpenLoomi's background; Loomi's only job is to surface the result at the right moment.
+
+### Can I use it across multiple screens?
+
+Yes. Loomi defaults to the bottom-right of your primary monitor, but wherever you drag it — which monitor, which corner — it remembers.
+
+### What's the difference between the Attention Agent and Loop?
+
+- **The Attention Agent** is the **little fox on your desktop**, gently reminding you in your line of sight.
+- **Loop** is the **proactive execution engine** in the background, picking up scattered signals and turning them into decision cards waiting for your approval.
+
+The two work as a pair: the "Today's To-Do" and "Today's Done" that Loomi pushes are essentially Loop's output, surfaced to your eyes by the Attention Agent. To see how that pipeline actually works, read [Loop](/docs/loop) next.

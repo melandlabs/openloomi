@@ -24,6 +24,10 @@
 
 OpenLoomi is an open-source AI coworker and workspace for builders who want local-first work memory around their AI agents. It connects your work tools and screen so AI can understand people, projects, decisions, and follow-ups before it acts with human approval.
 
+<p align="center">
+  <img src="screenshots/app/main-with-loomi.png" alt="OpenLoomi main window with Loomi" width="100%">
+</p>
+
 ## Quick Start
 
 **Download directly** (for end users):

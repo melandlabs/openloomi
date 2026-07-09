@@ -50,6 +50,16 @@ const capabilitiesItemsStatic = [
     icon: "route",
     backgroundImage: "/img/pic/function/Follow.png",
   },
+  {
+    title: "Attention Agent",
+    icon: "paw-print",
+    backgroundImage: "/img/pic/function/AttentionAgent.png",
+  },
+  {
+    title: "Loop",
+    icon: "loop-right",
+    backgroundImage: "/img/pic/function/Loop.png",
+  },
 ];
 
 const sectionShell = "w-full mx-0 px-4 sm:px-20 lg:px-20 py-20 sm:py-32";

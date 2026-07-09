@@ -24,6 +24,10 @@
 
 OpenLoomi 是一个开源的 AI 工作空间，运行在你的桌面上。它连接你已经在使用的工具和屏幕——消息应用、邮件、日历、文档、项目追踪器——并为你的人、项目和决策构建一个**全域上下文**。
 
+<p align="center">
+  <img src="screenshots/app/main-with-loomi.png" alt="OpenLoomi 主窗口与 Loomi" width="100%">
+</p>
+
 ## 功能特性
 
 |     | 功能模块                                                   | 功能说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |

@@ -1,0 +1,119 @@
+---
+title: "OpenLoomi 0.7.0"
+description: "OpenLoomi 0.7.0 release notes"
+---
+
+# OpenLoomi 0.7.0 - July 8, 2026
+
+OpenLoomi 0.7.0 marks the release of the **AI coworker experience** — a Loomi desktop pet that mirrors your activity, the Loop proactive execution engine running inside the main app, and a sweeping memory intelligence upgrade with relations, consolidation, and the BEAM benchmark. The release also expands agent runtime support with OpenCode and Hermes ACP, ships a cross-platform FileSystem and Obsidian vault scanner, and consolidates the CLI around `openloomi-ctl` and one-shot mode.
+
+### Notable Changes
+
+#### Loomi Desktop Pet (Attention Agent)
+
+A resident desktop pet — a small Loomi fox — now ships with OpenLoomi and reflects your activity in real time. The pet is on by default with an opt-out setting, and runs in its own Tauri webview so it stays present even when the main window is closed.
+
+- **Pet Core & Lifecycle**: New pet core module ships its own webview HTML and sprite assets, with full Tauri capability set, window registration, and lifecycle wired into the main app, tray, close, and cleanup flows
+- **Bubble & Card Windows**: Pet shows speech bubbles for proactive nudges and decision cards for actions requiring your approval, with auto-dismiss and inline draft editing
+- **Dev Scene Panel**: A dedicated dev panel exposes the pet's current scene, source chain, WHY labels, queue sort, and evidence pills for transparent debugging
+- **Fresh-Install Setup State**: First launch shows a "needs-setup" state and the "Add more connectors" CTA routes into the chat composer
+- **Cross-Webview Settings Sync**: Settings (including opt-out) sync across the main webview, the pet webview, and the chat composer in real time
+- **Right-Click Settings Menu**: Settings entry added to the pet's right-click menu for quick access
+- **macOS Integration**: Pet icon bundle, macos-private-api support, and a one-shot scheduler for run/dismiss actions with `open-decision` routing to scheduled-jobs execution
+
+#### Loop — Proactive Execution Engine
+
+Loop is now integrated into the main app (replacing the standalone desktop pet surface) and becomes OpenLoomi's continuously running judgment engine — every 10 minutes it scans email, calendar, code, and chat for signals that need your decision, then turns them into decision cards with confidence scores and evidence chains.
+
+- **Chat Workspace & Pages**: New chat workspace UI, plus `brief` (morning summary) and `wrap` (evening summary) pages with content API routes
+- **Agentic Connector Probing**: When you save an AI key, a fire-and-forget connector probe runs in the background and surfaces real probe state across Tauri webviews
+- **Card Router & Inline Editor**: Decision cards route through an agentic SSE pipeline, with an inline draft editor on the pet card so you can tweak copy before approving
+- **Deadline Reminder Decision**: New `deadline_reminder` decision type falls back to calendar or Slack when email replies are time-sensitive
+- **Focus View as Default Landing**: The Focus view ships as the default landing surface with slimmed-down PENDING rows for at-a-glance triage
+- **Loop Hardening**: Dropped the `LOOP_LEGACY` path, removed MCP from prompts, and made skill/CLI/insights co-equal parallel fallback surfaces
+- **Built-in Job Descriptions**: Job library enriched with clearer display names and descriptions, and falls back to `openloomi-memory` insights when the composio toolkit is missing
+- **Web Context Resilience**: Decision refs, `memory_refs`, and `insight_refs` are normalized across the web layer, and the web context formatter is resilient to new payload shapes
+- **Cron Timezone Fix**: Cron scheduling no longer drifts across timezones
+- **15-min Tick Timeout & `--dangerously-skip-permissions`**: A 15-minute tick timeout and a `skip-permissions` flag give operators explicit control over long-running ticks
+
+#### Memory Intelligence
+
+A major memory upgrade ships relations, consolidation diagnostics, and the BEAM benchmark for measuring effective agent memory.
+
+- **BEAM (Benchmarking Effective Agent Memory)**: A new benchmark runner measures how well the memory layer actually helps an agent, not just how much it stores
+- **Relation Discovery & Graph Helpers**: A relation discovery boundary and graph assignment helper surface and visualize knowledge relationships
+- **Revision Governance Diagnostics**: New diagnostics track which memory entries are safe to revise and which are anchored
+- **Consolidation Diagnostics Bundle**: A consolidated diagnostics bundle ships with plan helpers, evidence cluster scoring, and a shadow diagnostics boundary for safe rollouts
+- **Soft-Deprecate Raw Messages**: Raw messages superseded by summaries are soft-deprecated, reducing noise in retrieval while keeping the originals recoverable
+- **Semantic Artifact Foundation**: A semantic artifact foundation lays the groundwork for typed memory entries (notes, decisions, references)
+- **Forgetting-Cycle Shadow Diagnostics**: Opt-in shadow hooks surface what the forgetting cycle would do, without actually mutating memory
+- **Runtime Retrieval Diagnostics**: Runtime diagnostics expose retrieval path and latency for debugging
+- **Embedding Pipeline**: ChromaDB embedding wired up via `@chroma-core/default-embed` and externalized from Turbopack
+
+#### Agent Runtimes
+
+Two new runtime providers expand the surfaces Loop and the chat agent can execute on:
+
+- **OpenCode CLI Provider**: A native OpenCode CLI runtime provider, with env-selected runtime support so you can pick the default per session
+- **Hermes ACP Runtime Provider**: Hermes joins as an ACP-compatible runtime alongside the existing Claude agent runtime
+
+#### CLI: `openloomi-ctl` & One-Shot Mode
+
+The CLI consolidates around a single binary and adds a one-shot mode for scripted use.
+
+- **Rename to `openloomi-ctl`**: The CLI binary is renamed to `openloomi-ctl` across the Tauri runner, the SKILL docs, and the integration surface
+- **One-Shot Mode**: `openloomi-ctl` runs one-shot via the native agent runner, suitable for cron, scripts, and CI
+- **Default Runtime**: The Tauri default runner is set to `openloomi` for predictable behavior
+
+#### Cross-Platform FileSystem & Obsidian Vault
+
+A new FileSystem surface works in both the browser and Tauri, and an Obsidian vault scanner lets Loop and the chat agent read your notes.
+
+- **FileSystem in Browser & Tauri**: A unified FileSystem abstraction works in both the browser and Tauri, with skill data dir whitelisted for workspace reads
+- **Obsidian Vault Scanner**: A cross-platform Obsidian vault scanner reads your `.obsidian` notes and feeds them into memory
+- **`.tsv` and `.tgz` Support**: TSV and TGZ added to `FILE_TYPE_CONFIG` so they preview alongside other document types
+
+#### Updater & Distribution
+
+- **GitHub-Only Auto-Update**: Auto-update is migrated to a GitHub-only channel and the in-app updater UI is wired up to surface new versions
+- **macOS x86_64 Render-Engine Preflight Skipped**: The macOS x86_64 render-engine preflight is skipped in the release workflow to unblock the v0.7.0 build
+
+#### Web & Desktop UX
+
+- **Default Focus View**: Focus view is the default landing surface, with slimmer PENDING rows
+- **Sidebar Cleanup**: Insights nav item removed; Loop tab and route removed in favor of the integrated in-app surface; Agent and Connectors order swapped
+- **JWT Sync in Tauri**: The NextAuth session JWT is synced to `~/.openloomi/token` so the CLI and Tauri webviews share credentials
+- **Guest Login Fix**: Guest login now succeeds in the browser and syncs the JWT to `~/.openloomi/token` after sign-in
+- **Attachments Cleared After Send**: The chat composer clears attachments after a message is sent
+- **RSVP Suggestions**: Daily-focus RSVP suggestions now open the insight drawer correctly
+- **Markdown Images**: Absolute filesystem paths in markdown `<img>` tags no longer 404
+
+#### Security Hardening
+
+- **CSP Typo & Allowlist**: A CSP typo is corrected and `jsdelivr` / `geddle` are added to the allowlist so trusted CDNs work without weakening the policy
+- **Open-Redirect Blocked in Guest Auth**: Guest auth blocks open-redirect attempts and surfaces fetch errors instead of swallowing them
+- **Local User Row Before Auth**: Tauri ensures a local user row exists before auth and surfaces save errors to the UI
+- **API Key Masking**: API key masking now shows a placeholder value, signaling that the field is masked rather than empty
+
+#### macOS & Desktop Polish
+
+- **Dock Policy Gated on Windows**: The macOS dock policy is now correctly gated on Windows builds
+- **Screen Capture Retry**: Chronicle retries macOS screen capture on transient `CGWindowList` errors
+- **Voice Input Shortcut**: A voice input shortcut is wired up in the desktop app
+- **DMG Assets & Runtime Secrets**: DMG assets and runtime secrets are packaged for smoother installs
+- **Linux Path Handling**: Tauri custom home directory path handling is fixed on Linux
+
+#### Marketing & Documentation
+
+- **"AI Coworker and Workspace" Positioning**: Marketing copy is repositioned around the AI coworker and workspace framing, with five capability pillars
+- **Privacy & Security Page**: A new Privacy & Security page documents how OpenLoomi handles your data
+- **Memory Graph Evolution Plan**: A graph evolution architecture and execution plan is published, defining the long-term trajectory for the memory layer
+- **Proactive Decisions Copy**: Proactive-decisions documentation is simplified, tightened, and rebalanced for a user-facing voice
+- **Changelog Hardening**: Stale JSDoc references in the update banner are removed for accuracy
+
+#### Internal & Tooling
+
+- **Asset Hygiene**: Asset hygiene fix closes issue #265 and removes unused binaries
+- **Lint Cleanups**: Biome lint errors in the composio-bridge are resolved and a single-line import is collapsed for readability
+- **Sentry Removed**: Sentry instrumentation is removed in favor of lighter, in-house observability
+- **`--dangerously-skip-permissions` Flag**: The `openloomi-loop` skill documents a `skip-permissions` flag for advanced operators

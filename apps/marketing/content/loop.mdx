@@ -1,0 +1,179 @@
+---
+title: "Loop"
+description: "Proactive execution engine — turns scattered signals across your apps into decision cards waiting for your approval"
+icon: "FaSyncAlt"
+---
+
+# Loop
+
+> When your day starts, the question you actually want answered isn't "how many unread emails do I have?" — it's "what do I personally need to handle today?" Loop exists to answer that question.
+>
+> It pulls signals scattered across your apps (new emails, invitations, PR comments, @mentions, Linear tickets), prioritises them, and lays them out as **decision cards** in front of you. From there, all you do is glance and click.
+
+Loop is OpenLoomi's **proactive execution engine**. Every 10 minutes it runs a quiet tick, sifts through your inbox, calendar, code, and chats for things tied to you, and surfaces only the items that genuinely need your personal decision — as **decision cards**. You glance at the preview, decide it looks right, hit **Approve**, and Loop executes on your behalf.
+
+---
+
+## Overview
+
+Loop is not a scheduled task, not an email reminder, and not a cron script. It's the **judgement engine** OpenLoomi keeps running in the background:
+
+- 🔎 **See** — Every 10 minutes, fetch signals related to you from email / calendar / GitHub / Slack / Linear
+- 🧠 **Understand** — Enrich each signal with OpenLoomi memory (who's the sender, what project is this, what did we last discuss)
+- 🪪 **Judge** — Assign a typed action (`draft_reply`, `rsvp`, `review_pr`, `slack_reply`, `todo`) and a confidence score (0.60 – 0.85)
+- 🃏 **Present** — Turn each one into a decision card, queue it for you
+- 🛡️ **Protect** — Dry-run always leads; **execution always waits for your Approve**
+
+The default is one tick every 10 minutes — quiet and out of your way. Bump it to 5 minutes for sharper signal, or 30 minutes for a calmer desk.
+
+---
+
+## Typical Scenarios
+
+### An email that needs a reply
+
+> **9:12 AM, Sarah writes:** "Hi — I tweaked tomorrow's Q2 review agenda, can you take a look? Also, I'd like to move our Wednesday 1:1 to Thursday same time — works for you?"
+
+Loop sees the email:
+
+1. Pulls OpenLoomi memory → Sarah is a product partner you've worked with for 2 years, 47 prior interactions
+2. Detects "tweaked agenda", "move it to" → classifies as `draft_reply`
+3. Confidence **0.85** (known contact)
+4. Generates a decision card in the queue:
+
+```
+┌────────────────────────────────────────────────────────┐
+│ ✉  draft_reply  ·  conf 0.85                dec_a3f2   │
+├────────────────────────────────────────────────────────┤
+│ 🕐 2 min ago  ·  📧 Sarah Chen <sarah@acme.com>         │
+│ Subject: Q2 review agenda + 1:1 reschedule              │
+│                                                         │
+│ 👤 Sarah (product, 2 yrs · 47 prior interactions)       │
+│ 🧠 memory: projects/q2_review.md (her last note re Wed) │
+│                                                         │
+│ Draft: Agenda tweaks confirmed; 1:1 moving to Thursday  │
+│        same time works for me.                          │
+│                                                         │
+│ [▶ APPROVE & SEND]  [📝 EDIT DRAFT]  [⏸ LATER]  [✕ SKIP]│
+└────────────────────────────────────────────────────────┘
+```
+
+You tap **Approve & Send**. The email goes out, Loop moves this decision to `done`, and writes the interaction back into OpenLoomi memory — so next time Sarah emails, the context is even richer.
+
+### An unanswered meeting invitation
+
+> **1:30 PM, tomorrow's meeting invite** from Maya is still sitting in your calendar, unanswered.
+
+Loop surfaces an `rsvp` decision card, pre-loads Maya's last three related notes, and defaults to "Accept" (since you and Maya interact frequently in memory). One tap, you're RSVPed.
+
+### A Slack message that @mentions you
+
+> **4:15 PM,** someone in the engineering channel pings you: "@you, is this PR already on staging?"
+
+Loop sees the @mention, recognises the sender as a frequent collaborator → pushes a `slack_reply` card with the previous three context messages pre-loaded.
+
+### A GitHub Issue assigned to you
+
+> **8:50 PM,** Issue #203 in `acme/api` gets assigned to you.
+
+Loop pushes a `todo` card — title, labels, latest discussion all visible at a glance. You pick "handle now" or "tomorrow".
+
+---
+
+## Two Daily Briefings
+
+Beyond pushing cards as they appear, Loop generates two scheduled digests:
+
+### ☀️ 9:00 AM — Today's To-Do
+
+Rolls up everything that **definitely needs your personal attention today** and delivers the list to your Attention Agent (Loomi) and the Today panel in the main OpenLoomi window:
+
+- 10 AM customer call — you haven't read the meeting brief yet (Loop has a 1-pager ready)
+- Sarah's agenda tweak needs a reply (Loop has the draft)
+- 2 PRs waiting for your review
+- 8 PM — partner's birthday, don't forget the flowers (Loop surfaced this from memory)
+
+### 🌙 6:00 PM — Today's Done
+
+Lists what **Loop already handled for you today**, so your mental inbox is empty:
+
+- ✅ 3 emails sent this morning (drafts from Loop)
+- ✅ 2 meeting invites RSVPed
+- ✅ 1 Linear ticket status updated
+- ✅ Reply sent to Sarah; she has read it
+
+---
+
+## Dry-Run Protection
+
+**Loop will never, ever act on its own before you tap Approve.**
+
+Every decision card goes through dry-run first — "what would happen if I executed this now?". Concretely:
+
+| Step               | What Dry-run Does                                                               |
+| ------------------ | ------------------------------------------------------------------------------- |
+| Pull a decision    | Loop lays the **proposed action** out on the card, fully visible to you         |
+| Check side effects | Any action that sends mail / posts a comment is flagged with a red "⚠ OUTBOUND" |
+| Wait for approval  | **No outbound action happens until you tap Approve**                            |
+| Execute after OK   | Loop calls the matching OpenLoomi connector and actually sends                  |
+| Write back memory  | Result is written into OpenLoomi memory so future context is sharper            |
+
+> 💡 If Loop pushes a card and you ignore it for 5 minutes, it auto-retreats into "Later" — your queue never piles up.
+
+---
+
+## How to Enable / Tune It
+
+Loop is on by default, scanning every 10 minutes. To tune it:
+
+1. Open the main OpenLoomi window → Settings → Loop
+2. You can adjust:
+   - **Scan frequency** — 5 / 10 / 30 minutes
+   - **Sources** — Email / Calendar / GitHub / Slack / Linear (each individually toggleable)
+   - **Morning briefing time** — default 09:00
+   - **Evening recap time** — default 18:00
+   - **Trusted contacts** — which "important contacts" always feed the queue (default: people appearing ≥ 3 times in OpenLoomi memory)
+
+If you're new to Loop:
+
+- For the first 3 days, keep defaults and **actually look at what Loop surfaces** (don't ignore it)
+- On day 3+, tune your trusted list and source toggles based on which cards felt useful vs. noise
+- After a week, Loop's hit rate climbs noticeably — OpenLoomi memory has accumulated enough "who you are and what you do"
+
+---
+
+## Relationship to the Legacy `openloomi-loop` Skill
+
+If you've read OpenLoomi's open-source skill docs before, you may have seen a skill called [`openloomi-loop`](/docs/skills#openloomi-loop). Its core idea (turn scattered signals into decision cards, wait for user approval, then execute) is **exactly** the same as the Loop above — the new Loop is just integrated into the OpenLoomi desktop app, so you no longer run `claude -p` and `loop web` manually.
+
+The legacy `openloomi-loop` skill (Apache 2.0) is still there for users who don't want the desktop app and just want a CLI-runnable Loop. The decision-card schema and interfaces are compatible between the two.
+
+---
+
+## FAQ
+
+### Will Loop secretly send emails on my behalf?
+
+No. Any outbound action (send email, RSVP, reply on Slack, comment on GitHub) must wait for your Approve. Loop only ever does "look, think, push card" — it never executes autonomously.
+
+### Can I let Loop auto-execute certain card types?
+
+Yes — but **off by default**. In Settings → Loop → Automation Rules, you can configure rules like:
+
+- e.g. for `draft_reply` cards, if confidence ≥ 0.90 AND sender is on the trusted list → auto-send
+- We recommend only enabling auto-execute for **low-risk actions** (like marking a Linear ticket as done)
+
+### Will Loop slow down my computer?
+
+Loop is low-frequency and lightweight. One tick every 10 minutes, each lasting only a few seconds. It doesn't hog CPU or memory, and doesn't drain battery — OpenLoomi's connectors already do incremental sync, so Loop only reads and judges.
+
+### What's the relationship between Loop and the Attention Agent?
+
+- **Loop** is the **judgement engine** in the background, turning scattered signals into decision cards.
+- **The Attention Agent (Loomi)** is the **little fox on your desktop**, putting Loop's results in front of your eyes.
+
+The morning "Today's To-Do" and evening "Today's Done" come from Loop — but the actual bubble that pops up in the corner of your screen is pushed by Loomi. [Learn more about the Attention Agent →](/docs/attention-agent)
+
+### What's the relationship between Loop and Chat?
+
+If you tap "📝 Edit Draft" on a decision card, you jump straight into Chat in the main OpenLoomi window — you can chat with OpenLoomi to say "make paragraph three shorter" and it'll redraft the card; once it looks right, tap Approve to execute. [Learn more about Chat →](/docs/chat)
