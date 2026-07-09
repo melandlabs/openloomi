@@ -9,6 +9,7 @@ const BRIDGE_VERSION = "0.2.0";
 const PLUGIN_PHASE = "discovery-readiness";
 const COMMAND_TIMEOUT_MS = 5000;
 const MAX_COMMAND_OUTPUT = 4096;
+const DEBUG_DISCOVERY = process.env.OPENLOOMI_DEBUG_DISCOVERY === "1";
 
 const COMMANDS = new Set([
   "help",
@@ -38,7 +39,8 @@ async function setupStatus() {
     connectorStatusAvailable: false,
     apiReachable: false,
     discoverySource: discovery.source,
-    sourceRoot: discovery.sourceRoot,
+    sourceRoot: DEBUG_DISCOVERY ? discovery.sourceRoot : null,
+    sourceRootPresent: Boolean(discovery.sourceRoot),
     bridge: {
       name: "openloomi-codex-bridge",
       version: BRIDGE_VERSION,
@@ -162,17 +164,32 @@ async function discoverOpenLoomi() {
     return pathResult;
   }
 
-  for (const root of getPlatformInstallRoots()) {
+  const platformRoots = getPlatformInstallRoots();
+  let platformCandidatesChecked = 0;
+
+  for (const root of platformRoots) {
+    const platformChecked = [];
     const result = await validateRootCandidates(root, {
       mode: "packaged",
       source: "platform-default",
-      checked,
+      checked: platformChecked,
     });
+    platformCandidatesChecked += getCtlCandidatesForRoot(root).length;
 
     if (result.status === "found" || result.status === "invalid") {
-      return result;
+      return {
+        ...result,
+        checked: [...checked, ...platformChecked],
+      };
     }
   }
+
+  checked.push({
+    source: "platform-default",
+    present: false,
+    rootsChecked: platformRoots.length,
+    candidatesChecked: platformCandidatesChecked,
+  });
 
   const savedConfig = getSavedConfigCandidates();
 
@@ -259,8 +276,8 @@ async function inspectSourceCheckout(root, options) {
   if (!normalizedRoot || !isDirectory(normalizedRoot)) {
     options.checked.push({
       source: options.source,
-      path: normalizedRoot,
       present: false,
+      ...debugPath("path", normalizedRoot),
     });
 
     return {
@@ -271,9 +288,9 @@ async function inspectSourceCheckout(root, options) {
   if (!isSourceCheckout(normalizedRoot)) {
     options.checked.push({
       source: options.source,
-      path: normalizedRoot,
       present: false,
       reason: "SOURCE_MARKERS_NOT_FOUND",
+      ...debugPath("path", normalizedRoot),
     });
 
     return {
@@ -323,9 +340,9 @@ async function validateRootCandidates(root, options) {
 
   options.checked.push({
     source: options.source,
-    root: normalizedRoot,
     present: false,
     candidatesChecked: candidates.length,
+    ...debugPath("root", normalizedRoot),
   });
 
   return {
@@ -340,8 +357,8 @@ async function validateCtlPath(candidate, options) {
     if (options.recordMissing !== false) {
       options.checked.push({
         source: options.source,
-        path: normalizedPath,
         present: false,
+        ...debugPath("path", normalizedPath),
       });
     }
 
@@ -355,9 +372,9 @@ async function validateCtlPath(candidate, options) {
 
   options.checked.push({
     source: options.source,
-    path: normalizedPath,
     present: true,
     versionValid: versionResult.exitCode === 0,
+    ...debugPath("path", normalizedPath),
   });
 
   if (versionResult.exitCode !== 0) {
@@ -712,6 +729,10 @@ function expandHome(value) {
 
 function hasValue(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function debugPath(key, value) {
+  return DEBUG_DISCOVERY && value ? { [key]: value } : {};
 }
 
 function unique(values) {
