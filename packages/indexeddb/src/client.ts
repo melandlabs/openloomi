@@ -4,15 +4,15 @@
  */
 
 import type {
-  RawMessage,
-  RawMessageQuery,
-  GroupByType,
-  MemorySummaryRecord,
-} from "./manager";
-import type {
   RunMemoryForgettingCycleResult,
   RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions,
 } from "./forgetting";
+import type {
+  GroupByType,
+  MemorySummaryRecord,
+  RawMessage,
+  RawMessageQuery,
+} from "./manager";
 import {
   ensureRawMessagesSQLiteMigration,
   migrateIndexedDBRawMessagesToSQLite,
@@ -249,6 +249,7 @@ export async function queryRawMessagesWithFallback(
         botId: query.botId,
       },
       minRawResultsWithoutFallback: minRaw,
+      includeDeprecated: query.includeDeprecated,
     });
 
     const items: RawMessageQueryResultItem[] = result.items.map((item) => {
