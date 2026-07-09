@@ -14,13 +14,14 @@ import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 
-const BRIDGE_VERSION = "0.3.0";
-const PLUGIN_PHASE = "user-approved-install";
+const BRIDGE_VERSION = "0.4.0";
+const PLUGIN_PHASE = "ai-provider-setup";
 const COMMAND_TIMEOUT_MS = 5000;
 const MAX_COMMAND_OUTPUT = 4096;
 const DEBUG_DISCOVERY = process.env.OPENLOOMI_DEBUG_DISCOVERY === "1";
 
 const COMMANDS = new Set([
+  "configure-ai-provider",
   "help",
   "install-openloomi",
   "install-instructions",
@@ -185,6 +186,49 @@ async function installOpenLoomi(args) {
   });
 }
 
+function configureAiProvider(args) {
+  const secretViolation = getSecretArgViolation(args);
+
+  if (secretViolation) {
+    writeJson(
+      {
+        ready: false,
+        nextAction: "open_openloomi_ai_provider_setup",
+        reason: "SECRET_INPUT_NOT_ALLOWED",
+        rejectedFlag: secretViolation.flag,
+        message:
+          "API keys, OAuth tokens, and other secrets must not be passed through Codex chat or command-line arguments. Use an OpenLoomi-owned setup UI or CLI surface instead.",
+      },
+      1,
+    );
+    return;
+  }
+
+  const flags = parseFlags(args);
+  const aiProvider = getAiProviderStatus();
+  const codexOAuth = getCodexOAuthFeasibility();
+  const setupRequest = getAiProviderSetupRequest(flags);
+
+  writeJson({
+    ready: aiProvider.configured,
+    nextAction: aiProvider.configured
+      ? "setup_status"
+      : "open_openloomi_ai_provider_setup",
+    reason: aiProvider.configured
+      ? "AI_PROVIDER_CONFIGURED"
+      : "AI_PROVIDER_REQUIRED",
+    aiProviderConfigured: aiProvider.configured,
+    checks: {
+      aiProvider: aiProvider.checked,
+    },
+    codexOAuth,
+    setupRequest,
+    setupOptions: getAiProviderSetupOptions(codexOAuth),
+    safety:
+      "Only non-secret provider preferences may pass through Codex. API key entry must happen in OpenLoomi-owned UI or CLI surfaces.",
+  });
+}
+
 function getInstallPlan() {
   return {
     platform: process.platform,
@@ -205,8 +249,11 @@ function getInstallPlan() {
 function parseFlags(args) {
   const flags = {
     artifactUrl: null,
+    baseUrl: null,
     confirm: false,
     launch: false,
+    model: null,
+    provider: null,
     sha256: null,
   };
 
@@ -220,6 +267,39 @@ function parseFlags(args) {
 
     if (arg === "--launch") {
       flags.launch = true;
+      continue;
+    }
+
+    if (arg === "--provider") {
+      flags.provider = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--provider=")) {
+      flags.provider = arg.slice("--provider=".length);
+      continue;
+    }
+
+    if (arg === "--base-url") {
+      flags.baseUrl = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--base-url=")) {
+      flags.baseUrl = arg.slice("--base-url=".length);
+      continue;
+    }
+
+    if (arg === "--model") {
+      flags.model = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--model=")) {
+      flags.model = arg.slice("--model=".length);
       continue;
     }
 
@@ -246,6 +326,95 @@ function parseFlags(args) {
   }
 
   return flags;
+}
+
+function getSecretArgViolation(args) {
+  const secretFlags = [
+    "--api-key",
+    "--apikey",
+    "--auth-token",
+    "--oauth-token",
+    "--refresh-token",
+    "--secret",
+    "--token",
+  ];
+
+  for (const arg of args) {
+    const normalized = arg.toLowerCase();
+    const flag = secretFlags.find(
+      (candidate) =>
+        normalized === candidate || normalized.startsWith(`${candidate}=`),
+    );
+
+    if (flag) {
+      return {
+        flag,
+      };
+    }
+  }
+
+  return null;
+}
+
+function getCodexOAuthFeasibility() {
+  const markedSupported = process.env.OPENLOOMI_CODEX_OAUTH_SUPPORTED === "1";
+
+  return {
+    available: markedSupported,
+    source: markedSupported
+      ? "OPENLOOMI_CODEX_OAUTH_SUPPORTED"
+      : "not-configured",
+    reason: markedSupported
+      ? "OFFICIAL_CODEX_OAUTH_SURFACE_MARKED_AVAILABLE"
+      : "NO_OFFICIAL_CODEX_OAUTH_SURFACE_VERIFIED",
+    note: "Codex OAuth should only be used after an official supported surface is verified.",
+  };
+}
+
+function getAiProviderSetupRequest(flags) {
+  return {
+    provider: sanitizePreference(flags.provider),
+    baseUrl: sanitizePreference(flags.baseUrl),
+    model: sanitizePreference(flags.model),
+    apiKeyProvided: false,
+    secretInputAccepted: false,
+  };
+}
+
+function getAiProviderSetupOptions(codexOAuth) {
+  return [
+    {
+      id: "codex_oauth",
+      available: codexOAuth.available,
+      ownedBy: "Codex/OpenLoomi",
+      collectsSecrets: false,
+      reason: codexOAuth.reason,
+    },
+    {
+      id: "openloomi_desktop_settings",
+      available: true,
+      ownedBy: "OpenLoomi",
+      collectsSecrets: true,
+      action:
+        "Open OpenLoomi Desktop settings and configure provider base URL, API key, and model name there.",
+    },
+    {
+      id: "openloomi_cli_interactive",
+      available: true,
+      ownedBy: "OpenLoomi",
+      collectsSecrets: true,
+      action:
+        "Use an OpenLoomi-owned interactive CLI setup surface when openloomi-ctl exposes one.",
+    },
+  ];
+}
+
+function sanitizePreference(value) {
+  if (!hasValue(value)) {
+    return null;
+  }
+
+  return value.trim().slice(0, 256);
 }
 
 function validateArtifactUrl(value) {
@@ -1102,6 +1271,9 @@ async function main() {
   }
 
   switch (command) {
+    case "configure-ai-provider":
+      configureAiProvider(process.argv.slice(3));
+      break;
     case "help":
       help();
       break;

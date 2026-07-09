@@ -39,6 +39,17 @@ Only add `--launch` when the user explicitly approves launching the downloaded
 installer. Prefer adding `--sha256 "<official checksum>"` when official checksum
 metadata is available.
 
+For AI provider setup guidance, call:
+
+```bash
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" configure-ai-provider
+```
+
+You may pass non-secret preferences such as `--provider`, `--base-url`, and
+`--model` when the user provides them. Never pass `--api-key`, tokens, or other
+secrets. Secret entry must happen in an OpenLoomi-owned UI or interactive CLI
+surface.
+
 For bridge metadata, call:
 
 ```bash
