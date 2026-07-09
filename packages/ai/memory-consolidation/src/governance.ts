@@ -1,5 +1,8 @@
+import type { MemoryConsolidationEvalMetrics } from "./evaluation";
 import type { MemoryEvidenceRecord } from "./evidence-cluster";
+import type { GraphAwareRetrievalResult } from "./graph-contracts";
 import type { SemanticMemoryArtifactRollbackMetadata } from "./persistence";
+import type { MemorySemanticRetrievalEvalScenarioReport } from "./retrieval";
 import type {
   SemanticMemoryRevisionCompetitionDiagnostic,
   SemanticMemoryRevisionReasonCode,
@@ -201,6 +204,112 @@ export interface BuildMemoryGovernanceAuditScenarioReportInput {
   metadata?: Record<string, unknown>;
 }
 
+export type MemoryGraphRolloutDecision =
+  | "ready-for-limited-rollout"
+  | "blocked";
+
+export type MemoryGraphRolloutGateReasonCode =
+  | "memory_graph_rollout_governance"
+  | "dry_run_only"
+  | "metric_gate_passed"
+  | "metric_gate_failed"
+  | "retrieval_eval_gate_passed"
+  | "retrieval_eval_gate_failed"
+  | "semantic_retrieval_eval_gate_passed"
+  | "semantic_retrieval_eval_gate_failed"
+  | "audit_trail_gate_passed"
+  | "audit_trail_gate_failed"
+  | "cross_scope_gate_passed"
+  | "cross_scope_gate_failed"
+  | "polluted_memory_gate_passed"
+  | "polluted_memory_gate_failed"
+  | "correction_command_gate_passed"
+  | "correction_command_gate_failed"
+  | "rollback_command_gate_passed"
+  | "rollback_command_gate_failed"
+  | MemoryGovernanceAuditScenarioReasonCode
+  | MemoryGovernanceCommandReasonCode
+  | (string & {});
+
+export interface MemoryGraphRolloutGateThresholds {
+  minExpectedCandidateAccuracy?: number;
+  maxNoisePromotionRate?: number;
+  maxTemporaryOverrideLeakageRate?: number;
+  minContestedClusterCoverage?: number;
+  minDecayPrecisionProxy?: number;
+  maxUnresolvedPollutedArtifactCount?: number;
+  requireCorrectionCommand?: boolean;
+  requireRollbackCommand?: boolean;
+  requireAuditTrail?: boolean;
+  requireNoCrossScopeNodes?: boolean;
+}
+
+export interface MemoryGraphRolloutRetrievalScenarioInput {
+  scenarioId: string;
+  result: GraphAwareRetrievalResult;
+  expectedRankedNodeIds?: string[];
+  expectedHiddenDeprecatedNodeIds?: string[];
+  expectedAuditTrailNodeIds?: string[];
+  forbiddenNodeIds?: string[];
+  crossScopeNodeIds?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryGraphRolloutRetrievalScenarioResult {
+  scenarioId: string;
+  passed: boolean;
+  rankedNodeIds: string[];
+  hiddenDeprecatedNodeIds: string[];
+  auditTrailNodeIds: string[];
+  missingRankedNodeIds: string[];
+  missingHiddenDeprecatedNodeIds: string[];
+  missingAuditTrailNodeIds: string[];
+  leakedForbiddenNodeIds: string[];
+  crossScopeLeakNodeIds: string[];
+  reasonCodes: MemoryGraphRolloutGateReasonCode[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryGraphRolloutGate {
+  gateId: string;
+  passed: boolean;
+  actual: number | boolean | string[];
+  threshold?: number | boolean;
+  reasonCodes: MemoryGraphRolloutGateReasonCode[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryGraphRolloutGovernanceReport {
+  summary: {
+    scenarioId: string;
+    decision: MemoryGraphRolloutDecision;
+    gateCount: number;
+    passedGateCount: number;
+    failedGateCount: number;
+    graphRetrievalScenarioCount: number;
+    graphRetrievalPassedCount: number;
+    semanticRetrievalScenarioCount: number;
+    semanticRetrievalPassedCount: number;
+    dryRun: true;
+  };
+  gates: MemoryGraphRolloutGate[];
+  graphRetrievalScenarios: MemoryGraphRolloutRetrievalScenarioResult[];
+  semanticRetrievalScenarios: MemorySemanticRetrievalEvalScenarioReport[];
+  reasonCodes: MemoryGraphRolloutGateReasonCode[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface BuildMemoryGraphRolloutGovernanceReportInput {
+  scenarioId: string;
+  consolidationMetrics?: MemoryConsolidationEvalMetrics;
+  graphRetrievalScenarios?: MemoryGraphRolloutRetrievalScenarioInput[];
+  semanticRetrievalScenarios?: MemorySemanticRetrievalEvalScenarioReport[];
+  auditScenarioReport?: MemoryGovernanceAuditScenarioReport;
+  commandReport?: MemoryGovernanceCommandDryRunReport;
+  thresholds?: MemoryGraphRolloutGateThresholds;
+  metadata?: Record<string, unknown>;
+}
+
 function copyMetadata(
   metadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
@@ -270,6 +379,392 @@ function uniqueReasonCodes<ReasonCode extends string>(
   reasonCodes: ReasonCode[],
 ): ReasonCode[] {
   return [...new Set(reasonCodes)];
+}
+
+function missingIds(
+  actual: string[],
+  expected: string[] | undefined,
+): string[] {
+  if (!expected || expected.length === 0) {
+    return [];
+  }
+  const actualSet = new Set(actual);
+  return expected.filter((id) => !actualSet.has(id));
+}
+
+function intersectIds(left: string[], right: string[] | undefined): string[] {
+  if (!right || right.length === 0) {
+    return [];
+  }
+  const rightSet = new Set(right);
+  return [...new Set(left.filter((id) => rightSet.has(id)))].sort();
+}
+
+function auditTrailNodeIds(result: GraphAwareRetrievalResult): string[] {
+  return result.auditTrail?.map((trail) => trail.nodeId) ?? [];
+}
+
+function buildMemoryGraphRolloutRetrievalScenario(
+  input: MemoryGraphRolloutRetrievalScenarioInput,
+): MemoryGraphRolloutRetrievalScenarioResult {
+  const auditNodeIds = auditTrailNodeIds(input.result);
+  const allObservedNodeIds = [
+    ...input.result.rankedNodeIds,
+    ...input.result.hiddenDeprecatedNodeIds,
+    ...auditNodeIds,
+  ];
+  const missingRankedNodeIds = missingIds(
+    input.result.rankedNodeIds,
+    input.expectedRankedNodeIds,
+  );
+  const missingHiddenDeprecatedNodeIds = missingIds(
+    input.result.hiddenDeprecatedNodeIds,
+    input.expectedHiddenDeprecatedNodeIds,
+  );
+  const missingAuditTrailNodeIds = missingIds(
+    auditNodeIds,
+    input.expectedAuditTrailNodeIds,
+  );
+  const leakedForbiddenNodeIds = intersectIds(
+    input.result.rankedNodeIds,
+    input.forbiddenNodeIds,
+  );
+  const crossScopeLeakNodeIds = intersectIds(
+    allObservedNodeIds,
+    input.crossScopeNodeIds,
+  );
+  const passed =
+    missingRankedNodeIds.length === 0 &&
+    missingHiddenDeprecatedNodeIds.length === 0 &&
+    missingAuditTrailNodeIds.length === 0 &&
+    leakedForbiddenNodeIds.length === 0 &&
+    crossScopeLeakNodeIds.length === 0;
+
+  return {
+    scenarioId: input.scenarioId,
+    passed,
+    rankedNodeIds: [...input.result.rankedNodeIds],
+    hiddenDeprecatedNodeIds: [...input.result.hiddenDeprecatedNodeIds],
+    auditTrailNodeIds: auditNodeIds,
+    missingRankedNodeIds,
+    missingHiddenDeprecatedNodeIds,
+    missingAuditTrailNodeIds,
+    leakedForbiddenNodeIds,
+    crossScopeLeakNodeIds,
+    reasonCodes: uniqueReasonCodes([
+      passed ? "retrieval_eval_gate_passed" : "retrieval_eval_gate_failed",
+      ...(missingAuditTrailNodeIds.length === 0
+        ? (["audit_trail_gate_passed"] as const)
+        : (["audit_trail_gate_failed"] as const)),
+      ...(crossScopeLeakNodeIds.length === 0
+        ? (["cross_scope_gate_passed"] as const)
+        : (["cross_scope_gate_failed"] as const)),
+      ...input.result.reasonCodes,
+    ]),
+    metadata: copyMetadata(input.metadata),
+  };
+}
+
+function buildGate(input: {
+  gateId: string;
+  passed: boolean;
+  actual: number | boolean | string[];
+  threshold?: number | boolean;
+  passReasonCode: MemoryGraphRolloutGateReasonCode;
+  failReasonCode: MemoryGraphRolloutGateReasonCode;
+  metadata?: Record<string, unknown>;
+}): MemoryGraphRolloutGate {
+  return {
+    gateId: input.gateId,
+    passed: input.passed,
+    actual: input.actual,
+    threshold: input.threshold,
+    reasonCodes: [input.passed ? input.passReasonCode : input.failReasonCode],
+    metadata: copyMetadata(input.metadata),
+  };
+}
+
+function defaultRolloutThresholds(
+  thresholds: MemoryGraphRolloutGateThresholds | undefined,
+): Required<MemoryGraphRolloutGateThresholds> {
+  return {
+    minExpectedCandidateAccuracy: thresholds?.minExpectedCandidateAccuracy ?? 1,
+    maxNoisePromotionRate: thresholds?.maxNoisePromotionRate ?? 0,
+    maxTemporaryOverrideLeakageRate:
+      thresholds?.maxTemporaryOverrideLeakageRate ?? 0,
+    minContestedClusterCoverage: thresholds?.minContestedClusterCoverage ?? 1,
+    minDecayPrecisionProxy: thresholds?.minDecayPrecisionProxy ?? 1,
+    maxUnresolvedPollutedArtifactCount:
+      thresholds?.maxUnresolvedPollutedArtifactCount ?? 0,
+    requireCorrectionCommand: thresholds?.requireCorrectionCommand ?? true,
+    requireRollbackCommand: thresholds?.requireRollbackCommand ?? true,
+    requireAuditTrail: thresholds?.requireAuditTrail ?? true,
+    requireNoCrossScopeNodes: thresholds?.requireNoCrossScopeNodes ?? true,
+  };
+}
+
+export function buildMemoryGraphRolloutGovernanceReport(
+  input: BuildMemoryGraphRolloutGovernanceReportInput,
+): MemoryGraphRolloutGovernanceReport {
+  const thresholds = defaultRolloutThresholds(input.thresholds);
+  const gates: MemoryGraphRolloutGate[] = [];
+  const graphRetrievalScenarios = (input.graphRetrievalScenarios ?? []).map(
+    buildMemoryGraphRolloutRetrievalScenario,
+  );
+  const semanticRetrievalScenarios = [
+    ...(input.semanticRetrievalScenarios ?? []),
+  ];
+
+  if (input.consolidationMetrics) {
+    const metrics = input.consolidationMetrics;
+    gates.push(
+      buildGate({
+        gateId: "consolidation.expected-candidate-accuracy",
+        passed:
+          metrics.expectedCandidateAccuracy >=
+          thresholds.minExpectedCandidateAccuracy,
+        actual: metrics.expectedCandidateAccuracy,
+        threshold: thresholds.minExpectedCandidateAccuracy,
+        passReasonCode: "metric_gate_passed",
+        failReasonCode: "metric_gate_failed",
+      }),
+      buildGate({
+        gateId: "consolidation.noise-promotion-rate",
+        passed: metrics.noisePromotionRate <= thresholds.maxNoisePromotionRate,
+        actual: metrics.noisePromotionRate,
+        threshold: thresholds.maxNoisePromotionRate,
+        passReasonCode: "metric_gate_passed",
+        failReasonCode: "metric_gate_failed",
+      }),
+      buildGate({
+        gateId: "consolidation.temporary-override-leakage-rate",
+        passed:
+          metrics.temporaryOverrideLeakageRate <=
+          thresholds.maxTemporaryOverrideLeakageRate,
+        actual: metrics.temporaryOverrideLeakageRate,
+        threshold: thresholds.maxTemporaryOverrideLeakageRate,
+        passReasonCode: "metric_gate_passed",
+        failReasonCode: "metric_gate_failed",
+      }),
+      buildGate({
+        gateId: "consolidation.contested-cluster-coverage",
+        passed:
+          metrics.contestedClusterCoverage >=
+          thresholds.minContestedClusterCoverage,
+        actual: metrics.contestedClusterCoverage,
+        threshold: thresholds.minContestedClusterCoverage,
+        passReasonCode: "metric_gate_passed",
+        failReasonCode: "metric_gate_failed",
+      }),
+      buildGate({
+        gateId: "consolidation.decay-precision-proxy",
+        passed:
+          metrics.decayPrecisionProxy >= thresholds.minDecayPrecisionProxy,
+        actual: metrics.decayPrecisionProxy,
+        threshold: thresholds.minDecayPrecisionProxy,
+        passReasonCode: "metric_gate_passed",
+        failReasonCode: "metric_gate_failed",
+      }),
+    );
+  } else {
+    gates.push(
+      buildGate({
+        gateId: "consolidation.metrics",
+        passed: false,
+        actual: false,
+        threshold: true,
+        passReasonCode: "metric_gate_passed",
+        failReasonCode: "metric_gate_failed",
+      }),
+    );
+  }
+
+  if (graphRetrievalScenarios.length > 0) {
+    gates.push(
+      buildGate({
+        gateId: "retrieval.graph-scenarios",
+        passed: graphRetrievalScenarios.every((scenario) => scenario.passed),
+        actual: graphRetrievalScenarios.filter((scenario) => scenario.passed)
+          .length,
+        threshold: graphRetrievalScenarios.length,
+        passReasonCode: "retrieval_eval_gate_passed",
+        failReasonCode: "retrieval_eval_gate_failed",
+      }),
+    );
+
+    if (thresholds.requireAuditTrail) {
+      const auditScenarioCount = graphRetrievalScenarios.filter(
+        (scenario) => scenario.auditTrailNodeIds.length > 0,
+      ).length;
+      gates.push(
+        buildGate({
+          gateId: "retrieval.audit-trail",
+          passed:
+            auditScenarioCount > 0 &&
+            graphRetrievalScenarios.every(
+              (scenario) => scenario.missingAuditTrailNodeIds.length === 0,
+            ),
+          actual: auditScenarioCount,
+          threshold: 1,
+          passReasonCode: "audit_trail_gate_passed",
+          failReasonCode: "audit_trail_gate_failed",
+        }),
+      );
+    }
+
+    if (thresholds.requireNoCrossScopeNodes) {
+      const crossScopeLeakNodeIds = [
+        ...new Set(
+          graphRetrievalScenarios.flatMap(
+            (scenario) => scenario.crossScopeLeakNodeIds,
+          ),
+        ),
+      ].sort();
+      gates.push(
+        buildGate({
+          gateId: "retrieval.cross-scope-isolation",
+          passed: crossScopeLeakNodeIds.length === 0,
+          actual: crossScopeLeakNodeIds,
+          threshold: true,
+          passReasonCode: "cross_scope_gate_passed",
+          failReasonCode: "cross_scope_gate_failed",
+        }),
+      );
+    }
+  } else {
+    gates.push(
+      buildGate({
+        gateId: "retrieval.graph-scenarios",
+        passed: false,
+        actual: 0,
+        threshold: 1,
+        passReasonCode: "retrieval_eval_gate_passed",
+        failReasonCode: "retrieval_eval_gate_failed",
+      }),
+    );
+  }
+
+  if (semanticRetrievalScenarios.length > 0) {
+    gates.push(
+      buildGate({
+        gateId: "retrieval.semantic-eval-scenarios",
+        passed: semanticRetrievalScenarios.every((scenario) => scenario.passed),
+        actual: semanticRetrievalScenarios.filter((scenario) => scenario.passed)
+          .length,
+        threshold: semanticRetrievalScenarios.length,
+        passReasonCode: "semantic_retrieval_eval_gate_passed",
+        failReasonCode: "semantic_retrieval_eval_gate_failed",
+      }),
+    );
+  } else {
+    gates.push(
+      buildGate({
+        gateId: "retrieval.semantic-eval-scenarios",
+        passed: false,
+        actual: 0,
+        threshold: 1,
+        passReasonCode: "semantic_retrieval_eval_gate_passed",
+        failReasonCode: "semantic_retrieval_eval_gate_failed",
+      }),
+    );
+  }
+
+  if (input.auditScenarioReport) {
+    gates.push(
+      buildGate({
+        gateId: "governance.polluted-memory-unresolved",
+        passed:
+          input.auditScenarioReport.summary.unresolvedPollutedArtifactCount <=
+          thresholds.maxUnresolvedPollutedArtifactCount,
+        actual:
+          input.auditScenarioReport.summary.unresolvedPollutedArtifactCount,
+        threshold: thresholds.maxUnresolvedPollutedArtifactCount,
+        passReasonCode: "polluted_memory_gate_passed",
+        failReasonCode: "polluted_memory_gate_failed",
+      }),
+    );
+  } else {
+    gates.push(
+      buildGate({
+        gateId: "governance.polluted-memory-unresolved",
+        passed: false,
+        actual: false,
+        threshold: true,
+        passReasonCode: "polluted_memory_gate_passed",
+        failReasonCode: "polluted_memory_gate_failed",
+      }),
+    );
+  }
+
+  if (thresholds.requireCorrectionCommand) {
+    const validCorrectionCount =
+      input.commandReport?.commands.filter(
+        (command) => command.type === "correct-content" && command.valid,
+      ).length ?? 0;
+    gates.push(
+      buildGate({
+        gateId: "governance.correction-command",
+        passed: validCorrectionCount > 0,
+        actual: validCorrectionCount,
+        threshold: 1,
+        passReasonCode: "correction_command_gate_passed",
+        failReasonCode: "correction_command_gate_failed",
+      }),
+    );
+  }
+
+  if (thresholds.requireRollbackCommand) {
+    const validRollbackCount =
+      input.commandReport?.commands.filter(
+        (command) => command.type === "rollback-artifact" && command.valid,
+      ).length ?? 0;
+    gates.push(
+      buildGate({
+        gateId: "governance.rollback-command",
+        passed: validRollbackCount > 0,
+        actual: validRollbackCount,
+        threshold: 1,
+        passReasonCode: "rollback_command_gate_passed",
+        failReasonCode: "rollback_command_gate_failed",
+      }),
+    );
+  }
+
+  const failedGateCount = gates.filter((gate) => !gate.passed).length;
+  const decision: MemoryGraphRolloutDecision =
+    failedGateCount === 0 ? "ready-for-limited-rollout" : "blocked";
+
+  return {
+    summary: {
+      scenarioId: input.scenarioId,
+      decision,
+      gateCount: gates.length,
+      passedGateCount: gates.length - failedGateCount,
+      failedGateCount,
+      graphRetrievalScenarioCount: graphRetrievalScenarios.length,
+      graphRetrievalPassedCount: graphRetrievalScenarios.filter(
+        (scenario) => scenario.passed,
+      ).length,
+      semanticRetrievalScenarioCount: semanticRetrievalScenarios.length,
+      semanticRetrievalPassedCount: semanticRetrievalScenarios.filter(
+        (scenario) => scenario.passed,
+      ).length,
+      dryRun: true,
+    },
+    gates,
+    graphRetrievalScenarios,
+    semanticRetrievalScenarios,
+    reasonCodes: uniqueReasonCodes([
+      "memory_graph_rollout_governance",
+      "dry_run_only",
+      ...gates.flatMap((gate) => gate.reasonCodes),
+      ...graphRetrievalScenarios.flatMap((scenario) => scenario.reasonCodes),
+      ...semanticRetrievalScenarios.flatMap((scenario) => scenario.reasonCodes),
+      ...(input.auditScenarioReport?.reasonCodes ?? []),
+      ...(input.commandReport?.reasonCodes ?? []),
+    ]),
+    metadata: copyMetadata(input.metadata),
+  };
 }
 
 export function buildMemoryGovernanceExplanationReport(

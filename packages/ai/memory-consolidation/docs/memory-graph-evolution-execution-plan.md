@@ -420,6 +420,9 @@ Suggested rollout gates:
 - Retrieval dry-run shows noise reduction without hiding necessary evidence.
 - Runtime cost is bounded for expected candidate sizes.
 
+Rollout governance gate:
+[memory-graph-rollout-governance.md](./memory-graph-rollout-governance.md)
+
 ## Deliverables
 
 This planning task delivers only documentation:
