@@ -28,6 +28,17 @@ For installation guidance, call:
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" install-instructions
 ```
 
+If the user explicitly approves installing OpenLoomi from an official artifact,
+call:
+
+```bash
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" install-openloomi --confirm --artifact-url "<official OpenLoomi installer URL>"
+```
+
+Only add `--launch` when the user explicitly approves launching the downloaded
+installer. Prefer adding `--sha256 "<official checksum>"` when official checksum
+metadata is available.
+
 For bridge metadata, call:
 
 ```bash

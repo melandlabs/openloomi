@@ -1,18 +1,28 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import {
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+} from "node:fs";
+import { createHash } from "node:crypto";
+import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 
-const BRIDGE_VERSION = "0.2.0";
-const PLUGIN_PHASE = "discovery-readiness";
+const BRIDGE_VERSION = "0.3.0";
+const PLUGIN_PHASE = "user-approved-install";
 const COMMAND_TIMEOUT_MS = 5000;
 const MAX_COMMAND_OUTPUT = 4096;
 const DEBUG_DISCOVERY = process.env.OPENLOOMI_DEBUG_DISCOVERY === "1";
 
 const COMMANDS = new Set([
   "help",
+  "install-openloomi",
   "install-instructions",
   "run",
   "setup-status",
@@ -60,14 +70,17 @@ async function setupStatus() {
 }
 
 function installInstructions() {
+  const plan = getInstallPlan();
+
   writeJson({
     nextAction: "install_openloomi",
     reason: "INSTALL_REQUIRED",
     ready: false,
+    installPlan: plan,
     instructions: [
-      "Install OpenLoomi from an official release artifact.",
+      "Install OpenLoomi from an official release artifact or provide a source checkout with a staged openloomi-ctl.",
+      "The bridge will not download or launch an installer unless install-openloomi is called with --confirm.",
       "After installation, re-run setup-status from the Codex plugin.",
-      "For a source checkout, configure OPENLOOMI_REPO_DIR or OPENLOOMI_CTL once the CLI is staged.",
     ],
     bridge: {
       name: "openloomi-codex-bridge",
@@ -75,6 +88,323 @@ function installInstructions() {
       phase: PLUGIN_PHASE,
     },
   });
+}
+
+async function installOpenLoomi(args) {
+  const flags = parseFlags(args);
+  const plan = getInstallPlan();
+
+  if (!flags.confirm) {
+    writeJson({
+      ready: false,
+      nextAction: "confirm_install_openloomi",
+      reason: "INSTALL_CONFIRMATION_REQUIRED",
+      installPlan: plan,
+      command:
+        "install-openloomi --confirm --artifact-url <official OpenLoomi installer URL> [--sha256 <sha256>] [--launch]",
+      safety:
+        "No download or installer launch has been performed. Re-run with --confirm only after reviewing the artifact source.",
+    });
+    return;
+  }
+
+  if (!flags.artifactUrl) {
+    writeJson(
+      {
+        ready: false,
+        nextAction: "provide_official_artifact_url",
+        reason: "ARTIFACT_URL_REQUIRED",
+        installPlan: plan,
+        message:
+          "A confirmed install requires --artifact-url pointing to an official OpenLoomi release artifact.",
+      },
+      1,
+    );
+    return;
+  }
+
+  const artifact = validateArtifactUrl(flags.artifactUrl);
+
+  if (!artifact.valid) {
+    writeJson(
+      {
+        ready: false,
+        nextAction: "provide_official_artifact_url",
+        reason: "ARTIFACT_URL_NOT_ALLOWED",
+        message: artifact.reason,
+        allowedHosts: getAllowedArtifactHosts(),
+      },
+      1,
+    );
+    return;
+  }
+
+  const download = await downloadInstallerArtifact(artifact.url);
+
+  if (flags.sha256) {
+    const actualSha256 = await sha256File(download.path);
+
+    if (actualSha256.toLowerCase() !== flags.sha256.toLowerCase()) {
+      writeJson(
+        {
+          ready: false,
+          nextAction: "provide_valid_artifact",
+          reason: "ARTIFACT_SHA256_MISMATCH",
+          expectedSha256: flags.sha256,
+          actualSha256,
+          downloaded: true,
+          launched: false,
+        },
+        1,
+      );
+      return;
+    }
+  }
+
+  if (flags.launch) {
+    launchInstaller(download.path);
+  }
+
+  writeJson({
+    ready: false,
+    nextAction: flags.launch
+      ? "rerun_setup_status"
+      : "run_downloaded_installer",
+    reason: flags.launch ? "INSTALLER_LAUNCHED" : "INSTALLER_DOWNLOADED",
+    downloaded: true,
+    launched: Boolean(flags.launch),
+    artifact: {
+      url: artifact.url.toString(),
+      sha256Verified: Boolean(flags.sha256),
+      installerPath: DEBUG_DISCOVERY ? download.path : null,
+      installerPathPresent: true,
+    },
+    message: flags.launch
+      ? "The installer was launched after explicit confirmation. Re-run setup-status after installation completes."
+      : "The installer was downloaded after explicit confirmation. Set OPENLOOMI_DEBUG_DISCOVERY=1 to show the local installer path, or re-run with --launch to start it.",
+  });
+}
+
+function getInstallPlan() {
+  return {
+    platform: process.platform,
+    arch: process.arch,
+    supported: ["darwin", "linux", "win32"].includes(process.platform),
+    officialReleasePage: "https://github.com/openloomi/openloomi/releases",
+    requiredUserAction:
+      "Review the official artifact URL, then re-run install-openloomi with --confirm.",
+    safety: [
+      "The plugin never downloads an installer without --confirm.",
+      "The plugin never launches an installer without --launch.",
+      "Use --sha256 when official checksum metadata is available.",
+      "Local installer paths are hidden unless OPENLOOMI_DEBUG_DISCOVERY=1 is set.",
+    ],
+  };
+}
+
+function parseFlags(args) {
+  const flags = {
+    artifactUrl: null,
+    confirm: false,
+    launch: false,
+    sha256: null,
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "--confirm") {
+      flags.confirm = true;
+      continue;
+    }
+
+    if (arg === "--launch") {
+      flags.launch = true;
+      continue;
+    }
+
+    if (arg === "--artifact-url") {
+      flags.artifactUrl = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--artifact-url=")) {
+      flags.artifactUrl = arg.slice("--artifact-url=".length);
+      continue;
+    }
+
+    if (arg === "--sha256") {
+      flags.sha256 = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--sha256=")) {
+      flags.sha256 = arg.slice("--sha256=".length);
+    }
+  }
+
+  return flags;
+}
+
+function validateArtifactUrl(value) {
+  let url;
+
+  try {
+    url = new URL(value);
+  } catch {
+    return {
+      valid: false,
+      reason: "Artifact URL is not a valid URL.",
+    };
+  }
+
+  if (url.protocol !== "https:") {
+    return {
+      valid: false,
+      reason: "Artifact URL must use HTTPS.",
+    };
+  }
+
+  if (!getAllowedArtifactHosts().includes(url.hostname)) {
+    return {
+      valid: false,
+      reason: "Artifact URL host is not in the official OpenLoomi allowlist.",
+    };
+  }
+
+  if (
+    url.hostname === "github.com" &&
+    !url.pathname.toLowerCase().startsWith("/openloomi/openloomi/")
+  ) {
+    return {
+      valid: false,
+      reason:
+        "GitHub artifact URLs must come from the openloomi/openloomi repository.",
+    };
+  }
+
+  return {
+    valid: true,
+    url,
+  };
+}
+
+function getAllowedArtifactHosts() {
+  return ["github.com", "openloomi.ai", "www.openloomi.ai"];
+}
+
+async function downloadInstallerArtifact(url) {
+  const downloadDir = path.join(os.tmpdir(), "openloomi-codex-plugin");
+  const destination = path.join(downloadDir, getInstallerFilename(url));
+
+  mkdirSync(downloadDir, {
+    recursive: true,
+  });
+
+  await downloadUrl(url, destination);
+
+  return {
+    path: destination,
+  };
+}
+
+function getInstallerFilename(url) {
+  const parsedPath = decodeURIComponent(url.pathname);
+  const basename = path.basename(parsedPath);
+  const fallbackName = `openloomi-installer-${Date.now()}${getInstallerExtension()}`;
+  const filename = basename && basename !== "/" ? basename : fallbackName;
+
+  return filename.replace(/[^a-zA-Z0-9._-]/g, "-");
+}
+
+function getInstallerExtension() {
+  if (process.platform === "win32") {
+    return ".exe";
+  }
+
+  if (process.platform === "darwin") {
+    return ".dmg";
+  }
+
+  return ".AppImage";
+}
+
+function downloadUrl(url, destination, redirectCount = 0) {
+  return new Promise((resolve, reject) => {
+    if (redirectCount > 5) {
+      reject(new Error("Too many redirects while downloading installer."));
+      return;
+    }
+
+    const request = https.get(url, (response) => {
+      const statusCode = response.statusCode || 0;
+      const location = response.headers.location;
+
+      if (statusCode >= 300 && statusCode < 400 && location) {
+        response.resume();
+        downloadUrl(new URL(location, url), destination, redirectCount + 1)
+          .then(resolve)
+          .catch(reject);
+        return;
+      }
+
+      if (statusCode !== 200) {
+        response.resume();
+        reject(new Error(`Installer download failed with HTTP ${statusCode}.`));
+        return;
+      }
+
+      const file = createWriteStream(destination, {
+        flags: "w",
+      });
+
+      response.pipe(file);
+      file.on("finish", () => {
+        file.close(resolve);
+      });
+      file.on("error", reject);
+    });
+
+    request.on("error", reject);
+  });
+}
+
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(filePath);
+
+    stream.on("data", (chunk) => {
+      hash.update(chunk);
+    });
+    stream.on("end", () => {
+      resolve(hash.digest("hex"));
+    });
+    stream.on("error", reject);
+  });
+}
+
+function launchInstaller(filePath) {
+  const command =
+    process.platform === "darwin"
+      ? "open"
+      : process.platform === "win32"
+        ? filePath
+        : "xdg-open";
+  const args =
+    process.platform === "darwin" || process.platform === "linux"
+      ? [filePath]
+      : [];
+  const child = spawn(command, args, {
+    detached: true,
+    shell: process.platform === "win32",
+    stdio: "ignore",
+    windowsHide: false,
+  });
+
+  child.unref();
 }
 
 function version() {
@@ -774,6 +1104,9 @@ async function main() {
   switch (command) {
     case "help":
       help();
+      break;
+    case "install-openloomi":
+      await installOpenLoomi(process.argv.slice(3));
       break;
     case "install-instructions":
       installInstructions();
