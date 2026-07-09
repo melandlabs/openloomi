@@ -42,7 +42,98 @@ const COMMANDS = new Set([
   "run",
   "setup-status",
   "version",
+  "workflow-guidance",
 ]);
+
+const WORKFLOW_GUIDANCE = [
+  {
+    id: "openloomi-loop",
+    aliases: ["loop", "attention-loop", "follow-up"],
+    title: "OpenLoomi Loop",
+    description:
+      "Guide attention-loop, prioritization, wrap-up, and follow-up workflows through the local OpenLoomi runtime.",
+    wrapperSkill: "openloomi-loop",
+    readyRequired: true,
+    bridgeCommand: "run",
+    taskPromptPrefix:
+      "Use OpenLoomi loop workflow for this Codex task. Keep connector and memory operations inside OpenLoomi runtime.",
+    nextActionsWhenBlocked: [
+      "install_openloomi",
+      "login_openloomi",
+      "configure_ai_provider",
+      "configure_connectors",
+    ],
+    safety: [
+      "Do not implement loop scheduling or decision storage in the Codex plugin.",
+      "Pass the user task over stdin to the bridge run command when ready.",
+    ],
+  },
+  {
+    id: "openloomi-memory",
+    aliases: ["memory", "memories", "recall", "remember"],
+    title: "OpenLoomi Memory",
+    description:
+      "Guide memory search, recall, write, and context workflows through OpenLoomi-owned memory surfaces.",
+    wrapperSkill: "openloomi-memory",
+    readyRequired: true,
+    bridgeCommand: "run",
+    taskPromptPrefix:
+      "Use OpenLoomi memory workflow for this Codex task. Keep memory reads and writes inside OpenLoomi runtime.",
+    nextActionsWhenBlocked: [
+      "install_openloomi",
+      "login_openloomi",
+      "configure_ai_provider",
+      "configure_connectors",
+    ],
+    safety: [
+      "Do not read or write OpenLoomi memory files directly from the Codex plugin.",
+      "Do not expose memory contents unless OpenLoomi runtime returns them for the requested task.",
+    ],
+  },
+  {
+    id: "openloomi-connectors",
+    aliases: ["connectors", "connector", "integrations", "slack", "gmail"],
+    title: "OpenLoomi Connectors",
+    description:
+      "Guide connector readiness checks and setup handoffs for Slack, Gmail, Calendar, GitHub, and other OpenLoomi integrations.",
+    wrapperSkill: "openloomi-connectors",
+    readyRequired: false,
+    bridgeCommand: "setup-status",
+    taskPromptPrefix:
+      "Use OpenLoomi connector readiness workflow. Report setup status only and keep OAuth or API secrets inside OpenLoomi-owned surfaces.",
+    nextActionsWhenBlocked: [
+      "install_openloomi",
+      "login_openloomi",
+      "configure_connectors",
+    ],
+    safety: [
+      "Do not ask the user to paste connector OAuth tokens or API secrets into Codex.",
+      "Report connector readiness as status and next action only.",
+    ],
+  },
+  {
+    id: "openloomi-handoff",
+    aliases: ["handoff", "followup", "delegate", "send-to-loomi"],
+    title: "OpenLoomi Handoff",
+    description:
+      "Guide handoff workflows that send the current Codex task to OpenLoomi for follow-up, reminders, or later attention.",
+    wrapperSkill: "openloomi-handoff",
+    readyRequired: true,
+    bridgeCommand: "run",
+    taskPromptPrefix:
+      "Use OpenLoomi handoff workflow for this Codex task. Create a follow-up or delegated Loomi task when supported by the runtime.",
+    nextActionsWhenBlocked: [
+      "install_openloomi",
+      "login_openloomi",
+      "configure_ai_provider",
+      "configure_connectors",
+    ],
+    safety: [
+      "Do not build an independent task queue in the Codex plugin.",
+      "Keep handoff persistence inside OpenLoomi runtime.",
+    ],
+  },
+];
 
 class BridgeError extends Error {
   constructor(reason, message, details = {}) {
@@ -414,6 +505,90 @@ function configureAiProvider(args) {
   });
 }
 
+function workflowGuidance(args) {
+  const flags = parseFlags(args);
+  const workflowId = getRequestedWorkflow(args, flags);
+  const workflow = workflowId ? findWorkflowGuidance(workflowId) : null;
+
+  if (workflowId && !workflow) {
+    writeJson(
+      {
+        ready: false,
+        nextAction: "choose_supported_workflow",
+        reason: "UNKNOWN_WORKFLOW",
+        requestedWorkflow: workflowId,
+        supportedWorkflows: WORKFLOW_GUIDANCE.map(summarizeWorkflowGuidance),
+      },
+      1,
+    );
+    return;
+  }
+
+  if (!workflow) {
+    writeJson({
+      ready: true,
+      nextAction: "choose_workflow",
+      reason: "WORKFLOW_GUIDANCE_AVAILABLE",
+      workflows: WORKFLOW_GUIDANCE.map(summarizeWorkflowGuidance),
+      safety:
+        "These are thin Codex plugin entrypoints. Runtime logic, memory, connectors, handoff persistence, and secrets stay inside OpenLoomi.",
+    });
+    return;
+  }
+
+  writeJson({
+    ready: true,
+    nextAction: workflow.readyRequired ? "check_setup_status" : "use_guidance",
+    reason: "WORKFLOW_GUIDANCE_AVAILABLE",
+    workflow: {
+      ...workflow,
+      readinessCheckCommand: "setup-status",
+      runCommand:
+        workflow.bridgeCommand === "run"
+          ? 'printf "%s" "<task>" | loomi-bridge run'
+          : workflow.bridgeCommand,
+    },
+  });
+}
+
+function getRequestedWorkflow(args, flags) {
+  if (hasValue(flags.workflow)) {
+    return flags.workflow;
+  }
+
+  return args.find((arg) => !arg.startsWith("--") && hasValue(arg)) || null;
+}
+
+function findWorkflowGuidance(value) {
+  const normalized = normalizeWorkflowId(value);
+
+  return WORKFLOW_GUIDANCE.find(
+    (workflow) =>
+      workflow.id === normalized ||
+      workflow.aliases.some(
+        (alias) => normalizeWorkflowId(alias) === normalized,
+      ),
+  );
+}
+
+function summarizeWorkflowGuidance(workflow) {
+  return {
+    id: workflow.id,
+    title: workflow.title,
+    description: workflow.description,
+    wrapperSkill: workflow.wrapperSkill,
+    readyRequired: workflow.readyRequired,
+    bridgeCommand: workflow.bridgeCommand,
+  };
+}
+
+function normalizeWorkflowId(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+}
+
 function getInstallPlan() {
   return {
     platform: process.platform,
@@ -448,6 +623,7 @@ function parseFlags(args) {
     permissionMode: null,
     provider: null,
     sha256: null,
+    workflow: null,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -531,6 +707,17 @@ function parseFlags(args) {
 
     if (arg.startsWith("--sha256=")) {
       flags.sha256 = arg.slice("--sha256=".length);
+      continue;
+    }
+
+    if (arg === "--workflow") {
+      flags.workflow = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--workflow=")) {
+      flags.workflow = arg.slice("--workflow=".length);
     }
   }
 
@@ -2258,6 +2445,9 @@ async function main() {
       break;
     case "version":
       version();
+      break;
+    case "workflow-guidance":
+      workflowGuidance(process.argv.slice(3));
       break;
   }
 }

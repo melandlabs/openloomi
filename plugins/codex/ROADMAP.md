@@ -149,11 +149,12 @@ Goal: guide users toward OpenLoomi workflows after the runtime starts.
 
 Deliverables:
 
+- `workflow-guidance` bridge command;
 - workflow guidance for `openloomi-loop`;
 - workflow guidance for `openloomi-memory`;
 - connector readiness guidance;
 - handoff workflow guidance;
-- optional thin wrapper skills that call `loomi-bridge`.
+- thin wrapper skills that call `loomi-bridge`.
 
 Acceptance criteria:
 

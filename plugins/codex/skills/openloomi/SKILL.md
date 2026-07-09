@@ -62,6 +62,25 @@ For bridge metadata, call:
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" version
 ```
 
+For available OpenLoomi workflows, call:
+
+```bash
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" workflow-guidance
+```
+
+For workflow-specific guidance, call:
+
+```bash
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" workflow-guidance --workflow openloomi-loop
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" workflow-guidance --workflow openloomi-memory
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" workflow-guidance --workflow openloomi-connectors
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" workflow-guidance --workflow openloomi-handoff
+```
+
+Use the thin wrapper skills when the user specifically asks for loop, memory,
+connector readiness, or handoff workflows. The plugin must not copy OpenLoomi
+connector, memory, loop, scheduling, or handoff persistence logic into Codex.
+
 When `setup-status` returns `ready: true`, run a one-shot task by passing the
 user task over stdin:
 

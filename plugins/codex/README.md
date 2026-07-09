@@ -234,12 +234,14 @@ skills and workflows that are useful from Codex:
 - `openloomi-loop`: run attention-loop and follow-up workflows;
 - `openloomi-memory`: search or write memory through OpenLoomi-owned runtime
   surfaces;
-- connector readiness: check whether Slack, GitHub, Gmail, Calendar, and other
-  sources are configured before acting;
-- handoff workflows: send the current Codex task to Loomi for follow-up.
+- `openloomi-connectors`: check whether Slack, GitHub, Gmail, Calendar, and
+  other sources are configured before acting;
+- `openloomi-handoff`: send the current Codex task to Loomi for follow-up.
 
-The Codex plugin may expose thin wrapper skills for these workflows, but the
-OpenLoomi runtime should own the underlying implementation.
+The `workflow-guidance` bridge command exposes structured guidance for these
+workflows. The Codex plugin exposes thin wrapper skills, but the OpenLoomi
+runtime owns the underlying connector, memory, loop, and handoff
+implementation.
 
 ## Optional Codex Hooks
 
