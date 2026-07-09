@@ -64,6 +64,8 @@ Acceptance criteria:
 - missing guest/session token can return `READY_SESSION_BOOTSTRAP_PENDING`
   when install and provider checks are satisfied;
 - missing AI provider returns `AI_PROVIDER_REQUIRED`;
+- unavailable runtime provider status returns `AI_PROVIDER_STATUS_UNAVAILABLE`
+  instead of falsely reporting missing configuration;
 - no secret values are printed.
 
 ## Phase 4: User-Approved OpenLoomi Install Flow
@@ -107,6 +109,7 @@ Deliverables:
 
 - `configure_ai_provider` next action;
 - provider readiness detection;
+- runtime/UI provider readiness detection through OpenLoomi-owned local APIs;
 - Codex OAuth feasibility check;
 - setup flow for base URL, API key, and model name through OpenLoomi-owned UI
   or CLI surfaces;
@@ -115,6 +118,8 @@ Deliverables:
 Acceptance criteria:
 
 - missing provider setup returns `AI_PROVIDER_REQUIRED`;
+- UI-saved provider setup is recognized without requiring duplicate env vars;
+- provider status reports only masked presence fields, not API key values;
 - users can reach an OpenLoomi-owned setup flow from Codex;
 - base URL, API key, and model name configuration is supported when OAuth is
   unavailable;
@@ -202,6 +207,9 @@ Required tests:
 - missing token can be initialized through guest/session bootstrap;
 - session bootstrap failure returns `SESSION_INITIALIZATION_REQUIRED`;
 - missing AI provider returns `AI_PROVIDER_REQUIRED`;
+- UI-saved AI provider returns configured when the OpenLoomi local API is
+  reachable;
+- unavailable OpenLoomi local API returns `AI_PROVIDER_STATUS_UNAVAILABLE`;
 - user-approved install flow can run automatic default-path installation;
 - no secret values are printed;
 - one-shot prompt succeeds when ready;

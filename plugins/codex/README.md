@@ -178,10 +178,27 @@ For source checkouts, check project markers and likely CLI locations:
     "guestBootstrapMode": "local-openloomi-api"
   },
   "aiProviderConfigured": true,
+  "aiProviderStatus": "runtime_configured",
   "connectorStatusAvailable": false,
   "apiReachable": false,
   "ready": true,
-  "nextAction": "run"
+  "nextAction": "run",
+  "checks": {
+    "aiProviderRuntime": {
+      "checked": true,
+      "status": "runtime_configured",
+      "providers": [
+        {
+          "providerType": "openai_compatible",
+          "configured": true,
+          "source": "openloomi-ui",
+          "hasApiKey": true,
+          "baseUrlPresent": true,
+          "modelPresent": true
+        }
+      ]
+    }
+  }
 }
 ```
 
@@ -209,16 +226,25 @@ INSTALL_REQUIRED
 SESSION_INITIALIZATION_REQUIRED
 READY_SESSION_BOOTSTRAP_PENDING
 AI_PROVIDER_REQUIRED
+AI_PROVIDER_STATUS_UNAVAILABLE
 CONNECTOR_SETUP_REQUIRED
 READY
 ```
 
 OpenLoomi guest mode is supported. A missing token should not be treated as a
 requirement for account registration or manual login. When OpenLoomi is
-installed and the AI provider appears configured, the bridge may initialize a
-guest/session token through the local OpenLoomi API and write the standard
-`~/.openloomi/token` file. If the local API is not reachable, the bridge may
-launch OpenLoomi and ask the user to let OpenLoomi initialize its guest session.
+installed, the bridge may initialize a guest/session token through the local
+OpenLoomi API and write the standard `~/.openloomi/token` file. If the local API
+is not reachable, the bridge may launch OpenLoomi and ask the user to let
+OpenLoomi initialize its guest session.
+
+AI provider readiness should respect both environment variables and
+OpenLoomi-owned UI/runtime settings. When a token is available, the bridge may
+convert that token to a local session cookie through OpenLoomi's existing auth
+surface, call the local AI preferences API, and report only masked status
+fields such as `hasApiKey`, `baseUrlPresent`, and `modelPresent`. If OpenLoomi
+is not running, the bridge should report `AI_PROVIDER_STATUS_UNAVAILABLE`
+instead of claiming the provider is missing.
 
 ## First-Use AI Provider Setup
 
@@ -287,6 +313,8 @@ OPENLOOMI_AUTH_TOKEN present/missing
 ~/.openloomi/token present/missing
 guest/session initialization available/unavailable
 AI provider configured/missing
+AI provider runtime status available/unavailable
+AI provider hasApiKey/baseUrl/model presence
 connector configured/missing
 local API reachable/unreachable
 ```

@@ -65,6 +65,12 @@ You may pass non-secret preferences such as `--provider`, `--base-url`, and
 secrets. Secret entry must happen in an OpenLoomi-owned UI or interactive CLI
 surface.
 
+AI provider readiness may come from environment variables or from
+OpenLoomi-owned UI/runtime settings. If the bridge reports
+`AI_PROVIDER_STATUS_UNAVAILABLE`, guide the user to open OpenLoomi so the local
+API can confirm whether provider settings exist. Do not ask the user to repeat
+API keys in Codex chat.
+
 For bridge metadata, call:
 
 ```bash
