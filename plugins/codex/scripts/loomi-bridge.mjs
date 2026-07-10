@@ -45,6 +45,7 @@ const COMMANDS = new Set([
   "install-openloomi",
   "install-instructions",
   "run",
+  "setup",
   "setup-status",
   "version",
   "workflow-guidance",
@@ -2082,6 +2083,217 @@ function version() {
   });
 }
 
+// Run another bridge subcommand as a child process and capture the JSON it
+// prints to stdout. Used by `setup` to chain install / session init without
+// having to refactor the underlying writeJson() early-returns.
+//
+// The child runs with the same env as the parent, minus the few knobs that
+// would change bridge behavior mid-setup. Secrets (api keys, auth tokens)
+// are never read here; if the user pastes one into chat, redact it.
+function runBridgeSubcommand(args, { timeoutMs = 5 * 60 * 1000 } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(
+      process.execPath,
+      [fileURLToPath(import.meta.url), ...args],
+      { stdio: ["ignore", "pipe", "pipe"], env: process.env },
+    );
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      resolve(payload);
+    };
+
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish({
+        ok: false,
+        code: "TIMEOUT",
+        stdout,
+        stderr,
+        message: `Bridge subcommand ${args[0] || ""} did not finish within ${timeoutMs}ms.`,
+      });
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      finish({
+        ok: false,
+        code: "SPAWN_ERROR",
+        stdout,
+        stderr,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      let parsed = null;
+      try {
+        parsed = stdout ? JSON.parse(stdout) : null;
+      } catch {
+        parsed = null;
+      }
+      finish({
+        ok: code === 0,
+        code: code === 0 ? "OK" : `EXIT_${code ?? "NULL"}`,
+        stdout,
+        stderr,
+        exitCode: code,
+        parsed,
+      });
+    });
+  });
+}
+
+async function setup(args) {
+  // End-to-end wizard for Codex. Walks the state machine in one invocation:
+  //   install (only if --yes) -> initialize-session -> re-check status.
+  // We deliberately do NOT auto-configure the AI provider: secret entry
+  // must happen in OpenLoomi-owned UI per the SKILL secrets contract.
+  const flags = parseFlags(args);
+  const yesFlag = !!flags.yes || !!flags.confirm;
+  const maxWaitMs = Number(flags["max-wait"] || 30_000);
+  const maxSteps = 6; // hard ceiling on chained transitions
+  const steps = [];
+
+  const record = (name, ok, detail) => {
+    steps.push({ step: name, ok, at: Date.now(), ...(detail || {}) });
+  };
+
+  for (let i = 0; i < maxSteps; i += 1) {
+    const status = await buildSetupStatus();
+
+    if (status.reason === "READY" || status.reason === "READY_SESSION_BOOTSTRAP_PENDING") {
+      record("status_check", true, { reason: status.reason });
+      writeJson({
+        ok: true,
+        setup: status.reason === "READY" ? "ready" : "ready_session_bootstrap_pending",
+        steps,
+        status,
+        message:
+          status.reason === "READY"
+            ? "OpenLoomi is ready."
+            : "OpenLoomi is installed and the bridge will initialize a guest session on the next run.",
+      });
+      return;
+    }
+
+    // 1. Install (only with explicit user approval via --yes / --confirm).
+    if (!status.installed && status.nextAction === "install_openloomi") {
+      record("status_check", false, { reason: status.reason });
+      if (!yesFlag) {
+        writeJson({
+          ok: false,
+          setup: "awaiting_user_action",
+          steps,
+          status,
+          nextAction: "confirm_install_openloomi",
+          reason: "INSTALL_CONFIRMATION_REQUIRED",
+          message:
+            "OpenLoomi is not installed. Re-run with --yes to install from the official release, or install manually and retry.",
+        });
+        return;
+      }
+      const r = await runBridgeSubcommand(["install-openloomi", "--confirm"], {
+        timeoutMs: 15 * 60 * 1000,
+      });
+      const ok = r.ok && r.parsed && r.parsed.installed !== false;
+      record("install", ok, {
+        code: r.code,
+        exitCode: r.exitCode,
+        reason: r.parsed && r.parsed.reason,
+      });
+      if (!ok) {
+        writeJson({
+          ok: false,
+          setup: "install_failed",
+          steps,
+          status,
+          install: r.parsed,
+          message:
+            (r.parsed && r.parsed.message) ||
+            "OpenLoomi installation did not complete. Follow the reported nextAction.",
+        });
+        return;
+      }
+      continue;
+    }
+
+    // 2. Installed, no token yet -> ask the local OpenLoomi API to mint one.
+    if (
+      status.installed &&
+      !status.tokenPresent &&
+      (status.reason === "SESSION_INITIALIZATION_REQUIRED" ||
+        status.reason === "READY_SESSION_BOOTSTRAP_PENDING" ||
+        status.nextAction === "initialize_openloomi_session" ||
+        status.nextAction === "open_openloomi")
+    ) {
+      record("status_check", false, { reason: status.reason });
+      const r = await runBridgeSubcommand(["initialize-session"], {
+        timeoutMs: maxWaitMs + 10_000,
+      });
+      const ok = r.ok && r.parsed && r.parsed.ready === true;
+      record("initialize_session", ok, {
+        code: r.code,
+        exitCode: r.exitCode,
+        reason: r.parsed && r.parsed.reason,
+      });
+      if (!ok) {
+        writeJson({
+          ok: true,
+          setup: "awaiting_user_action",
+          steps,
+          status,
+          session: r.parsed,
+          nextAction: "open_openloomi",
+          reason: "SESSION_INITIALIZATION_REQUIRED",
+          message:
+            "Open OpenLoomi once so it can create a guest session, then re-run setup.",
+        });
+        return;
+      }
+      continue;
+    }
+
+    // 3. No automatic transition matches. Surface a clear next step.
+    //    The realistic stops here are:
+    //      - AI_PROVIDER_REQUIRED -> walk the user through OpenLoomi Desktop
+    //        Settings. Do NOT auto-call configure-ai-provider with a key.
+    //      - INSTALL_REQUIRED without --yes -> already handled above.
+    //      - any other upstream state -> just hand back the status.
+    record("status_check", false, { reason: status.reason });
+    writeJson({
+      ok: true,
+      setup: "awaiting_user_action",
+      steps,
+      status,
+      nextAction: status.nextAction,
+      reason: status.reason,
+      message: status.message,
+    });
+    return;
+  }
+
+  const final = await buildSetupStatus();
+  writeJson({
+    ok: false,
+    setup: "step_limit_reached",
+    steps,
+    status: final,
+    message: `Setup did not reach READY within ${maxSteps} steps. Follow the reported nextAction.`,
+  });
+}
+
 async function run() {
   const flags = parseFlags(process.argv.slice(3));
   const prompt = await readStdin();
@@ -3091,6 +3303,9 @@ async function main() {
       break;
     case "run":
       await run();
+      break;
+    case "setup":
+      await setup(process.argv.slice(3));
       break;
     case "setup-status":
       await setupStatus();

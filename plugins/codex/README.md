@@ -50,80 +50,75 @@ User installs the Codex plugin
   -> plugin shows related OpenLoomi skills and workflows
 ```
 
-## User Tour: Try the Plugin from a Source Checkout
+## User Tour: Install the Plugin
 
-This tour is for users who cloned the OpenLoomi repository and want to try the
-Codex plugin before it is available through a public plugin marketplace.
+The OpenLoomi Codex plugin lives at `plugins/codex/` inside the OpenLoomi
+repository. The repository root doubles as a Codex marketplace root: it ships
+`.agents/plugins/marketplace.json` that points at this plugin directory, so
+any Codex build that supports `codex plugin marketplace` can install the
+plugin directly from the repository.
 
-The source checkout provides the Codex plugin files. Runtime execution still
-needs a local OpenLoomi runtime with `openloomi-ctl`. The easiest test path is
-to install the packaged OpenLoomi Desktop release, then install this plugin into
-Codex from a local marketplace that points at `plugins/codex`.
+Pick the install path that matches your workflow.
+
+### Install from GitHub (no clone required)
+
+```bash
+codex plugin marketplace add melandlabs/openloomi
+codex plugin add openloomi@openloomi
+```
+
+Codex will fetch the OpenLoomi repository, discover the marketplace manifest
+at the root, and install the `openloomi` plugin into
+`~/.codex/plugins/cache/openloomi/openloomi/<version>`. Restart Codex and
+start a new thread so the plugin cache is refreshed.
+
+### Install from a local checkout (developers)
+
+```bash
+git clone https://github.com/melandlabs/openloomi.git
+cd openloomi
+codex plugin marketplace add .
+codex plugin add openloomi@openloomi
+```
+
+The `.` argument tells Codex to use the repository root as a local
+marketplace. The same `marketplace.json` resolution rules apply, so the
+plugin path resolves to `./plugins/codex`.
+
+To pick up local edits to `plugins/codex/` after the initial install, force
+Codex to re-snapshot the marketplace:
+
+```bash
+codex plugin marketplace remove openloomi
+codex plugin marketplace add .
+codex plugin add openloomi@openloomi
+```
 
 ### Requirements
 
-- A Codex build that supports `codex plugin marketplace`.
-- A local OpenLoomi source checkout.
-- A local marketplace root whose `marketplace.json` exposes this plugin.
-- OpenLoomi Desktop installed, or a source build that stages `openloomi-ctl`.
-- An initialized OpenLoomi guest/session token at `~/.openloomi/token` for
-  one-shot execution.
+- A Codex build that supports `codex plugin marketplace` (Codex CLI 0.144+).
+- For GitHub install: network access to `github.com`.
+- For local install: the OpenLoomi repository checked out somewhere writable.
+- OpenLoomi Desktop installed, or a source build that stages `openloomi-ctl`,
+  for any runtime task (`run`, handoff, loop, memory, connectors).
 - An AI provider configured in OpenLoomi Desktop for runtime tasks.
 
-The source checkout alone is not enough for runtime execution. If
-`openloomi-ctl` is missing, the plugin can still show setup and workflow
-guidance, but `run` and workflow handoff calls cannot execute.
-
-### Install the Local Marketplace
-
-Point Codex at the local marketplace root provided by the OpenLoomi checkout or
-by a development checkout of the marketplace package:
-
-```powershell
-codex.cmd plugin marketplace add <path-to-openloomi-local-marketplace>
-```
-
-On macOS or Linux, use:
-
-```bash
-codex plugin marketplace add <path-to-openloomi-local-marketplace>
-```
-
-The marketplace root must contain a `marketplace.json` entry for the
-`openloomi` plugin, and that entry must resolve to this plugin directory:
-
-```text
-openloomi/
-  plugins/
-    codex/
-      .codex-plugin/plugin.json
-      skills/
-      scripts/
-      assets/
-```
-
-After adding or updating the marketplace, restart Codex and start a new thread
-so the plugin cache is refreshed.
-
-During local development, if Codex still loads an older cached plugin, remove
-and add the marketplace again:
-
-```powershell
-codex.cmd plugin marketplace remove <marketplace-name>
-codex.cmd plugin marketplace add <path-to-openloomi-local-marketplace>
-```
+The plugin alone is enough for setup guidance and workflow discovery. If
+`openloomi-ctl` is missing, the plugin can still report readiness, install
+instructions, and workflow guidance, but `run` and handoff calls cannot
+execute.
 
 ### Verify the Bridge Before Using Codex
 
 From the OpenLoomi source checkout, verify the plugin bridge directly:
 
-```powershell
-node plugins\codex\scripts\loomi-bridge.mjs version
-node plugins\codex\scripts\loomi-bridge.mjs setup-status
-node plugins\codex\scripts\loomi-bridge.mjs workflow-guidance
+```bash
+node plugins/codex/scripts/loomi-bridge.mjs version
+node plugins/codex/scripts/loomi-bridge.mjs setup-status
+node plugins/codex/scripts/loomi-bridge.mjs workflow-guidance
 ```
 
-Expected readiness milestones:
+Expected readiness milestones for a fully prepared environment:
 
 ```text
 installed: true
@@ -147,6 +142,18 @@ guest/session token. The plugin and `openloomi-ctl` read the token from:
 
 If `aiProviderConfigured` is `false`, configure a model provider in
 OpenLoomi-owned settings. Do not paste API keys into Codex chat.
+
+You can also drive the same end-to-end flow from a single command:
+
+```bash
+node plugins/codex/scripts/loomi-bridge.mjs setup
+```
+
+The `setup` command walks the readiness state machine: install (with
+explicit `--yes`) -> initialize a local guest/session token -> re-check
+status. It returns a structured `steps` array and a final `status` block so
+Codex can render the path it took. The AI provider step is never automated;
+secret entry must happen in OpenLoomi-owned UI or interactive CLI surfaces.
 
 ### Try the Plugin in Codex
 
@@ -192,20 +199,24 @@ Codex.
 : The source checkout was detected, but no staged `openloomi-ctl` exists. The
 current plugin does not execute the source tree directly.
 
-`not_authenticated`
+`SESSION_INITIALIZATION_REQUIRED`
 
-: `openloomi-ctl` could not read `~/.openloomi/token`. Open OpenLoomi Desktop
-and initialize guest mode, then re-run `setup-status`.
+: OpenLoomi is installed but the local guest/session token could not be
+created. Open OpenLoomi Desktop once so the local API can mint a guest
+session, then re-run `setup-status` or `setup`.
 
-`AI_PROVIDER_REQUIRED`
+`AI_PROVIDER_REQUIRED` / `AI_PROVIDER_STATUS_UNAVAILABLE`
 
 : Configure the AI provider in OpenLoomi Desktop. Secrets must stay in
-OpenLoomi-owned UI or secure storage.
+OpenLoomi-owned UI or secure storage. If the local API is unreachable, the
+plugin reports status as unavailable rather than falsely reporting missing
+configuration.
 
 `Codex still shows an old plugin version`
 
-: Remove and re-add the local marketplace, restart Codex, and start a new
-thread.
+: Remove and re-add the marketplace, restart Codex, and start a new thread.
+The cached plugin lives at
+`~/.codex/plugins/cache/openloomi/openloomi/<version>`.
 
 ## Plugin Package Layout
 
@@ -426,32 +437,57 @@ secure storage.
 ## OpenLoomi Skill Guidance
 
 After OpenLoomi starts, the plugin should guide users toward OpenLoomi-related
-skills and workflows that are useful from Codex:
+skills and workflows that are useful from Codex. The Codex plugin ships the
+following skills under `plugins/codex/skills/`:
 
-- `openloomi-loop`: run attention-loop and follow-up workflows;
+- `openloomi`: the main entry point. Triggers on any `OpenLoomi` / `Loomi`
+  mention and dispatches to the right sub-skill.
+- `openloomi-install`: walks install, first-use setup, AI provider setup,
+  and `SESSION_INITIALIZATION_REQUIRED` recovery flows.
+- `openloomi-loop`: run attention-loop and follow-up workflows.
 - `openloomi-memory`: search or write memory through OpenLoomi-owned runtime
-  surfaces;
+  surfaces. Thin wrapper — does not implement memory storage.
 - `openloomi-connectors`: check whether Slack, GitHub, Gmail, Calendar, and
-  other sources are configured before acting;
+  other sources are configured before acting. Reports status only.
 - `openloomi-handoff`: send the current Codex task to Loomi for follow-up.
+  Codex-specific (Claude Code does not yet have an equivalent).
+- `openloomi-api`: openloomi HTTP API reference (auth, chat, RAG, workspace,
+  integrations, feedback). Triggered by API / backend questions.
+- `openloomi-feature-guide`: product overview, capabilities, and how-tos for
+  non-developer questions like "what can openloomi do".
+- `composio`: third-party 1000+ app integration router (Gmail, Slack,
+  GitHub, etc.) via the Composio CLI. Platform-agnostic; not OpenLoomi
+  business logic.
 
-The `workflow-guidance` bridge command exposes structured guidance for these
-workflows. The Codex plugin exposes thin wrapper skills, but the OpenLoomi
-runtime owns the underlying connector, memory, loop, and handoff
-implementation.
+The `workflow-guidance` bridge command exposes structured guidance for the
+four workflow skills (`openloomi-loop`, `openloomi-memory`,
+`openloomi-connectors`, `openloomi-handoff`). All other skills are
+documentation or routing helpers. The plugin must not copy OpenLoomi
+connector, memory, loop, scheduling, or handoff persistence logic into
+Codex — runtime implementations stay inside the OpenLoomi desktop runtime.
 
 ## Optional Codex Hooks
 
-The plugin may later add Codex hooks so the OpenLoomi Pet can notify the user
-when:
+Status: deferred pending Codex platform support.
 
-- a Codex task completes;
-- a Codex task needs user input;
-- a handoff has been queued for Loomi follow-up;
-- OpenLoomi connector or model setup is blocking a requested task.
+The Codex plugin surface does not currently expose Claude-style lifecycle
+hooks (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,
+`Stop`, `SubagentStart`, `SubagentStop`, `Notification`). The Claude Code
+plugin (`plugins/claude`) implements these via `hooks/hooks.json` plus
+`scripts/hooks-merge.cjs`; there is no equivalent mechanism on the Codex
+side as of the current Codex plugin API.
 
-Hook support is optional and should be added after the core install, readiness,
-AI provider setup, and one-shot flows are stable.
+The intended Pet notification surface is:
+
+- a Codex task completes — Pet `happy`;
+- a Codex task needs user input — Pet `needsinput`;
+- a handoff has been queued for Loomi follow-up — Pet `working`;
+- OpenLoomi connector or model setup is blocking a task — Pet `thinking`.
+
+Until Codex adds an official lifecycle event surface, this section stays
+open. Do not ship a hand-rolled polling loop inside the Codex plugin to
+fake hooks — it would duplicate Claude-only state and conflict with the
+"thin wrapper, no business logic" rule (see `ROADMAP.md` Phase 8).
 
 ## Secret Handling
 

@@ -1,0 +1,20 @@
+{
+  "name": "openloomi",
+  "interface": {
+    "displayName": "OpenLoomi"
+  },
+  "plugins": [
+    {
+      "name": "openloomi",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
