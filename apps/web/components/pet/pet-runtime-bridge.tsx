@@ -12,7 +12,10 @@ import {
 } from "./pet-runtime-state";
 
 type RuntimePayloadState =
-  PetRuntimeState | "happy" | "presenting" | "needsinput";
+  | PetRuntimeState
+  | "happy"
+  | "presenting"
+  | "needsinput";
 
 async function emitRuntimeState(
   state: RuntimePayloadState,
