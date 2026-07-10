@@ -5,7 +5,7 @@
     "email": "developers@melandlabs.ai"
   },
   "metadata": {
-    "description": "OpenLoomi local-first runtime — plugins for Claude Code and Codex",
+    "description": "OpenLoomi local-first runtime — plugins for Claude",
     "version": "0.7.3",
     "homepage": "https://openloomi.ai",
     "repository": "https://github.com/melandlabs/openloomi",
