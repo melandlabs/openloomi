@@ -17,6 +17,7 @@ mod dev_panel;
 #[cfg(target_os = "macos")]
 mod dock;
 mod macos_window;
+mod state;
 pub mod theme;
 mod watcher;
 mod window;
@@ -36,6 +37,7 @@ pub use dev_panel::{
     build_dev_panel_window, close_dev_panel_for_exit, dev_panel_requested,
     hide_dev_panel_window, show_dev_panel_window, DEV_PANEL_H, DEV_PANEL_W,
 };
+pub use state::{handle_runtime_state_event, publish_baseline_state};
 pub use theme::{
     read_config, write_config, PetConfig, PetConfigView, BUILTIN_THEMES, DEFAULT_THEME,
 };

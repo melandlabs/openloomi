@@ -46,7 +46,7 @@ const BUILTIN_THEMES: Record<ThemeName, BuiltinTheme> = {
       sleeping: "loomi-sleeping.png",
       juggling: "loomi-juggling.png",
       happy: "loomi-happy.png",
-      presenting: "loomi-happy.png",
+      presenting: "loomi-presenting.png",
     },
   },
   capybara: {
@@ -173,6 +173,12 @@ describe("imageFor()", () => {
       "loomi-pet/assets/fox/loomi-juggling.png",
     );
   });
+
+  it("uses a distinct fox sprite for presenting", () => {
+    expect(imageFor("fox", "presenting")).toBe(
+      "loomi-pet/assets/fox/loomi-presenting.png",
+    );
+  });
 });
 
 describe("widget source sanity", () => {
@@ -195,6 +201,10 @@ describe("widget source sanity", () => {
 
   it("widget listens for pet:config-changed", () => {
     expect(widgetHtml).toMatch(/listen\(\s*["']pet:config-changed["']/);
+  });
+
+  it("widget listens for pending-count badge updates", () => {
+    expect(widgetHtml).toMatch(/listen\(\s*["']loop:pending-count["']/);
   });
 
   it("widget exposes both built-in themes in the right-click menu", () => {

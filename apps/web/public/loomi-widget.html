@@ -84,6 +84,31 @@
         animation: pet-bob 3.4s ease-in-out infinite;
       }
 
+      .pending-badge {
+        position: absolute;
+        z-index: 5;
+        top: 7px;
+        right: 7px;
+        min-width: 22px;
+        height: 22px;
+        padding: 0 6px;
+        box-sizing: border-box;
+        border: 2px solid rgba(255, 255, 255, 0.92);
+        border-radius: 11px;
+        background: #dc2626;
+        color: #fff;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        pointer-events: none;
+      }
+      .pending-badge.visible {
+        display: flex;
+      }
+
       /* State-specific animations — kept in sync with the demo's
      keyframes. If you add a new state, add a rule here AND an entry
      in the STATE_IMAGES map below. */
@@ -305,6 +330,7 @@
   </head>
   <body>
     <img class="fox" id="fox" data-state="idle" alt="Loomi" draggable="false" />
+    <span class="pending-badge" id="pending-badge" aria-hidden="true"></span>
 
     <div id="pet-menu" role="menu" aria-hidden="true">
       <button type="button" data-op="open" role="menuitem">Open Loomi</button>
@@ -332,14 +358,10 @@
         // which is bundled by the public/ resource pattern in
         // tauri.conf.json (`../.next/standalone/apps/web/public/**/*`).
         //
-        // Juggling note: the original `loomi-info.png` (1.5 MB) was
-        // assigned to `juggling` by mistake. The real juggling sprite
-        // is `loomi-juggling.png` (52 KB). This map now points at the
-        // correct file.
-        //
-        // `presenting` is the post-completion handoff state — the fox
-        // has no dedicated sprite for it yet, so we fall back to
-        // `happy` until assets land.
+        // `juggling` is reserved for actual concurrent work. Queued Loop
+        // decisions are represented by the small pending-count badge and
+        // do not select the main pose. `presenting` uses the handoff pose
+        // that previously made the multitasking state look like a speech.
         const BUILTIN_THEMES = {
           fox: {
             baseDir: "loomi-pet/assets/fox/",
@@ -353,7 +375,7 @@
               sleeping: "loomi-sleeping.png",
               juggling: "loomi-juggling.png",
               happy: "loomi-happy.png",
-              presenting: "loomi-happy.png",
+              presenting: "loomi-presenting.png",
             },
           },
           capybara: {
@@ -391,6 +413,7 @@
         let customThemes = [];
 
         const fox = document.getElementById("fox");
+        const pendingBadge = document.getElementById("pending-badge");
         // Tracked alongside `fox.dataset.state` so the click handler can
         // branch on it (e.g. `needs-setup` → `pet:open-ai-settings`
         // instead of the default `pet:open-dashboard`).
@@ -527,6 +550,12 @@
             };
             img.src = src;
           }
+        }
+
+        function setPendingCount(value) {
+          const count = Math.max(0, Number(value) || 0);
+          pendingBadge.textContent = count > 99 ? "99+" : String(count);
+          pendingBadge.classList.toggle("visible", count > 0);
         }
 
         // ---- Custom right-click menu ----------------------------------
@@ -728,6 +757,10 @@
           t.event.listen("loop:state", (e) => {
             const p = (e && e.payload) || {};
             if (p.state) setState(p.state);
+          });
+          t.event.listen("loop:pending-count", (e) => {
+            const p = (e && e.payload) || {};
+            setPendingCount(p.count);
           });
         }
         // `pet:config-changed` fires whenever the host reloads the

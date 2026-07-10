@@ -635,6 +635,20 @@ fn main() {
                 }
             });
 
+            // The chat UI owns short-lived activity states such as
+            // thinking, working, juggling and completion. The pet state
+            // coordinator restores the latest Loop baseline when the UI
+            // emits `idle`, so queued decisions never pin an active run to
+            // the wrong sprite.
+            let runtime_state_app = app_handle.clone();
+            app_handle.listen("pet:runtime-state", move |event| {
+                if let Err(error) =
+                    pet::handle_runtime_state_event(&runtime_state_app, event.payload())
+                {
+                    eprintln!("[loomi-pet] ignored runtime state: {error}");
+                }
+            });
+
             // B2: bubble click → open the card (which the user can act
             // on). If the card doesn't have a current decision payload
             // (e.g. everything got dismissed in flight), the card

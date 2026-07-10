@@ -1,6 +1,7 @@
 // Decision-file watcher: background thread that polls `decisions.json`
-// for changes and maps the pending/done/dismissed bucket counts into one
-// of the pet's 9 + idle states, emitting `loop:state` to the pet window.
+// for changes and maps fresh done/dismissed/attention signals into the
+// pet's background state. Pending count is emitted separately as a badge;
+// it does not claim that the chat runtime is thinking or juggling.
 //
 // The polling is intentionally simple (read + sleep). We re-evaluate the
 // snapshot on every poll even when the file is unchanged because some pet
@@ -18,8 +19,8 @@ use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 
 use super::{
-    last_review_seen_secs_ago, PET_BUBBLE_LABEL, PET_CARD_LABEL, PET_LABEL,
-    set_pending_decision_count,
+    last_review_seen_secs_ago, publish_baseline_state, set_pending_decision_count,
+    PET_BUBBLE_LABEL, PET_CARD_LABEL, PET_LABEL,
 };
 
 const POLL_MS: u64 = 2000;
@@ -75,12 +76,7 @@ pub fn spawn_decision_watcher(app: AppHandle) {
             } else {
                 ("idle", "All clear")
             };
-            let payload = serde_json::json!({
-                "state": state,
-                "monologue": monologue,
-            });
-            let _ = app_for_listener.emit_to(PET_LABEL, "loop:state", payload.clone());
-            let _ = app_for_listener.emit_to(PET_BUBBLE_LABEL, "loop:state", payload);
+            publish_baseline_state(&app_for_listener, state, Some(monologue.into()));
             // Hide the bubble that the bootstrap emit showed — the user
             // just finished setup, no need to keep prompting.
             super::hide_bubble_window(&app_for_listener);
@@ -146,12 +142,11 @@ fn watch_loop(
     // reset (or a future watcher restart) can re-trigger the hint.
     std::thread::sleep(Duration::from_millis(FIRST_RUN_SETUP_DELAY_MS));
     if !*setup_emitted.lock().unwrap() && !path.exists() && !has_anthropic_env_key() {
-        let payload = serde_json::json!({
-            "state": "needs-setup",
-            "monologue": "Tap me — let's set up your AI provider",
-        });
-        let _ = app.emit_to(PET_LABEL, "loop:state", payload.clone());
-        let _ = app.emit_to(PET_BUBBLE_LABEL, "loop:state", payload);
+        publish_baseline_state(
+            app,
+            "needs-setup",
+            Some("Tap me — let's set up your AI provider".into()),
+        );
         // Show the bubble so the monologue is immediately visible.
         // The card is already self-shown by `loomi-card.html` on first
         // load (see comment above), so we skip it here to avoid a
@@ -167,7 +162,15 @@ fn watch_loop(
         // re-triggers the hint on next watcher restart.
         *setup_emitted.lock().unwrap() = false;
 
-        let Ok(bytes) = std::fs::read(&path) else { continue };
+        let Ok(bytes) = std::fs::read(&path) else {
+            set_pending_decision_count(0);
+            let _ = app.emit_to(
+                PET_LABEL,
+                "loop:pending-count",
+                serde_json::json!({ "count": 0 }),
+            );
+            continue;
+        };
         let Ok(snap) = serde_json::from_slice::<DecisionsSnap>(&bytes) else {
             continue;
         };
@@ -179,12 +182,17 @@ fn watch_loop(
         // store — happens on the watcher thread, off the UI critical
         // path.
         set_pending_decision_count(snap.pending.len());
+        let _ = app.emit_to(
+            PET_LABEL,
+            "loop:pending-count",
+            serde_json::json!({ "count": snap.pending.len() }),
+        );
         let newest_ts = snap
             .pending
             .iter()
             .chain(snap.done.iter())
             .chain(snap.dismissed.iter())
-            .filter_map(|d| d.created_at.clone().or(d.completed_at.clone()))
+            .filter_map(|d| d.completed_at.clone().or(d.created_at.clone()))
             .max();
         let needs_user = snap.pending.iter().any(|d| d.needs_user.unwrap_or(false));
         let top_pending_id = snap.pending.first().and_then(|d| d.id.clone());
@@ -202,7 +210,7 @@ fn watch_loop(
         let reviewed_recently = last_review_seen_secs_ago()
             .map(|s| s < PRESENTING_REVIEW_GRACE_SECS)
             .unwrap_or(false);
-        let (state, monologue) = map_state_to_pet(&snap, &newest_ts, needs_user, reviewed_recently);
+        let (state, monologue) = map_state_to_pet(&snap, needs_user, reviewed_recently);
 
         let data_changed = buckets != last_buckets
             || newest_ts != last_decision_ts
@@ -237,15 +245,10 @@ fn watch_loop(
         last_reviewed_recently = reviewed_recently;
 
         last_emitted_state = Some(state.to_string());
-        let state_payload = serde_json::json!({ "state": state, "monologue": monologue });
-        // Pet widget flips its sprite/animation, bubble swaps to a
-        // state-specific phrase — both listen on `loop:state`. We
-        // mirror to the bubble so watcher-driven flips (sweeping /
-        // happy / sleeping / etc.) actually change the bubble text;
-        // without this the bubble would stay frozen on the last
-        // decision's dialogue until a new decision arrives.
-        let _ = app.emit_to(PET_LABEL, "loop:state", state_payload.clone());
-        let _ = app.emit_to(PET_BUBBLE_LABEL, "loop:state", state_payload);
+        // Runtime chat activity temporarily wins over this baseline.
+        // The coordinator still records every watcher update and restores
+        // the latest one after the chat UI releases its override.
+        publish_baseline_state(app, state, monologue);
 
         // B2: keep bubble + card windows in sync. The bubble auto-shows
         // when the latest pending decision changes and auto-hides when
@@ -703,52 +706,48 @@ pub struct DecContext {
 /// flip from "I have results for you" to "happy / done".
 pub fn map_state_to_pet(
     s: &DecisionsSnap,
-    newest_ts: &Option<String>,
     needs_user: bool,
     reviewed_recently: bool,
 ) -> (&'static str, Option<String>) {
-    let pending = s.pending.len();
     let done = s.done.len();
     let dismissed = s.dismissed.len();
     let hour = current_hour_local();
-    let just_now = is_just_now(newest_ts);
+    let done_just_now = is_just_now(&newest_bucket_ts(&s.done));
+    let dismissed_just_now = is_just_now(&newest_bucket_ts(&s.dismissed));
 
-    if pending == 0 && !(6..22).contains(&hour) {
-        return ("sleeping", None);
-    }
-    if pending == 0 && dismissed > 0 && just_now {
-        return ("sweeping", None);
-    }
-    // `presenting` sits between `sweeping` and `happy` — it surfaces
-    // when there's a freshly-done decision that the user hasn't yet
-    // seen. The pet sprite + bubble text deliberately differentiates
+    // `presenting` surfaces when there's a freshly-done decision that
+    // the user hasn't yet seen. The pet sprite + bubble text deliberately differentiates
     // this from `happy` so the user feels the loop "handing off" the
     // result rather than just celebrating. As soon as the user
     // clicks through (`pet:open-card` → `mark_review_seen`), the
     // watcher re-emits with `reviewed_recently = true` and we fall
     // through to the `happy` branch on the next poll.
-    if pending == 0 && done > 0 && just_now && !reviewed_recently {
+    if done > 0 && done_just_now && !reviewed_recently {
         return (
             "presenting",
             Some(format!("{done} done — review when you're ready")),
         );
     }
-    if pending == 0 && done > 0 && just_now {
+    if done > 0 && done_just_now {
         return ("happy", Some(format!("{} done. Tap to see.", done)));
     }
-    if pending == 0 {
-        return ("idle", None);
-    }
-    if pending >= 2 {
-        return ("juggling", Some(format!("{} cards open", pending)));
+    if dismissed > 0 && dismissed_just_now {
+        return ("sweeping", None);
     }
     if needs_user {
         return ("needsinput", None);
     }
-    if just_now {
-        return ("thinking", None);
+    if !(6..22).contains(&hour) {
+        return ("sleeping", None);
     }
-    ("working", None)
+    ("idle", None)
+}
+
+fn newest_bucket_ts(items: &[DecItem]) -> Option<String> {
+    items
+        .iter()
+        .filter_map(|item| item.completed_at.clone().or(item.created_at.clone()))
+        .max()
 }
 
 /// Whether `newest_ts` is within `JUST_NOW_SECS` of "now".
@@ -892,31 +891,41 @@ mod tests {
         // We can't easily inject hour, so check both branches: any result
         // is "sleeping" or "idle" depending on local clock; just assert
         // it is not the "happy" / "juggling" family.
-        let (state, _) = map_state_to_pet(&s, &None, false, false);
+        let (state, _) = map_state_to_pet(&s, false, false);
         assert!(matches!(state, "sleeping" | "idle"), "got {state}");
     }
 
     #[test]
-    fn multiple_pending_is_juggling_with_count() {
+    fn multiple_pending_does_not_claim_runtime_is_juggling() {
         let s = snap(3, 0, 0);
-        let (state, mono) = map_state_to_pet(&s, &None, false, false);
-        assert_eq!(state, "juggling");
-        assert_eq!(mono.as_deref(), Some("3 cards open"));
+        let (state, mono) = map_state_to_pet(&s, false, false);
+        assert!(matches!(state, "idle" | "sleeping"), "got {state}");
+        assert_eq!(mono, None);
     }
 
     #[test]
     fn single_pending_with_needs_user_is_needsinput() {
         let mut s = snap(1, 0, 0);
         s.pending[0].needs_user = Some(true);
-        let (state, _) = map_state_to_pet(&s, &None, true, false);
+        let (state, _) = map_state_to_pet(&s, true, false);
         assert_eq!(state, "needsinput");
     }
 
     #[test]
-    fn single_pending_no_needs_user_is_working_or_thinking() {
+    fn single_pending_no_needs_user_stays_at_baseline() {
         let s = snap(1, 0, 0);
-        let (state, _) = map_state_to_pet(&s, &None, false, false);
-        assert!(matches!(state, "working" | "thinking"), "got {state}");
+        let (state, _) = map_state_to_pet(&s, false, false);
+        assert!(matches!(state, "idle" | "sleeping"), "got {state}");
+    }
+
+    #[test]
+    fn fresh_pending_does_not_make_an_old_done_item_presenting() {
+        let mut s = snap(1, 1, 0);
+        s.pending[0].created_at = Some(format_iso_now_approx());
+        s.done[0].completed_at = Some("2020-01-01T00:00:00Z".into());
+
+        let (state, _) = map_state_to_pet(&s, false, false);
+        assert!(matches!(state, "idle" | "sleeping"), "got {state}");
     }
 
     /// Build a snapshot whose `done` bucket contains exactly one
@@ -946,13 +955,13 @@ mod tests {
 
     #[test]
     fn done_with_just_now_and_not_reviewed_emits_presenting() {
-        // `newest_ts` is "now-ish" (the test runs at the moment of
-        // wall-clock), `reviewed_recently = false` → we expect the
-        // `presenting` rule to win over the `happy` rule that would
+        // The done item's completion time is "now-ish" (the test runs at
+        // the moment of wall-clock), `reviewed_recently = false` → we
+        // expect the `presenting` rule to win over the `happy` rule that would
         // otherwise fire on `done > 0 && just_now`.
         let now_iso = format_iso_now_approx();
         let s = snap_with_done_completed_at(1, &now_iso);
-        let (state, _) = map_state_to_pet(&s, &Some(now_iso), false, false);
+        let (state, _) = map_state_to_pet(&s, false, false);
         assert_eq!(state, "presenting");
     }
 
@@ -960,7 +969,7 @@ mod tests {
     fn done_with_just_now_and_reviewed_falls_back_to_happy() {
         let now_iso = format_iso_now_approx();
         let s = snap_with_done_completed_at(1, &now_iso);
-        let (state, _) = map_state_to_pet(&s, &Some(now_iso), false, true);
+        let (state, _) = map_state_to_pet(&s, false, true);
         assert_eq!(state, "happy");
     }
 
@@ -971,7 +980,7 @@ mod tests {
         // bucket branch lands on `idle` (or `sleeping` if the test
         // happens to run in night hours).
         let s = snap_with_done_completed_at(1, "2020-01-01T00:00:00Z");
-        let (state, _) = map_state_to_pet(&s, &Some("2020-01-01T00:00:00Z".into()), false, false);
+        let (state, _) = map_state_to_pet(&s, false, false);
         assert!(
             matches!(state, "idle" | "sleeping"),
             "expected idle/sleeping, got {state}"

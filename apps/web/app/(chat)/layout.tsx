@@ -17,6 +17,7 @@ import { ConversationApiOnboardingGuard } from "@/components/conversation-api-on
 import { ScreenMemoryCaptureProvider } from "@/components/chronicle/screen-memory-provider";
 import { LoopNavBridge } from "@/components/loop/loop-nav-bridge";
 import { PetChatBridge } from "@/components/pet/pet-chat-bridge";
+import { PetRuntimeBridge } from "@/components/pet/pet-runtime-bridge";
 import { ScheduledJobsInit } from "@/components/scheduled-jobs-init";
 
 export default async function Layout({
@@ -65,6 +66,7 @@ export default async function Layout({
                         components/pet/pet-chat-bridge.tsx for the why.
                       */}
                       <PetChatBridge />
+                      <PetRuntimeBridge />
                       {/* Drive the local scheduler + ensure-loop-jobs off
                           useSession(). Mounted here (inside SessionProvider)
                           so it can see auth state transitions, not just the
