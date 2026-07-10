@@ -2,17 +2,17 @@
 // for changes and maps the pending/done/dismissed bucket counts into one
 // of the pet's 9 + idle states, emitting `loop:state` to the pet window.
 //
-// The polling is intentionally simple (`fs::metadata` mtime + sleep) —
-// adding the `notify` crate buys us little here (mtime granularity is
-// fine for a human-driven decision flow) and pulls in a transitive set of
-// platform-specific deps we don't otherwise need.
+// The polling is intentionally simple (read + sleep). We re-evaluate the
+// snapshot on every poll even when the file is unchanged because some pet
+// states expire with time (`presenting`) or change when the user reviews a
+// card. An mtime-only gate would leave those states pinned indefinitely.
 //
 // B2: also emits `loop:decision` to the bubble + card windows so the
 // speech bubble tracks the latest pending decision and the larger card
 // window stays in sync with whatever the user most recently opened.
 
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Listener, Manager};
@@ -108,7 +108,6 @@ fn watch_loop(
     setup_emitted: std::sync::Arc<std::sync::Mutex<bool>>,
 ) {
     let path = resolve_decisions_path(app);
-    let mut last_mtime: Option<SystemTime> = None;
     let mut last_buckets: (usize, usize, usize) = (0, 0, 0);
     let mut last_decision_ts: Option<String> = None;
     let mut last_top_id: Option<String> = None;
@@ -164,12 +163,6 @@ fn watch_loop(
     loop {
         std::thread::sleep(Duration::from_millis(POLL_MS));
 
-        let Ok(meta) = std::fs::metadata(&path) else { continue };
-        let Ok(mtime) = meta.modified() else { continue };
-        if last_mtime == Some(mtime) {
-            continue;
-        }
-        last_mtime = Some(mtime);
         // File appeared — clear the setup guard so a future deletion
         // re-triggers the hint on next watcher restart.
         *setup_emitted.lock().unwrap() = false;
@@ -209,17 +202,18 @@ fn watch_loop(
         let reviewed_recently = last_review_seen_secs_ago()
             .map(|s| s < PRESENTING_REVIEW_GRACE_SECS)
             .unwrap_or(false);
+        let (state, monologue) = map_state_to_pet(&snap, &newest_ts, needs_user, reviewed_recently);
 
-        let changed = buckets != last_buckets
+        let data_changed = buckets != last_buckets
             || newest_ts != last_decision_ts
             || top_pending_id != last_top_id
-            || current_pending_ids != last_pending_ids
-            // The `presenting → happy` transition fires on review, not
-            // on decisions.json edits. Re-emit whenever the reviewed-
-            // recently flag flips so the pet reacts within one poll
-            // (~2 s) of the user clicking the bubble.
-            || reviewed_recently != last_reviewed_recently;
-        if !changed {
+            || current_pending_ids != last_pending_ids;
+        if !should_emit_update(
+            data_changed,
+            reviewed_recently != last_reviewed_recently,
+            last_emitted_state.as_deref(),
+            state,
+        ) {
             continue;
         }
         // Detect ids that left `pending` between this poll and the last.
@@ -242,7 +236,6 @@ fn watch_loop(
         last_pending_ids = current_pending_ids;
         last_reviewed_recently = reviewed_recently;
 
-        let (state, monologue) = map_state_to_pet(&snap, &newest_ts, needs_user, reviewed_recently);
         last_emitted_state = Some(state.to_string());
         let state_payload = serde_json::json!({ "state": state, "monologue": monologue });
         // Pet widget flips its sprite/animation, bubble swaps to a
@@ -327,6 +320,20 @@ fn watch_loop(
         });
         let _ = app.emit_to(PET_CARD_LABEL, "loop:pending-list", pending_list);
     }
+}
+
+/// Decide whether the watcher should publish a fresh pet state.
+///
+/// `state` is included separately from data/review changes so wall-clock
+/// transitions still publish. In particular, a `presenting` state must fall
+/// back after its freshness window even if `decisions.json` is untouched.
+fn should_emit_update(
+    data_changed: bool,
+    review_changed: bool,
+    last_state: Option<&str>,
+    next_state: &str,
+) -> bool {
+    data_changed || review_changed || last_state != Some(next_state)
 }
 
 /// Build the `loop:decision` payload that the bubble + card webviews
@@ -969,6 +976,26 @@ mod tests {
             matches!(state, "idle" | "sleeping"),
             "expected idle/sleeping, got {state}"
         );
+    }
+
+    #[test]
+    fn watcher_emits_when_time_changes_state_without_file_changes() {
+        assert!(should_emit_update(
+            false,
+            false,
+            Some("presenting"),
+            "idle"
+        ));
+    }
+
+    #[test]
+    fn watcher_stays_quiet_when_data_review_and_state_are_unchanged() {
+        assert!(!should_emit_update(
+            false,
+            false,
+            Some("idle"),
+            "idle"
+        ));
     }
 
     /// Rough "now" in the format `is_just_now` accepts. We don't need
