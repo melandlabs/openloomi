@@ -24,8 +24,8 @@ Pick the channel that matches your situation:
 /plugin install openloomi
 
 # Hacking on the plugin itself (local source after clone opneloomi GitHub repo)
-git clone https://github.com/melandlabs/openloomi.git
-claude --plugin-dir openloomi/plugins/claude
+git clone https://github.com/melandlabs/openloomi.git && cd openloomi
+claude --plugin-dir plugins/claude
 ```
 
 Inside the running session `/openloomi:help` lists all 8 commands.
