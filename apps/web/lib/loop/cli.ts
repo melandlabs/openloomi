@@ -247,6 +247,20 @@ async function main(): Promise<number> {
           const dec = decisions.add(
             p as unknown as Parameters<typeof decisions.add>[0],
           );
+          if (dec === null) {
+            process.stdout.write(
+              JSON.stringify(
+                {
+                  ok: true,
+                  decision: null,
+                  filtered: "noop_or_tick_summary",
+                },
+                null,
+                2,
+              ),
+            );
+            return 0;
+          }
           process.stdout.write(
             JSON.stringify({ ok: true, decision: dec }, null, 2),
           );

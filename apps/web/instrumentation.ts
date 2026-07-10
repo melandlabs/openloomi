@@ -91,6 +91,25 @@ export function register() {
           );
         })
         .catch((e) => console.warn("[Loop] Scheduler import failed:", e));
+
+      // Legacy daemon cleanup (#288): sweep for any stale
+      // `openloomi-loop.cjs schedule|watch` process left running from an
+      // older debug build and SIGTERM it. Best-effort; soft-fails so the
+      // rest of instrumentation runs unaffected.
+      import("./lib/loop/legacy-cleanup")
+        .then(({ cleanupLegacyLoopDaemon }) => {
+          try {
+            const r = cleanupLegacyLoopDaemon();
+            if (r.killedPids.length || r.pidFileRemoved) {
+              console.log(
+                `[Loop] legacy cleanup: killed=${r.killedPids.length} pidFileRemoved=${r.pidFileRemoved}`,
+              );
+            }
+          } catch (e) {
+            console.warn("[Loop] legacy cleanup failed:", e);
+          }
+        })
+        .catch((e) => console.warn("[Loop] legacy-cleanup import failed:", e));
     }
   }
 }

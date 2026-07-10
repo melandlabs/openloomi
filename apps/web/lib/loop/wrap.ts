@@ -509,12 +509,15 @@ export async function buildAndEnqueue(
     confidence: snapshot.narrative?.status === "ready" ? 0.85 : 1,
   });
 
-  if (snapshot.narrative?.status === "generating") {
+  // #288 — `card` is now `LoopDecision | null` because decisions.add() may
+  // reject noop / tick_summary records. For type:"wrap" the filter never
+  // matches, but the nullable contract is acknowledged here defensively.
+  if (card && snapshot.narrative?.status === "generating") {
     kickOffBackgroundEnrichment(snapshot, card.id);
   }
 
   log(
-    `wrap card enqueued ${card.id}${
+    `wrap card enqueued ${card?.id ?? "<rejected>"}${
       snapshot.narrative?.status === "generating"
         ? " (narrative: generating)"
         : snapshot.narrative?.status === "ready"

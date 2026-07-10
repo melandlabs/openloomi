@@ -60,6 +60,14 @@ async function handleTick(
     setActiveUser(context.userId);
     const watchResult = await runWatcher({ userId: context.userId });
     const tickResult = await run({ userId: context.userId });
+    // #288 — fire-and-forget desktop notifications only for fresh,
+    // actionable decisions. Pet bubble is the primary surface; this is
+    // opt-in via LoopPreferences.desktopNotifications. Errors are
+    // swallowed and logged by notifyForDecisions.
+    if (tickResult.newDecisions && tickResult.newDecisions.length > 0) {
+      const { notifyForDecisions } = await import("./notifications");
+      await notifyForDecisions(tickResult.newDecisions);
+    }
     return { ...tickResult, watch: watchResult };
   }, context);
 }

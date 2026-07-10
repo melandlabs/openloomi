@@ -624,12 +624,15 @@ export async function buildAndEnqueue(
   });
 
   // Fire-and-forget background enrich — never awaited, never throws.
-  if (snapshot.narrative?.status === "generating") {
+  // #288 — `card` is now `LoopDecision | null` because decisions.add() may
+  // reject noop / tick_summary records. For type:"brief" the filter never
+  // matches, but the nullable contract is acknowledged here defensively.
+  if (card && snapshot.narrative?.status === "generating") {
     kickOffBackgroundEnrichment(snapshot, card.id);
   }
 
   log(
-    `brief card enqueued ${card.id}${
+    `brief card enqueued ${card?.id ?? "<rejected>"}${
       snapshot.narrative?.status === "generating"
         ? " (narrative: generating)"
         : snapshot.narrative?.status === "ready"

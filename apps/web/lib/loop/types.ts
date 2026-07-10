@@ -25,6 +25,8 @@ export type DecisionType =
   | "doc_update"
   | "brief"
   | "wrap"
+  | "noop" // NEW — non-actionable; filtered at decisions.add()
+  | "tick_summary" // NEW — explicit per-tick summary; filtered at decisions.add()
   | "unknown";
 
 export type DecisionStatus = "pending" | "done" | "dismissed";
@@ -129,6 +131,13 @@ export interface LoopPreferences {
    * `true` — opt-out via `PUT /api/loop/preferences { narrative: false }`.
    */
   narrative?: boolean;
+  /**
+   * Send native macOS / OS desktop notifications for high-priority Loop
+   * events. Default `false` because the Loomi Pet bubble/card is the
+   * primary desktop surface and is always on. Opt-in via
+   * `PUT /api/loop/preferences { desktopNotifications: true }`.
+   */
+  desktopNotifications?: boolean;
 }
 
 /** Mute rule scope — discriminated union keyed by signal type. */
@@ -167,6 +176,7 @@ export const DEFAULT_LOOP_PREFERENCES: LoopPreferences = {
   noReplySkip: true,
   promotionSkip: true,
   narrative: true,
+  desktopNotifications: false, // NEW
 };
 
 export interface ConnectorEntry {

@@ -167,6 +167,47 @@ export const signals = {
 // Decisions
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Noop / tick-summary filter (#288)
+// ---------------------------------------------------------------------------
+//
+// The agentic tick occasionally emits a "Tick clean. 0 new decisions"-shaped
+// record that is non-actionable. We never want such records in `pending` —
+// the pet reads `pending` to surface cards, and any external watch loop
+// fires an OS notification for every fresh `pending` row.
+//
+// A record is rejected if ANY of the following is true:
+//   - type === "noop"
+//   - type === "tick_summary"
+//   - title matches /^\s*0\s+new\s+decision/i   (defence in depth — the
+//     agent occasionally drifts on the literal "type")
+//   - context.source === "loop_tick"            (explicit per-tick marker)
+//   - context.noop === true                     (escape hatch for the agent)
+//
+// Rejection is silent to callers (returns null) so the agentic tick
+// pipeline keeps working unchanged. The pet watcher polls `decisions.json`
+// mtime; rejected records never write the file, so the mtime is stable
+// and no spurious "presenting" state fires.
+
+const NOOP_TITLE_RE = /^\s*0\s+new\s+decision/i;
+
+export function isNoopDecision(input: {
+  type?: string;
+  title?: string;
+  context?: Record<string, unknown>;
+}): boolean {
+  if (!input) return false;
+  if (input.type === "noop" || input.type === "tick_summary") return true;
+  if (typeof input.title === "string" && NOOP_TITLE_RE.test(input.title))
+    return true;
+  const ctx = input.context;
+  if (ctx && typeof ctx === "object") {
+    if (ctx.source === "loop_tick") return true;
+    if (ctx.noop === true) return true;
+  }
+  return false;
+}
+
 function readDecisions(): LoopDecisionBuckets {
   ensureDirs();
   const d = readJson<LoopDecisionBuckets>(LOOP_PATHS.decisions, emptyBuckets());
@@ -205,7 +246,16 @@ export const decisions = {
       title: string;
       action: LoopDecision["action"];
     },
-  ): LoopDecision {
+  ): LoopDecision | null {
+    // #288 — drop non-actionable tick / noop records at the store layer so
+    // they never reach `pending` (and therefore never reach the pet bubble
+    // or any external watch loop's notification fan-out).
+    if (isNoopDecision(input)) {
+      log(
+        `[decisions.add] rejected noop/tick_summary record: type=${input.type} title=${JSON.stringify(input.title)}`,
+      );
+      return null;
+    }
     const d = readDecisions();
     const dec: LoopDecision = {
       id: input.id || uid("dec"),

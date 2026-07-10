@@ -474,6 +474,7 @@ export default defineConfig({
     hookTimeout: 20000,
     include: [
       "tests/unit/*.test.ts",
+      "tests/unit/*/*.test.ts",
       "tests/api/*.test.ts",
       "tests/api/*.smoke.ts",
       "tests/benchmark/*.test.ts",
