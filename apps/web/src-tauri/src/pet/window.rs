@@ -81,7 +81,8 @@ pub fn build_pet_window(app: &AppHandle) -> tauri::Result<()> {
     .visible(true)
     .focused(false);
 
-    builder.build()?;
+    let window = builder.build()?;
+    super::macos_window::configure_for_all_spaces(&window);
     wire_pet_window_events(app);
     Ok(())
 }
@@ -97,6 +98,7 @@ pub fn show_pet_window(app: &AppHandle) {
         let _ = w.set_focus();
         let _ = w.set_always_on_top(true);
         let _ = w.set_visible_on_all_workspaces(true);
+        super::macos_window::configure_for_all_spaces(&w);
     }
 }
 

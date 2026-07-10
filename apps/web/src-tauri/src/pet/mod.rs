@@ -16,6 +16,7 @@ mod config_watcher;
 mod dev_panel;
 #[cfg(target_os = "macos")]
 mod dock;
+mod macos_window;
 pub mod theme;
 mod watcher;
 mod window;

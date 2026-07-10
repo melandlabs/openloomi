@@ -70,6 +70,7 @@ pub fn build_bubble_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindo
     let builder = base;
 
     let w = builder.build()?;
+    super::macos_window::configure_for_all_spaces(&w);
     // CloseRequested → hide (so the OS × button on the bubble isn't a
     // destroy gesture). Tauri's webview window has decorations(false) so
     // this branch is only hit if the user wires a close shortcut in the
@@ -105,6 +106,7 @@ pub fn show_bubble_window(app: &AppHandle) {
         let _ = w.show();
         let _ = w.set_always_on_top(true);
         let _ = w.set_visible_on_all_workspaces(true);
+        super::macos_window::configure_for_all_spaces(&w);
         let _ = w.set_focus();
         // Tell the bubble's JS to (re)arm its auto-dismiss timer. The
         // bubble owns the dismiss lifecycle (see
