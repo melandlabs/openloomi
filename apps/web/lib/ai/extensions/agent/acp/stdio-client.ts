@@ -1,5 +1,13 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { platform } from "node:os";
+import { StringDecoder } from "node:string_decoder";
+
+import {
+  appendCapturedCliOutput,
+  buildCliEnvironment,
+  MAX_CLI_PROTOCOL_LINE_CHARS,
+  shouldDetachCliProcess,
+  terminateCliProcessTree,
+} from "../cli-process";
 
 type JsonRpcId = string | number;
 
@@ -23,7 +31,7 @@ interface JsonRpcResponse {
 
 type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
 
-export type HermesAcpClientEvent =
+export type AcpStdioClientEvent =
   | { type: "notification"; method: string; params?: unknown }
   | { type: "diagnostic"; message: string }
   | {
@@ -35,7 +43,7 @@ export type HermesAcpClientEvent =
       timeoutMs?: number;
     };
 
-export type HermesAcpClientRequestHandler = (request: {
+export type AcpStdioClientRequestHandler = (request: {
   id: JsonRpcId;
   method: string;
   params?: unknown;
@@ -51,38 +59,39 @@ interface PendingAgentRequest {
   method: string;
 }
 
-export class HermesAcpCommandNotFoundError extends Error {
-  constructor(command: string) {
+export class AcpCommandNotFoundError extends Error {
+  constructor(runtimeName: string, command: string) {
     super(
-      `Hermes ACP executable not found: ${command}. Install Hermes with ACP support or set OPENLOOMI_AGENT_HERMES_COMMAND to the Hermes executable.`,
+      `${runtimeName} ACP executable not found: ${command}. Install ${runtimeName} with ACP support or configure its OPENLOOMI_AGENT_*_COMMAND environment variable.`,
     );
-    this.name = "HermesAcpCommandNotFoundError";
+    this.name = "AcpCommandNotFoundError";
   }
 }
 
-export class HermesAcpExitError extends Error {
+export class AcpExitError extends Error {
   constructor(
     message: string,
     readonly exitCode?: number,
   ) {
     super(message);
-    this.name = "HermesAcpExitError";
+    this.name = "AcpExitError";
   }
 }
 
-export class HermesAcpJsonRpcError extends Error {
+export class AcpJsonRpcError extends Error {
   constructor(
+    readonly runtimeName: string,
     readonly method: string,
     readonly code: number,
     message: string,
     readonly data?: unknown,
   ) {
-    super(`Hermes ACP ${method} failed: ${message}`);
-    this.name = "HermesAcpJsonRpcError";
+    super(`${runtimeName} ACP ${method} failed: ${message}`);
+    this.name = "AcpJsonRpcError";
   }
 }
 
-export class HermesAcpClient {
+export class AcpStdioClient {
   private proc?: ChildProcessWithoutNullStreams;
   private requestCounter = 0;
   private stdout = "";
@@ -93,20 +102,23 @@ export class HermesAcpClient {
   private closed = false;
   private pendingRequests = new Map<JsonRpcId, PendingRequest>();
   private pendingAgentRequests = new Map<JsonRpcId, PendingAgentRequest>();
-  private eventQueue = new AsyncQueue<HermesAcpClientEvent>();
+  private eventQueue = new AsyncQueue<AcpStdioClientEvent>();
   private resolveClosed?: () => void;
+  private readonly stdoutDecoder = new StringDecoder("utf8");
+  private readonly stderrDecoder = new StringDecoder("utf8");
   private readonly closedPromise = new Promise<void>((resolve) => {
     this.resolveClosed = resolve;
   });
 
   constructor(
+    private readonly runtimeName: string,
     private readonly command: string,
     private readonly args: string[],
     private readonly options: {
       cwd: string;
       signal?: AbortSignal;
       timeoutMs?: number;
-      onRequest?: HermesAcpClientRequestHandler;
+      onRequest?: AcpStdioClientRequestHandler;
     },
   ) {}
 
@@ -118,7 +130,8 @@ export class HermesAcpClient {
     try {
       this.proc = spawn(this.command, this.args, {
         cwd: this.options.cwd,
-        env: process.env,
+        env: buildCliEnvironment(),
+        detached: shouldDetachCliProcess(),
         windowsHide: true,
       });
     } catch (error) {
@@ -143,19 +156,31 @@ export class HermesAcpClient {
     }
 
     proc.stdout.on("data", (chunk: Buffer) => {
-      const text = chunk.toString();
-      this.stdout += text;
+      const text = this.stdoutDecoder.write(chunk);
+      this.stdout = appendCapturedCliOutput(this.stdout, text);
       this.stdoutBuffer += text;
+      if (this.stdoutBuffer.length > MAX_CLI_PROTOCOL_LINE_CHARS) {
+        const error = new AcpExitError(
+          `${this.runtimeName} ACP emitted a JSON line larger than ${MAX_CLI_PROTOCOL_LINE_CHARS} characters`,
+        );
+        this.rejectAll(error);
+        this.eventQueue.push({ type: "diagnostic", message: error.message });
+        this.kill();
+        return;
+      }
       this.flushStdoutLines();
     });
 
     proc.stderr.on("data", (chunk: Buffer) => {
-      this.stderr += chunk.toString();
+      this.stderr = appendCapturedCliOutput(
+        this.stderr,
+        this.stderrDecoder.write(chunk),
+      );
     });
 
     proc.on("error", (error: Error & { code?: string }) => {
       const err = isCommandNotFoundError(error)
-        ? new HermesAcpCommandNotFoundError(this.command)
+        ? new AcpCommandNotFoundError(this.runtimeName, this.command)
         : error;
       this.rejectAll(err);
       this.eventQueue.push({ type: "diagnostic", message: err.message });
@@ -163,8 +188,17 @@ export class HermesAcpClient {
     });
 
     proc.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
+      const finalStdout = this.stdoutDecoder.end();
+      if (finalStdout) {
+        this.stdout = appendCapturedCliOutput(this.stdout, finalStdout);
+        this.stdoutBuffer += finalStdout;
+      }
+      this.stderr = appendCapturedCliOutput(
+        this.stderr,
+        this.stderrDecoder.end(),
+      );
       const exitCode = this.timedOut ? 124 : (code ?? (signal ? 130 : 0));
-      const closeEvent: HermesAcpClientEvent = {
+      const closeEvent: AcpStdioClientEvent = {
         type: "close",
         exitCode,
         stderr: this.stderr,
@@ -178,7 +212,9 @@ export class HermesAcpClient {
         this.stdoutBuffer = "";
       }
 
-      const exitError = this.formatExitError(closeEvent);
+      const exitError =
+        this.formatExitError(closeEvent) ??
+        this.formatPendingRequestExitError(closeEvent);
       if (exitError) {
         this.rejectAll(exitError);
       }
@@ -207,11 +243,11 @@ export class HermesAcpClient {
     this.write({ jsonrpc: "2.0", method, params });
   }
 
-  nextEvent(): Promise<HermesAcpClientEvent | undefined> {
+  nextEvent(): Promise<AcpStdioClientEvent | undefined> {
     return this.eventQueue.shift();
   }
 
-  drainEvents(): HermesAcpClientEvent[] {
+  drainEvents(): AcpStdioClientEvent[] {
     return this.eventQueue.drain();
   }
 
@@ -245,7 +281,7 @@ export class HermesAcpClient {
       return;
     }
 
-    killProcessTree(this.proc);
+    terminateCliProcessTree(this.proc);
   }
 
   private readonly abortHandler = () => {
@@ -255,7 +291,7 @@ export class HermesAcpClient {
 
   private write(message: Record<string, unknown>): void {
     if (!this.proc || this.closed) {
-      throw new Error("Hermes ACP process is not running");
+      throw new Error(`${this.runtimeName} ACP process is not running`);
     }
 
     this.proc.stdin.write(`${JSON.stringify(message)}\n`);
@@ -278,7 +314,7 @@ export class HermesAcpClient {
     } catch {
       this.eventQueue.push({
         type: "diagnostic",
-        message: `Hermes ACP emitted invalid JSON: ${line}`,
+        message: `${this.runtimeName} ACP emitted invalid JSON: ${line}`,
       });
       return;
     }
@@ -299,7 +335,8 @@ export class HermesAcpClient {
       this.pendingRequests.delete(message.id);
       if (message.error) {
         pending.reject(
-          new HermesAcpJsonRpcError(
+          new AcpJsonRpcError(
+            this.runtimeName,
             pending.method,
             message.error.code,
             message.error.message,
@@ -328,7 +365,7 @@ export class HermesAcpClient {
     }
 
     if (message.method !== "session/request_permission") {
-      const diagnostic = `Unsupported Hermes ACP client method: ${message.method}`;
+      const diagnostic = `Unsupported ${this.runtimeName} ACP client method: ${message.method}`;
       this.respondError(message.id, -32601, diagnostic);
       this.eventQueue.push({ type: "diagnostic", message: diagnostic });
       return;
@@ -398,7 +435,11 @@ export class HermesAcpClient {
   }
 
   private finish(): void {
+    if (this.closed) {
+      return;
+    }
     this.closed = true;
+    this.pendingAgentRequests.clear();
     this.cleanup();
     this.eventQueue.close();
     this.resolveClosed?.();
@@ -415,31 +456,49 @@ export class HermesAcpClient {
   private normalizeSpawnError(error: unknown): Error {
     const err = error instanceof Error ? error : new Error(String(error));
     return isCommandNotFoundError(err as Error & { code?: string })
-      ? new HermesAcpCommandNotFoundError(this.command)
+      ? new AcpCommandNotFoundError(this.runtimeName, this.command)
       : err;
   }
 
   private formatExitError(
-    closeEvent: Extract<HermesAcpClientEvent, { type: "close" }>,
-  ): HermesAcpExitError | undefined {
+    closeEvent: Extract<AcpStdioClientEvent, { type: "close" }>,
+  ): AcpExitError | undefined {
     if (closeEvent.exitCode === 0) {
       return undefined;
     }
 
     const output = closeEvent.stderr.trim() || closeEvent.stdout.trim();
     if (closeEvent.timedOut) {
-      return new HermesAcpExitError(
+      return new AcpExitError(
         output
-          ? `Hermes ACP timed out after ${closeEvent.timeoutMs}ms: ${output}`
-          : `Hermes ACP timed out after ${closeEvent.timeoutMs}ms`,
+          ? `${this.runtimeName} ACP timed out after ${closeEvent.timeoutMs}ms: ${output}`
+          : `${this.runtimeName} ACP timed out after ${closeEvent.timeoutMs}ms`,
         closeEvent.exitCode,
       );
     }
 
-    return new HermesAcpExitError(
+    return new AcpExitError(
       output
-        ? `Hermes ACP exited with code ${closeEvent.exitCode}: ${output}`
-        : `Hermes ACP exited with code ${closeEvent.exitCode}`,
+        ? `${this.runtimeName} ACP exited with code ${closeEvent.exitCode}: ${output}`
+        : `${this.runtimeName} ACP exited with code ${closeEvent.exitCode}`,
+      closeEvent.exitCode,
+    );
+  }
+
+  private formatPendingRequestExitError(
+    closeEvent: Extract<AcpStdioClientEvent, { type: "close" }>,
+  ): AcpExitError | undefined {
+    if (this.pendingRequests.size === 0) {
+      return undefined;
+    }
+
+    const methods = [
+      ...new Set(
+        [...this.pendingRequests.values()].map((request) => request.method),
+      ),
+    ].join(", ");
+    return new AcpExitError(
+      `${this.runtimeName} ACP exited before responding to pending request(s): ${methods}`,
       closeEvent.exitCode,
     );
   }
@@ -451,6 +510,9 @@ class AsyncQueue<T> {
   private closed = false;
 
   push(item: T): void {
+    if (this.closed) {
+      return;
+    }
     const waiter = this.waiters.shift();
     if (waiter) {
       waiter(item);
@@ -482,24 +544,6 @@ class AsyncQueue<T> {
   drain(): T[] {
     return this.items.splice(0);
   }
-}
-
-function killProcessTree(proc: ChildProcessWithoutNullStreams) {
-  if (proc.killed) {
-    return;
-  }
-
-  if (platform() === "win32" && proc.pid) {
-    spawn("taskkill", ["/F", "/T", "/PID", String(proc.pid)], {
-      windowsHide: true,
-      stdio: "ignore",
-    }).on("error", () => {
-      proc.kill();
-    });
-    return;
-  }
-
-  proc.kill("SIGTERM");
 }
 
 function isCommandNotFoundError(error: Error & { code?: string }) {

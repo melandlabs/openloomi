@@ -5823,6 +5823,9 @@ const enUS = {
       hideDetails: "Hide Details",
       allow: "Allow",
       deny: "Deny",
+      allowed: "Permission granted",
+      denied: "Permission denied",
+      submitError: "Failed to submit permission decision",
     },
     integration: {
       title: "Connect platforms to unlock deeper insight",

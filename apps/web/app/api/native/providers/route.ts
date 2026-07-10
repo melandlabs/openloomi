@@ -4,23 +4,25 @@
  * Get available agent and sandbox providers
  */
 
-import { NextResponse } from "next/server";
+import { hermesPlugin } from "@/lib/ai/extensions/agent/hermes";
+import { openclawPlugin } from "@/lib/ai/extensions/agent/openclaw";
+import { opencodePlugin } from "@/lib/ai/extensions/agent/opencode";
+import { getConfiguredDefaultAgentProvider } from "@/lib/ai/native-agent/provider-env";
 import {
-  CLAUDE_METADATA,
   type AgentProviderMetadata,
+  CLAUDE_METADATA,
 } from "@openloomi/ai/agent/plugin";
 import {
   getAgentRegistry,
   getAllAgentMetadata,
 } from "@openloomi/ai/agent/registry";
-import { hermesPlugin } from "@/lib/ai/extensions/agent/hermes";
-import { opencodePlugin } from "@/lib/ai/extensions/agent/opencode";
-import { getConfiguredDefaultAgentProvider } from "@/lib/ai/native-agent/provider-env";
+import { NextResponse } from "next/server";
 
 // Register lightweight built-in Agent plugins used by this metadata route.
 const registry = getAgentRegistry();
 registry.register(opencodePlugin);
 registry.register(hermesPlugin);
+registry.register(openclawPlugin);
 
 function getProviderMetadata(): AgentProviderMetadata[] {
   const metadataByType = new Map<string, AgentProviderMetadata>();
@@ -29,6 +31,7 @@ function getProviderMetadata(): AgentProviderMetadata[] {
     CLAUDE_METADATA,
     opencodePlugin.metadata,
     hermesPlugin.metadata,
+    openclawPlugin.metadata,
   ]) {
     metadataByType.set(metadata.type, metadata);
   }

@@ -10,36 +10,51 @@ const DEFAULT_AGENT_PROVIDER: AgentProvider = "claude";
 const ENV_PROVIDER_KEY = "OPENLOOMI_AGENT_PROVIDER";
 const OPENCODE_PROVIDER = "opencode";
 const HERMES_PROVIDER = "hermes";
+const OPENCLAW_PROVIDER = "openclaw";
 const SUPPORTED_ENV_PROVIDERS = new Set([
   "claude",
   OPENCODE_PROVIDER,
   HERMES_PROVIDER,
+  OPENCLAW_PROVIDER,
 ]);
 
 export function getConfiguredDefaultAgentProvider(
   env: EnvSource = process.env,
 ): AgentProvider {
-  const provider = resolveEnvAgentProvider(env) ?? DEFAULT_AGENT_PROVIDER;
-  if (provider === HERMES_PROVIDER) {
-    validateHermesUnsupportedEnvConfig(env);
-  }
-  return provider;
+  return resolveEnvAgentProvider(env) ?? DEFAULT_AGENT_PROVIDER;
 }
 
 export function resolveNativeAgentProviderRequest(
   body: NativeAgentRequest,
   env: EnvSource = process.env,
 ): NativeAgentRequest {
-  const provider =
-    resolveRequestAgentProvider(body.provider) ??
-    getConfiguredDefaultAgentProvider(env);
+  // Runtime selection is deployment configuration, not an HTTP request
+  // option. External CLI agents inherit host credentials and can execute local
+  // tools, so allowing callers to switch providers would cross a trust boundary.
+  const provider = getConfiguredDefaultAgentProvider(env);
 
   if (provider === HERMES_PROVIDER) {
+    const hermesEnvConfig = resolveHermesEnvConfig(env);
+    // The chat UI's model selector describes the built-in Claude runtime. Do
+    // not forward that unrelated model/base URL/API key bundle into Hermes.
     return {
       ...body,
       provider,
-      modelConfig: resolveHermesModelConfig(body),
-      providerConfig: resolveHermesEnvConfig(env).providerConfig,
+      modelConfig: hermesEnvConfig.model
+        ? { model: hermesEnvConfig.model }
+        : undefined,
+      // Executable paths, profiles, environment, and process timeouts are a
+      // server trust boundary. Never accept them from an HTTP request.
+      providerConfig: hermesEnvConfig.providerConfig,
+    };
+  }
+
+  if (provider === OPENCLAW_PROVIDER) {
+    return {
+      ...body,
+      provider,
+      modelConfig: undefined,
+      providerConfig: resolveOpenClawEnvConfig(env),
     };
   }
 
@@ -47,47 +62,20 @@ export function resolveNativeAgentProviderRequest(
     return {
       ...body,
       provider,
+      providerConfig: undefined,
     };
   }
 
   const opencodeEnvConfig = resolveOpenCodeEnvConfig(env);
-  const requestProviderConfig = isRecord(body.providerConfig)
-    ? body.providerConfig
-    : {};
-  const envAllowAutoApprove =
-    opencodeEnvConfig.providerConfig.allowAutoApprove === true;
-  const requestDisablesAutoApprove =
-    requestProviderConfig.allowAutoApprove === false;
-
-  const providerConfig = {
-    ...opencodeEnvConfig.providerConfig,
-    ...requestProviderConfig,
-    allowAutoApprove: envAllowAutoApprove && !requestDisablesAutoApprove,
-  };
-
-  const requestModel = normalizeOptionalString(body.modelConfig?.model);
-  const modelConfig =
-    opencodeEnvConfig.model && !requestModel
-      ? { ...body.modelConfig, model: opencodeEnvConfig.model }
-      : body.modelConfig;
 
   return {
     ...body,
     provider,
-    modelConfig,
-    providerConfig,
+    modelConfig: opencodeEnvConfig.model
+      ? { model: opencodeEnvConfig.model }
+      : undefined,
+    providerConfig: opencodeEnvConfig.providerConfig,
   };
-}
-
-function resolveRequestAgentProvider(
-  provider: NativeAgentRequest["provider"],
-): AgentProvider | undefined {
-  if (typeof provider !== "string") {
-    return undefined;
-  }
-
-  const trimmed = provider.trim();
-  return trimmed ? (trimmed as AgentProvider) : undefined;
 }
 
 function resolveEnvAgentProvider(env: EnvSource): AgentProvider | undefined {
@@ -99,34 +87,31 @@ function resolveEnvAgentProvider(env: EnvSource): AgentProvider | undefined {
   const provider = rawProvider.toLowerCase();
   if (!SUPPORTED_ENV_PROVIDERS.has(provider)) {
     throwConfigError(
-      `Unsupported ${ENV_PROVIDER_KEY}: ${rawProvider}. Supported values: claude, opencode, hermes.`,
+      `Unsupported ${ENV_PROVIDER_KEY}: ${rawProvider}. Supported values: claude, opencode, hermes, openclaw.`,
     );
   }
 
   return provider as AgentProvider;
 }
 
-function resolveHermesModelConfig(body: NativeAgentRequest) {
-  const requestModel = normalizeOptionalString(body.modelConfig?.model);
-  if (requestModel) {
-    throwConfigError(
-      "Hermes model selection is not supported by this ACP MVP. Configure Hermes model selection through Hermes profile/config instead.",
-    );
-  }
-
-  return body.modelConfig;
-}
-
 function resolveHermesEnvConfig(env: EnvSource) {
-  validateHermesUnsupportedEnvConfig(env);
-
   const providerConfig: Record<string, unknown> = {};
   const command = normalizeOptionalString(env.OPENLOOMI_AGENT_HERMES_COMMAND);
   const profile = normalizeOptionalString(env.OPENLOOMI_AGENT_HERMES_PROFILE);
+  const model = normalizeOptionalString(env.OPENLOOMI_AGENT_HERMES_MODEL);
+  const inferenceProvider = normalizeOptionalString(
+    env.OPENLOOMI_AGENT_HERMES_PROVIDER,
+  );
   const timeoutMs = parsePositiveIntegerEnv(
     env,
     "OPENLOOMI_AGENT_HERMES_TIMEOUT_MS",
   );
+
+  if (inferenceProvider && !model) {
+    throwConfigError(
+      "OPENLOOMI_AGENT_HERMES_PROVIDER requires OPENLOOMI_AGENT_HERMES_MODEL.",
+    );
+  }
 
   if (command) {
     providerConfig.hermesPath = command;
@@ -139,22 +124,9 @@ function resolveHermesEnvConfig(env: EnvSource) {
   }
 
   return {
+    model: model && inferenceProvider ? `${inferenceProvider}:${model}` : model,
     providerConfig,
   };
-}
-
-function validateHermesUnsupportedEnvConfig(env: EnvSource) {
-  if (normalizeOptionalString(env.OPENLOOMI_AGENT_HERMES_MODEL)) {
-    throwConfigError(
-      "OPENLOOMI_AGENT_HERMES_MODEL is not supported by this ACP MVP. Configure Hermes model selection through Hermes profile/config instead.",
-    );
-  }
-
-  if (normalizeOptionalString(env.OPENLOOMI_AGENT_HERMES_PROVIDER)) {
-    throwConfigError(
-      "OPENLOOMI_AGENT_HERMES_PROVIDER is not supported by this ACP MVP. Configure Hermes provider selection through Hermes profile/config instead.",
-    );
-  }
 }
 
 function resolveOpenCodeEnvConfig(env: EnvSource) {
@@ -188,6 +160,82 @@ function resolveOpenCodeEnvConfig(env: EnvSource) {
     model,
     providerConfig,
   };
+}
+
+function resolveOpenClawEnvConfig(env: EnvSource) {
+  const providerConfig: Record<string, unknown> = {};
+  const values = {
+    openclawPath: normalizeOptionalString(env.OPENLOOMI_AGENT_OPENCLAW_COMMAND),
+    gatewayUrl: normalizeOptionalString(
+      env.OPENLOOMI_AGENT_OPENCLAW_GATEWAY_URL,
+    ),
+    tokenFile: normalizeOptionalString(env.OPENLOOMI_AGENT_OPENCLAW_TOKEN_FILE),
+    passwordFile: normalizeOptionalString(
+      env.OPENLOOMI_AGENT_OPENCLAW_PASSWORD_FILE,
+    ),
+    session: normalizeOptionalString(env.OPENLOOMI_AGENT_OPENCLAW_SESSION),
+    sessionLabel: normalizeOptionalString(
+      env.OPENLOOMI_AGENT_OPENCLAW_SESSION_LABEL,
+    ),
+  };
+
+  if (values.session && values.sessionLabel) {
+    throwConfigError(
+      "OPENLOOMI_AGENT_OPENCLAW_SESSION and OPENLOOMI_AGENT_OPENCLAW_SESSION_LABEL are mutually exclusive.",
+    );
+  }
+  if (values.gatewayUrl && !isWebSocketUrl(values.gatewayUrl)) {
+    throwConfigError(
+      `OPENLOOMI_AGENT_OPENCLAW_GATEWAY_URL must use ws: or wss:. Received: ${values.gatewayUrl}.`,
+    );
+  }
+
+  for (const [key, value] of Object.entries(values)) {
+    if (value) providerConfig[key] = value;
+  }
+
+  const booleanOptions = [
+    ["requireExisting", "OPENLOOMI_AGENT_OPENCLAW_REQUIRE_EXISTING"],
+    ["resetSession", "OPENLOOMI_AGENT_OPENCLAW_RESET_SESSION"],
+    ["noPrefixCwd", "OPENLOOMI_AGENT_OPENCLAW_NO_PREFIX_CWD"],
+  ] as const;
+  for (const [configKey, envKey] of booleanOptions) {
+    const value = parseBooleanEnv(env, envKey);
+    if (value !== undefined) providerConfig[configKey] = value;
+  }
+
+  if (
+    providerConfig.requireExisting === true &&
+    !values.session &&
+    !values.sessionLabel
+  ) {
+    throwConfigError(
+      "OPENLOOMI_AGENT_OPENCLAW_REQUIRE_EXISTING requires OPENLOOMI_AGENT_OPENCLAW_SESSION or OPENLOOMI_AGENT_OPENCLAW_SESSION_LABEL.",
+    );
+  }
+
+  const provenance = normalizeOptionalString(
+    env.OPENLOOMI_AGENT_OPENCLAW_PROVENANCE,
+  );
+  if (
+    provenance &&
+    provenance !== "off" &&
+    provenance !== "meta" &&
+    provenance !== "meta+receipt"
+  ) {
+    throwConfigError(
+      `OPENLOOMI_AGENT_OPENCLAW_PROVENANCE must be off, meta, or meta+receipt. Received: ${provenance}.`,
+    );
+  }
+  if (provenance) providerConfig.provenance = provenance;
+
+  const timeoutMs = parsePositiveIntegerEnv(
+    env,
+    "OPENLOOMI_AGENT_OPENCLAW_TIMEOUT_MS",
+  );
+  if (timeoutMs !== undefined) providerConfig.timeoutMs = timeoutMs;
+
+  return providerConfig;
 }
 
 function parseBooleanEnv(env: EnvSource, key: string): boolean | undefined {
@@ -240,8 +288,13 @@ function normalizeOptionalString(value: unknown): string | undefined {
   return trimmed || undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+function isWebSocketUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "ws:" || url.protocol === "wss:";
+  } catch {
+    return false;
+  }
 }
 
 function throwConfigError(message: string): never {

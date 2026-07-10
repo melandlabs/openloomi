@@ -174,7 +174,7 @@ describe("native agent runner", () => {
     expect(agent.config?.thinkingLevel).toBeUndefined();
   });
 
-  it("lets request provider override OpenCode env default", async () => {
+  it("does not let a request override the server-selected runtime", async () => {
     const agent = new CapturingAgent();
     const getUserLlmProviderConfig = vi.fn(async () => ({
       apiKey: "saved-key",
@@ -202,12 +202,11 @@ describe("native agent runner", () => {
 
     await collectMessages(run.generator);
 
-    expect(agent.config).toMatchObject({
-      provider: "claude",
-      apiKey: "saved-key",
-      baseUrl: "https://llm.example.test",
-      model: "saved-model",
-    });
+    expect(getUserLlmProviderConfig).not.toHaveBeenCalled();
+    expect(agent.config).toMatchObject({ provider: "opencode" });
+    expect(agent.config?.apiKey).toBeUndefined();
+    expect(agent.config?.baseUrl).toBeUndefined();
+    expect(agent.config?.model).toBeUndefined();
   });
 
   it("runs through package core using host-provided adapters", async () => {

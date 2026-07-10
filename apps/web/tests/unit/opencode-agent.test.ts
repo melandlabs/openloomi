@@ -178,6 +178,85 @@ describe("OpenCode parser", () => {
     ]);
   });
 
+  it("parses current OpenCode part-based tool, reasoning, and usage events", () => {
+    expect(
+      parseOpenCodeJsonLine(
+        JSON.stringify({
+          type: "tool_use",
+          sessionID: "session-1",
+          part: {
+            type: "tool",
+            id: "part-1",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { command: "pwd" },
+              output: "workspace",
+            },
+          },
+        }),
+      ),
+    ).toEqual([
+      {
+        type: "tool_use",
+        id: "call-1",
+        name: "bash",
+        input: { command: "pwd" },
+      },
+      {
+        type: "tool_result",
+        toolUseId: "call-1",
+        output: "workspace",
+        isError: false,
+      },
+    ]);
+
+    expect(
+      parseOpenCodeJsonLine(
+        JSON.stringify({
+          type: "reasoning",
+          part: { type: "reasoning", text: "thinking" },
+        }),
+      ),
+    ).toEqual([{ type: "reasoning", content: "thinking" }]);
+
+    expect(
+      parseOpenCodeJsonLine(
+        JSON.stringify({
+          type: "step_finish",
+          part: {
+            type: "step-finish",
+            reason: "tool-calls",
+            cost: 0.25,
+            tokens: { input: 10, output: 4 },
+          },
+        }),
+      ),
+    ).toEqual([
+      {
+        type: "result",
+        content: "tool-calls",
+        cost: 0.25,
+        usage: { inputTokens: 10, outputTokens: 4 },
+      },
+    ]);
+  });
+
+  it("uses nested OpenCode error data when present", () => {
+    expect(
+      parseOpenCodeJsonLine(
+        JSON.stringify({
+          type: "error",
+          error: {
+            name: "ProviderAuthError",
+            data: { message: "authentication failed" },
+          },
+        }),
+      ),
+    ).toEqual([{ type: "error", message: "authentication failed" }]);
+  });
+
   it("ignores invalid JSON lines", () => {
     expect(parseOpenCodeJsonLine("not-json")).toEqual([]);
   });
@@ -217,6 +296,43 @@ console.log(JSON.stringify({
       await readFile(join(workDir, "args.json"), "utf8"),
     ) as string[];
     expect(args).not.toContain("--auto");
+  });
+
+  it("passes conversation context and materialized images to OpenCode", async () => {
+    const workDir = await createFakeOpenCodeWorkDir(`
+const fs = require("node:fs");
+fs.writeFileSync("args.json", JSON.stringify(process.argv.slice(2)));
+console.log(JSON.stringify({ type: "text", text: "ok" }));
+`);
+    const agent = new OpenCodeAgent({
+      provider: "opencode",
+      workDir,
+      providerConfig: { opencodePath: process.execPath },
+    });
+
+    await collectMessages(
+      agent.run("current question", {
+        conversation: [
+          { role: "user", content: "earlier question" },
+          { role: "assistant", content: "earlier answer" },
+        ],
+        images: [{ data: "aGVsbG8=", mimeType: "image/png" }],
+      }),
+    );
+
+    const args = JSON.parse(
+      await readFile(join(workDir, "args.json"), "utf8"),
+    ) as string[];
+    const fileFlag = args.indexOf("--file");
+    expect(fileFlag).toBeGreaterThan(-1);
+    expect(args[fileFlag + 1]).toBe(
+      join(workDir, ".openloomi-inputs", "image-1.png"),
+    );
+    const imagePath = args[fileFlag + 1];
+    if (!imagePath) throw new Error("Expected an OpenCode --file path");
+    expect(await readFile(imagePath, "utf8")).toBe("hello");
+    expect(args.at(-1)).toEqual(expect.stringContaining("earlier question"));
+    expect(args.at(-1)).toEqual(expect.stringContaining("current question"));
   });
 
   it("stops a running OpenCode process through the session controller", async () => {
@@ -289,6 +405,81 @@ process.exit(7);
     expect(
       messages.find((message) => message.type === "error")?.message,
     ).toContain("simulated failure");
+    expect(messages.at(-1)?.type).toBe("done");
+  });
+
+  it("decodes UTF-8 JSON events split across stdout chunks", async () => {
+    const workDir = await createFakeOpenCodeWorkDir(`
+const payload = Buffer.from(JSON.stringify({ type: "text", text: "你好" }) + "\\n");
+const split = payload.indexOf(Buffer.from("你")) + 1;
+process.stdout.write(payload.subarray(0, split));
+setTimeout(() => process.stdout.write(payload.subarray(split)), 10);
+`);
+    const agent = new OpenCodeAgent({
+      provider: "opencode",
+      workDir,
+      providerConfig: { opencodePath: process.execPath },
+    });
+
+    const messages = await collectMessages(agent.run("unicode"));
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", content: "你好" }),
+      ]),
+    );
+  });
+
+  it("aggregates OpenCode step usage into the terminal result", async () => {
+    const workDir = await createFakeOpenCodeWorkDir(`
+console.log(JSON.stringify({ type: "text", part: { type: "text", text: "done" } }));
+console.log(JSON.stringify({ type: "step_finish", part: {
+  type: "step-finish", reason: "tool-calls", cost: 0.1,
+  tokens: { input: 10, output: 2 }
+} }));
+console.log(JSON.stringify({ type: "step_finish", part: {
+  type: "step-finish", reason: "end_turn", cost: 0.2,
+  tokens: { input: 5, output: 3 }
+} }));
+`);
+    const agent = new OpenCodeAgent({
+      provider: "opencode",
+      workDir,
+      providerConfig: { opencodePath: process.execPath },
+    });
+
+    const messages = await collectMessages(agent.run("collect usage"));
+
+    const result = messages.find((message) => message.type === "result");
+    expect(result).toMatchObject({
+      type: "result",
+      content: "success",
+      usage: { inputTokens: 15, outputTokens: 5 },
+    });
+    expect(result?.cost).toBeCloseTo(0.3);
+  });
+
+  it("does not report success after an OpenCode error event", async () => {
+    const workDir = await createFakeOpenCodeWorkDir(`
+console.log(JSON.stringify({
+  type: "error",
+  error: { name: "ProviderAuthError", data: { message: "bad credentials" } }
+}));
+`);
+    const agent = new OpenCodeAgent({
+      provider: "opencode",
+      workDir,
+      providerConfig: { opencodePath: process.execPath },
+    });
+
+    const messages = await collectMessages(agent.run("fail safely"));
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "error", message: "bad credentials" }),
+      ]),
+    );
+    expect(messages.some((message) => message.type === "result")).toBe(false);
     expect(messages.at(-1)?.type).toBe("done");
   });
 

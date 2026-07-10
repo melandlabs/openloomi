@@ -24,6 +24,7 @@ export function convertOpenCodeEvent(event: unknown): AgentMessage[] {
   const record = event as Record<string, unknown>;
   const type = readString(record.type) || readString(record.event);
   const messages: AgentMessage[] = [];
+  const part = asRecord(record.part);
 
   const isErrorEvent = type?.toLowerCase().includes("error") ?? false;
   const errorText = extractErrorText(record);
@@ -33,6 +34,43 @@ export function convertOpenCodeEvent(event: unknown): AgentMessage[] {
       message: errorText || extractText(record) || "OpenCode event error",
     });
     return messages;
+  }
+
+  // `opencode run --format json` emits completed wire events in the form
+  // `{ type, sessionID, part }`. Keep this projection explicit so upstream
+  // schema changes cannot silently degrade tool and usage reporting.
+  if (type === "text" && part?.type === "text") {
+    const text = extractText(part);
+    return text ? [{ type: "text", content: text }] : [];
+  }
+
+  if (type === "reasoning" && part?.type === "reasoning") {
+    const text = extractText(part);
+    return text ? [{ type: "reasoning", content: text }] : [];
+  }
+
+  if (type === "tool_use" && part?.type === "tool") {
+    return convertOpenCodeToolPart(part);
+  }
+
+  if (
+    (type === "step_finish" || type === "step-finish") &&
+    part?.type === "step-finish"
+  ) {
+    const tokens = asRecord(part.tokens);
+    const inputTokens = readNumber(tokens?.input);
+    const outputTokens = readNumber(tokens?.output);
+    return [
+      {
+        type: "result",
+        content: readString(part.reason) ?? "step_finish",
+        cost: readNumber(part.cost),
+        usage:
+          inputTokens !== undefined && outputTokens !== undefined
+            ? { inputTokens, outputTokens }
+            : undefined,
+      },
+    ];
   }
 
   const toolMessage = extractToolMessage(record, type);
@@ -56,6 +94,47 @@ export function convertOpenCodeEvent(event: unknown): AgentMessage[] {
       content: type,
       cost: readNumber(record.cost) ?? readNumber(record.total_cost_usd),
       duration: readNumber(record.duration) ?? readNumber(record.duration_ms),
+    });
+  }
+
+  return messages;
+}
+
+function convertOpenCodeToolPart(
+  part: Record<string, unknown>,
+): AgentMessage[] {
+  const state = asRecord(part.state);
+  if (!state) {
+    return [];
+  }
+
+  const toolUseId =
+    readString(part.callID) ?? readString(part.callId) ?? readString(part.id);
+  const toolName = readString(part.tool) ?? "OpenCode tool";
+  const status = readString(state.status);
+  const input = asRecord(state.input);
+  const messages: AgentMessage[] = [
+    {
+      type: "tool_use",
+      id: toolUseId,
+      name: toolName,
+      input,
+    },
+  ];
+
+  if (status === "completed") {
+    messages.push({
+      type: "tool_result",
+      toolUseId,
+      output: stringifyUnknown(state.output) ?? "",
+      isError: false,
+    });
+  } else if (status === "error") {
+    messages.push({
+      type: "tool_result",
+      toolUseId,
+      output: stringifyUnknown(state.error) ?? "OpenCode tool failed",
+      isError: true,
     });
   }
 
@@ -182,9 +261,21 @@ function extractErrorText(record: Record<string, unknown>): string | undefined {
   }
   const error = asRecord(record.error);
   if (error) {
-    return readString(error.message) || readString(error.name);
+    const data = asRecord(error.data);
+    return (
+      readString(error.message) ||
+      readString(data?.message) ||
+      readString(error.name)
+    );
   }
   return undefined;
+}
+
+function stringifyUnknown(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

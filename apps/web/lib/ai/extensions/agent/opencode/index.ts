@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
@@ -29,6 +29,7 @@ import {
 } from "./command";
 import { OPENCODE_METADATA } from "./metadata";
 import { parseOpenCodeJsonLine } from "./parser";
+import { addConversationContext } from "../prompt-context";
 
 export class OpenCodeAgent extends BaseAgent {
   readonly provider: AgentProvider = "opencode";
@@ -207,15 +208,22 @@ export class OpenCodeAgent extends BaseAgent {
     const providerConfig = normalizeOpenCodeProviderConfig(
       this.config.providerConfig,
     );
+    const attachmentFiles = await materializeOpenCodeImages(cwd, options);
     const command = buildOpenCodeRunCommand({
-      prompt,
+      prompt: addConversationContext(prompt, options),
       cwd,
       model: this.config.model,
       permissionMode: options?.permissionMode,
       providerConfig: this.config.providerConfig,
+      attachmentFiles,
     });
 
     let closeEvent: Extract<OpenCodeCliEvent, { type: "close" }> | undefined;
+    let sawRuntimeError = false;
+    let totalCost = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let sawUsage = false;
 
     for await (const event of runOpenCodeCli(command.command, command.args, {
       cwd,
@@ -225,6 +233,18 @@ export class OpenCodeAgent extends BaseAgent {
     })) {
       if (event.type === "line") {
         for (const message of parseOpenCodeJsonLine(event.line)) {
+          if (message.type === "result") {
+            totalCost += message.cost ?? 0;
+            if (message.usage) {
+              inputTokens += message.usage.inputTokens;
+              outputTokens += message.usage.outputTokens;
+              sawUsage = true;
+            }
+            continue;
+          }
+          if (message.type === "error") {
+            sawRuntimeError = true;
+          }
           yield this.withMessageId(message);
         }
         continue;
@@ -246,10 +266,16 @@ export class OpenCodeAgent extends BaseAgent {
       return;
     }
 
+    if (sawRuntimeError) {
+      return;
+    }
+
     yield {
       type: "result",
       content: "success",
+      cost: totalCost || undefined,
       duration: closeEvent.duration,
+      usage: sawUsage ? { inputTokens, outputTokens } : undefined,
       messageId: this.generateMessageId(),
     };
   }
@@ -304,6 +330,42 @@ function resolveHome(filePath: string) {
     return join(homedir(), filePath.slice(2));
   }
   return isAbsolute(filePath) ? filePath : join(process.cwd(), filePath);
+}
+
+async function materializeOpenCodeImages(
+  cwd: string,
+  options?: AgentOptions,
+): Promise<string[]> {
+  const images = options?.images?.filter((image) => Boolean(image.data)) ?? [];
+  if (images.length === 0) return [];
+
+  const inputDir = join(cwd, ".openloomi-inputs");
+  await mkdir(inputDir, { recursive: true });
+  const files: string[] = [];
+  for (const [index, image] of images.entries()) {
+    if (!image.data) continue;
+    const file = join(
+      inputDir,
+      `image-${index + 1}.${imageExtension(image.mimeType)}`,
+    );
+    const data = image.data.replace(/^data:[^;]+;base64,/, "");
+    await writeFile(file, Buffer.from(data, "base64"));
+    files.push(file);
+  }
+  return files;
+}
+
+function imageExtension(mimeType: string): string {
+  switch (mimeType.toLowerCase()) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/gif":
+      return "gif";
+    case "image/webp":
+      return "webp";
+    default:
+      return "png";
+  }
 }
 
 export function createOpenCodeAgent(config: AgentConfig): OpenCodeAgent {

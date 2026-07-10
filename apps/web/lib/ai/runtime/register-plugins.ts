@@ -9,6 +9,7 @@ import { getAgentRegistry } from "@openloomi/ai/agent/registry";
 import {
   claudePlugin,
   hermesPlugin,
+  openclawPlugin,
   opencodePlugin,
 } from "@/lib/ai/extensions";
 
@@ -19,4 +20,5 @@ export function registerPlugins() {
   registry.register(claudePlugin);
   registry.register(opencodePlugin);
   registry.register(hermesPlugin);
+  registry.register(openclawPlugin);
 }

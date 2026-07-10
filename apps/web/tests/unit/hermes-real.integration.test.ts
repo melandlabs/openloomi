@@ -292,10 +292,10 @@ describeRealHermes("Hermes real ACP integration", () => {
     130_000,
   );
 
-  it("rejects unsupported Hermes model/provider env overrides before spawning", async () => {
+  it("rejects an incomplete Hermes provider override before spawning", async () => {
     withHermesProviderEnv();
-    process.env.OPENLOOMI_AGENT_HERMES_MODEL = "not-supported";
-    process.env.OPENLOOMI_AGENT_HERMES_PROVIDER = "not-supported";
+    process.env.OPENLOOMI_AGENT_HERMES_MODEL = "";
+    process.env.OPENLOOMI_AGENT_HERMES_PROVIDER = "openrouter";
     const host = createHermesRealHost();
 
     await expect(
@@ -308,7 +308,9 @@ describeRealHermes("Hermes real ACP integration", () => {
         createContext(10_000),
         host,
       ),
-    ).rejects.toThrow(/OPENLOOMI_AGENT_HERMES_MODEL is not supported/);
+    ).rejects.toThrow(
+      /OPENLOOMI_AGENT_HERMES_PROVIDER requires OPENLOOMI_AGENT_HERMES_MODEL/,
+    );
   }, 20_000);
 });
 

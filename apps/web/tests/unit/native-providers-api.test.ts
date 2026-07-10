@@ -31,6 +31,9 @@ describe("native providers API", () => {
     expect(body.agents.filter((agent) => agent.type === "hermes")).toHaveLength(
       1,
     );
+    expect(
+      body.agents.filter((agent) => agent.type === "openclaw"),
+    ).toHaveLength(1);
     expect(body.agents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -39,6 +42,10 @@ describe("native providers API", () => {
         }),
         expect.objectContaining({
           type: "hermes",
+          supportsSandbox: false,
+        }),
+        expect.objectContaining({
+          type: "openclaw",
           supportsSandbox: false,
         }),
       ]),
@@ -87,6 +94,21 @@ describe("native providers API", () => {
     expect(
       body.agents.find((agent) => agent.type === "hermes")?.supportsSandbox,
     ).toBe(false);
+  });
+
+  it("returns OpenClaw as the default when configured by env", async () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "openclaw";
+    const { GET } = await import("@/app/api/native/providers/route");
+
+    const response = await GET();
+    const body = (await response.json()) as ProvidersResponse;
+
+    expect(body.defaultAgent).toBe("openclaw");
+    expect(
+      body.agents.find((agent) => agent.type === "openclaw"),
+    ).toMatchObject({
+      supportsSandbox: false,
+    });
   });
 });
 

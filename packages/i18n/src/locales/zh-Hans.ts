@@ -5485,6 +5485,9 @@ const zhHans = {
       hideDetails: "隐藏详情",
       allow: "允许",
       deny: "拒绝",
+      allowed: "已允许此次操作",
+      denied: "已拒绝此次操作",
+      submitError: "提交权限决定失败",
     },
     complete: {
       title: "认识你的 AI 助手",

@@ -1,6 +1,9 @@
 import type { AgentMessage, AgentOptions } from "@openloomi/ai/agent/types";
 
-export function convertHermesAcpNotification(params: unknown): AgentMessage[] {
+export function convertAcpNotification(
+  params: unknown,
+  runtimeName: string,
+): AgentMessage[] {
   const record = asRecord(params);
   const update = asRecord(record?.update);
   if (!update) {
@@ -18,7 +21,7 @@ export function convertHermesAcpNotification(params: unknown): AgentMessage[] {
       return text ? [{ type: "reasoning", content: text }] : [];
     }
     case "tool_call":
-      return [convertToolCall(update)];
+      return [convertToolCall(update, runtimeName)];
     case "tool_call_update": {
       const toolResult = convertToolCallUpdate(update);
       return toolResult ? [toolResult] : [];
@@ -32,7 +35,10 @@ export function convertHermesAcpNotification(params: unknown): AgentMessage[] {
   }
 }
 
-export function convertHermesPromptResponse(result: unknown): AgentMessage[] {
+export function convertAcpPromptResponse(
+  result: unknown,
+  runtimeName: string,
+): AgentMessage[] {
   const record = asRecord(result);
   const stopReason = readString(record?.stopReason) ?? "end_turn";
   const usage = extractUsage(record?.usage);
@@ -41,7 +47,7 @@ export function convertHermesPromptResponse(result: unknown): AgentMessage[] {
     return [
       {
         type: "error",
-        message: "Hermes ACP prompt was cancelled",
+        message: `${runtimeName} ACP prompt was cancelled`,
       },
     ];
   }
@@ -55,10 +61,11 @@ export function convertHermesPromptResponse(result: unknown): AgentMessage[] {
   ];
 }
 
-export async function mapHermesPermissionRequest(
+export async function mapAcpPermissionRequest(
   params: unknown,
   options: AgentOptions | undefined,
   mode: "run" | "plan" | "execute",
+  runtimeName: string,
 ) {
   const request = asRecord(params);
   const toolCall = asRecord(request?.toolCall);
@@ -73,7 +80,7 @@ export async function mapHermesPermissionRequest(
   let behavior: "allow" | "deny" = "deny";
   if (options?.onPermissionRequest) {
     const decision = await options.onPermissionRequest({
-      toolName: readString(toolCall?.title) ?? "Hermes tool",
+      toolName: readString(toolCall?.title) ?? `${runtimeName} tool`,
       toolInput: asRecord(toolCall?.rawInput) ?? {},
       toolUseID: readString(toolCall?.toolCallId) ?? "hermes-tool",
     });
@@ -87,11 +94,17 @@ export async function mapHermesPermissionRequest(
   return selectDenyOutcome(permissionOptions);
 }
 
-function convertToolCall(update: Record<string, unknown>): AgentMessage {
+function convertToolCall(
+  update: Record<string, unknown>,
+  runtimeName: string,
+): AgentMessage {
   return {
     type: "tool_use",
     id: readString(update.toolCallId),
-    name: readString(update.title) || readString(update.kind) || "Hermes tool",
+    name:
+      readString(update.title) ||
+      readString(update.kind) ||
+      `${runtimeName} tool`,
     input: asRecord(update.rawInput) ?? undefined,
   };
 }

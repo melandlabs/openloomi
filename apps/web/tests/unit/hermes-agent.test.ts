@@ -86,6 +86,29 @@ describe("HermesAgent", () => {
     });
   });
 
+  it("applies an explicitly configured model to the new ACP session", async () => {
+    const workDir = await createFakeHermesWorkDir(defaultFakeAcpScript());
+    const agent = createAgent(
+      workDir,
+      {},
+      "openrouter:anthropic/claude-sonnet-4.6",
+    );
+
+    await collectMessages(agent.run("normal run"));
+
+    const calls = await readJsonLines(join(workDir, "calls.jsonl"));
+    expect(calls.map((call) => call.method)).toEqual([
+      "initialize",
+      "session/new",
+      "session/set_model",
+      "session/prompt",
+    ]);
+    expect(calls[2].params).toEqual({
+      sessionId: "hermes-session-1",
+      modelId: "openrouter:anthropic/claude-sonnet-4.6",
+    });
+  });
+
   it("turns JSON-RPC prompt errors into one error and exactly one done", async () => {
     const workDir = await createFakeHermesWorkDir(defaultFakeAcpScript());
     const agent = createAgent(workDir);
@@ -95,6 +118,26 @@ describe("HermesAgent", () => {
     expect(messages.find((message) => message.type === "error")).toMatchObject({
       type: "error",
       message: expect.stringContaining("fake prompt failure"),
+    });
+    expect(countDone(messages)).toBe(1);
+  });
+
+  it("rejects pending RPC calls when Hermes exits cleanly without responding", async () => {
+    const workDir = await createFakeHermesWorkDir(`
+process.stdin.once("data", () => process.exit(0));
+`);
+    const agent = createAgent(workDir);
+
+    const messages = await withTimeout(
+      collectMessages(agent.run("exit before initialize response")),
+      5000,
+    );
+
+    expect(messages.find((message) => message.type === "error")).toMatchObject({
+      type: "error",
+      message: expect.stringContaining(
+        "exited before responding to pending request(s): initialize",
+      ),
     });
     expect(countDone(messages)).toBe(1);
   });
@@ -322,10 +365,12 @@ describe("HermesAgent", () => {
 function createAgent(
   workDir: string,
   providerConfig: Record<string, unknown> = {},
+  model?: string,
 ) {
   return new HermesAgent({
     provider: "hermes",
     workDir,
+    model,
     providerConfig: {
       hermesPath: process.execPath,
       ...providerConfig,
@@ -410,6 +455,9 @@ rl.on("line", (line) => {
       break;
     case "session/new":
       respond(message.id, { sessionId });
+      break;
+    case "session/set_model":
+      respond(message.id, {});
       break;
     case "session/cancel":
       append("cancels.jsonl", message);

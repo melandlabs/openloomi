@@ -159,15 +159,38 @@ OpenLoomi automatically detects your Claude configuration — no extra setup req
 
 **Supported Agents**
 
-| Agent    | Status         | Notes                                    |
-| -------- | -------------- | ---------------------------------------- |
-| Claude   | ✅ Supported   | Auto-detected by default                 |
-| Codex    | 🔜 Coming Soon | GitHub Copilot's CLI agent               |
-| Pi       | 🔜 Coming Soon | Anthropic's research assistant           |
-| OpenClaw | 🔜 Coming Soon | Open-source agent compatible with Claude |
-| Hermes   | 🔜 Coming Soon | Browser-use compatible agent             |
+| Agent      | Status         | Notes                                                   |
+| ---------- | -------------- | ------------------------------------------------------- |
+| Claude     | ✅ Supported   | Default built-in runtime                                |
+| OpenCode   | ✅ Supported   | Local `opencode run` integration with JSON event stream |
+| Hermes     | ✅ Supported   | Local `hermes acp` integration                          |
+| OpenClaw   | ✅ Supported   | Gateway-backed `openclaw acp` bridge                    |
+| Codex      | 🔜 Coming Soon | Metadata exists; a production adapter is not registered |
+| DeepAgents | 🔜 Coming Soon | Metadata exists; a production adapter is not registered |
 
-> **Note:** OpenLoomi currently supports Claude. Additional agent support (Codex, Pi, OpenClaw, Hermes) is on the roadmap and will be available in a future release.
+Runtime selection is intentionally server-controlled and is not shown as an in-app setting yet. Set `OPENLOOMI_AGENT_PROVIDER` before starting OpenLoomi; supported values are `claude`, `opencode`, `hermes`, and `openclaw`.
+
+```bash
+# OpenCode
+OPENLOOMI_AGENT_PROVIDER=opencode
+OPENLOOMI_AGENT_OPENCODE_COMMAND=opencode
+OPENLOOMI_AGENT_OPENCODE_MODEL=anthropic/claude-sonnet-4.6
+
+# Hermes
+OPENLOOMI_AGENT_PROVIDER=hermes
+OPENLOOMI_AGENT_HERMES_COMMAND=hermes
+OPENLOOMI_AGENT_HERMES_PROFILE=coding
+
+# OpenClaw (configure and start its Gateway first)
+OPENLOOMI_AGENT_PROVIDER=openclaw
+OPENLOOMI_AGENT_OPENCLAW_COMMAND=openclaw
+OPENLOOMI_AGENT_OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789
+OPENLOOMI_AGENT_OPENCLAW_TOKEN_FILE=/path/to/gateway.token
+```
+
+OpenLoomi does not install or authenticate these CLIs. CLI subprocesses receive a restricted environment; use `OPENLOOMI_AGENT_ENV_ALLOWLIST` only when a runtime needs an additional named variable. Executable paths, runtime models, profiles, Gateway targets, and approval policy cannot be overridden by chat/API request bodies.
+
+Agent runtimes and sandboxes are separate layers: OpenCode, Hermes, and OpenClaw are registered through `AgentPlugin` and do not pretend to be sandbox providers. Filesystem or process isolation must still be selected and enforced independently by the host.
 
 **Configuring Your Agent**
 

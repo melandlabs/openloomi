@@ -5,7 +5,7 @@ description: "OpenLoomi 0.7.0 release notes"
 
 # OpenLoomi 0.7.0 - July 8, 2026
 
-OpenLoomi 0.7.0 marks the release of the **AI coworker experience** — a Loomi desktop pet that mirrors your activity, the Loop proactive execution engine running inside the main app, and a sweeping memory intelligence upgrade with relations, consolidation, and the BEAM benchmark. The release also expands agent runtime support with OpenCode and Hermes ACP, ships a cross-platform FileSystem and Obsidian vault scanner, and consolidates the CLI around `openloomi-ctl` and one-shot mode.
+OpenLoomi 0.7.0 marks the release of the **AI coworker experience** — a Loomi desktop pet that mirrors your activity, the Loop proactive execution engine running inside the main app, and a sweeping memory intelligence upgrade with relations, consolidation, and the BEAM benchmark. The release also expands agent runtime support with OpenCode, Hermes ACP, and the OpenClaw ACP bridge, ships a cross-platform FileSystem and Obsidian vault scanner, and consolidates the CLI around `openloomi-ctl` and one-shot mode.
 
 ### Notable Changes
 
@@ -52,10 +52,13 @@ A major memory upgrade ships relations, consolidation diagnostics, and the BEAM 
 
 #### Agent Runtimes
 
-Two new runtime providers expand the surfaces Loop and the chat agent can execute on:
+Three runtime providers expand the surfaces Loop and the chat agent can execute on:
 
-- **OpenCode CLI Provider**: A native OpenCode CLI runtime provider, with env-selected runtime support so you can pick the default per session
+- **OpenCode CLI Provider**: A native OpenCode CLI runtime provider selected through deployment environment configuration
 - **Hermes ACP Runtime Provider**: Hermes joins as an ACP-compatible runtime alongside the existing Claude agent runtime
+- **OpenClaw ACP Runtime Provider**: OpenClaw connects through its Gateway-backed `openclaw acp` stdio bridge
+- **Shared ACP Runtime Layer**: Hermes and OpenClaw share lifecycle, streaming, permission, cancellation, and process-tree cleanup behavior
+- **Server-Controlled Configuration**: Runtime selection, executable paths, models, profiles, Gateway targets, and automatic approval policy come only from environment variables
 
 #### CLI: `openloomi-ctl` & One-Shot Mode
 

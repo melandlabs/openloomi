@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildHermesAcpCommand } from "@/lib/ai/extensions/agent/hermes/command";
 import { buildOpenCodeRunCommand } from "@/lib/ai/extensions/agent/opencode/command";
+import { buildOpenClawAcpCommand } from "@/lib/ai/extensions/agent/openclaw/command";
 import {
   getConfiguredDefaultAgentProvider,
   resolveNativeAgentProviderRequest,
@@ -19,6 +20,17 @@ const AGENT_ENV_KEYS = [
   "OPENLOOMI_AGENT_HERMES_TIMEOUT_MS",
   "OPENLOOMI_AGENT_HERMES_MODEL",
   "OPENLOOMI_AGENT_HERMES_PROVIDER",
+  "OPENLOOMI_AGENT_OPENCLAW_COMMAND",
+  "OPENLOOMI_AGENT_OPENCLAW_GATEWAY_URL",
+  "OPENLOOMI_AGENT_OPENCLAW_TOKEN_FILE",
+  "OPENLOOMI_AGENT_OPENCLAW_PASSWORD_FILE",
+  "OPENLOOMI_AGENT_OPENCLAW_SESSION",
+  "OPENLOOMI_AGENT_OPENCLAW_SESSION_LABEL",
+  "OPENLOOMI_AGENT_OPENCLAW_REQUIRE_EXISTING",
+  "OPENLOOMI_AGENT_OPENCLAW_RESET_SESSION",
+  "OPENLOOMI_AGENT_OPENCLAW_NO_PREFIX_CWD",
+  "OPENLOOMI_AGENT_OPENCLAW_PROVENANCE",
+  "OPENLOOMI_AGENT_OPENCLAW_TIMEOUT_MS",
 ];
 
 let originalEnv: NodeJS.ProcessEnv;
@@ -59,7 +71,74 @@ describe("native agent provider env resolver", () => {
     expect(getConfiguredDefaultAgentProvider()).toBe("hermes");
   });
 
-  it("lets request provider override env provider", () => {
+  it("uses OpenClaw from env and builds its ACP bridge command", () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "openclaw";
+    process.env.OPENLOOMI_AGENT_OPENCLAW_COMMAND = "openclaw-custom";
+    process.env.OPENLOOMI_AGENT_OPENCLAW_GATEWAY_URL =
+      "wss://gateway.example.test";
+    process.env.OPENLOOMI_AGENT_OPENCLAW_TOKEN_FILE = "/secrets/token";
+    process.env.OPENLOOMI_AGENT_OPENCLAW_SESSION = "agent:main:main";
+    process.env.OPENLOOMI_AGENT_OPENCLAW_REQUIRE_EXISTING = "true";
+    process.env.OPENLOOMI_AGENT_OPENCLAW_NO_PREFIX_CWD = "1";
+    process.env.OPENLOOMI_AGENT_OPENCLAW_PROVENANCE = "meta+receipt";
+    process.env.OPENLOOMI_AGENT_OPENCLAW_TIMEOUT_MS = "4000";
+
+    const request = resolveNativeAgentProviderRequest({
+      ...baseRequest(),
+      provider: "claude",
+      modelConfig: { model: "request-model" },
+      providerConfig: { openclawPath: "request-command" },
+    });
+    const command = buildOpenClawAcpCommand(request.providerConfig);
+
+    expect(request.provider).toBe("openclaw");
+    expect(request.modelConfig).toBeUndefined();
+    expect(request.providerConfig).toEqual({
+      openclawPath: "openclaw-custom",
+      gatewayUrl: "wss://gateway.example.test",
+      tokenFile: "/secrets/token",
+      session: "agent:main:main",
+      requireExisting: true,
+      noPrefixCwd: true,
+      provenance: "meta+receipt",
+      timeoutMs: 4000,
+    });
+    expect(command).toEqual({
+      command: "openclaw-custom",
+      args: [
+        "acp",
+        "--url",
+        "wss://gateway.example.test",
+        "--token-file",
+        "/secrets/token",
+        "--session",
+        "agent:main:main",
+        "--require-existing",
+        "--no-prefix-cwd",
+        "--provenance",
+        "meta+receipt",
+      ],
+    });
+  });
+
+  it("validates OpenClaw session and gateway environment configuration", () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "openclaw";
+    process.env.OPENLOOMI_AGENT_OPENCLAW_SESSION = "agent:main:main";
+    process.env.OPENLOOMI_AGENT_OPENCLAW_SESSION_LABEL = "main";
+
+    expect(() => resolveNativeAgentProviderRequest(baseRequest())).toThrow(
+      /mutually exclusive/,
+    );
+
+    process.env.OPENLOOMI_AGENT_OPENCLAW_SESSION = undefined;
+    process.env.OPENLOOMI_AGENT_OPENCLAW_SESSION_LABEL = undefined;
+    process.env.OPENLOOMI_AGENT_OPENCLAW_GATEWAY_URL = "https://not-websocket";
+    expect(() => resolveNativeAgentProviderRequest(baseRequest())).toThrow(
+      /must use ws: or wss:/,
+    );
+  });
+
+  it("keeps runtime selection server-controlled when a request names another provider", () => {
     process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
 
     const request = resolveNativeAgentProviderRequest({
@@ -67,7 +146,7 @@ describe("native agent provider env resolver", () => {
       provider: "claude",
     });
 
-    expect(request.provider).toBe("claude");
+    expect(request.provider).toBe("hermes");
   });
 
   it("treats an empty provider env value as unconfigured", () => {
@@ -132,7 +211,7 @@ describe("native agent provider env resolver", () => {
     },
   );
 
-  it("lets request model override env model", () => {
+  it("keeps the OpenCode model server-controlled", () => {
     process.env.OPENLOOMI_AGENT_PROVIDER = "opencode";
     process.env.OPENLOOMI_AGENT_OPENCODE_MODEL = "env/model";
 
@@ -141,10 +220,10 @@ describe("native agent provider env resolver", () => {
       modelConfig: { model: "request/model" },
     });
 
-    expect(request.modelConfig?.model).toBe("request/model");
+    expect(request.modelConfig?.model).toBe("env/model");
   });
 
-  it("lets request providerConfig fields override env providerConfig fields", () => {
+  it("keeps OpenCode executable and agent config server-controlled", () => {
     process.env.OPENLOOMI_AGENT_PROVIDER = "opencode";
     process.env.OPENLOOMI_AGENT_OPENCODE_COMMAND = "env-opencode";
     process.env.OPENLOOMI_AGENT_OPENCODE_AGENT = "env-agent";
@@ -158,8 +237,8 @@ describe("native agent provider env resolver", () => {
     });
 
     expect(request.providerConfig).toMatchObject({
-      opencodePath: "request-opencode",
-      agent: "request-agent",
+      opencodePath: "env-opencode",
+      agent: "env-agent",
     });
   });
 
@@ -179,13 +258,11 @@ describe("native agent provider env resolver", () => {
       providerConfig: request.providerConfig,
     });
 
-    expect(request.providerConfig).toMatchObject({
-      allowAutoApprove: false,
-    });
+    expect(request.providerConfig).not.toHaveProperty("allowAutoApprove");
     expect(command.args).not.toContain("--auto");
   });
 
-  it("lets request lower env-capped allowAutoApprove", () => {
+  it("does not let a request change env-capped allowAutoApprove", () => {
     process.env.OPENLOOMI_AGENT_PROVIDER = "opencode";
     process.env.OPENLOOMI_AGENT_OPENCODE_ALLOW_AUTO_APPROVE = "true";
 
@@ -197,7 +274,7 @@ describe("native agent provider env resolver", () => {
     });
 
     expect(request.providerConfig).toMatchObject({
-      allowAutoApprove: false,
+      allowAutoApprove: true,
     });
   });
 
@@ -228,33 +305,60 @@ describe("native agent provider env resolver", () => {
     },
   );
 
-  it("rejects Hermes model env because ACP model switching is not supported in this MVP", () => {
+  it("applies a Hermes model from trusted env config", () => {
     process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
     process.env.OPENLOOMI_AGENT_HERMES_MODEL = "nous/hermes";
 
-    expect(() => resolveNativeAgentProviderRequest(baseRequest())).toThrow(
-      /OPENLOOMI_AGENT_HERMES_MODEL is not supported/,
-    );
+    expect(
+      resolveNativeAgentProviderRequest(baseRequest()).modelConfig,
+    ).toEqual({ model: "nous/hermes" });
   });
 
-  it("rejects Hermes provider env because ACP provider switching is not supported in this MVP", () => {
+  it("requires a Hermes model when an inference provider is configured", () => {
     process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
     process.env.OPENLOOMI_AGENT_HERMES_PROVIDER = "openrouter";
 
     expect(() => resolveNativeAgentProviderRequest(baseRequest())).toThrow(
-      /OPENLOOMI_AGENT_HERMES_PROVIDER is not supported/,
+      /OPENLOOMI_AGENT_HERMES_PROVIDER requires OPENLOOMI_AGENT_HERMES_MODEL/,
     );
   });
 
-  it("rejects request model for Hermes because ACP model switching is not supported in this MVP", () => {
+  it("qualifies a trusted Hermes model with its inference provider", () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
+    process.env.OPENLOOMI_AGENT_HERMES_PROVIDER = "openrouter";
+    process.env.OPENLOOMI_AGENT_HERMES_MODEL = "anthropic/claude-sonnet-4.6";
+
+    expect(
+      resolveNativeAgentProviderRequest(baseRequest()).modelConfig,
+    ).toEqual({ model: "openrouter:anthropic/claude-sonnet-4.6" });
+  });
+
+  it("drops the generic chat model when Hermes is only the env default", () => {
     process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
 
-    expect(() =>
+    expect(
       resolveNativeAgentProviderRequest({
         ...baseRequest(),
-        modelConfig: { model: "request/model" },
-      }),
-    ).toThrow(/Hermes model selection is not supported/);
+        modelConfig: {
+          apiKey: "cloud-token",
+          baseUrl: "https://cloud.example.test",
+          model: "anthropic/claude-sonnet-4.6",
+        },
+      }).modelConfig,
+    ).toBeUndefined();
+  });
+
+  it("does not let an explicit Hermes request select an ACP model", () => {
+    process.env.OPENLOOMI_AGENT_PROVIDER = "hermes";
+    process.env.OPENLOOMI_AGENT_HERMES_MODEL = "env/hermes-model";
+
+    expect(
+      resolveNativeAgentProviderRequest({
+        ...baseRequest(),
+        provider: "hermes",
+        modelConfig: { model: "openrouter:anthropic/claude-sonnet-4.6" },
+      }).modelConfig,
+    ).toEqual({ model: "env/hermes-model" });
   });
 
   it("does not let request providerConfig override Hermes server-side config or inject flags", () => {

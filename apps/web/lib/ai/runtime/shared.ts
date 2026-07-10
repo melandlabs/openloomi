@@ -23,6 +23,7 @@ import { getAppMemoryDir } from "@/lib/utils/path";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import { stripMalformedToolCalls } from "@/lib/utils/tool-names";
 import { formatAgentStreamErrorForUser } from "./format-error";
+import { resolveNativeAgentProviderRequest } from "@/lib/ai/native-agent/provider-env";
 export { formatAgentStreamErrorForUser } from "./format-error";
 export {
   formatCatchAllErrorForUser,
@@ -205,22 +206,32 @@ export async function handleAgentRuntime(
         platform,
       };
 
-      // Build agent config (only provider-related config)
-      const agentConfig: AgentConfig = {
-        provider: "claude",
-        ...(options.workDir && { workDir: options.workDir }), // Pass workDir for file generation
-      };
-      const userAnthropicConfig = await getUserLlmProviderConfig({
-        userId: options.userId,
-        providerType: "anthropic_compatible",
+      const runtimeRequest = resolveNativeAgentProviderRequest({
+        prompt,
+        modelConfig: options.modelConfig,
       });
+
+      // Runtime choice and CLI configuration are deployment-controlled.
+      const agentConfig: AgentConfig = {
+        provider: runtimeRequest.provider || "claude",
+        model: runtimeRequest.modelConfig?.model,
+        providerConfig: runtimeRequest.providerConfig,
+        ...(options.workDir && { workDir: options.workDir }),
+      };
+      const userAnthropicConfig =
+        agentConfig.provider === "claude"
+          ? await getUserLlmProviderConfig({
+              userId: options.userId,
+              providerType: "anthropic_compatible",
+            })
+          : undefined;
 
       // User-saved Anthropic settings win over runtime defaults such as the
       // frontend's selectedModel fallback to claude-sonnet-4.6.
-      const effectiveModelConfig = {
-        ...options.modelConfig,
-        ...userAnthropicConfig,
-      };
+      const effectiveModelConfig =
+        agentConfig.provider === "claude"
+          ? { ...options.modelConfig, ...userAnthropicConfig }
+          : (runtimeRequest.modelConfig ?? {});
 
       if (effectiveModelConfig.apiKey) {
         agentConfig.apiKey = effectiveModelConfig.apiKey;

@@ -13,7 +13,10 @@ import type {
 } from "@openloomi/ai/agent/runtime";
 
 import { nativeAgentHost } from "./host";
-import { permissionResponses } from "./permissions";
+import {
+  expireNativeAgentPermission,
+  registerNativeAgentPermission,
+} from "./permissions";
 
 export type { NativeAgentRequest, NativeAgentRun };
 export { NativeAgentRequestError };
@@ -46,7 +49,11 @@ export async function runNativeAgentRequest(
       ...context,
       permissionHandler:
         context.permissionHandler ??
-        createNativeAgentPermissionHandler(body.permissionMode),
+        createNativeAgentPermissionHandler(
+          body.permissionMode,
+          context.userId,
+          context.abortController.signal,
+        ),
       emitPermissionRequestEvents:
         context.emitPermissionRequestEvents ?? !context.permissionHandler,
     },
@@ -56,6 +63,8 @@ export async function runNativeAgentRequest(
 
 function createNativeAgentPermissionHandler(
   permissionMode: NativeAgentRequest["permissionMode"],
+  ownerUserId: string,
+  signal: AbortSignal,
 ): AgentRuntimePermissionHandler {
   return (request) => {
     if (permissionMode === "dontAsk") {
@@ -66,12 +75,14 @@ function createNativeAgentPermissionHandler(
       return Promise.resolve({ behavior: "deny" });
     }
 
-    return waitForPermissionResponse(request);
+    return waitForPermissionResponse(request, ownerUserId, signal);
   };
 }
 
 function waitForPermissionResponse(
   request: AgentRuntimePermissionRequest,
+  ownerUserId: string,
+  signal: AbortSignal,
 ): Promise<{
   behavior: "allow" | "deny";
   updatedInput?: Record<string, unknown>;
@@ -80,26 +91,43 @@ function waitForPermissionResponse(
   // because a tab closed or the agent crashed.
   const PERMISSION_TTL_MS = 5 * 60 * 1000;
   return new Promise((resolve) => {
+    const abortHandler = () => {
+      expireNativeAgentPermission({
+        requestId: request.requestId,
+        ownerUserId,
+      });
+    };
     const ttl = setTimeout(() => {
-      if (permissionResponses.has(request.toolUseID)) {
-        permissionResponses.delete(request.toolUseID);
+      if (
+        expireNativeAgentPermission({
+          requestId: request.requestId,
+          ownerUserId,
+        })
+      ) {
         console.warn(
-          `[AgentAPI] Permission request timed out, auto-denying: ${request.toolUseID}`,
+          `[AgentAPI] Permission request timed out, auto-denying: ${request.requestId}`,
         );
-        resolve({ behavior: "deny" });
       }
     }, PERMISSION_TTL_MS);
-    permissionResponses.set(request.toolUseID, {
+    registerNativeAgentPermission(request.requestId, {
+      ownerUserId,
+      providerToolUseId: request.toolUseID,
+      createdAt: Date.now(),
       resolve: (result) => {
         clearTimeout(ttl);
+        signal.removeEventListener("abort", abortHandler);
         resolve(result);
       },
       reject: (error) => {
         clearTimeout(ttl);
-        permissionResponses.delete(request.toolUseID);
+        signal.removeEventListener("abort", abortHandler);
         console.error("[AgentAPI] Permission request rejected:", error);
         resolve({ behavior: "deny" });
       },
     });
+    signal.addEventListener("abort", abortHandler, { once: true });
+    if (signal.aborted) {
+      abortHandler();
+    }
   });
 }

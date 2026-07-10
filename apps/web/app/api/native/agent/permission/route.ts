@@ -6,7 +6,7 @@
 
 import type { NextRequest } from "next/server";
 import { auth } from "@/app/(auth)/auth";
-import { permissionResponses } from "@/lib/ai/native-agent/permissions";
+import { resolveNativeAgentPermission } from "@/lib/ai/native-agent/permissions";
 
 // POST /api/native/agent/permission - Handle permission response from frontend
 export async function POST(req: NextRequest) {
@@ -17,32 +17,41 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = (await req.json()) as {
-      toolUseID: string;
+      requestId: string;
       behavior: "allow" | "deny";
       updatedInput?: Record<string, unknown>;
     };
 
-    console.log("[PermissionAPI] Permission response:", body);
-
-    const responseHandler = permissionResponses.get(body.toolUseID);
-    if (!responseHandler) {
-      console.error(
-        `[PermissionAPI] No pending permission request for toolUseID: ${body.toolUseID}`,
-      );
+    if (
+      typeof body.requestId !== "string" ||
+      !body.requestId.trim() ||
+      (body.behavior !== "allow" && body.behavior !== "deny") ||
+      (body.updatedInput !== undefined &&
+        (!body.updatedInput ||
+          typeof body.updatedInput !== "object" ||
+          Array.isArray(body.updatedInput)))
+    ) {
       return Response.json(
-        { error: "Invalid toolUseID or request already handled" },
-        { status: 404 },
+        { error: "Invalid permission response" },
+        { status: 400 },
       );
     }
 
-    // Resolve the promise with the user's decision
-    responseHandler.resolve({
-      behavior: body.behavior,
-      updatedInput: body.updatedInput,
+    const resolution = resolveNativeAgentPermission({
+      requestId: body.requestId,
+      ownerUserId: session.user.id,
+      result: {
+        behavior: body.behavior,
+        updatedInput: body.updatedInput,
+      },
     });
 
-    // Clean up
-    permissionResponses.delete(body.toolUseID);
+    if (resolution !== "resolved") {
+      return Response.json(
+        { error: "Permission request not found or already handled" },
+        { status: 404 },
+      );
+    }
 
     return Response.json({ success: true });
   } catch (error) {

@@ -1,4 +1,6 @@
-import { getAgentRegistry, type AgentRegistry } from "../registry";
+import { randomUUID } from "node:crypto";
+
+import { type AgentRegistry, getAgentRegistry } from "../registry";
 import type { AgentConfig, AgentMessage, AgentOptions, IAgent } from "../types";
 
 export interface AgentRuntimeRequest {
@@ -9,9 +11,14 @@ export interface AgentRuntimeRequest {
   options?: AgentOptions;
 }
 
-export type AgentRuntimePermissionRequest = Parameters<
+type AgentPermissionRequest = Parameters<
   NonNullable<AgentOptions["onPermissionRequest"]>
 >[0];
+
+export type AgentRuntimePermissionRequest = AgentPermissionRequest & {
+  /** Opaque OpenLoomi request id exposed to clients instead of provider ids. */
+  requestId: string;
+};
 
 export type AgentRuntimePermissionDecision = Awaited<
   ReturnType<NonNullable<AgentOptions["onPermissionRequest"]>>
@@ -44,10 +51,6 @@ export class AgentRuntimeRequestError extends Error {
   }
 }
 
-type InsightChange = Parameters<
-  NonNullable<AgentOptions["onInsightChange"]>
->[0];
-
 interface ResolvedAgentRuntimeContext {
   registry: AgentRegistry;
   permissionHandler?: AgentRuntimePermissionHandler;
@@ -73,7 +76,7 @@ export async function runAgentRuntimeRequest(
   const runtimeContext = resolveRuntimeContext(context);
   const agent = runtimeContext.registry.create(request.config);
   const agentOptions = request.options ?? {};
-  const permissionRequestEventQueue: AgentRuntimePermissionRequest[] = [];
+  const runtimeEventQueue = new RuntimeEventQueue();
   const pendingSudoCommands = new Map<
     string,
     { command: string; cwd?: string }
@@ -111,7 +114,7 @@ export async function runAgentRuntimeRequest(
       planId: request.planId,
       finalPrompt: request.prompt,
       agentOptions,
-      permissionRequestEventQueue,
+      runtimeEventQueue,
       runtimeContext,
     });
   } else {
@@ -119,7 +122,7 @@ export async function runAgentRuntimeRequest(
       agent,
       finalPrompt: request.prompt,
       agentOptions,
-      permissionRequestEventQueue,
+      runtimeEventQueue,
       pendingSudoCommands,
       runtimeContext,
     });
@@ -167,25 +170,26 @@ function createExecuteGenerator({
   planId,
   finalPrompt,
   agentOptions,
-  permissionRequestEventQueue,
+  runtimeEventQueue,
   runtimeContext,
 }: {
   agent: IAgent;
   planId: string;
   finalPrompt: string;
   agentOptions: AgentOptions;
-  permissionRequestEventQueue: AgentRuntimePermissionRequest[];
+  runtimeEventQueue: RuntimeEventQueue;
   runtimeContext: ResolvedAgentRuntimeContext;
 }): AsyncGenerator<AgentMessage> {
-  const insightChangeEventQueue: InsightChange[] = [];
-
   return (async function* () {
     const innerGenerator = agent.execute({
       planId,
       originalPrompt: finalPrompt,
       ...agentOptions,
       onInsightChange: (data) => {
-        insightChangeEventQueue.push(data);
+        runtimeEventQueue.push({
+          type: "insightsRefresh",
+          ...data,
+        });
       },
       onPermissionRequest: async (permissionRequest) => {
         runtimeContext.logger.log(
@@ -195,19 +199,13 @@ function createExecuteGenerator({
         return resolvePermissionRequest({
           permissionRequest,
           agentOptions,
-          permissionRequestEventQueue,
+          runtimeEventQueue,
           runtimeContext,
         });
       },
     });
 
-    for await (const message of innerGenerator) {
-      yield message;
-      yield* drainQueuedAgentEvents(
-        insightChangeEventQueue,
-        permissionRequestEventQueue,
-      );
-    }
+    yield* multiplexAgentMessages(innerGenerator, runtimeEventQueue);
   })();
 }
 
@@ -215,24 +213,25 @@ function createRunGenerator({
   agent,
   finalPrompt,
   agentOptions,
-  permissionRequestEventQueue,
+  runtimeEventQueue,
   pendingSudoCommands,
   runtimeContext,
 }: {
   agent: IAgent;
   finalPrompt: string;
   agentOptions: AgentOptions;
-  permissionRequestEventQueue: AgentRuntimePermissionRequest[];
+  runtimeEventQueue: RuntimeEventQueue;
   pendingSudoCommands: Map<string, { command: string; cwd?: string }>;
   runtimeContext: ResolvedAgentRuntimeContext;
 }): AsyncGenerator<AgentMessage> {
-  const insightChangeEventQueue: InsightChange[] = [];
-
   return (async function* () {
     const innerGenerator = agent.run(finalPrompt, {
       ...agentOptions,
       onInsightChange: (data) => {
-        insightChangeEventQueue.push(data);
+        runtimeEventQueue.push({
+          type: "insightsRefresh",
+          ...data,
+        });
       },
       onPermissionRequest: async (permissionRequest) => {
         runtimeContext.logger.log(
@@ -245,47 +244,50 @@ function createRunGenerator({
         return resolvePermissionRequest({
           permissionRequest,
           agentOptions,
-          permissionRequestEventQueue,
+          runtimeEventQueue,
           runtimeContext,
         });
       },
     });
 
-    for await (const message of innerGenerator) {
-      if (
-        message.type === "tool_result" &&
-        message.output &&
-        message.toolUseId &&
-        runtimeContext.detectPasswordPrompt?.(message.output)
-      ) {
-        const pendingCommand = pendingSudoCommands.get(message.toolUseId);
-        if (pendingCommand) {
-          runtimeContext.logger.log(
-            "[AgentRuntime] Detected sudo password prompt for toolUseID:",
-            message.toolUseId,
-          );
-          yield {
-            type: "password_input",
-            toolUseId: message.toolUseId,
-            passwordInput: {
-              toolUseID: message.toolUseId,
-              originalCommand: pendingCommand.command,
-            },
-          };
+    yield* multiplexAgentMessages(
+      innerGenerator,
+      runtimeEventQueue,
+      (message) => {
+        if (
+          message.type === "tool_result" &&
+          message.output &&
+          message.toolUseId &&
+          runtimeContext.detectPasswordPrompt?.(message.output)
+        ) {
+          const pendingCommand = pendingSudoCommands.get(message.toolUseId);
+          if (pendingCommand) {
+            runtimeContext.logger.log(
+              "[AgentRuntime] Detected sudo password prompt for toolUseID:",
+              message.toolUseId,
+            );
+            return [
+              {
+                type: "password_input",
+                toolUseId: message.toolUseId,
+                passwordInput: {
+                  toolUseID: message.toolUseId,
+                  originalCommand: pendingCommand.command,
+                },
+              },
+              message,
+            ];
+          }
         }
-      }
 
-      yield message;
-      yield* drainQueuedAgentEvents(
-        insightChangeEventQueue,
-        permissionRequestEventQueue,
-      );
-    }
+        return [message];
+      },
+    );
   })();
 }
 
 function rememberSudoCommand(
-  permissionRequest: AgentRuntimePermissionRequest,
+  permissionRequest: AgentPermissionRequest,
   pendingSudoCommands: Map<string, { command: string; cwd?: string }>,
 ) {
   if (permissionRequest.toolName !== "Bash") {
@@ -307,20 +309,28 @@ function rememberSudoCommand(
 function resolvePermissionRequest({
   permissionRequest,
   agentOptions,
-  permissionRequestEventQueue,
+  runtimeEventQueue,
   runtimeContext,
 }: {
-  permissionRequest: AgentRuntimePermissionRequest;
+  permissionRequest: AgentPermissionRequest;
   agentOptions: AgentOptions;
-  permissionRequestEventQueue: AgentRuntimePermissionRequest[];
+  runtimeEventQueue: RuntimeEventQueue;
   runtimeContext: ResolvedAgentRuntimeContext;
 }): Promise<AgentRuntimePermissionDecision> {
+  const runtimePermissionRequest: AgentRuntimePermissionRequest = {
+    ...permissionRequest,
+    requestId: randomUUID(),
+  };
+
   if (runtimeContext.emitPermissionRequestEvents) {
-    permissionRequestEventQueue.push(permissionRequest);
+    runtimeEventQueue.push({
+      type: "permission_request",
+      permissionRequest: runtimePermissionRequest,
+    });
   }
 
   if (runtimeContext.permissionHandler) {
-    return runtimeContext.permissionHandler(permissionRequest);
+    return runtimeContext.permissionHandler(runtimePermissionRequest);
   }
 
   if (agentOptions.permissionMode === "dontAsk") {
@@ -337,27 +347,85 @@ function resolvePermissionRequest({
   return Promise.resolve({ behavior: "deny" });
 }
 
-function* drainQueuedAgentEvents(
-  insightChangeEventQueue: InsightChange[],
-  permissionRequestEventQueue: AgentRuntimePermissionRequest[],
-): Generator<AgentMessage> {
-  while (insightChangeEventQueue.length > 0) {
-    const event = insightChangeEventQueue.shift();
-    if (event) {
-      yield {
-        type: "insightsRefresh",
-        ...event,
-      };
+async function* multiplexAgentMessages(
+  innerGenerator: AsyncGenerator<AgentMessage>,
+  runtimeEventQueue: RuntimeEventQueue,
+  transformMessage: (message: AgentMessage) => AgentMessage[] = (message) => [
+    message,
+  ],
+): AsyncGenerator<AgentMessage> {
+  let finished = false;
+  let pendingNext = innerGenerator.next();
+
+  try {
+    while (!finished) {
+      const queuedEvent = runtimeEventQueue.shift();
+      if (queuedEvent) {
+        yield queuedEvent;
+        continue;
+      }
+
+      const outcome = await Promise.race([
+        pendingNext.then((result) => ({ type: "agent" as const, result })),
+        runtimeEventQueue.waitForEvent().then(() => ({
+          type: "runtime" as const,
+        })),
+      ]);
+
+      if (outcome.type === "runtime") {
+        continue;
+      }
+
+      // A provider can resolve its next message in the same microtask that it
+      // asks for permission. Always expose queued control events first.
+      for (const event of runtimeEventQueue.drain()) {
+        yield event;
+      }
+
+      if (outcome.result.done) {
+        finished = true;
+        break;
+      }
+
+      for (const message of transformMessage(outcome.result.value)) {
+        yield message;
+      }
+      pendingNext = innerGenerator.next();
     }
+  } finally {
+    if (!finished) {
+      await innerGenerator.return(undefined);
+    }
+  }
+}
+
+class RuntimeEventQueue {
+  private readonly events: AgentMessage[] = [];
+  private eventSignal = createSignal();
+
+  push(event: AgentMessage): void {
+    this.events.push(event);
+    this.eventSignal.resolve();
+    this.eventSignal = createSignal();
   }
 
-  while (permissionRequestEventQueue.length > 0) {
-    const permissionRequest = permissionRequestEventQueue.shift();
-    if (permissionRequest) {
-      yield {
-        type: "permission_request",
-        permissionRequest,
-      };
-    }
+  shift(): AgentMessage | undefined {
+    return this.events.shift();
   }
+
+  drain(): AgentMessage[] {
+    return this.events.splice(0);
+  }
+
+  waitForEvent(): Promise<void> {
+    return this.eventSignal.promise;
+  }
+}
+
+function createSignal(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }

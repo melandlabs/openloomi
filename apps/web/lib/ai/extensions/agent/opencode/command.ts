@@ -1,7 +1,14 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { platform } from "node:os";
+import { StringDecoder } from "node:string_decoder";
 
 import type { AgentOptions } from "@openloomi/ai/agent/types";
+import {
+  appendCapturedCliOutput,
+  buildCliEnvironment,
+  MAX_CLI_PROTOCOL_LINE_CHARS,
+  shouldDetachCliProcess,
+  terminateCliProcessTree,
+} from "../cli-process";
 
 export interface OpenCodeProviderConfig {
   opencodePath?: string;
@@ -18,6 +25,7 @@ export interface OpenCodeRunCommandOptions {
   model?: string;
   permissionMode?: AgentOptions["permissionMode"];
   providerConfig?: Record<string, unknown>;
+  attachmentFiles?: string[];
 }
 
 export interface OpenCodeRunCommand {
@@ -102,6 +110,9 @@ export function buildOpenCodeRunCommand(
   for (const file of providerConfig.files ?? []) {
     args.push("--file", file);
   }
+  for (const file of options.attachmentFiles ?? []) {
+    args.push("--file", file);
+  }
   if (
     options.permissionMode === "bypassPermissions" &&
     providerConfig.allowAutoApprove
@@ -138,6 +149,8 @@ export async function* runOpenCodeCli(
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let spawnError: Error | undefined;
   let proc: ChildProcessWithoutNullStreams;
+  const stdoutDecoder = new StringDecoder("utf8");
+  const stderrDecoder = new StringDecoder("utf8");
 
   const push = (event: OpenCodeCliEvent) => {
     events.push(event);
@@ -153,7 +166,8 @@ export async function* runOpenCodeCli(
   try {
     proc = spawn(command, args, {
       cwd: options.cwd,
-      env: { ...process.env, ...options.env },
+      env: buildCliEnvironment(options.env),
+      detached: shouldDetachCliProcess(),
       windowsHide: true,
     });
   } catch (error) {
@@ -175,7 +189,7 @@ export async function* runOpenCodeCli(
   };
 
   const abortHandler = () => {
-    killProcessTree(proc);
+    terminateCliProcessTree(proc);
   };
 
   options.signal?.addEventListener("abort", abortHandler, { once: true });
@@ -185,19 +199,28 @@ export async function* runOpenCodeCli(
   if (options.timeoutMs && options.timeoutMs > 0) {
     timeout = setTimeout(() => {
       timedOut = true;
-      killProcessTree(proc);
+      terminateCliProcessTree(proc);
     }, options.timeoutMs);
   }
 
   proc.stdout.on("data", (chunk: Buffer) => {
-    const text = chunk.toString();
-    stdout += text;
+    const text = stdoutDecoder.write(chunk);
+    stdout = appendCapturedCliOutput(stdout, text);
     stdoutBuffer += text;
+    if (stdoutBuffer.length > MAX_CLI_PROTOCOL_LINE_CHARS) {
+      spawnError = new Error(
+        `OpenCode CLI emitted a JSON line larger than ${MAX_CLI_PROTOCOL_LINE_CHARS} characters`,
+      );
+      done = true;
+      terminateCliProcessTree(proc);
+      wake();
+      return;
+    }
     flushStdoutLines();
   });
 
   proc.stderr.on("data", (chunk: Buffer) => {
-    stderr += chunk.toString();
+    stderr = appendCapturedCliOutput(stderr, stderrDecoder.write(chunk));
   });
 
   proc.on("error", (error: Error & { code?: string }) => {
@@ -217,6 +240,12 @@ export async function* runOpenCodeCli(
       clearTimeout(timeout);
       timeout = undefined;
     }
+    const finalStdout = stdoutDecoder.end();
+    if (finalStdout) {
+      stdout = appendCapturedCliOutput(stdout, finalStdout);
+      stdoutBuffer += finalStdout;
+    }
+    stderr = appendCapturedCliOutput(stderr, stderrDecoder.end());
     if (stdoutBuffer.trim()) {
       push({ type: "line", line: stdoutBuffer });
       stdoutBuffer = "";
@@ -260,25 +289,10 @@ export async function* runOpenCodeCli(
       timeout = undefined;
     }
     options.signal?.removeEventListener("abort", abortHandler);
+    if (!done) {
+      terminateCliProcessTree(proc);
+    }
   }
-}
-
-function killProcessTree(proc: ChildProcessWithoutNullStreams) {
-  if (proc.killed) {
-    return;
-  }
-
-  if (platform() === "win32" && proc.pid) {
-    spawn("taskkill", ["/F", "/T", "/PID", String(proc.pid)], {
-      windowsHide: true,
-      stdio: "ignore",
-    }).on("error", () => {
-      proc.kill();
-    });
-    return;
-  }
-
-  proc.kill("SIGTERM");
 }
 
 function isCommandNotFoundError(error: Error & { code?: string }) {

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import "../i18n";
 
 interface PermissionRequest {
+  requestId: string;
   toolName: string;
   toolInput: Record<string, unknown>;
   toolUseID: string;
@@ -19,7 +20,7 @@ interface PermissionDialogProps {
   onDecision: (decision: {
     behavior: "allow" | "deny";
     updatedInput?: Record<string, unknown>;
-  }) => void;
+  }) => void | Promise<void>;
   onClose?: () => void;
 }
 
@@ -30,6 +31,30 @@ export function PermissionDialog({
 }: PermissionDialogProps) {
   const { t } = useTranslation();
   const [showDetails, setShowDetails] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submittedDecision, setSubmittedDecision] = useState<
+    "allow" | "deny" | null
+  >(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const submitDecision = async (behavior: "allow" | "deny") => {
+    if (submitting || submittedDecision) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onDecision({ behavior });
+      setSubmittedDecision(behavior);
+      onClose?.();
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : t("agent.permission.submitError"),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const formatToolInput = () => {
     try {
@@ -60,6 +85,18 @@ export function PermissionDialog({
   };
 
   const risk = getRiskLevel();
+
+  if (submittedDecision) {
+    return (
+      <div className="rounded-xl border border-border bg-card/50 p-3 text-sm text-muted-foreground">
+        {t(
+          submittedDecision === "allow"
+            ? "agent.permission.allowed"
+            : "agent.permission.denied",
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="border-primary/30 bg-accent/30 space-y-4 rounded-xl border p-4">
@@ -154,6 +191,7 @@ export function PermissionDialog({
                 )}
                 aria-hidden
               >
+                <title>{t("agent.permission.showDetails")}</title>
                 <polyline points="6 9 12 15 18 9" />
               </svg>
             </span>
@@ -167,9 +205,15 @@ export function PermissionDialog({
       </div>
 
       <div className="flex justify-end gap-2">
+        {submitError && (
+          <p className="mr-auto self-center text-xs text-destructive">
+            {submitError}
+          </p>
+        )}
         <button
           type="button"
-          onClick={() => onDecision({ behavior: "deny" })}
+          disabled={submitting}
+          onClick={() => void submitDecision("deny")}
           className={cn(
             "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
             "bg-destructive/10 text-destructive hover:bg-destructive/20",
@@ -180,7 +224,8 @@ export function PermissionDialog({
         </button>
         <button
           type="button"
-          onClick={() => onDecision({ behavior: "allow" })}
+          disabled={submitting}
+          onClick={() => void submitDecision("allow")}
           className={cn(
             "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
             "bg-primary text-primary-foreground hover:bg-primary/90",

@@ -32,6 +32,7 @@ import { stripMalformedToolCalls } from "@/lib/utils/tool-names";
 import { parseStructuredOutput } from "@/lib/types/execution-result";
 import { QuestionInput } from "../question-input";
 import { PasswordInput } from "../password-input";
+import { PermissionDialog } from "../permission-dialog";
 import { useChatContext } from "../chat-context";
 import { useGlobalInsightDrawer } from "../global-insight-drawer";
 import type { ContentSegment } from "@openloomi/shared/ref";
@@ -1094,6 +1095,57 @@ const PurePreviewMessage = ({
                                   },
                                 ],
                               });
+                            }}
+                          />
+                        );
+                      }
+                    }
+
+                    if (type === "data-permission-request") {
+                      const permissionPart = part as {
+                        data?: {
+                          permissionRequest?: {
+                            requestId: string;
+                            toolName: string;
+                            toolInput: Record<string, unknown>;
+                            toolUseID: string;
+                            decisionReason?: string;
+                            blockedPath?: string;
+                          };
+                        };
+                      };
+                      const request = permissionPart.data?.permissionRequest;
+
+                      if (request?.requestId) {
+                        return (
+                          <PermissionDialog
+                            key={key}
+                            request={request}
+                            onDecision={async (decision) => {
+                              const response = await fetch(
+                                "/api/native/agent/permission",
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    requestId: request.requestId,
+                                    ...decision,
+                                  }),
+                                },
+                              );
+                              if (!response.ok) {
+                                const result = (await response
+                                  .json()
+                                  .catch(() => null)) as {
+                                  error?: string;
+                                } | null;
+                                throw new Error(
+                                  result?.error ||
+                                    "Failed to submit permission decision",
+                                );
+                              }
                             }}
                           />
                         );

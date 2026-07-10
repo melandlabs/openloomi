@@ -3,6 +3,11 @@ import type { AgentProviderMetadata } from "@openloomi/ai/agent/plugin";
 export const HERMES_CONFIG_SCHEMA = {
   type: "object",
   properties: {
+    model: {
+      type: "string",
+      description:
+        "Hermes ACP model id, optionally qualified as provider:model",
+    },
     workDir: {
       type: "string",
       description: "Working directory for Hermes ACP sessions",

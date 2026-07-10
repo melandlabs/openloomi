@@ -2,7 +2,7 @@
  * Agent SDK Abstraction Layer - Type Definitions
  *
  * This module defines the common interfaces for different agent implementations.
- * Supports: Claude Agent SDK, DeepAgents.js, and custom implementations.
+ * Supports Claude Agent SDK, OpenCode, ACP runtimes, and custom implementations.
  */
 
 // ============================================================================
@@ -175,6 +175,8 @@ export interface AgentMessage {
   };
   /** Permission request fields */
   permissionRequest?: {
+    /** Opaque OpenLoomi request id used when submitting the decision. */
+    requestId: string;
     toolName: string;
     toolInput: Record<string, unknown>;
     toolUseID: string;

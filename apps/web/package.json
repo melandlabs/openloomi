@@ -43,6 +43,7 @@
     "loop": "node ./scripts/loop-cli.mjs"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.22.1",
     "@ai-sdk/openai-compatible": "^1.0.0",
     "@ai-sdk/provider": "^2.0.0",
     "@ai-sdk/react": "^2.0.0",

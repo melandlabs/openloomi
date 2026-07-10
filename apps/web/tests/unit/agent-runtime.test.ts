@@ -1,10 +1,9 @@
-import { describe, expect, it } from "vitest";
-import {
-  runAgentRuntimeRequest,
-  type AgentRuntimePermissionRequest,
-} from "@openloomi/ai/agent/runtime";
-import { AgentRegistry } from "@openloomi/ai/agent/registry";
 import { hermesPlugin } from "@/lib/ai/extensions/agent/hermes";
+import { AgentRegistry } from "@openloomi/ai/agent/registry";
+import {
+  type AgentRuntimePermissionRequest,
+  runAgentRuntimeRequest,
+} from "@openloomi/ai/agent/runtime";
 import type {
   AgentConfig,
   AgentMessage,
@@ -14,6 +13,7 @@ import type {
   IAgent,
   TaskPlan,
 } from "@openloomi/ai/agent/types";
+import { describe, expect, it } from "vitest";
 
 const silentLogger = {
   log: () => {},
@@ -78,12 +78,56 @@ describe("agent runtime", () => {
 
     expect(permissionRequests).toHaveLength(1);
     expect(messages.map((message) => message.type)).toEqual([
-      "text",
       "permission_request",
+      "text",
     ]);
-    expect(messages[0].content).toBe("permission:allow");
-    expect(messages[1].permissionRequest?.toolName).toBe("Write");
+    expect(messages[0].permissionRequest).toMatchObject({
+      requestId: expect.any(String),
+      toolName: "Write",
+      toolUseID: "tool-1",
+    });
+    expect(messages[1].content).toBe("permission:allow");
     expect(run.shouldAbortOnClose()).toBe(false);
+  });
+
+  it("streams a permission request before the provider is allowed to continue", async () => {
+    let resolvePermission!: (decision: { behavior: "allow" | "deny" }) => void;
+    const permissionDecision = new Promise<{ behavior: "allow" | "deny" }>(
+      (resolve) => {
+        resolvePermission = resolve;
+      },
+    );
+    const run = await runAgentRuntimeRequest(
+      {
+        prompt: "create a file",
+        config: createConfig(),
+        options: {},
+      },
+      {
+        registry: createRegistry(new PermissionAgent()),
+        emitPermissionRequestEvents: true,
+        logger: silentLogger,
+        permissionHandler: () => permissionDecision,
+      },
+    );
+
+    await expect(run.generator.next()).resolves.toMatchObject({
+      done: false,
+      value: {
+        type: "permission_request",
+        permissionRequest: {
+          requestId: expect.any(String),
+          toolName: "Write",
+        },
+      },
+    });
+
+    resolvePermission({ behavior: "allow" });
+    await expect(run.generator.next()).resolves.toMatchObject({
+      done: false,
+      value: { type: "text", content: "permission:allow" },
+    });
+    await expect(run.generator.next()).resolves.toMatchObject({ done: true });
   });
 
   it("auto-denies protected tools in dontAsk mode when no host handler is present", async () => {
@@ -102,10 +146,8 @@ describe("agent runtime", () => {
 
     const messages = await collectMessages(run.generator);
 
-    expect(messages[0].content).toBe("permission:deny");
-    expect(
-      messages.some((message) => message.type === "permission_request"),
-    ).toBe(true);
+    expect(messages[0].type).toBe("permission_request");
+    expect(messages[1].content).toBe("permission:deny");
   });
 
   it("converts sudo password prompts into runtime password_input events", async () => {
