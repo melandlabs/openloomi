@@ -14,7 +14,7 @@
 //   setup-status [--json]            stable JSON
 //   install [--yes]                  user-approved install
 //   login                            open OpenLoomi login surface
-//   sync-claude-env                  read Claude env → POST /api/ai/provider/config
+//   sync-claude-env                  read Claude env → PUT /api/preferences/ai
 //   pet <state>                      set OpenLoomi Pet state
 //   state <name> [--event <e>]       fire-and-forget state (hook internal)
 //   archive                          archive last Stop transcript (hook internal)
@@ -635,6 +635,33 @@ async function apiPOST(path, body, { timeoutMs = 10_000 } = {}) {
   }
 }
 
+async function apiPUT(path, body, { timeoutMs = 10_000 } = {}) {
+  // Same contract as apiPOST — Bearer + JSON. Used for the per-user
+  // /api/preferences/ai upsert, which is the runtime's source of truth
+  // for AI provider config (see apps/web/app/(chat)/api/preferences/ai/route.ts).
+  const bearer = loadBearerToken();
+  const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  if (bearer) headers.Authorization = `Bearer ${bearer}`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(openloomiBaseUrl() + path, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    const text = await res.text().catch(() => '');
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
+    return { ok: res.ok, status: res.status, json };
+  } catch (e) {
+    return { ok: false, status: 0, error: { code: 'network', message: String(e?.message || e) } };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
@@ -715,12 +742,22 @@ async function readBinVersion(binPath) {
 }
 
 async function probeAiProvider() {
-  // Probes a server-side config; the actual response shapes vary across
-  // OpenLoomi versions, so we treat any 2xx as "configured" and 4xx as
-  // "missing", 5xx / network as "unknown".
-  const r = await apiGET('/api/ai/provider/config', { timeoutMs: 3000 });
-  if (r.ok) return { ok: true, configured: r.json?.configured !== false };
-  if (r.status === 404) return { ok: false, configured: false, reason: 'endpoint_missing' };
+  // The runtime exposes per-user AI settings at /api/preferences/ai
+  // (apps/web/app/(chat)/api/preferences/ai/route.ts). A provider is
+  // "configured" when either the system defaults — which read from the
+  // ANTHROPIC_* env vars in Tauri mode — carry a key, or the user has
+  // saved an explicit anthropic_compatible row with a key.
+  const r = await apiGET('/api/preferences/ai', { timeoutMs: 3000 });
+  if (r.ok && r.json) {
+    const sys = r.json?.systemDefaults?.anthropic_compatible;
+    const fromSys = !!(sys && sys.hasApiKey);
+    const fromUser =
+      Array.isArray(r.json?.settings) &&
+      r.json.settings.some(
+        (s) => s?.providerType === 'anthropic_compatible' && s?.hasApiKey,
+      );
+    return { ok: true, configured: fromSys || fromUser };
+  }
   if (r.status === 401 || r.status === 403) return { ok: true, configured: false, reason: 'auth_required' };
   return { ok: false, configured: false, reason: r.error?.code || 'unknown' };
 }
@@ -1079,26 +1116,14 @@ async function syncClaudeEnv() {
     apiKey,
     baseUrl,
     model,
-    source: 'claude-code-plugin',
+    enabled: true,
   };
 
-  const res = await apiPOST('/api/ai/provider/config', payload, { timeoutMs: 10_000 });
+  const res = await apiPUT('/api/preferences/ai', payload, { timeoutMs: 10_000 });
   // We explicitly drop the apiKey from our local variable.
   // eslint-disable-next-line no-unused-vars
   const _drop = apiKey; // marker for review
 
-  if (res.status === 404) {
-    return {
-      ok: false,
-      code: 'ENDPOINT_MISSING',
-      message:
-        'OpenLoomi runtime does not yet expose POST /api/ai/provider/config. Configure the Anthropic-compatible provider manually in OpenLoomi Desktop Preferences → API Settings.',
-      provider: 'anthropic_compatible',
-      baseUrl,
-      model,
-      checked,
-    };
-  }
   if (!res.ok) {
     return {
       ok: false,
@@ -1711,9 +1736,7 @@ async function main() {
               ok: false,
               setup: 'sync_failed',
               code: syncRes.code,
-              message: syncRes.code === 'ENDPOINT_MISSING'
-                ? 'OpenLoomi runtime does not expose /api/ai/provider/config. Update OpenLoomi Desktop to a version that supports it, then re-run /openloomi:setup.'
-                : `sync-claude-env failed: ${syncRes.code}`,
+              message: `sync-claude-env failed: ${syncRes.code}`,
               sync: { code: syncRes.code, provider: syncRes.provider, model: syncRes.model },
               steps,
               status,
