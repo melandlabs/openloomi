@@ -66,7 +66,7 @@ Expected:
 
 - `initialize-session` reports `SESSION_READY`.
 - `setup-status` reports `apiReachable: true` and `apiBaseUrl:
-  "http://localhost:3515"` when the dev API is up.
+"http://localhost:3515"` when the dev API is up.
 - `run` passes the resolved local API URL to `openloomi-ctl` as
   `OPENLOOMI_API_URL` without requiring the user to set it manually.
 - A successful minimal prompt returns `RUN_COMPLETE` with `result.ok: true`.
