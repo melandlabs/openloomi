@@ -663,16 +663,17 @@ A: Automatically extracted important information from your conversations, includ
 
 ### Q: How do I switch the desktop app to use the Codex CLI as its agent runtime?
 
-A: This is an advanced runtime-executor setting. It is not required for the
-Codex plugin to connect to OpenLoomi.
+A: When OpenLoomi is used from Codex, the Codex runtime is the recommended
+desktop runtime. It lets OpenLoomi reuse the user's existing Codex CLI runtime
+instead of requiring a separate OpenLoomi AI provider key for the first plugin
+workflow.
 
 ```bash
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" codex-runtime-info
 ```
 
-Follow the returned platform-specific guidance only when the user explicitly
-asks to switch the desktop runtime executor, then verify the active provider
-through `/api/native/providers`.
+Follow the returned platform-specific guidance, restart OpenLoomi, then verify
+the active provider through `/api/native/providers`.
 
 ### Q: How do I create automation tasks?
 

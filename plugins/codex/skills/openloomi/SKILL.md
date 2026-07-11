@@ -114,15 +114,18 @@ login token in Codex chat.
 
 ---
 
-## Advanced runtime executor diagnostics
+## Launching the desktop app with the Codex runtime
+
+When OpenLoomi is used from Codex, prefer the desktop Codex runtime so
+OpenLoomi can reuse the user's existing Codex CLI runtime instead of requiring
+a separate OpenLoomi AI provider setup for the first workflow.
 
 When the user asks to make OpenLoomi spawn Codex as the native-agent executor,
-or diagnostics show a runtime executor mismatch, call:
+or diagnostics show that the desktop runtime is not using Codex, call:
 
 ```bash
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" codex-runtime-info
 ```
 
-Show the returned platform-specific guidance only for that advanced runtime
-executor case. The standard Codex plugin flow does not require switching the
-desktop runtime provider.
+Show the returned platform-specific guidance, then ask the user to restart
+OpenLoomi and verify `/api/native/providers` reports `defaultAgent: "codex"`.
