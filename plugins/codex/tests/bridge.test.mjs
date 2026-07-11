@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 const PLUGIN_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -29,6 +29,7 @@ function run(args, env = {}) {
   return execFileSync('node', [BRIDGE, ...args], {
     encoding: 'utf8',
     env: { ...process.env, ...env },
+    cwd: env.BRIDGE_TEST_CWD || process.cwd(),
   });
 }
 
@@ -37,6 +38,25 @@ function runOutcome(args, env) {
     const stdout = execFileSync('node', [BRIDGE, ...args], {
       encoding: 'utf8',
       env: { ...process.env, ...env },
+      cwd: env.BRIDGE_TEST_CWD || process.cwd(),
+    });
+    return { code: 0, stdout, stderr: '' };
+  } catch (e) {
+    return {
+      code: e.status ?? 1,
+      stdout: String(e.stdout ?? ''),
+      stderr: String(e.stderr ?? ''),
+    };
+  }
+}
+
+function runOutcomeWithInput(args, env, input) {
+  try {
+    const stdout = execFileSync('node', [BRIDGE, ...args], {
+      encoding: 'utf8',
+      env: { ...process.env, ...env },
+      input,
+      cwd: env.BRIDGE_TEST_CWD || process.cwd(),
     });
     return { code: 0, stdout, stderr: '' };
   } catch (e) {
@@ -65,12 +85,29 @@ function withFakeHome(fn) {
   const env = {
     HOME: tmp,
     USERPROFILE: tmp,
+    LOCALAPPDATA: join(tmp, 'AppData', 'Local'),
+    APPDATA: join(tmp, 'AppData', 'Roaming'),
+    PROGRAMFILES: join(tmp, 'Program Files'),
+    'ProgramFiles(x86)': join(tmp, 'Program Files (x86)'),
+    BRIDGE_TEST_CWD: tmp,
     PATH: pathWithNode,
     OPENLOOMI_BIN: '',
+    OPENLOOMI_CTL: '',
     OPENLOOMI_HOME: '',
     OPENLOOMI_INSTALL_DIR: '',
     OPENLOOMI_REPO_DIR: '',
+    OPENLOOMI_API_URL: '',
     OPENLOOMI_BASE_URL: 'http://127.0.0.1:1',
+    OPENLOOMI_AUTH_TOKEN: '',
+    OPENAI_API_KEY: '',
+    ANTHROPIC_API_KEY: '',
+    OPENROUTER_API_KEY: '',
+    OPENLOOMI_AI_API_KEY: '',
+    OPENAI_BASE_URL: '',
+    ANTHROPIC_BASE_URL: '',
+    OPENROUTER_BASE_URL: '',
+    OPENLOOMI_AI_BASE_URL: '',
+    OPENLOOMI_AI_MODEL: '',
     OPENLOOMI_DEBUG_DISCOVERY: '1',
   };
   try {
@@ -78,6 +115,50 @@ function withFakeHome(fn) {
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+}
+
+function writeFakeToken(home) {
+  const dir = join(home, '.openloomi');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'token'), Buffer.from('fake-openloomi-token', 'utf8').toString('base64'));
+}
+
+function writeFakeCtl(home) {
+  const nodeScript = join(home, 'fake-openloomi-ctl.mjs');
+  writeFileSync(
+    nodeScript,
+    [
+      "if (process.argv.includes('--version')) {",
+      "  console.log('openloomi-ctl 9.9.9');",
+      "  process.exit(0);",
+      "}",
+      "let input = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (chunk) => { input += chunk; });",
+      "process.stdin.on('end', () => {",
+      "  console.log(JSON.stringify({",
+      "    ok: true,",
+      "    env: { OPENLOOMI_API_URL: process.env.OPENLOOMI_API_URL || null },",
+      "    prompt: input,",
+      "  }));",
+      "});",
+    ].join('\n'),
+  );
+
+  if (process.platform === 'win32') {
+    const cmd = join(home, 'openloomi-ctl.cmd');
+    writeFileSync(cmd, `@"${process.execPath}" "%~dp0fake-openloomi-ctl.mjs" %*\r\n`);
+    return cmd;
+  }
+
+  const shim = join(home, 'openloomi-ctl');
+  const nodePath = process.execPath.replace(/'/g, "'\\''");
+  writeFileSync(
+    shim,
+    `#!/bin/sh\nexec '${nodePath}' "$(dirname "$0")/fake-openloomi-ctl.mjs" "$@"\n`,
+  );
+  chmodSync(shim, 0o755);
+  return shim;
 }
 
 // -----------------------------------------------------------------------------
@@ -135,10 +216,14 @@ test('setup-status apiProbe field is present and well-formed', () => {
 
 test('setup-status reports OPENLOOMI_API_UNREACHABLE when API down and no token', () => {
   withFakeHome((env) => {
+    const ctl = writeFakeCtl(env.HOME);
     // Make sure no token file is present and no local API is reachable
     // (fake HOME guarantees ~/.openloomi/token does not exist; the fake
     // env forces OPENLOOMI_BASE_URL to a closed port).
-    const j = JSON.parse(run(['setup-status'], env));
+    const j = runJson(['setup-status'], {
+      ...env,
+      OPENLOOMI_CTL: ctl,
+    });
     assert.equal(j.apiReachable, false);
     if (!j.tokenPresent) {
       assert.equal(j.ready, false);
@@ -180,7 +265,7 @@ test('setup-status exposes the protocol contract fields', () => {
 
 test('setup-status aiProvider checks only report presence, never values', () => {
   withFakeHome((env) => {
-    const j = JSON.parse(run(['setup-status'], env));
+    const j = runJson(['setup-status'], env);
     // Every check entry must have {key, present, source}; no value field.
     for (const entry of j.checks.aiProvider || []) {
       assert.equal(typeof entry.key, 'string');
@@ -194,6 +279,31 @@ test('setup-status aiProvider checks only report presence, never values', () => 
       assert.equal(typeof entry.source, 'string');
       assert.ok(!('value' in entry), `auth check leaked a value: ${entry.key}`);
     }
+  });
+});
+
+test('run injects OPENLOOMI_API_URL from OPENLOOMI_BASE_URL for openloomi-ctl', () => {
+  withFakeHome((env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+    const r = runOutcomeWithInput(
+      ['run'],
+      {
+        ...env,
+        OPENLOOMI_CTL: ctl,
+        OPENLOOMI_BASE_URL: 'http://localhost:3515',
+        OPENLOOMI_API_URL: '',
+        ANTHROPIC_API_KEY: 'sk-test-never-print',
+      },
+      'Reply with exactly: OpenLoomi ready.',
+    );
+    assert.equal(r.code, 0, r.stderr || r.stdout);
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.ready, true);
+    assert.equal(j.reason, 'RUN_COMPLETE');
+    assert.equal(j.result.env.OPENLOOMI_API_URL, 'http://localhost:3515');
+    assert.equal(j.result.prompt, 'Reply with exactly: OpenLoomi ready.');
+    assert.ok(!r.stdout.includes('sk-test-never-print'));
   });
 });
 
@@ -388,7 +498,7 @@ test('pet with invalid state returns INVALID_STATE', () => {
 
 test('pet with token missing returns TOKEN_MISSING under fake HOME', () => {
   withFakeHome((env) => {
-    const j = JSON.parse(run(['pet', 'happy'], env));
+    const j = runJson(['pet', 'happy'], env);
     assert.equal(j.ok, false);
     // Either TOKEN_MISSING (no ~/.openloomi/token) or API_UNREACHABLE
     // (would-be call hits a closed port). Both are valid first-line
@@ -434,9 +544,15 @@ test('codex-runtime-info returns the desktop-app Codex runtime switch plan', () 
   const j = runJson(['codex-runtime-info']);
   assert.equal(j.purpose.startsWith('Switch the OpenLoomi desktop app'), true);
   assert.equal(j.envProviderKey, 'OPENLOOMI_AGENT_PROVIDER');
-  assert.match(j.switch.oneOff, /OPENLOOMI_AGENT_PROVIDER=codex/);
-  assert.match(j.switch.oneOff, /\/Applications\/openloomi\.app/);
-  assert.match(j.switch.permanent, /~\/\.zshrc/);
+  assert.equal(typeof j.switch.oneOff, 'object');
+  assert.match(j.switch.oneOff.darwin, /OPENLOOMI_AGENT_PROVIDER codex/);
+  assert.match(j.switch.oneOff.darwin, /\/Applications\/openloomi\.app/);
+  assert.match(j.switch.oneOff.linux, /OPENLOOMI_AGENT_PROVIDER=codex/);
+  assert.match(j.switch.oneOff.win32, /OPENLOOMI_AGENT_PROVIDER codex/);
+  assert.equal(typeof j.switch.permanent, 'object');
+  assert.match(j.switch.permanent.darwin, /~\/\.zshrc/);
+  assert.match(j.switch.permanent.linux, /environment\.d/);
+  assert.match(j.switch.permanent.win32, /environment variables/i);
   assert.ok(Array.isArray(j.prerequisites) && j.prerequisites.length >= 3);
   const varNames = j.companionEnvVars.map((entry) => entry.name);
   for (const expected of [

@@ -114,41 +114,15 @@ login token in Codex chat.
 
 ---
 
-
 ## Launching the desktop app with the Codex runtime
 
-The packaged desktop app defaults to the Claude provider. To switch its
-agent runtime to the Codex CLI, export `OPENLOOMI_AGENT_PROVIDER=codex` in
-the shell that opens the app so the variable reaches the Tauri-launched
-web server:
+When the user asks to make OpenLoomi spawn Codex as the native-agent executor,
+or diagnostics show a runtime executor mismatch, call:
 
 ```bash
-export OPENLOOMI_AGENT_PROVIDER=codex
-open /Applications/openloomi.app
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" codex-runtime-info
 ```
 
-For a permanent switch, add it to your shell rc (`~/.zshrc`):
-
-```bash
-echo 'export OPENLOOMI_AGENT_PROVIDER=codex' >> ~/.zshrc
-```
-
-Optional companion variables (read by the native-agent env resolver at
-startup):
-
-- `OPENLOOMI_AGENT_CODEX_COMMAND` — path to the Codex CLI binary (default: `codex` on `PATH`)
-- `OPENLOOMI_AGENT_CODEX_MODEL` — e.g. `gpt-5.4`
-- `OPENLOOMI_AGENT_CODEX_PROFILE` — passed as `-p <name>`
-- `OPENLOOMI_AGENT_CODEX_SANDBOX` — `read-only` | `workspace-write` | `danger-full-access` (default `workspace-write`; plan phase is always forced to `read-only`)
-- `OPENLOOMI_AGENT_CODEX_SKIP_GIT_REPO_CHECK` — default `true`
-- `OPENLOOMI_AGENT_CODEX_FULL_AUTO` — set `true` to allow `--full-auto` only under `bypassPermissions`
-- `OPENLOOMI_AGENT_CODEX_TIMEOUT_MS` — CLI runtime budget in milliseconds
-
-### Prerequisites
-
-- `which codex` resolves to a working Codex CLI binary (`brew install --cask codex` or `npm i -g @openai/codex`).
-- `~/.codex/config.toml` is configured and `OPENAI_API_KEY` (or Codex CLI's other auth) is available to the spawned process.
-
-### Verify
-
-After launch, `GET /api/native/providers` should report `defaultAgent: "codex"` and include a `codex` entry in `agents`. If you still see `defaultAgent: "claude"`, the env var did not reach the web server — relaunch from a shell that has the export set, or check that the launcher script is not stripping the environment.
+Show the returned platform-specific guidance and make clear that
+`set-codex-runtime-env` changes the desktop runtime environment outside the
+current Codex turn.

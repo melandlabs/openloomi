@@ -130,15 +130,18 @@ node plugins/codex/scripts/loomi-bridge.mjs version
 ```json
 {
   "name": "openloomi-codex-bridge",
-  "version": "0.8.0",
+  "version": "0.7.3",
   "pluginPhase": "runtime-provider-readiness",
   "commands": [
+    "codex-runtime-info",
     "configure-ai-provider",
     "help",
     "initialize-session",
     "install-instructions",
     "install-openloomi",
+    "pet",
     "run",
+    "set-codex-runtime-env",
     "setup",
     "setup-status",
     "version",
@@ -446,10 +449,10 @@ user confirmation.
 
 ### Launching the desktop app with the Codex runtime
 
-By default the packaged desktop app routes chat and agent requests through the
-Claude provider. To run the same desktop binary against the local Codex CLI
-instead, set `OPENLOOMI_AGENT_PROVIDER=codex` in the environment the desktop
-app actually inherits.
+By default the packaged desktop app may route native-agent requests through
+the default runtime provider. If you need to run the same desktop binary
+against the local Codex CLI, set `OPENLOOMI_AGENT_PROVIDER=codex` in the
+environment the desktop app actually inherits.
 
 > **macOS caveat:** the desktop app's web server runs inside the GUI launchd
 > session, not your terminal. `export FOO=bar` in a terminal does **not**
