@@ -649,6 +649,7 @@ open_openloomi
 configure_ai_provider
 configure_connectors
 show_openloomi_skills
+return_without_bridge
 run
 ```
 
@@ -664,6 +665,7 @@ READY_SESSION_BOOTSTRAP_PENDING
 AI_PROVIDER_REQUIRED
 AI_PROVIDER_STATUS_UNAVAILABLE
 CONNECTOR_SETUP_REQUIRED
+RECURSION_GUARD
 READY
 ```
 

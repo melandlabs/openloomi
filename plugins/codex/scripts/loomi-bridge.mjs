@@ -31,6 +31,7 @@ const SESSION_BOOTSTRAP_POLL_MS = 2000;
 const SESSION_API_TIMEOUT_MS = 5000;
 const API_PROBE_TIMEOUT_MS = 1000;
 const MAX_COMMAND_OUTPUT = 4096;
+const RUN_LOCK_TTL_MS = RUN_TIMEOUT_MS + 60_000;
 const DEBUG_DISCOVERY = process.env.OPENLOOMI_DEBUG_DISCOVERY === "1";
 const OFFICIAL_RELEASE_SOURCE = {
   owner: "melandlabs",
@@ -39,6 +40,11 @@ const OFFICIAL_RELEASE_SOURCE = {
     "https://api.github.com/repos/melandlabs/openloomi/releases/latest",
   releasePage: "https://github.com/melandlabs/openloomi/releases",
 };
+
+const RUNTIME_SAFE_PROMPT_GUARD = [
+  "You are already inside the OpenLoomi runtime.",
+  "Do not call tools, shell, skills, Codex plugins, OpenLoomi plugins, or loomi-bridge.",
+].join(" ");
 
 const COMMANDS = new Set([
   "codex-runtime-info",
@@ -85,7 +91,7 @@ const WORKFLOW_GUIDANCE = [
     readyRequired: true,
     bridgeCommand: "run",
     taskPromptPrefix:
-      "Use OpenLoomi loop workflow for this Codex task. Keep connector and memory operations inside OpenLoomi runtime.",
+      `${RUNTIME_SAFE_PROMPT_GUARD} Treat the user request as a loop planning request. Return the final planning result only.`,
     nextActionsWhenBlocked: [
       "install_openloomi",
       "initialize_openloomi_session",
@@ -107,7 +113,7 @@ const WORKFLOW_GUIDANCE = [
     readyRequired: true,
     bridgeCommand: "run",
     taskPromptPrefix:
-      "Use OpenLoomi memory workflow for this Codex task. Keep memory reads and writes inside OpenLoomi runtime.",
+      `${RUNTIME_SAFE_PROMPT_GUARD} Treat the user request as a memory/context request. Return only the runtime result; do not read or write memory files directly.`,
     nextActionsWhenBlocked: [
       "install_openloomi",
       "initialize_openloomi_session",
@@ -150,7 +156,7 @@ const WORKFLOW_GUIDANCE = [
     readyRequired: true,
     bridgeCommand: "run",
     taskPromptPrefix:
-      "Use OpenLoomi handoff workflow for this Codex task. Create a follow-up or delegated Loomi task when supported by the runtime.",
+      `${RUNTIME_SAFE_PROMPT_GUARD} Treat the user request as a handoff or follow-up request. Return the final runtime result only.`,
     nextActionsWhenBlocked: [
       "install_openloomi",
       "initialize_openloomi_session",
@@ -1713,6 +1719,125 @@ function runOpenLoomiOneShot({ ctlPath, permissionMode, prompt, apiBaseUrl }) {
       env: getOpenLoomiCtlChildEnv({ apiBaseUrl }),
     },
   );
+}
+
+function acquireRunLock() {
+  const lockPath = getRunLockPath();
+  const now = Date.now();
+  const lock = {
+    id: `${process.pid}-${now}-${Math.random().toString(36).slice(2)}`,
+    pid: process.pid,
+    startedAt: now,
+    command: "run",
+  };
+
+  mkdirSync(path.dirname(lockPath), { recursive: true });
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const existing = readRunLock(lockPath);
+
+    if (existing && !isRunLockStale(existing, now)) {
+      return {
+        acquired: false,
+        lockPath,
+        existing,
+      };
+    }
+
+    if (existing) {
+      removeRunLock(lockPath);
+    }
+
+    try {
+      writeFileSync(lockPath, JSON.stringify(lock), {
+        flag: "wx",
+        mode: 0o600,
+      });
+
+      return {
+        acquired: true,
+        lockPath,
+        lock,
+      };
+    } catch (error) {
+      if (error?.code !== "EEXIST") {
+        throw error;
+      }
+    }
+  }
+
+  return {
+    acquired: false,
+    lockPath,
+    existing: readRunLock(lockPath),
+  };
+}
+
+function releaseRunLock(acquiredLock) {
+  if (!acquiredLock?.acquired) {
+    return;
+  }
+
+  const current = readRunLock(acquiredLock.lockPath);
+  if (current?.id === acquiredLock.lock.id) {
+    removeRunLock(acquiredLock.lockPath);
+  }
+}
+
+function getRunLockPath() {
+  return path.join(os.homedir(), ".openloomi", "codex-plugin-run.lock");
+}
+
+function readRunLock(lockPath) {
+  if (!isFile(lockPath)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(readFileText(lockPath));
+  } catch {
+    return {
+      id: "unreadable",
+      startedAt: 0,
+      command: "run",
+    };
+  }
+}
+
+function isRunLockStale(lock, now = Date.now()) {
+  const startedAt = Number(lock?.startedAt || 0);
+  return !startedAt || now - startedAt > getRunLockTtlMs();
+}
+
+function getRunLockTtlMs() {
+  const configured = Number(process.env.OPENLOOMI_CODEX_BRIDGE_RUN_LOCK_TTL_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : RUN_LOCK_TTL_MS;
+}
+
+function removeRunLock(lockPath) {
+  try {
+    unlinkSync(lockPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+function summarizeRunLock(lock) {
+  if (!lock) {
+    return null;
+  }
+
+  const startedAt = Number(lock.startedAt || 0);
+  return {
+    pid: Number(lock.pid || 0) || null,
+    command: lock.command || "run",
+    ageMs: startedAt ? Math.max(0, Date.now() - startedAt) : null,
+    stale: isRunLockStale(lock),
+  };
 }
 
 function getOpenLoomiCtlChildEnv({ apiBaseUrl } = {}) {
@@ -3511,12 +3636,37 @@ async function run() {
   }
 
   const permissionMode = getPermissionMode(flags.permissionMode);
-  const result = await runOpenLoomiOneShot({
-    ctlPath: setup.ctlPath,
-    permissionMode,
-    prompt,
-    apiBaseUrl: setup.apiBaseUrl,
-  });
+  const runLock = acquireRunLock();
+
+  if (!runLock.acquired) {
+    writeJson(
+      {
+        ready: false,
+        ran: false,
+        command: "run",
+        nextAction: "return_without_bridge",
+        reason: "RECURSION_GUARD",
+        message:
+          "A loomi-bridge run is already active. Refusing nested OpenLoomi bridge invocation.",
+        lock: summarizeRunLock(runLock.existing),
+      },
+      1,
+    );
+    return;
+  }
+
+  let result;
+
+  try {
+    result = await runOpenLoomiOneShot({
+      ctlPath: setup.ctlPath,
+      permissionMode,
+      prompt,
+      apiBaseUrl: setup.apiBaseUrl,
+    });
+  } finally {
+    releaseRunLock(runLock);
+  }
 
   if (result.exitCode !== 0) {
     writeJson(

@@ -27,11 +27,15 @@ loop task yet. Guest/session initialization must happen through OpenLoomi-owned
 surfaces. Never ask for API keys, OAuth tokens, connector secrets, or
 OpenLoomi auth tokens in Codex chat.
 
-When `ready: true`, pass the user request over stdin to the bridge:
+When `ready: true`, wrap the user request with the `taskPromptPrefix` returned
+by `workflow-guidance`, then pass that runtime-safe prompt over stdin to the
+bridge:
 
 ```bash
-printf "%s" "<user loop request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
+printf "%s" "<taskPromptPrefix>\n\nOriginal user request: <user loop request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
 ```
 
-Frame the request as an OpenLoomi loop task. Keep all persistence, connector
-state, memory access, and follow-up scheduling inside OpenLoomi runtime.
+Do not send wording that asks the inner runtime to invoke Codex plugins,
+OpenLoomi plugins, skills, shell commands, or `loomi-bridge`. Keep all
+persistence, connector state, memory access, and follow-up scheduling inside
+OpenLoomi runtime.

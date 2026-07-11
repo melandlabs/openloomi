@@ -23,12 +23,14 @@ node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" setup-status
 ```
 
 If `ready: false`, follow the reported `nextAction` before attempting handoff.
-When `ready: true`, pass the handoff request over stdin:
+When `ready: true`, wrap the handoff request with the `taskPromptPrefix`
+returned by `workflow-guidance`, then pass that runtime-safe prompt over stdin:
 
 ```bash
-printf "%s" "<handoff request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
+printf "%s" "<taskPromptPrefix>\n\nOriginal user request: <handoff request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
 ```
 
-Include enough task context for OpenLoomi to create a follow-up, but do not
-include secrets. OpenLoomi runtime owns handoff persistence and notification
-routing.
+Do not send wording that asks the inner runtime to invoke Codex plugins,
+OpenLoomi plugins, skills, shell commands, or `loomi-bridge`. Include enough
+task context for OpenLoomi to create a follow-up, but do not include secrets.
+OpenLoomi runtime owns handoff persistence and notification routing.

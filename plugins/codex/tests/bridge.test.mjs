@@ -123,6 +123,25 @@ function writeFakeToken(home) {
   writeFileSync(join(dir, 'token'), Buffer.from('fake-openloomi-token', 'utf8').toString('base64'));
 }
 
+function getRunLockPath(home) {
+  return join(home, '.openloomi', 'codex-plugin-run.lock');
+}
+
+function writeRunLock(home, { startedAt = Date.now(), pid = 99999 } = {}) {
+  const lockPath = getRunLockPath(home);
+  mkdirSync(dirname(lockPath), { recursive: true });
+  writeFileSync(
+    lockPath,
+    JSON.stringify({
+      id: `test-lock-${startedAt}`,
+      pid,
+      startedAt,
+      command: 'run',
+    }),
+  );
+  return lockPath;
+}
+
 function writeFakeCtl(home) {
   const nodeScript = join(home, 'fake-openloomi-ctl.mjs');
   writeFileSync(
@@ -307,6 +326,64 @@ test('run injects OPENLOOMI_API_URL from OPENLOOMI_BASE_URL for openloomi-ctl', 
   });
 });
 
+test('run refuses nested bridge invocation when an active run lock exists', () => {
+  withFakeHome((env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+    writeRunLock(env.HOME);
+    const r = runOutcomeWithInput(
+      ['run'],
+      {
+        ...env,
+        OPENLOOMI_CTL: ctl,
+        ANTHROPIC_API_KEY: 'sk-test-never-print',
+      },
+      'Nested request should be refused.',
+    );
+    assert.equal(r.code, 1);
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.reason, 'RECURSION_GUARD');
+    assert.equal(j.ran, false);
+    assert.equal(j.command, 'run');
+    assert.equal(j.nextAction, 'return_without_bridge');
+    assert.ok(!r.stdout.includes('sk-test-never-print'));
+  });
+});
+
+test('run cleans stale lock and proceeds', () => {
+  withFakeHome((env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+    const lockPath = writeRunLock(env.HOME, {
+      startedAt: Date.now() - 10_000,
+    });
+    const r = runOutcomeWithInput(
+      ['run'],
+      {
+        ...env,
+        OPENLOOMI_CTL: ctl,
+        OPENLOOMI_CODEX_BRIDGE_RUN_LOCK_TTL_MS: '1',
+        ANTHROPIC_API_KEY: 'sk-test-never-print',
+      },
+      'Stale lock should be ignored.',
+    );
+    assert.equal(r.code, 0, r.stderr || r.stdout);
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.reason, 'RUN_COMPLETE');
+    assert.equal(j.result.prompt, 'Stale lock should be ignored.');
+    assert.equal(existsSync(lockPath), false, 'run lock should be released');
+  });
+});
+
+test('setup-status is not blocked by an active run lock', () => {
+  withFakeHome((env) => {
+    writeRunLock(env.HOME);
+    const j = runJson(['setup-status'], env);
+    assert.notEqual(j.reason, 'RECURSION_GUARD');
+    assert.ok('ready' in j);
+  });
+});
+
 // -----------------------------------------------------------------------------
 // install-instructions / workflow-guidance
 // -----------------------------------------------------------------------------
@@ -345,6 +422,17 @@ test('workflow-guidance lists the four openloomi workflows', () => {
 // -----------------------------------------------------------------------------
 // Secrets contract — the plugin must never echo API key / token values
 // -----------------------------------------------------------------------------
+
+test('workflow-guidance uses runtime-safe run prompts for agent workflows', () => {
+  for (const workflow of ['openloomi-loop', 'openloomi-memory', 'openloomi-handoff']) {
+    const j = runJson(['workflow-guidance', '--workflow', workflow]);
+    const prefix = j.workflow?.taskPromptPrefix || '';
+    assert.match(prefix, /already inside the OpenLoomi runtime/);
+    assert.match(prefix, /Do not call tools, shell, skills/);
+    assert.match(prefix, /loomi-bridge/);
+    assert.doesNotMatch(prefix, /^Use OpenLoomi .* workflow/);
+  }
+});
 
 test('secrets contract: fake key value never appears in any subcommand output', () => {
   withFakeHome((env) => {

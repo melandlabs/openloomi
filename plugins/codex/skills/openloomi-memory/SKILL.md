@@ -26,12 +26,15 @@ If `ready: false`, follow the reported `nextAction`. Connector setup and
 guest/session initialization must happen through OpenLoomi-owned surfaces, not
 Codex chat.
 
-When `ready: true`, pass the user request over stdin to the bridge:
+When `ready: true`, wrap the user request with the `taskPromptPrefix` returned
+by `workflow-guidance`, then pass that runtime-safe prompt over stdin to the
+bridge:
 
 ```bash
-printf "%s" "<user memory request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
+printf "%s" "<taskPromptPrefix>\n\nOriginal user request: <user memory request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
 ```
 
-Only show memory content when OpenLoomi runtime returns it for the requested
-task. Keep secrets and connector credentials out of prompts, argv, stdout, and
-stderr.
+Do not send wording that asks the inner runtime to invoke Codex plugins,
+OpenLoomi plugins, skills, shell commands, or `loomi-bridge`. Only show memory
+content when OpenLoomi runtime returns it for the requested task. Keep secrets
+and connector credentials out of prompts, argv, stdout, and stderr.
