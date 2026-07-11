@@ -632,15 +632,17 @@ test('codex-runtime-info returns the desktop-app Codex runtime switch plan', () 
   const j = runJson(['codex-runtime-info']);
   assert.equal(j.purpose.startsWith('Switch the OpenLoomi desktop app'), true);
   assert.equal(j.envProviderKey, 'OPENLOOMI_AGENT_PROVIDER');
-  assert.equal(typeof j.switch.oneOff, 'object');
-  assert.match(j.switch.oneOff.darwin, /OPENLOOMI_AGENT_PROVIDER codex/);
-  assert.match(j.switch.oneOff.darwin, /\/Applications\/openloomi\.app/);
-  assert.match(j.switch.oneOff.linux, /OPENLOOMI_AGENT_PROVIDER=codex/);
-  assert.match(j.switch.oneOff.win32, /OPENLOOMI_AGENT_PROVIDER codex/);
-  assert.equal(typeof j.switch.permanent, 'object');
-  assert.match(j.switch.permanent.darwin, /~\/\.zshrc/);
-  assert.match(j.switch.permanent.linux, /environment\.d/);
-  assert.match(j.switch.permanent.win32, /environment variables/i);
+  assert.equal(typeof j.switch.oneOff, 'string');
+  assert.equal(typeof j.switch.permanent, 'string');
+  assert.equal(typeof j.switch.perPlatform.oneOff, 'object');
+  assert.match(j.switch.perPlatform.oneOff.darwin, /OPENLOOMI_AGENT_PROVIDER codex/);
+  assert.match(j.switch.perPlatform.oneOff.darwin, /\/Applications\/openloomi\.app/);
+  assert.match(j.switch.perPlatform.oneOff.linux, /OPENLOOMI_AGENT_PROVIDER=codex/);
+  assert.match(j.switch.perPlatform.oneOff.win32, /OPENLOOMI_AGENT_PROVIDER codex/);
+  assert.equal(typeof j.switch.perPlatform.permanent, 'object');
+  assert.match(j.switch.perPlatform.permanent.darwin, /~\/\.zshrc/);
+  assert.match(j.switch.perPlatform.permanent.linux, /environment\.d/);
+  assert.match(j.switch.perPlatform.permanent.win32, /environment variables/i);
   assert.ok(Array.isArray(j.prerequisites) && j.prerequisites.length >= 3);
   const varNames = j.companionEnvVars.map((entry) => entry.name);
   for (const expected of [
