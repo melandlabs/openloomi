@@ -114,7 +114,7 @@ login token in Codex chat.
 
 ---
 
-## Launching the desktop app with the Codex runtime
+## Advanced runtime executor diagnostics
 
 When the user asks to make OpenLoomi spawn Codex as the native-agent executor,
 or diagnostics show a runtime executor mismatch, call:
@@ -123,6 +123,6 @@ or diagnostics show a runtime executor mismatch, call:
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" codex-runtime-info
 ```
 
-Show the returned platform-specific guidance and make clear that
-`set-codex-runtime-env` changes the desktop runtime environment outside the
-current Codex turn.
+Show the returned platform-specific guidance only for that advanced runtime
+executor case. The standard Codex plugin flow does not require switching the
+desktop runtime provider.

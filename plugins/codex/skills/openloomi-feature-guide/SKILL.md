@@ -663,33 +663,16 @@ A: Automatically extracted important information from your conversations, includ
 
 ### Q: How do I switch the desktop app to use the Codex CLI as its agent runtime?
 
-A: The packaged OpenLoomi Desktop defaults to the Claude agent runtime. To
-make it drive the local Codex CLI instead, export `OPENLOOMI_AGENT_PROVIDER=codex`
-in the shell that opens the app, then launch OpenLoomi from that same shell:
+A: This is an advanced runtime-executor setting. It is not required for the
+Codex plugin to connect to OpenLoomi.
 
 ```bash
-export OPENLOOMI_AGENT_PROVIDER=codex
-open /Applications/openloomi.app
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" codex-runtime-info
 ```
 
-For a permanent switch, add the export to your shell rc (`~/.zshrc`,
-`~/.bashrc`). Optional companion variables let you pick the Codex model,
-profile, sandbox mode, approval policy, CLI path, and timeout — all read
-from the shell environment at launch time:
-
-- `OPENLOOMI_AGENT_CODEX_COMMAND` — path to the Codex CLI (default `codex` on `PATH`)
-- `OPENLOOMI_AGENT_CODEX_MODEL` — e.g. `gpt-5.4`
-- `OPENLOOMI_AGENT_CODEX_PROFILE` — passed as `-p <name>`
-- `OPENLOOMI_AGENT_CODEX_SANDBOX` — `read-only` | `workspace-write` | `danger-full-access`
-- `OPENLOOMI_AGENT_CODEX_ASK_FOR_APPROVAL` — `untrusted` | `on-failure` | `on-request` | `never`
-- `OPENLOOMI_AGENT_CODEX_SKIP_GIT_REPO_CHECK` — default `true`
-- `OPENLOOMI_AGENT_CODEX_FULL_AUTO` — default `false`
-- `OPENLOOMI_AGENT_CODEX_TIMEOUT_MS` — CLI runtime budget in ms
-
-Prerequisites: a working Codex CLI binary on `PATH`, a configured
-`~/.codex/config.toml`, and `OPENAI_API_KEY` (or Codex CLI's other auth)
-available to the spawned process. After launch, hit
-`GET /api/native/providers` and confirm `defaultAgent` is `codex`.
+Follow the returned platform-specific guidance only when the user explicitly
+asks to switch the desktop runtime executor, then verify the active provider
+through `/api/native/providers`.
 
 ### Q: How do I create automation tasks?
 

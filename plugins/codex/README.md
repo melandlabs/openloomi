@@ -447,80 +447,14 @@ If a source checkout exists but the CLI is not built or staged, the plugin
 should return actionable instructions rather than building automatically without
 user confirmation.
 
-### Launching the desktop app with the Codex runtime
+### Advanced Runtime Executor Diagnostics
 
-By default the packaged desktop app may route native-agent requests through
-the default runtime provider. If you need to run the same desktop binary
-against the local Codex CLI, set `OPENLOOMI_AGENT_PROVIDER=codex` in the
-environment the desktop app actually inherits.
+The Codex plugin does not require the OpenLoomi desktop runtime to use Codex as
+its native-agent executor. Keep the standard plugin path focused on
+`setup-status`, `initialize-session`, workflow guidance, and `run`.
 
-> **macOS caveat:** the desktop app's web server runs inside the GUI launchd
-> session, not your terminal. `export FOO=bar` in a terminal does **not**
-> reach the running web server. After setting the variable you must Quit and
-> reopen `OpenLoomi.app` so the new env is inherited by the freshly forked
-> web process. On Linux a per-user env file works after the next login, and
-> on Windows you edit the user environment via System Settings.
-
-```bash
-node plugins/codex/scripts/loomi-bridge.mjs set-codex-runtime-env codex
-# macOS: writes via launchctl setenv.
-# Linux: writes ~/.config/environment.d/openloomi-codex.conf.
-# Windows: prints manual steps (System Settings → Environment Variables).
-
-# Then quit and reopen OpenLoomi so the new env reaches the web server.
-```
-
-Flags accepted by `set-codex-runtime-env`:
-
-- `<value>` — defaults to `codex` (other supported values: `claude`,
-  `opencode`, `hermes`, `openclaw`).
-- `--unset` — clear `OPENLOOMI_AGENT_PROVIDER` from the host environment.
-- `--dry-run` — describe what would happen without performing the write.
-
-For a permanent shell-side switch on macOS or Linux, you can additionally
-append the export to your shell rc so future shells remember it:
-
-```bash
-echo 'export OPENLOOMI_AGENT_PROVIDER=codex' >> ~/.zshrc
-```
-
-The shell export helps the bridge itself and `openloomi-ctl`; the
-`set-codex-runtime-env` step is what makes the GUI launchd domain and the
-desktop session pick the variable up.
-
-Optional companion variables (all read by `apps/web`'s native-agent env
-resolver at startup):
-
-```bash
-export OPENLOOMI_AGENT_CODEX_COMMAND=codex           # defaults to `codex` on PATH
-export OPENLOOMI_AGENT_CODEX_MODEL=gpt-5.4            # optional model override
-export OPENLOOMI_AGENT_CODEX_PROFILE=work             # optional `-p <name>`
-export OPENLOOMI_AGENT_CODEX_SANDBOX=workspace-write # read-only | workspace-write | danger-full-access
-export OPENLOOMI_AGENT_CODEX_ASK_FOR_APPROVAL=on-request # untrusted | on-failure | on-request | never
-export OPENLOOMI_AGENT_CODEX_SKIP_GIT_REPO_CHECK=true # default true
-export OPENLOOMI_AGENT_CODEX_FULL_AUTO=false         # set true to allow --full-auto under bypassPermissions
-export OPENLOOMI_AGENT_CODEX_TIMEOUT_MS=120000       # CLI runtime budget in ms
-```
-
-Prerequisites that must hold before the desktop app will actually drive Codex:
-
-- `which codex` resolves to a working Codex CLI binary (install via
-  `brew install --cask codex` or `npm i -g @openai/codex`).
-- `~/.codex/config.toml` is configured and `OPENAI_API_KEY` (or the Codex
-  CLI's other auth) is available to the spawned process.
-
-Verification after launch: the desktop app's `GET /api/native/providers`
-should return `codex` inside `agents` and `defaultAgent: "codex"`. If you
-still see `defaultAgent: "claude"` after running `set-codex-runtime-env` and
-reopening the app, the env change did not stick — re-run
-`launchctl getenv OPENLOOMI_AGENT_PROVIDER` in a terminal to confirm the
-GUI session actually has it.
-
-### Surface the switch from inside Codex
-
-The Codex plugin bridge exposes the same switch plan as structured JSON so it
-can be referenced from skills and shown verbatim in chat without retyping the
-shell snippets. From any Codex session, run:
+When explicitly diagnosing the desktop runtime executor, the bridge can return
+the current Codex runtime switch plan as structured JSON:
 
 ```bash
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" codex-runtime-info
@@ -529,29 +463,23 @@ node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" codex-runtime-info
 The bridge returns:
 
 - `envProviderKey` (`OPENLOOMI_AGENT_PROVIDER`)
-- `switch.oneOff` and `switch.permanent` — ready-to-run shell snippets, with
-  the macOS caveat that the snippet is `launchctl setenv …` rather than
-  `export …`
-- `prerequisites` — Codex CLI binary, `~/.codex/config.toml`, `OPENAI_API_KEY`
-- `companionEnvVars[]` — `OPENLOOMI_AGENT_CODEX_*` variables with their defaults
-- `verify.endpoint` / `verify.expectDefaultAgent` — the `GET /api/native/providers` contract
-- `defaults.currentDefaultProvider` — echoes the active `OPENLOOMI_AGENT_PROVIDER` so the model can spot a missing export before suggesting commands
-- `defaults.codexCliOnPath` — best-effort PATH probe for the `codex` binary
+- `switch.oneOff` and `switch.permanent` platform guidance
+- `prerequisites` for the local Codex CLI
+- `companionEnvVars[]` for the desktop runtime executor
+- `verify.endpoint` / `verify.expectDefaultAgent` for `/api/native/providers`
+- `defaults.currentDefaultProvider`
+- `defaults.codexCliOnPath`
 
-The companion command that performs the GUI-session env write is
-`set-codex-runtime-env`:
+If a runtime-executor switch is actually required, use:
 
 ```bash
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" set-codex-runtime-env codex
-# Clear it later:
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" set-codex-runtime-env --unset
-# Plan only, do not write:
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" set-codex-runtime-env --dry-run
 ```
 
-After running `set-codex-runtime-env`, Quit and reopen `OpenLoomi.app` so the
-new env actually reaches the freshly forked web process — the env only
-applies to GUI processes launched **after** `launchctl setenv` (on macOS).
+After changing the desktop runtime environment, restart OpenLoomi and verify
+the active provider through `/api/native/providers`.
 
 ### Missing Install
 

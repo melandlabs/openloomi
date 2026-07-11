@@ -24,7 +24,7 @@ or executes anything outside the plugin's own scripts.
 | `AI_PROVIDER_STATUS_UNAVAILABLE` | The local OpenLoomi API is not reachable, so the bridge cannot confirm whether provider settings are saved. Ask the user to open OpenLoomi Desktop and re-run `setup-status`. |
 | `run` / `READY_SESSION_BOOTSTRAP_PENDING` | Nothing to install. The bridge will bootstrap a guest session on the next `run` when the local API is reachable. |
 
-## Runtime executor switch
+## Advanced runtime executor diagnostics
 
 If the user explicitly asks to switch the desktop runtime executor to Codex,
 or diagnostics show a native-agent provider mismatch, call:
