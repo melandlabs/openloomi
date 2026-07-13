@@ -4308,12 +4308,15 @@
 
           // Title: prefer the decision's `dialogue` (module-supplied
           // headline), fall back to the decision's `title`.
-          titleEl.textContent = decision.dialogue || decision.title || "Worth a re-read.";
+          titleEl.textContent =
+            decision.dialogue || decision.title || "Worth a re-read.";
 
           // Tag chip: show module id when known so the user can tell
           // digests apart at a glance.
           const moduleId =
-            (decision.action && decision.action.params && decision.action.params.module) ||
+            (decision.action &&
+              decision.action.params &&
+              decision.action.params.module) ||
             null;
           const moduleLabel =
             moduleId === "ai-news-digest"
@@ -4544,6 +4547,53 @@
           }
         }
 
+        // Shared card-window retirement used by every exit that closes
+        // the card: the ✕ button and the "View details" (open) action.
+        // Both must fully hide the OS window, stop it intercepting the
+        // cursor, tell the Rust host, and fade the local DOM (so the
+        // standalone browser preview also reacts). Before #319 the open
+        // branch navigated but skipped this, leaving the card floating
+        // until the user clicked ✕ — the mirror-image half of #317.
+        function hideCardWindow() {
+          const t = window.__TAURI__;
+          const win =
+            t && t.window
+              ? t.window.getCurrentWebviewWindow
+                ? t.window.getCurrentWebviewWindow()
+                : t.window.getCurrentWindow
+                  ? t.window.getCurrentWindow()
+                  : null
+              : null;
+          // Primary path: hide the window directly. More reliable than
+          // the pet:close-card event roundtrip — the OS-level hide takes
+          // effect immediately and doesn't depend on the Rust listener.
+          if (win && typeof win.hide === "function") {
+            try {
+              win.hide();
+            } catch (_) {
+              /* fall through to the event + fade below */
+            }
+          }
+          // Defensive: turn off cursor events so even if the OS-level
+          // hide is delayed, the 360×420 region stops intercepting the
+          // mouse. Reset by the loop:state / loop:decision listeners when
+          // the card re-shows.
+          if (win && typeof win.setIgnoreCursorEvents === "function") {
+            try {
+              win.setIgnoreCursorEvents(true);
+            } catch (_) {}
+          }
+          // Secondary path: still emit pet:close-card so the Rust host
+          // can run its own hide + bubble-restore logic (main.rs).
+          if (t && t.event && t.event.emit) t.event.emit("pet:close-card");
+          // Even without Tauri, fade the card locally so the click has a
+          // visible effect (e.g. previewing the page in a plain browser).
+          card.style.opacity = "0";
+          setTimeout(() => {
+            card.style.display = "none";
+          }, 160);
+        }
+
         async function postAction(action, body) {
           if (!decision || !decision.id) {
             setStatus("error", "No pending decision — try refreshing.");
@@ -4575,7 +4625,7 @@
               } else if (activeLayout === "wrap") {
                 t.event.emit("pet:open-wrap");
               } else {
-                t.event.emit("pet:open-decision", { id: decision.id });
+                t.event.emit("pet:open-decision", { id: decisionId });
               }
             } else {
               if (activeLayout === "brief") {
@@ -4584,15 +4634,32 @@
                 window.location.href = "/wrap";
               } else {
                 window.location.href =
-                  "/loop/" + encodeURIComponent(decision.id);
+                  "/loop/" + encodeURIComponent(decisionId);
               }
             }
+            // Synchronously drop the local decision + notify peer windows
+            // so an in-flight loop:decision for this id can't re-show the
+            // card mid-fade (mirrors the ✕ handler's inline clear).
+            decision = null;
+            apply();
+            if (t && t.event && t.event.emit) {
+              t.event.emit("loop:decision-cleared", { id: decisionId });
+            }
+            // Brief/wrap cards aren't actionable decisions — archive them
+            // server-side so the watcher drops them from `pending[]` and
+            // never re-pops the card. (A real decision stays pending: the
+            // user is going to act on it in the main window.)
             if (activeLayout === "brief" || activeLayout === "wrap") {
               dismissDecisionFromCard(
                 decisionId,
                 `opened ${activeLayout} details`,
               );
             }
+            // #319: retire the card window too. Every exit from the card
+            // must both handle the decision AND hide the window — before
+            // this the open branch just returned, leaving the card
+            // floating until the user clicked ✕.
+            hideCardWindow();
             return;
           }
           if (action === "edit") {
@@ -4805,62 +4872,20 @@
                 });
               }
             }
-            const t = window.__TAURI__;
-            // Resolve a Tauri WebviewWindow handle from the global Tauri
-            // API. Tauri 2.x exposes `getCurrentWebviewWindow`; older
-            // builds may still have `getCurrentWindow`. Both are safe to
-            // call — we just need an object with `.hide()` and
-            // `.setIgnoreCursorEvents()`.
-            const win =
-              t && t.window
-                ? t.window.getCurrentWebviewWindow
-                  ? t.window.getCurrentWebviewWindow()
-                  : t.window.getCurrentWindow
-                    ? t.window.getCurrentWindow()
-                    : null
-                : null;
-
-            // Primary path: hide the window directly. More reliable than
-            // the pet:close-card event roundtrip — the OS-level hide
-            // takes effect immediately and doesn't depend on the Rust
-            // listener.
-            if (win && typeof win.hide === "function") {
-              try {
-                win.hide();
-              } catch (_) {
-                /* fall through */
-              }
-            }
-            // Defensive: turn off cursor events so even if the OS-level
-            // hide is delayed / doesn't take effect, the 360×420 region
-            // stops intercepting mouse events. Reset by the loop:state /
-            // loop:decision listeners below when the card re-shows.
-            if (win && typeof win.setIgnoreCursorEvents === "function") {
-              try {
-                win.setIgnoreCursorEvents(true);
-              } catch (_) {}
-            }
-            // Secondary path: still emit pet:close-card so the Rust host
-            // can run its own hide + bubble-restore logic (see
-            // main.rs:599-602).
-            if (t && t.event && t.event.emit) t.event.emit("pet:close-card");
             // Best-effort server-side dismiss: write `dismissed` to
             // ~/.openloomi/loop/decisions.json so the watcher's next 2s
             // poll (apps/web/src-tauri/src/pet/watcher.rs) sees the id
             // leave `pending[]` and stops re-emitting `loop:decision`
-            // for it. Fire-and-forget; the local close animation below
-            // is what the user sees. No `await` — visual close must
-            // not block on the network.
+            // for it. Fire-and-forget; the visual close below is what the
+            // user sees. No `await` — the close must not block on the
+            // network.
             if (closingDecisionId) {
               dismissDecisionFromCard(closingDecisionId, "closed from card");
             }
-            // Even without Tauri, hide the card locally so the click
-            // produces a visible effect (e.g. when previewing the page
-            // standalone in a browser).
-            card.style.opacity = "0";
-            setTimeout(() => {
-              card.style.display = "none";
-            }, 160);
+            // Retire the card window (hide + cursor-transparent +
+            // pet:close-card + local fade). Shared with the open branch
+            // (#319) so both exits close the window the same way.
+            hideCardWindow();
             return;
           }
           // Connection layout "Add more connectors" CTA → ask

@@ -97,7 +97,9 @@ export const aiNewsDigest: QuietDayModule = {
     return true;
   },
   async buildDecision(ctx: QuietDayContext): Promise<LoopDecision | null> {
-    const res = await invokeAgentPrompt(PROMPT, { timeoutMs: DIGEST_TIMEOUT_MS });
+    const res = await invokeAgentPrompt(PROMPT, {
+      timeoutMs: DIGEST_TIMEOUT_MS,
+    });
     const parsed = parseDigestPayload(res);
     const bullets = parsed?.bullets ?? [];
     if (bullets.length === 0) return null;

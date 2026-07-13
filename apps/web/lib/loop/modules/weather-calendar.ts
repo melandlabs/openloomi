@@ -115,9 +115,10 @@ function wmoLabel(code: number): string {
 
 async function fetchWeather(loc: Location): Promise<WeatherSummary | null> {
   try {
-    const url =
-      `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(WEATHER_TIMEOUT_MS) });
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(WEATHER_TIMEOUT_MS),
+    });
     if (!res.ok) return null;
     const json = (await res.json()) as Record<string, unknown>;
     const current = json.current as Record<string, unknown> | undefined;
@@ -125,7 +126,11 @@ async function fetchWeather(loc: Location): Promise<WeatherSummary | null> {
     const t = Number(current.temperature_2m);
     const code = Number(current.weather_code);
     const wind = Number(current.wind_speed_10m);
-    if (!Number.isFinite(t) || !Number.isFinite(code) || !Number.isFinite(wind)) {
+    if (
+      !Number.isFinite(t) ||
+      !Number.isFinite(code) ||
+      !Number.isFinite(wind)
+    ) {
       return null;
     }
     return {
@@ -198,12 +203,15 @@ export const weatherCalendar: QuietDayModule = {
     const loc = loadUserLocation() ?? (await fetchIpLocation());
     const [weather, calRes] = await Promise.all([
       loc ? fetchWeather(loc) : Promise.resolve(null),
-      invokeAgentPrompt(CALENDAR_PROMPT, { timeoutMs: CALENDAR_TIMEOUT_MS }).catch(
-        () => ({ ok: false, result: undefined, text: "" }) as {
-          ok: boolean;
-          result: unknown;
-          text?: string;
-        },
+      invokeAgentPrompt(CALENDAR_PROMPT, {
+        timeoutMs: CALENDAR_TIMEOUT_MS,
+      }).catch(
+        () =>
+          ({ ok: false, result: undefined, text: "" }) as {
+            ok: boolean;
+            result: unknown;
+            text?: string;
+          },
       ),
     ]);
     const events = parseEvents(calRes);
@@ -231,9 +239,7 @@ export const weatherCalendar: QuietDayModule = {
     for (const e of events) {
       const title = String(e.title ?? "Untitled event").slice(0, 80);
       const when = String(e.when ?? "").slice(0, 60);
-      const summary = when
-        ? `${title} — ${when}`
-        : title;
+      const summary = when ? `${title} — ${when}` : title;
       items.push({ title: "Next", summary });
     }
 

@@ -605,9 +605,7 @@ export async function buildAndEnqueue(
   // below).
   if (items.length === 0 && prefs.quietWhenEmpty !== false) {
     if (prefs.quietDayFiller && prefs.quietDayFiller !== "none") {
-      log(
-        `[loop.brief] empty brief — running module ${prefs.quietDayFiller}`,
-      );
+      log(`[loop.brief] empty brief — running module ${prefs.quietDayFiller}`);
       const moduleDecision = await runQuietDayModule(prefs.quietDayFiller, {
         kind: "brief",
         date: snapshot.date,
@@ -628,8 +626,9 @@ export async function buildAndEnqueue(
         };
         // Stash the digest on the snapshot so the /brief page can
         // surface it without re-running the module.
-        (enrichedSnapshot as BriefSnapshot & { quiet_digest?: LoopDecision }).quiet_digest =
-          moduleDecision;
+        (
+          enrichedSnapshot as BriefSnapshot & { quiet_digest?: LoopDecision }
+        ).quiet_digest = moduleDecision;
         try {
           writeBrief(enrichedSnapshot);
         } catch (e) {

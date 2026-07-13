@@ -500,7 +500,10 @@ export async function buildAndEnqueue(
         prefs,
       });
       if (moduleDecision) {
-        const enrichedSnapshot = { ...snapshot, narrative: null as WrapNarrative };
+        const enrichedSnapshot = {
+          ...snapshot,
+          narrative: null as WrapNarrative,
+        };
         (
           enrichedSnapshot as WrapSnapshot & { quiet_digest?: LoopDecision }
         ).quiet_digest = moduleDecision;
