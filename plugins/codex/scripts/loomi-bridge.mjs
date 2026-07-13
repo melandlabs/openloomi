@@ -1712,14 +1712,14 @@ function getPermissionMode(value) {
   return "deny";
 }
 
-function runOpenLoomiOneShot({ ctlPath, permissionMode, prompt, apiBaseUrl }) {
+function runOpenLoomiOneShot({ ctlPath, permissionMode, prompt }) {
   return runCommandWithInput(
     ctlPath,
     ["--one-shot", "--stdin", "--json", "--permission-mode", permissionMode],
     prompt,
     RUN_TIMEOUT_MS,
     {
-      env: getOpenLoomiCtlChildEnv({ apiBaseUrl }),
+      env: getOpenLoomiCtlChildEnv(),
     },
   );
 }
@@ -1843,19 +1843,14 @@ function summarizeRunLock(lock) {
   };
 }
 
-function getOpenLoomiCtlChildEnv({ apiBaseUrl } = {}) {
-  const env = {};
-  const inheritedApiUrl = normalizeLocalApiUrl(process.env.OPENLOOMI_API_URL);
-  const resolvedApiUrl =
-    inheritedApiUrl ||
-    normalizeLocalApiUrl(apiBaseUrl) ||
-    normalizeLocalApiUrl(process.env.OPENLOOMI_BASE_URL);
-
-  if (resolvedApiUrl && !inheritedApiUrl) {
-    env.OPENLOOMI_API_URL = resolvedApiUrl;
-  }
-
-  return env;
+function getOpenLoomiCtlChildEnv() {
+  // Do not synthesize OPENLOOMI_API_URL from the readiness probe. In v0.7.5,
+  // setting it selects the legacy HTTP compatibility path and bypasses the
+  // packaged CLI's direct native-agent runner.
+  //
+  // An explicit caller-provided OPENLOOMI_API_URL is already inherited by the
+  // child through process.env in runCommandWithInput.
+  return {};
 }
 
 async function initializeSession() {
@@ -3693,7 +3688,6 @@ async function run() {
       ctlPath: setup.ctlPath,
       permissionMode,
       prompt,
-      apiBaseUrl: setup.apiBaseUrl,
     });
   } finally {
     releaseRunLock(runLock);

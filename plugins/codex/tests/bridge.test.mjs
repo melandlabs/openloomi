@@ -301,7 +301,7 @@ test('setup-status aiProvider checks only report presence, never values', () => 
   });
 });
 
-test('run injects OPENLOOMI_API_URL from OPENLOOMI_BASE_URL for openloomi-ctl', () => {
+test('run preserves the direct runner by not synthesizing OPENLOOMI_API_URL', () => {
   withFakeHome((env) => {
     const ctl = writeFakeCtl(env.HOME);
     writeFakeToken(env.HOME);
@@ -320,8 +320,32 @@ test('run injects OPENLOOMI_API_URL from OPENLOOMI_BASE_URL for openloomi-ctl', 
     const j = JSON.parse(r.stdout);
     assert.equal(j.ready, true);
     assert.equal(j.reason, 'RUN_COMPLETE');
-    assert.equal(j.result.env.OPENLOOMI_API_URL, 'http://localhost:3515');
+    assert.equal(j.result.env.OPENLOOMI_API_URL, null);
     assert.equal(j.result.prompt, 'Reply with exactly: OpenLoomi ready.');
+    assert.ok(!r.stdout.includes('sk-test-never-print'));
+  });
+});
+
+test('run preserves an explicitly configured OPENLOOMI_API_URL', () => {
+  withFakeHome((env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+    const r = runOutcomeWithInput(
+      ['run'],
+      {
+        ...env,
+        OPENLOOMI_CTL: ctl,
+        OPENLOOMI_BASE_URL: 'http://localhost:3414',
+        OPENLOOMI_API_URL: 'http://localhost:3515',
+        ANTHROPIC_API_KEY: 'sk-test-never-print',
+      },
+      'Reply with exactly: OpenLoomi ready.',
+    );
+    assert.equal(r.code, 0, r.stderr || r.stdout);
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.ready, true);
+    assert.equal(j.reason, 'RUN_COMPLETE');
+    assert.equal(j.result.env.OPENLOOMI_API_URL, 'http://localhost:3515');
     assert.ok(!r.stdout.includes('sk-test-never-print'));
   });
 });
