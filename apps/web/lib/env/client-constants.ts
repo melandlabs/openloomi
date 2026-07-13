@@ -34,7 +34,7 @@ export const isTestEnvironment = Boolean(
 
 // AI Model and proxy configuration (client-safe, no node: dependencies)
 export const DEFAULT_AI_MODEL =
-  process.env.NEXT_PUBLIC_ANTHROPIC_MODEL || "anthropic/claude-sonnet-4.6";
+  process.env.NEXT_PUBLIC_ANTHROPIC_MODEL || "claude-sonnet-5";
 // Use a relative path so it works across both local web and tauri runtimes.
 export const AI_PROXY_BASE_URL =
   process.env.NEXT_PUBLIC_AI_PROXY_URL || "/api/ai";

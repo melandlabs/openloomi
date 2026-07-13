@@ -6,6 +6,7 @@ import { useLocalStorage } from "usehooks-ts";
  */
 export type ModelType =
   | "default"
+  | "anthropic/claude-sonnet-5"
   | "anthropic/claude-sonnet-4.6"
   | "anthropic/claude-sonnet-4.5"
   | "anthropic/claude-opus-4.6"
