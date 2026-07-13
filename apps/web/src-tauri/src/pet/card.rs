@@ -1,7 +1,7 @@
 // Decision card window: larger always-on-top webview shown on demand
 // (typically by clicking the bubble or the pet itself while there is a
 // pending decision). Loads `public/loomi-card.html` which provides a
-// full decision card with Run / Dismiss / Open-in-dashboard actions.
+// full decision card with Open / Dismiss / Run-in-dashboard actions.
 //
 // Unlike the bubble, the card is *not* managed by the watcher — the
 // host only shows it in response to a user gesture (`pet:open-card` from

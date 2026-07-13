@@ -2096,7 +2096,7 @@
              destructive primary action doesn't read as "the first
              click target" when the user is scanning left-to-right.
              A decision without a known type falls back to the legacy
-             Run/Dismiss/Open trio. -->
+             Open/Dismiss/Run trio. -->
         <div class="footer" id="dec-footer"></div>
       </section>
 
@@ -2445,7 +2445,7 @@
         // is a secondary option, `danger` is the negative path.
         //
         // Why this exists: the legacy footer showed the same generic
-        // Run / Dismiss / Open trio for every decision type, which made
+        // Open / Dismiss / Run trio for every decision type, which made
         // RSVP, draft_reply, and review_pr all look identical even though
         // they ask for very different user input. Mapping each type to
         // its natural buttons (Yes/No/Maybe, Send/Edit/Discard,
@@ -2610,9 +2610,9 @@
         // decision payload is missing). Mirrors the legacy trio so
         // unknown types still respond to clicks.
         const DEFAULT_ACTIONS = [
-          { action: "run", label: "▶ Run", variant: "primary" },
-          { action: "dismiss", label: "✕ Dismiss", variant: "danger" },
           { action: "open", label: "↗ Open", variant: "ghost" },
+          { action: "dismiss", label: "✕ Dismiss", variant: "danger" },
+          { action: "run", label: "▶ Run", variant: "primary" },
         ];
         const TYPE_LABELS = {
           rsvp: "RSVP",

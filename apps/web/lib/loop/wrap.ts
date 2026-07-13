@@ -500,29 +500,36 @@ export async function buildAndEnqueue(
         prefs,
       });
       if (moduleDecision) {
+        // Route the digest through `decisions.add` so the pet watcher
+        // sees it (#316 follow-up). Without this the card lived only
+        // on `wrap.json.quiet_digest` and never reached
+        // `decisions.json`. See the matching comment in `brief.ts`
+        // for the full rationale.
+        const persisted = decisions.add(moduleDecision) ?? moduleDecision;
+
         const enrichedSnapshot = {
           ...snapshot,
           narrative: null as WrapNarrative,
         };
         (
           enrichedSnapshot as WrapSnapshot & { quiet_digest?: LoopDecision }
-        ).quiet_digest = moduleDecision;
+        ).quiet_digest = persisted;
         try {
           writeWrap(enrichedSnapshot);
         } catch (e) {
           log(`[loop.wrap] persist (digest) failed: ${e}`);
         }
         log(
-          `[loop.wrap] digest card enqueued ${moduleDecision.id} (module=${prefs.quietDayFiller})`,
+          `[loop.wrap] digest card enqueued ${persisted.id} (module=${prefs.quietDayFiller})`,
         );
-        return { card: moduleDecision, snapshot: enrichedSnapshot };
+        return { card: persisted, snapshot: enrichedSnapshot };
       }
       log(
         `[loop.wrap] empty wrap — module ${prefs.quietDayFiller} returned no decision, skipping card`,
       );
       return { card: null, snapshot };
     }
-    log(`[loop.wrap] empty wrap — quietWhenEmpty=true, skipping card`);
+    log("[loop.wrap] empty wrap — quietWhenEmpty=true, skipping card");
     return { card: null, snapshot };
   }
 

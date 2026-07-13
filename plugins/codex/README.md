@@ -132,7 +132,7 @@ node plugins/codex/scripts/loomi-bridge.mjs version
 ```json
 {
   "name": "openloomi-codex-bridge",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "pluginPhase": "runtime-provider-readiness",
   "commands": [
     "codex-runtime-info",

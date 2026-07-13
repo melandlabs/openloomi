@@ -612,6 +612,19 @@ export async function buildAndEnqueue(
         prefs,
       });
       if (moduleDecision) {
+        // Route the digest through the same `decisions.add` path the
+        // legacy templated card uses (#316 follow-up). Without this
+        // the card lived only on `brief.json.quiet_digest` and never
+        // reached `decisions.json` — the pet watcher (which only
+        // watches `decisions.json`) would never surface it, the
+        // badge would never increment, and the user could not dismiss
+        // it via the standard card flow. `decisions.add` accepts the
+        // already-built `LoopDecision` shape and normalises it
+        // (`memory_refs` hoisting etc.) — we use the returned record
+        // so the snapshot-stashed copy and the card we return are
+        // byte-identical to what's on disk.
+        const persisted = decisions.add(moduleDecision) ?? moduleDecision;
+
         // Re-stamp the persisted snapshot with the module decision's
         // own context.items, so the /brief page can render them too
         // (it's a read-through view of the snapshot). We do NOT swap
@@ -628,16 +641,16 @@ export async function buildAndEnqueue(
         // surface it without re-running the module.
         (
           enrichedSnapshot as BriefSnapshot & { quiet_digest?: LoopDecision }
-        ).quiet_digest = moduleDecision;
+        ).quiet_digest = persisted;
         try {
           writeBrief(enrichedSnapshot);
         } catch (e) {
           log(`[loop.brief] persist (digest) failed: ${e}`);
         }
         log(
-          `[loop.brief] digest card enqueued ${moduleDecision.id} (module=${prefs.quietDayFiller})`,
+          `[loop.brief] digest card enqueued ${persisted.id} (module=${prefs.quietDayFiller})`,
         );
-        return { card: moduleDecision, snapshot: enrichedSnapshot };
+        return { card: persisted, snapshot: enrichedSnapshot };
       }
       // Module returned null (unavailable, parse failure, etc.) —
       // degrade to skipping the card.
@@ -646,7 +659,7 @@ export async function buildAndEnqueue(
       );
       return { card: null, snapshot };
     }
-    log(`[loop.brief] empty brief — quietWhenEmpty=true, skipping card`);
+    log("[loop.brief] empty brief — quietWhenEmpty=true, skipping card");
     return { card: null, snapshot };
   }
 
