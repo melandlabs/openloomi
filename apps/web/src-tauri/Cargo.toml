@@ -59,7 +59,13 @@ cpal = "0.18"
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
 core-foundation = "0.10"
-objc2 = "0.6"
+# `catch-all` wraps every `msg_send!` in a `@catch` and converts the
+# Objective-C `@throw` into a Rust panic, which `panic_guard::catch_unwind_str`
+# (used in `pet/macos_window.rs`) can then actually catch. Without this the
+# ObjC exception unwinds straight into `tao::did_finish_launching` and
+# Rust aborts with "Rust cannot catch foreign exceptions" — see
+# https://github.com/openloomi/openloomi/issues/314 cold-launch abort.
+objc2 = { version = "0.6", features = ["catch-all"] }
 objc2-av-foundation = { version = "0.3.2", features = ["AVCaptureDevice", "AVMediaFormat", "block2"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSString", "alloc"] }
 # Updated to 7.x: Swift concurrency issues fixed in newer versions

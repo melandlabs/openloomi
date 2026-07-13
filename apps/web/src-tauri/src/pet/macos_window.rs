@@ -12,16 +12,6 @@ fn collection_behavior_for_pet(current: usize) -> usize {
     current | CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY
 }
 
-/// Whether the pet window should opt into `acceptsFirstMouse` on the
-/// underlying NSWindow. Independent of Tauri's `accept_first_mouse`
-/// builder flag — belt-and-braces for issue #314 so right-click into
-/// a borderless transparent window is delivered to WKWebView even if a
-/// future Tauri change moves the semantics of the builder flag.
-#[cfg(target_os = "macos")]
-fn accepts_first_mouse_for_pet() -> bool {
-    true
-}
-
 #[cfg(target_os = "macos")]
 pub fn configure_for_all_spaces(window: &tauri::WebviewWindow) {
     use objc2::{msg_send, runtime::AnyObject};
@@ -42,15 +32,22 @@ pub fn configure_for_all_spaces(window: &tauri::WebviewWindow) {
             }
         };
 
+        // Configure the pet/aux windows to be visible across macOS
+        // Spaces and full-screen apps. We deliberately do NOT also
+        // call `setAcceptsFirstMouse:` here — the underlying window
+        // is tao's `TaoWindow`, which does not implement that
+        // selector and would throw
+        // `NSInvalidArgumentException: unrecognized selector`,
+        // taking the app down during `did_finish_launching`. The
+        // right-click menu fix from issue #314 is delivered by
+        // Tauri's builder-level `.accept_first_mouse(true)`
+        // (see `pet/window.rs`), which routes the first mouse event
+        // — including right-click — into WKWebView through a
+        // different code path.
         unsafe {
             let current: usize = msg_send![raw, collectionBehavior];
             let desired = collection_behavior_for_pet(current);
             let _: () = msg_send![raw, setCollectionBehavior: desired];
-            // See `accepts_first_mouse_for_pet()` — mirrors the
-            // builder-side `accept_first_mouse(true)` flag in `window.rs`.
-            if accepts_first_mouse_for_pet() {
-                let _: () = msg_send![raw, setAcceptsFirstMouse: true];
-            }
         }
     }) {
         log::warn!("[loop-pet] {label}: macOS Space configuration failed: {error}");
@@ -79,14 +76,5 @@ mod tests {
             collection_behavior_for_pet(existing),
             existing | CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY
         );
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn first_mouse_is_accepted() {
-        // Regression guard: if a future change weakens the helper to
-        // `false` the pet's right-click menu (and theme switcher)
-        // breaks silently on cold launch — see issue #314.
-        assert!(accepts_first_mouse_for_pet());
     }
 }
