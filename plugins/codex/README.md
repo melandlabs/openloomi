@@ -775,7 +775,9 @@ The bridge ships a `pet <state>` command that mirrors
 `plugins/claude/scripts/loomi-bridge.mjs::cmdPet`. It validates against the
 same 9-state sprite vocabulary and POSTs `{state, source: "codex-plugin"}`
 to `/api/pet/state` on the local OpenLoomi runtime with the bearer token
-from `~/.openloomi/token`.
+from `~/.openloomi/token`. The command tries every local OpenLoomi API URL
+in priority order, so a closed 3414 port can still fall back to a source
+runtime on 3515.
 
 ```bash
 node plugins/codex/scripts/loomi-bridge.mjs pet happy
@@ -802,35 +804,35 @@ Failure modes (all return structured JSON, never throw):
   every URL the bridge tried.
 - `PET_FAILED` - runtime answered but with a non-success status code.
 
-The Codex plugin deliberately does **not** ship lifecycle-driven Pet
-transitions. The Claude Code plugin wires `SessionStart` / `Stop` /
-`PreToolUse` / etc. to Pet states via `hooks/hooks.json`; the Codex plugin
-platform does not yet expose an equivalent event surface (see next
-section), so `pet` is user-driven only. Do not introduce a polling loop
-inside the Codex plugin to fake lifecycle hooks.
+The bridge also exposes an internal `state <state> --event <event>` command
+for Codex lifecycle hooks. This path is hook-safe: it never fails the Codex
+turn, never prompts, and returns `hook: "skipped"` when OpenLoomi is not
+ready, the token is missing, or the Pet endpoint is unavailable.
 
-## Optional Codex Hooks
+## Codex Pet Lifecycle Hooks
 
-Status: deferred pending Codex platform support.
+Status: implemented as a non-blocking Pet mirror.
 
-The Codex plugin surface does not currently expose Claude-style lifecycle
-hooks (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,
-`Stop`, `SubagentStart`, `SubagentStop`, `Notification`). The Claude Code
-plugin (`plugins/claude`) implements these via `hooks/hooks.json` plus
-`scripts/hooks-merge.cjs`; there is no equivalent mechanism on the Codex
-side as of the current Codex plugin API.
+The Codex plugin ships `plugins/codex/hooks/hooks.json` and declares it in
+`.codex-plugin/plugin.json`. The hook bundle mirrors Codex lifecycle events
+onto the OpenLoomi Pet without making authorization or control-flow
+decisions.
 
-The intended Pet notification surface is:
+Current mapping:
 
-- a Codex task completes - Pet `happy`;
-- a Codex task needs user input - Pet `needsinput`;
-- a handoff has been queued for Loomi follow-up - Pet `working`;
-- OpenLoomi connector or model setup is blocking a task - Pet `thinking`.
+- `SessionStart` - Pet `presenting`;
+- `UserPromptSubmit` - Pet `thinking`;
+- `PreToolUse` - Pet `working`;
+- `PermissionRequest` - Pet `needsinput`;
+- `PostToolUse` - Pet `thinking`;
+- `SubagentStart` - Pet `juggling`;
+- `SubagentStop` - Pet `thinking`;
+- `Stop` - Pet `happy`.
 
-Until Codex adds an official lifecycle event surface, this section stays
-open. Do not ship a hand-rolled polling loop inside the Codex plugin to
-fake hooks - it would duplicate Claude-only state and conflict with the
-"thin wrapper, no business logic" rule.
+Hooks use the same runtime-accepted `source: "codex-plugin"` value when
+posting to `/api/pet/state`. They are best-effort UI feedback only. Memory
+archive, follow-up scheduling, permission decisions, and connector behavior
+stay inside OpenLoomi-owned runtime surfaces.
 
 ## Secret Handling
 

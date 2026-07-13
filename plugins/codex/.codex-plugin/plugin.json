@@ -7,24 +7,16 @@
   },
   "homepage": "https://openloomi.ai/docs/getting-started",
   "license": "Apache-2.0",
-  "keywords": [
-    "openloomi",
-    "loomi",
-    "assistant",
-    "memory",
-    "codex"
-  ],
+  "keywords": ["openloomi", "loomi", "assistant", "memory", "codex"],
   "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "OpenLoomi",
     "shortDescription": "Use your local OpenLoomi assistant from Codex",
     "longDescription": "Connect Codex to a local OpenLoomi runtime for setup readiness, personal memory workflows, and future one-shot task execution.",
     "developerName": "OpenLoomi",
     "category": "Productivity",
-    "capabilities": [
-      "Read",
-      "Interactive"
-    ],
+    "capabilities": ["Read", "Interactive"],
     "defaultPrompt": [
       "Check whether OpenLoomi is ready",
       "Show OpenLoomi setup next steps",

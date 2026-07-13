@@ -58,6 +58,7 @@ const COMMANDS = new Set([
   "set-codex-runtime-env",
   "setup",
   "setup-status",
+  "state",
   "version",
   "workflow-guidance",
 ]);
@@ -2696,110 +2697,19 @@ function version() {
   });
 }
 
-// -----------------------------------------------------------------------------
-// pet
-// -----------------------------------------------------------------------------
+async function postPetState(
+  baseUrl,
+  state,
+  token,
+  {
+    source = "codex-plugin",
+    event = null,
+    timeoutMs = PET_HTTP_TIMEOUT_MS,
+  } = {},
+) {
+  const body = { state, source };
+  if (event) body.event = event;
 
-const PET_STATES = [
-  "happy",
-  "idle",
-  "juggling",
-  "needsinput",
-  "presenting",
-  "sleeping",
-  "sweeping",
-  "thinking",
-  "working",
-];
-
-const PET_STATE_SET = new Set(PET_STATES);
-
-async function pet(args) {
-  const state = args[0];
-
-  if (!hasValue(state)) {
-    writeJson({
-      ok: false,
-      code: "MISSING_STATE",
-      validStates: PET_STATES,
-    });
-    return;
-  }
-
-  if (!PET_STATE_SET.has(state)) {
-    writeJson({
-      ok: false,
-      code: "INVALID_STATE",
-      received: state,
-      validStates: PET_STATES,
-    });
-    return;
-  }
-
-  const tokenStatus = getTokenStatus();
-  const token = readOpenLoomiAuthToken(tokenStatus);
-
-  if (!hasValue(token)) {
-    writeJson({
-      ok: false,
-      code: "TOKEN_MISSING",
-      validStates: PET_STATES,
-      message:
-        "OpenLoomi needs a local guest/session token before the Codex plugin can update Pet state.",
-    });
-    return;
-  }
-
-  const attempts = [];
-
-  for (const baseUrl of getLocalApiBaseUrls()) {
-    const result = await postPetState(baseUrl, state, token);
-    attempts.push(result.attempt);
-
-    if (result.ok) {
-      writeJson({
-        ok: true,
-        code: "PET_STATE_SET",
-        state,
-        baseUrl,
-      });
-      return;
-    }
-
-    if (result.code === "ENDPOINT_MISSING") {
-      writeJson({
-        ok: false,
-        code: "ENDPOINT_MISSING",
-        state,
-        baseUrl,
-        attempts,
-        message:
-          "OpenLoomi runtime is reachable, but the Pet state endpoint is not available in this build.",
-      });
-      return;
-    }
-
-    if (result.code === "PET_FAILED") {
-      writeJson({
-        ok: false,
-        code: "PET_FAILED",
-        state,
-        baseUrl,
-        attempts,
-      });
-      return;
-    }
-  }
-
-  writeJson({
-    ok: false,
-    code: "API_UNREACHABLE",
-    state,
-    attempts,
-  });
-}
-
-async function postPetState(baseUrl, state, token) {
   try {
     const response = await fetchWithTimeout(
       `${baseUrl}/api/pet/state`,
@@ -2808,14 +2718,20 @@ async function postPetState(baseUrl, state, token) {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
+          Accept: "application/json",
         },
-        body: JSON.stringify({
-          state,
-          source: "codex-plugin",
-        }),
+        body: JSON.stringify(body),
       },
-      SESSION_API_TIMEOUT_MS,
+      timeoutMs,
     );
+
+    const text = await response.text().catch(() => "");
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
+    }
 
     const attempt = {
       baseUrl,
@@ -2824,21 +2740,24 @@ async function postPetState(baseUrl, state, token) {
     };
 
     if (response.ok) {
-      return { ok: true, attempt };
+      return { ok: true, response: json, attempt };
     }
 
     return {
       ok: false,
       code: response.status === 404 ? "ENDPOINT_MISSING" : "PET_FAILED",
+      response: json,
       attempt,
     };
   } catch (error) {
     return {
       ok: false,
       code: "API_UNREACHABLE",
+      message: error?.message || String(error),
       attempt: {
         baseUrl,
         reason: error?.name === "AbortError" ? "TIMEOUT" : "NETWORK_ERROR",
+        message: error?.message || String(error),
       },
     };
   }
@@ -2856,7 +2775,7 @@ async function postPetState(baseUrl, state, token) {
 //
 // The runtime resolution logic here intentionally mirrors
 // `apps/web/lib/ai/native-agent/provider-env.ts`:
-//   * empty / whitespace / unsupported value -> "claude"
+//   * empty, whitespace, or unsupported values resolve to "claude"
 //   * normalized lower-case otherwise
 // Anything else (e.g. unknown value) is surfaced verbatim so the caller
 // can spot a typo.
@@ -2963,7 +2882,7 @@ function codexRuntimeInfo() {
     envProviderKey: CODEX_RUNTIME_INFO_KEY,
     platform,
     switch: {
-      // Current-platform snippets - kept as strings so most callers
+      // Current-platform snippets are kept as strings so most callers
       // can copy-paste directly. Field name is unchanged; type just
       // narrows from `object` to `string`.
       oneOff: oneOffByPlatform[platform] || oneOffByPlatform.darwin,
@@ -4672,72 +4591,169 @@ async function petCommand(args) {
     );
   }
 
-  const baseUrl = getLocalApiBaseUrls()[0];
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), PET_HTTP_TIMEOUT_MS);
+  const attempts = [];
 
-  try {
-    const res = await fetch(`${baseUrl}/api/pet/state`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ state, source: "codex-plugin" }),
-      signal: ctrl.signal,
+  for (const baseUrl of getLocalApiBaseUrls()) {
+    const result = await postPetState(baseUrl, state, token, {
+      source: "codex-plugin",
     });
+    attempts.push(result.attempt);
 
-    if (res.status === 404) {
+    if (result.ok) {
+      return writeJson({
+        ok: true,
+        code: "PET_STATE_SET",
+        state,
+        baseUrl,
+        attempts,
+        response: result.response,
+      });
+    }
+
+    if (result.code === "ENDPOINT_MISSING") {
       return writeJson(
         {
           ok: false,
           code: "ENDPOINT_MISSING",
-          message: `OpenLoomi runtime does not yet expose POST /api/pet/state. Pending endpoint - would have set state to '${state}'.`,
           state,
+          baseUrl,
+          attempts,
+          message:
+            "OpenLoomi runtime is reachable, but the Pet state endpoint is not available in this build.",
         },
         0,
       );
     }
 
-    const text = await res.text().catch(() => "");
-    let json = null;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {
-      json = { raw: text };
-    }
-
-    if (!res.ok) {
+    if (result.code === "PET_FAILED") {
       return writeJson(
         {
           ok: false,
           code: "PET_FAILED",
           state,
-          status: res.status,
-          response: json,
+          baseUrl,
+          attempts,
+          response: result.response,
         },
         0,
       );
     }
-
-    return writeJson({ ok: true, state, response: json });
-  } catch (e) {
-    const isAbort = e && (e.name === "AbortError" || e.name === "TimeoutError");
-    return writeJson(
-      {
-        ok: false,
-        code: "API_UNREACHABLE",
-        message:
-          (e && (e.message || String(e))) ||
-          `Could not reach ${baseUrl}/api/pet/state.`,
-        state,
-      },
-      0,
-    );
-  } finally {
-    clearTimeout(timer);
   }
+
+  return writeJson(
+    {
+      ok: false,
+      code: "API_UNREACHABLE",
+      state,
+      attempts,
+      message: "Could not reach OpenLoomi Pet state API on any local URL.",
+    },
+    0,
+  );
+}
+
+function parseStateCommandArgs(args) {
+  const out = { state: args && args.length > 0 ? args[0] : null, event: null };
+  for (let i = 1; i < (args || []).length; i += 1) {
+    const arg = args[i];
+    if (arg === "--event" && args[i + 1]) {
+      out.event = args[i + 1];
+      i += 1;
+    }
+  }
+  return out;
+}
+
+async function stateCommand(args) {
+  const { state, event } = parseStateCommandArgs(args || []);
+
+  if (!state) {
+    return writeJson({
+      ok: false,
+      state: null,
+      event,
+      hook: "skipped",
+      reason: "missing_state",
+      validStates: CAPYBARA_STATES_LIST,
+    });
+  }
+
+  if (!CAPYBARA_STATES.has(state)) {
+    return writeJson({
+      ok: false,
+      state,
+      event,
+      hook: "skipped",
+      reason: "invalid_state",
+      validStates: CAPYBARA_STATES_LIST,
+    });
+  }
+
+  const tokenStatus = getTokenStatus();
+  const token = readOpenLoomiAuthToken(tokenStatus);
+  if (!token) {
+    return writeJson({
+      ok: false,
+      state,
+      event,
+      hook: "skipped",
+      reason: "token_missing",
+    });
+  }
+
+  const attempts = [];
+
+  for (const baseUrl of getLocalApiBaseUrls()) {
+    const result = await postPetState(baseUrl, state, token, {
+      source: "codex-plugin",
+      event,
+      timeoutMs: PET_HTTP_TIMEOUT_MS,
+    });
+    attempts.push(result.attempt);
+
+    if (result.ok) {
+      return writeJson({
+        ok: true,
+        state,
+        event,
+        hook: "sent",
+        baseUrl,
+      });
+    }
+
+    if (result.code === "ENDPOINT_MISSING") {
+      return writeJson({
+        ok: false,
+        state,
+        event,
+        hook: "skipped",
+        reason: "endpoint_missing",
+        baseUrl,
+        attempts,
+      });
+    }
+
+    if (result.code === "PET_FAILED") {
+      return writeJson({
+        ok: false,
+        state,
+        event,
+        hook: "skipped",
+        reason: "pet_failed",
+        baseUrl,
+        attempts,
+      });
+    }
+  }
+
+  return writeJson({
+    ok: false,
+    state,
+    event,
+    hook: "skipped",
+    reason: "api_unreachable",
+    attempts,
+  });
 }
 
 async function main() {
@@ -4788,6 +4804,9 @@ async function main() {
       break;
     case "setup-status":
       await setupStatus();
+      break;
+    case "state":
+      await stateCommand(process.argv.slice(3));
       break;
     case "version":
       version();
