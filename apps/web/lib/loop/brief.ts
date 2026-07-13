@@ -43,6 +43,7 @@ import { LOOP_PATHS } from "./paths";
 import { readPreferences } from "./preferences";
 import { invokeAgentPrompt } from "./runner";
 import { decisions, log } from "./store";
+import { runQuietDayModule } from "./quiet-modules";
 import type {
   BriefMuted,
   BriefNarrative,
@@ -586,6 +587,68 @@ export async function buildAndEnqueue(
     writeBrief(snapshot);
   } catch (e) {
     log(`[loop.brief] persist failed: ${e}`);
+  }
+
+  // #316 — quiet-mode branch. When zero items surfaced, the default
+  // behaviour is to skip the templated "nothing to do" card entirely:
+  // no badge increment, no pet bubble. The snapshot above is still on
+  // disk for history, so the user can read it via GET /api/loop/brief.
+  //
+  // Two sub-branches:
+  //   1. `prefs.quietDayFiller !== "none"` → try the module. If it
+  //      returns a `quiet_digest` decision, enqueue that instead of
+  //      skipping. The user opted into a filler on purpose.
+  //   2. otherwise → log + return `{ card: null, snapshot }`.
+  //
+  // When `prefs.quietWhenEmpty === false`, the legacy behaviour wins
+  // and we fall through to the templated card (the existing code path
+  // below).
+  if (items.length === 0 && prefs.quietWhenEmpty !== false) {
+    if (prefs.quietDayFiller && prefs.quietDayFiller !== "none") {
+      log(
+        `[loop.brief] empty brief — running module ${prefs.quietDayFiller}`,
+      );
+      const moduleDecision = await runQuietDayModule(prefs.quietDayFiller, {
+        kind: "brief",
+        date: snapshot.date,
+        prefs,
+      });
+      if (moduleDecision) {
+        // Re-stamp the persisted snapshot with the module decision's
+        // own context.items, so the /brief page can render them too
+        // (it's a read-through view of the snapshot). We do NOT swap
+        // the snapshot's own items[] — that's the queue's empty
+        // truth; we just attach the module's payload alongside.
+        const enrichedSnapshot: BriefSnapshot = {
+          ...snapshot,
+          // Reuse the existing narrative field for the digest so
+          // /brief can read it through one path. `null` is the
+          // canonical "no narrative" shape; we just patch a marker.
+          narrative: null,
+        };
+        // Stash the digest on the snapshot so the /brief page can
+        // surface it without re-running the module.
+        (enrichedSnapshot as BriefSnapshot & { quiet_digest?: LoopDecision }).quiet_digest =
+          moduleDecision;
+        try {
+          writeBrief(enrichedSnapshot);
+        } catch (e) {
+          log(`[loop.brief] persist (digest) failed: ${e}`);
+        }
+        log(
+          `[loop.brief] digest card enqueued ${moduleDecision.id} (module=${prefs.quietDayFiller})`,
+        );
+        return { card: moduleDecision, snapshot: enrichedSnapshot };
+      }
+      // Module returned null (unavailable, parse failure, etc.) —
+      // degrade to skipping the card.
+      log(
+        `[loop.brief] empty brief — module ${prefs.quietDayFiller} returned no decision, skipping card`,
+      );
+      return { card: null, snapshot };
+    }
+    log(`[loop.brief] empty brief — quietWhenEmpty=true, skipping card`);
+    return { card: null, snapshot };
   }
 
   // Card dialogue: prefer the narrative headline when ready, otherwise

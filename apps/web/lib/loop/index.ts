@@ -49,6 +49,11 @@ export {
 export { registerLoopHandlers, LOOP_HANDLER_NAMES } from "./handlers";
 export { readPreferences, writePreferences } from "./preferences";
 export {
+  QUIET_DAY_MODULES,
+  runQuietDayModule,
+} from "./quiet-modules";
+export type { QuietDayContext, QuietDayModule } from "./quiet-modules";
+export {
   state,
   listDecisions,
   getDecision,

@@ -343,7 +343,9 @@ export const decisions = {
 const MAX_MUTES = 1000;
 
 /** Decision types eligible for auto-muting on dismiss. brief / wrap are
- *  explicitly excluded — those are scheduled and must resurface each day. */
+ *  explicitly excluded — those are scheduled and must resurface each day.
+ *  `quiet_digest` (#316) is INCLUDED — a digest the user dismisses should
+ *  not auto-resurface on the next tick. */
 export const MUTABLE_DECISION_TYPES: ReadonlySet<DecisionType> = new Set([
   "rsvp",
   "draft_reply",
@@ -356,6 +358,7 @@ export const MUTABLE_DECISION_TYPES: ReadonlySet<DecisionType> = new Set([
   "linear_review",
   "contact_update",
   "doc_update",
+  "quiet_digest",
 ]);
 
 function emptyMutes(): LoopMutes {

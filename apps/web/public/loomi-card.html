@@ -2206,6 +2206,49 @@
       </section>
 
       <!-- ============================================================
+           LAYOUT: QUIET_DIGEST  (issue #316)
+           Read-only filler card shown when a brief or wrap comes up
+           empty and the user opted into a content module
+           (ai-news-digest / weather-calendar / memory-resurface).
+           Renders the module's headline as the card title and
+           `context.items[]` as a bulleted list. No run / dismiss
+           action buttons — it's a one-off read.
+           ============================================================ -->
+      <section data-layout="quiet-digest">
+        <div class="header">
+          <span class="icon">✦</span>
+          <span class="type-label">DIGEST</span>
+          <span
+            class="pill"
+            id="quiet-digest-pill"
+            style="background: var(--blue-soft); color: var(--blue-dark)"
+            >QUIET</span
+          >
+          <span class="spacer"></span>
+          <button
+            class="close"
+            data-action="close"
+            type="button"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div class="brief-header">
+          <div class="brief-title" id="quiet-digest-title">
+            Worth a re-read.
+          </div>
+          <div class="brief-tag" id="quiet-digest-tag">Quiet day filler</div>
+        </div>
+        <div class="brief-list" id="quiet-digest-list"></div>
+        <div class="footer single-col">
+          <button class="primary" data-action="dismiss" type="button">
+            Got it
+          </button>
+        </div>
+      </section>
+
+      <!-- ============================================================
            USAGE STRIP (cumulative native-agent tokens)
            Anchored to the bottom of the card flex column, right-aligned.
            This keeps it out of the way of the layout's own header (×)
@@ -2663,6 +2706,7 @@
           if (decision && decision.id) {
             if (decision.type === "brief") return "brief";
             if (decision.type === "wrap") return "wrap";
+            if (decision.type === "quiet_digest") return "quiet-digest";
             return "decision";
           }
           // 3. State-driven fallback.
@@ -2698,6 +2742,7 @@
           renderDecision();
           renderBrief();
           renderWrap();
+          renderQuietDigest();
           renderNoApiKey();
         }
 
@@ -4236,6 +4281,88 @@
           el.innerHTML = "";
         }
 
+        // ---------- Quiet-digest layout (issue #316) ----------
+        // Read-only filler card for empty brief / wrap days. Renders the
+        // module's `decision.context.items[]` as a bulleted list, the
+        // dialogue as the title, and a single "Got it" dismiss button.
+        //
+        // Defensive: a module that forgot to populate `context.items`
+        // renders an empty list (not a crash) so the user can still
+        // dismiss the card. Module id is read from
+        // `decision.action.params.module` and shown in the tag chip so
+        // the user can tell ai-news from weather from memory at a glance.
+        function renderQuietDigest() {
+          const titleEl = document.getElementById("quiet-digest-title");
+          const tagEl = document.getElementById("quiet-digest-tag");
+          const listEl = document.getElementById("quiet-digest-list");
+          if (!titleEl || !tagEl || !listEl) return;
+
+          if (!decision || !decision.id || decision.type !== "quiet_digest") {
+            // No decision to render — blank out so a stale digest from
+            // a previous decision doesn't sit there waiting for a click.
+            titleEl.textContent = "Worth a re-read.";
+            tagEl.textContent = "Quiet day filler";
+            listEl.innerHTML = "";
+            return;
+          }
+
+          // Title: prefer the decision's `dialogue` (module-supplied
+          // headline), fall back to the decision's `title`.
+          titleEl.textContent = decision.dialogue || decision.title || "Worth a re-read.";
+
+          // Tag chip: show module id when known so the user can tell
+          // digests apart at a glance.
+          const moduleId =
+            (decision.action && decision.action.params && decision.action.params.module) ||
+            null;
+          const moduleLabel =
+            moduleId === "ai-news-digest"
+              ? "Last 24h in AI / tech"
+              : moduleId === "weather-calendar"
+                ? "Weather + meetings"
+                : moduleId === "memory-resurface"
+                  ? "From your memory"
+                  : "Quiet day filler";
+          tagEl.textContent = moduleLabel;
+
+          // Bullets. The contract is `context.items: { title, summary, ref?, url? }[]`.
+          // We render title + summary as the visible line; ref/url go
+          // into the title attribute so hovering reveals the source
+          // (a real read can land in a follow-up PR with a click-through).
+          const items = Array.isArray(decision.context?.items)
+            ? decision.context.items
+            : [];
+          listEl.innerHTML = "";
+          if (items.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "brief-item";
+            empty.innerHTML =
+              '<span class="brief-priority p2">·</span><div><div class="bi-title">Nothing to read</div><div class="bi-sub">The filler ran but had nothing to surface.</div></div><span></span>';
+            listEl.appendChild(empty);
+            return;
+          }
+          for (const it of items) {
+            const row = document.createElement("div");
+            row.className = "brief-item";
+            const title = (it && it.title) || "Untitled";
+            const summary = (it && it.summary) || "";
+            const ref = (it && (it.ref || it.url)) || "";
+            const subBits = [];
+            if (summary) subBits.push(esc(summary));
+            if (ref) subBits.push(esc(ref));
+            const sub = subBits.join(" · ");
+            row.innerHTML =
+              '<span class="brief-priority p2">·</span>' +
+              '<div><div class="bi-title">' +
+              esc(title) +
+              "</div>" +
+              (sub ? '<div class="bi-sub">' + sub + "</div>" : "") +
+              "</div>" +
+              "<span></span>";
+            listEl.appendChild(row);
+          }
+        }
+
         // ---------- Misc ----------
         function esc(s) {
           return String(s == null ? "" : s)
@@ -4392,17 +4519,18 @@
           return base.join("\n");
         }
 
-        async function archiveOpenedBriefOrWrap(id, layout) {
-          if (!id || (layout !== "brief" && layout !== "wrap")) return;
+        async function dismissDecisionFromCard(id, reason) {
+          if (!id) return;
           try {
             const res = await fetch(
-              "/api/loop/decision/" + encodeURIComponent(id),
+              `${window.__OPENLOOMI_API__ || ""}/api/loop/decision/${encodeURIComponent(id)}`,
               {
                 method: "POST",
                 headers: { "content-type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify({
                   action: "dismiss",
-                  reason: `opened ${layout} details`,
+                  reason: reason || "closed from card",
                 }),
               },
             );
@@ -4460,7 +4588,10 @@
               }
             }
             if (activeLayout === "brief" || activeLayout === "wrap") {
-              archiveOpenedBriefOrWrap(decisionId, activeLayout);
+              dismissDecisionFromCard(
+                decisionId,
+                `opened ${activeLayout} details`,
+              );
             }
             return;
           }
@@ -4656,6 +4787,24 @@
           if (btn.disabled) return;
           const action = btn.dataset.action;
           if (action === "close") {
+            // Synchronous local clear: prevents an in-flight `loop:decision`
+            // event for the same id from immediately undoing the close.
+            // Mirrors what the `loop:decision-cleared` listener at lines
+            // ~5249 does, but does it inline so the order is guaranteed (a
+            // queued Tauri event can't interleave with this synchronous
+            // click handler).
+            const tauri = window.__TAURI__;
+            let closingDecisionId = null;
+            if (decision && decision.id) {
+              closingDecisionId = decision.id;
+              decision = null;
+              apply();
+              if (tauri && tauri.event && tauri.event.emit) {
+                tauri.event.emit("loop:decision-cleared", {
+                  id: closingDecisionId,
+                });
+              }
+            }
             const t = window.__TAURI__;
             // Resolve a Tauri WebviewWindow handle from the global Tauri
             // API. Tauri 2.x exposes `getCurrentWebviewWindow`; older
@@ -4695,6 +4844,16 @@
             // can run its own hide + bubble-restore logic (see
             // main.rs:599-602).
             if (t && t.event && t.event.emit) t.event.emit("pet:close-card");
+            // Best-effort server-side dismiss: write `dismissed` to
+            // ~/.openloomi/loop/decisions.json so the watcher's next 2s
+            // poll (apps/web/src-tauri/src/pet/watcher.rs) sees the id
+            // leave `pending[]` and stops re-emitting `loop:decision`
+            // for it. Fire-and-forget; the local close animation below
+            // is what the user sees. No `await` — visual close must
+            // not block on the network.
+            if (closingDecisionId) {
+              dismissDecisionFromCard(closingDecisionId, "closed from card");
+            }
             // Even without Tauri, hide the card locally so the click
             // produces a visible effect (e.g. when previewing the page
             // standalone in a browser).

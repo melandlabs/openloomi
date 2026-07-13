@@ -26,6 +26,7 @@ import { LOOP_PATHS } from "./paths";
 import { readPreferences } from "./preferences";
 import { invokeAgentPrompt } from "./runner";
 import { decisions, log } from "./store";
+import { runQuietDayModule } from "./quiet-modules";
 import type { LoopDecision, WrapNarrative } from "./types";
 
 const WRAP_PATH = LOOP_PATHS.wrap;
@@ -476,6 +477,50 @@ export async function buildAndEnqueue(
     writeWrap(snapshot);
   } catch (e) {
     log(`[loop.wrap] persist failed: ${e}`);
+  }
+
+  // #316 — quiet-mode branch (mirrors brief.ts). When zero highlights
+  // got captured today, the default behaviour is to skip the
+  // templated "nothing got done" card entirely. The snapshot above
+  // is still on disk for history.
+  //
+  // Sub-branches match brief.ts:
+  //   1. `prefs.quietDayFiller !== "none"` → try the module; enqueue
+  //      the returned `quiet_digest` decision if non-null.
+  //   2. otherwise → log + return `{ card: null, snapshot }`.
+  //
+  // `prefs.quietWhenEmpty === false` falls through to the templated
+  // card (existing code path below).
+  if (highlights.length === 0 && prefs.quietWhenEmpty !== false) {
+    if (prefs.quietDayFiller && prefs.quietDayFiller !== "none") {
+      log(`[loop.wrap] empty wrap — running module ${prefs.quietDayFiller}`);
+      const moduleDecision = await runQuietDayModule(prefs.quietDayFiller, {
+        kind: "wrap",
+        date: snapshot.date,
+        prefs,
+      });
+      if (moduleDecision) {
+        const enrichedSnapshot = { ...snapshot, narrative: null as WrapNarrative };
+        (
+          enrichedSnapshot as WrapSnapshot & { quiet_digest?: LoopDecision }
+        ).quiet_digest = moduleDecision;
+        try {
+          writeWrap(enrichedSnapshot);
+        } catch (e) {
+          log(`[loop.wrap] persist (digest) failed: ${e}`);
+        }
+        log(
+          `[loop.wrap] digest card enqueued ${moduleDecision.id} (module=${prefs.quietDayFiller})`,
+        );
+        return { card: moduleDecision, snapshot: enrichedSnapshot };
+      }
+      log(
+        `[loop.wrap] empty wrap — module ${prefs.quietDayFiller} returned no decision, skipping card`,
+      );
+      return { card: null, snapshot };
+    }
+    log(`[loop.wrap] empty wrap — quietWhenEmpty=true, skipping card`);
+    return { card: null, snapshot };
   }
 
   const dialogue = computeWrapDialogue(snapshot, highlights);

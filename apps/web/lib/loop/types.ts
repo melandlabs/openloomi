@@ -27,6 +27,7 @@ export type DecisionType =
   | "wrap"
   | "noop" // NEW — non-actionable; filtered at decisions.add()
   | "tick_summary" // NEW — explicit per-tick summary; filtered at decisions.add()
+  | "quiet_digest" // NEW — filler content for empty brief/wrap days; read-only
   | "unknown";
 
 export type DecisionStatus = "pending" | "done" | "dismissed";
@@ -45,6 +46,7 @@ export type ActionKind =
   | "doc_update"
   | "brief"
   | "wrap"
+  | "quiet_digest" // NEW — filler content for empty brief/wrap days
   | string; // open form for agent-emitted kinds
 
 export interface LoopAction {
@@ -106,6 +108,22 @@ export interface LoopSignal {
   _insightId?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Quiet-day filler module ids (#316)
+// ---------------------------------------------------------------------------
+//
+// Selected via `LoopPreferences.quietDayFiller` when a brief / wrap snapshot
+// comes up empty. Each id maps to a `QuietDayModule` implementation in
+// `quiet-modules.ts`; new modules are drop-in additions to the
+// `QUIET_DAY_MODULES` registry. "none" is the deliberate no-op default —
+// empty day → no card, no badge, snapshot still on disk.
+
+export type QuietDayFillerId =
+  | "none"
+  | "ai-news-digest"
+  | "weather-calendar"
+  | "memory-resurface";
+
 export interface LoopPreferences {
   enabled: boolean;
   /** 24h HH:MM local time. */
@@ -138,6 +156,32 @@ export interface LoopPreferences {
    * `PUT /api/loop/preferences { desktopNotifications: true }`.
    */
   desktopNotifications?: boolean;
+  /**
+   * When the brief or wrap snapshot is empty (no surfaced items /
+   * highlights), skip the templated "nothing to do" card entirely.
+   * Snapshot still gets persisted to `~/.openloomi/loop/{brief,wrap}.json`
+   * for history; the pet bubble stays silent and no badge increments.
+   *
+   * Default `true` — opt-out via
+   * `PUT /api/loop/preferences { quietWhenEmpty: false }` to restore the
+   * legacy "open a card to dismiss nothing" behaviour. See issue #316.
+   */
+  quietWhenEmpty?: boolean;
+  /**
+   * Optional content module to run when the quiet path fires. The module
+   * produces a `type:"quiet_digest"` decision card in place of the
+   * templated empty card, turning "nothing to dismiss" into "the card
+   * worth opening" — e.g. a news digest, weather + first meeting, or a
+   * resurfaced memory.
+   *
+   * Default `"none"` (skip the card entirely). Built-ins:
+   *   - "ai-news-digest"  → 3 last-24h AI / tech headlines
+   *   - "weather-calendar" → weather + first 2 calendar events
+   *   - "memory-resurface" → 2 stale insights from the user's memory
+   *
+   * No-op when `quietWhenEmpty === false`. See issue #316.
+   */
+  quietDayFiller?: QuietDayFillerId;
 }
 
 /** Mute rule scope — discriminated union keyed by signal type. */
@@ -177,6 +221,8 @@ export const DEFAULT_LOOP_PREFERENCES: LoopPreferences = {
   promotionSkip: true,
   narrative: true,
   desktopNotifications: false, // NEW
+  quietWhenEmpty: true, // NEW (#316) — opt-out via prefs
+  quietDayFiller: "none", // NEW (#316) — opt into a module
 };
 
 export interface ConnectorEntry {

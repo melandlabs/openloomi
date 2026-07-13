@@ -23,7 +23,17 @@ const ALLOWED_KEYS: (keyof LoopPreferences)[] = [
   "promotionSkip",
   "timezone",
   "narrative",
+  "desktopNotifications",
+  "quietWhenEmpty",
+  "quietDayFiller",
 ];
+
+const ALLOWED_FILLER_IDS = [
+  "none",
+  "ai-news-digest",
+  "weather-calendar",
+  "memory-resurface",
+] as const;
 
 const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
@@ -100,6 +110,32 @@ export async function PUT(req: Request) {
     if (body.narrative !== undefined && typeof body.narrative !== "boolean") {
       return NextResponse.json(
         { error: "narrative must be a boolean" },
+        { status: 400 },
+      );
+    }
+    // #316 — quiet-mode prefs. `quietWhenEmpty` mirrors the narrative
+    // boolean check. `quietDayFiller` is a closed union — anything else
+    // is a typo or a forward-compat probe we don't want to silently
+    // accept (it would resolve to "none" at runtime and confuse users).
+    if (
+      body.quietWhenEmpty !== undefined &&
+      typeof body.quietWhenEmpty !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "quietWhenEmpty must be a boolean" },
+        { status: 400 },
+      );
+    }
+    if (
+      body.quietDayFiller !== undefined &&
+      !ALLOWED_FILLER_IDS.includes(
+        body.quietDayFiller as (typeof ALLOWED_FILLER_IDS)[number],
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error: `quietDayFiller must be one of: ${ALLOWED_FILLER_IDS.join(", ")}`,
+        },
         { status: 400 },
       );
     }
