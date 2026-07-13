@@ -1,0 +1,88 @@
+---
+title: "OpenCode CLI Runtime"
+description: "Run OpenLoomi native agent tasks through the local OpenCode CLI"
+---
+
+# OpenCode CLI Runtime
+
+The OpenCode adapter starts the locally installed CLI with `opencode run --format json`, assigns the OpenLoomi working directory with `--dir`, and maps OpenCode's JSON event stream into OpenLoomi sessions, text, reasoning, tool activity, errors, and usage. OpenLoomi does not install OpenCode or configure its model credentials.
+
+## Install and authenticate
+
+Install OpenCode for the same operating-system user that starts OpenLoomi. One cross-platform option is npm:
+
+```bash
+npm install -g opencode-ai
+opencode --version
+```
+
+OpenCode also publishes an installer script, Homebrew package, Windows packages, and standalone binaries. See the official [OpenCode installation guide](https://opencode.ai/docs/) for the current platform-specific choices.
+
+Configure a model provider interactively, then confirm that the credentials and model are visible:
+
+```bash
+opencode auth login
+opencode auth list
+opencode models
+```
+
+Saved provider credentials are loaded from OpenCode's user data directory. OpenCode can also use supported provider environment variables and project `.env` files; review the official [provider documentation](https://opencode.ai/docs/providers/) before running it in a repository containing secrets.
+
+## Configure OpenLoomi
+
+Set environment variables before starting OpenLoomi:
+
+```bash
+OPENLOOMI_AGENT_PROVIDER=opencode
+OPENLOOMI_AGENT_OPENCODE_COMMAND=opencode
+OPENLOOMI_AGENT_OPENCODE_MODEL=provider/model-id
+OPENLOOMI_AGENT_OPENCODE_AGENT=build
+OPENLOOMI_AGENT_OPENCODE_TIMEOUT_MS=300000
+OPENLOOMI_AGENT_OPENCODE_ALLOW_AUTO_APPROVE=false
+```
+
+The model must use OpenCode's `provider/model` form. Leave the model or agent unset to use OpenCode's configured defaults. Restart OpenLoomi after changing runtime environment variables.
+
+## Environment reference
+
+| Variable                                      | Default          | Behavior                                                                                   |
+| --------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------ |
+| `OPENLOOMI_AGENT_OPENCODE_COMMAND`            | `opencode`       | Executable name or absolute path.                                                          |
+| `OPENLOOMI_AGENT_OPENCODE_MODEL`              | OpenCode default | Passes `--model` in `provider/model` form.                                                 |
+| `OPENLOOMI_AGENT_OPENCODE_AGENT`              | OpenCode default | Passes a configured primary agent name with `--agent`.                                     |
+| `OPENLOOMI_AGENT_OPENCODE_TIMEOUT_MS`         | unset            | Positive integer process timeout in milliseconds.                                          |
+| `OPENLOOMI_AGENT_OPENCODE_ALLOW_AUTO_APPROVE` | `false`          | Permits `--auto` only when the OpenLoomi request also explicitly uses `bypassPermissions`. |
+
+Executable paths, models, agents, timeouts, and auto-approval policy are server-owned. Values supplied by a chat or native-agent request cannot override them.
+
+## Permissions and isolation
+
+OpenLoomi does not pass `--auto` by default and never passes it while generating a plan. Enabling `OPENLOOMI_AGENT_OPENCODE_ALLOW_AUTO_APPROVE=true` is only the first gate: OpenCode receives `--auto` only when the trusted OpenLoomi execution path also selects `bypassPermissions`.
+
+The absence of `--auto` is not a filesystem sandbox. OpenCode's selected agent, permissions, provider configuration, and the operating-system account still determine what the process can read or change. Use an OpenCode agent with explicit permission rules and run OpenLoomi inside an isolation boundary when untrusted prompts or repositories are in scope. See the official [OpenCode permissions guide](https://opencode.ai/docs/permissions/).
+
+CLI subprocesses receive a restricted environment containing common model credentials, `OPENCODE_*` variables, and names explicitly listed in `OPENLOOMI_AGENT_ENV_ALLOWLIST`. They still run as the OpenLoomi operating-system user and can access that user's OpenCode configuration and credentials.
+
+## Verify the integration
+
+First verify the same non-interactive mode independently in a disposable working directory:
+
+```bash
+opencode run --format json --dir /path/to/disposable-project \
+  --model provider/model-id \
+  "Reply with exactly: OPENCODE_READY"
+```
+
+Then start OpenLoomi with `OPENLOOMI_AGENT_PROVIDER=opencode` and run a read-only prompt. A successful OpenLoomi run should emit a session, streamed text, a terminal result, and a done event. The adapter also forwards image attachments to OpenCode as temporary `--file` inputs.
+
+The repository contains an opt-in real-chain smoke test in `apps/web/tests/unit/cli-runtimes-real.integration.test.ts`; set `RUN_OPENCODE_REAL=1` and the test's documented saved-setting variables when validating a development checkout.
+
+## Troubleshooting
+
+- **Executable not found:** run `opencode --version` as the OpenLoomi service user, or set `OPENLOOMI_AGENT_OPENCODE_COMMAND` to an absolute executable path.
+- **Provider or model not found:** inspect `opencode auth list` and `opencode models`, then use the exact `provider/model` identifier.
+- **Permission rejection or stalled tool request:** verify the selected OpenCode agent's permissions. Keep auto-approval disabled unless the deployment has an external isolation boundary.
+- **Run times out:** test `opencode run` directly from the same working directory, then increase `OPENLOOMI_AGENT_OPENCODE_TIMEOUT_MS` if model or tool startup is legitimately slow.
+- **Malformed or missing events:** update OpenCode and verify that `opencode run --format json` emits newline-delimited JSON rather than formatted terminal output.
+
+See the official [OpenCode CLI reference](https://opencode.ai/docs/cli/) for the complete `run`, authentication, model, agent, file, and permission options.

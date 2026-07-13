@@ -1,5 +1,7 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
+
+import spawn from "cross-spawn";
 
 import type { AgentOptions } from "@openloomi/ai/agent/types";
 import {
@@ -225,7 +227,7 @@ export async function* runCodexCli(
       env: buildCliEnvironment(options.env),
       detached: shouldDetachCliProcess(),
       windowsHide: true,
-    });
+    }) as ChildProcessWithoutNullStreams;
     // Codex CLI 0.144+ reads the prompt from argv but ALSO blocks waiting
     // for stdin to reach EOF whenever stdin is a piped stream (e.g.
     // `node`'s default `pipe` stdio). Without this explicit close the

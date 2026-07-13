@@ -1,0 +1,74 @@
+---
+title: "Codex CLI Runtime"
+description: "Run OpenLoomi native agent tasks through the local Codex CLI"
+---
+
+# Codex CLI Runtime
+
+The Codex runtime adapter starts the locally installed CLI with `codex exec --json`, consumes its JSONL event stream, and maps Codex sessions, text, reasoning, tool activity, errors, and usage into OpenLoomi agent events. OpenLoomi does not install or authenticate Codex for you.
+
+## Install and authenticate
+
+Install the official CLI and confirm it is available to the same OS user that starts OpenLoomi:
+
+```bash
+npm install -g @openai/codex
+codex --version
+codex login
+```
+
+Codex reuses saved CLI authentication. For controlled non-interactive environments, the CLI also accepts `CODEX_API_KEY` for `codex exec`; OpenLoomi preserves `CODEX_*` variables in the runtime's restricted child-process environment. Keep `CODEX_API_KEY` scoped to the OpenLoomi process and do not expose it to untrusted build or repository scripts.
+
+Verify Codex independently before enabling the adapter:
+
+```bash
+codex exec --json --sandbox read-only --skip-git-repo-check \
+  "Reply with exactly: CODEX_READY"
+```
+
+See the official [Codex non-interactive mode documentation](https://learn.chatgpt.com/docs/non-interactive-mode) for `codex exec`, JSONL output, authentication, and sandbox behavior.
+
+## Configure OpenLoomi
+
+Set environment variables before starting OpenLoomi:
+
+```bash
+OPENLOOMI_AGENT_PROVIDER=codex
+OPENLOOMI_AGENT_CODEX_COMMAND=codex
+OPENLOOMI_AGENT_CODEX_SANDBOX=workspace-write
+OPENLOOMI_AGENT_CODEX_SKIP_GIT_REPO_CHECK=true
+OPENLOOMI_AGENT_CODEX_FULL_AUTO=false
+OPENLOOMI_AGENT_CODEX_TIMEOUT_MS=300000
+```
+
+Optional model and profile overrides:
+
+```bash
+OPENLOOMI_AGENT_CODEX_PROFILE=work
+OPENLOOMI_AGENT_CODEX_MODEL=gpt-5.4
+```
+
+Leave either value unset to use the corresponding Codex CLI configuration. `CODEX_HOME` is also preserved, so an installation with a non-default Codex config and authentication directory can be selected at process startup.
+
+## Environment reference
+
+| Variable                                    | Default           | Behavior                                                                                          |
+| ------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `OPENLOOMI_AGENT_CODEX_COMMAND`             | `codex`           | Executable name or absolute path.                                                                 |
+| `OPENLOOMI_AGENT_CODEX_PROFILE`             | Codex default     | Passes the named Codex config profile with `-p`.                                                  |
+| `OPENLOOMI_AGENT_CODEX_MODEL`               | Codex default     | Passes a model override with `-m`.                                                                |
+| `OPENLOOMI_AGENT_CODEX_SANDBOX`             | `workspace-write` | Accepts `read-only`, `workspace-write`, or `danger-full-access`. Planning always uses read-only.  |
+| `OPENLOOMI_AGENT_CODEX_SKIP_GIT_REPO_CHECK` | `true`            | Allows OpenLoomi work directories outside a Git repository. Set `false` to enforce Codex's check. |
+| `OPENLOOMI_AGENT_CODEX_FULL_AUTO`           | `false`           | Compatibility opt-in; only forwarded for an explicit bypass-permissions execution request.        |
+| `OPENLOOMI_AGENT_CODEX_TIMEOUT_MS`          | unset             | Positive integer process timeout in milliseconds.                                                 |
+
+`codex exec --full-auto` is a deprecated compatibility path in current Codex releases. Prefer an explicit sandbox and leave `OPENLOOMI_AGENT_CODEX_FULL_AUTO=false`. Use `danger-full-access` only inside an isolation boundary you control.
+
+Executable paths, profiles, models, sandbox modes, Git checks, and timeouts are server-owned configuration. Values supplied in native-agent request bodies are ignored, so a caller cannot switch the runtime or weaken its policy.
+
+## Troubleshooting
+
+- **Executable not found:** run `codex --version` as the OpenLoomi service user, or set `OPENLOOMI_AGENT_CODEX_COMMAND` to the absolute executable path.
+- **Login or model error:** run the verification command above with the same `HOME`/`USERPROFILE` and `CODEX_HOME` used by OpenLoomi.
+- **Not inside a trusted directory:** keep `OPENLOOMI_AGENT_CODEX_SKIP_GIT_REPO_CHECK=true` for non-repository work directories, or run tasks in a Git repository and set it to `false`.
+- **Run times out:** increase `OPENLOOMI_AGENT_CODEX_TIMEOUT_MS` and verify the selected model is reachable from the Codex CLI itself.

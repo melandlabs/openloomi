@@ -1,5 +1,7 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
+
+import spawn from "cross-spawn";
 
 import {
   appendCapturedCliOutput,
@@ -127,19 +129,19 @@ export class AcpStdioClient {
       return;
     }
 
+    let proc: ChildProcessWithoutNullStreams;
     try {
-      this.proc = spawn(this.command, this.args, {
+      proc = spawn(this.command, this.args, {
         cwd: this.options.cwd,
         env: buildCliEnvironment(),
         detached: shouldDetachCliProcess(),
         windowsHide: true,
-      });
+      }) as ChildProcessWithoutNullStreams;
+      this.proc = proc;
     } catch (error) {
       const err = this.normalizeSpawnError(error);
       throw err;
     }
-
-    const proc = this.proc;
 
     this.options.signal?.addEventListener("abort", this.abortHandler, {
       once: true,

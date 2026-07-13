@@ -464,6 +464,9 @@ importers:
       croner:
         specifier: ^9.0.0
         version: 9.1.0
+      cross-spawn:
+        specifier: ^7.0.6
+        version: 7.0.6
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -795,6 +798,9 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
+      '@types/cross-spawn':
+        specifier: ^6.0.6
+        version: 6.0.6
       '@types/d3-scale':
         specifier: ^4.0.8
         version: 4.0.9
@@ -6225,6 +6231,9 @@ packages:
 
   '@types/connect@3.4.38':
     resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
+
+  '@types/cross-spawn@6.0.6':
+    resolution: {integrity: sha512-fXRhhUkG4H3TQk5dBhQ7m/JDdSNHKwR2BBia62lhwEIq9xGiQKLxd6LymNhn47SjXhsUEPmxi+PKw2OkW4LLjA==}
 
   '@types/crypto-js@4.2.2':
     resolution: {integrity: sha512-sDOLlVbHhXpAUAL0YHDUUwDZf3iN4Bwi4W6a0W0b+QcAezUbRtH4FVb+9J4h+XFPW7l/gQ9F8qC7P+Ec4k8QVQ==}
@@ -18107,6 +18116,10 @@ snapshots:
       assertion-error: 2.0.1
 
   '@types/connect@3.4.38':
+    dependencies:
+      '@types/node': 22.19.17
+
+  '@types/cross-spawn@6.0.6':
     dependencies:
       '@types/node': 22.19.17
 

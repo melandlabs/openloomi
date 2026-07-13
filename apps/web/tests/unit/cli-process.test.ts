@@ -17,6 +17,8 @@ describe("CLI process environment", () => {
       AUTH_SECRET: "auth-secret",
       OPENAI_API_KEY: "model-secret",
       OPENCLAW_GATEWAY_TOKEN: "gateway-secret",
+      CODEX_API_KEY: "codex-secret",
+      CODEX_HOME: "/tmp/codex-home",
     };
 
     expect(buildCliEnvironment()).toMatchObject({
@@ -24,6 +26,8 @@ describe("CLI process environment", () => {
       PATH: "test-path",
       OPENAI_API_KEY: "model-secret",
       OPENCLAW_GATEWAY_TOKEN: "gateway-secret",
+      CODEX_API_KEY: "codex-secret",
+      CODEX_HOME: "/tmp/codex-home",
     });
     expect(buildCliEnvironment()).not.toHaveProperty("DATABASE_URL");
     expect(buildCliEnvironment()).not.toHaveProperty("AUTH_SECRET");

@@ -391,7 +391,6 @@ function setHermesCredentialEnv(apiKey: string, baseUrl?: string) {
 
   process.env.OPENAI_API_KEY = apiKey;
   process.env.ANTHROPIC_API_KEY = apiKey;
-  process.env.OPENLOOMI_HERMES_REAL_PROVIDER_API_KEY = apiKey;
 
   if (normalizedBaseUrl && /openrouter\.ai/i.test(normalizedBaseUrl)) {
     process.env.OPENROUTER_API_KEY = apiKey;
@@ -434,7 +433,7 @@ async function createHermesRealHome(credentials: HermesRealCredentials) {
       "custom_providers:",
       "  - name: openloomi-real",
       `    base_url: ${yamlString(baseUrl)}`,
-      "    key_env: OPENLOOMI_HERMES_REAL_PROVIDER_API_KEY",
+      "    key_env: OPENAI_API_KEY",
       "    api_mode: anthropic_messages",
       `    model: ${yamlString(model)}`,
       "",

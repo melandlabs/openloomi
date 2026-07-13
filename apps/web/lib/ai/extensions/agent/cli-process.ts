@@ -31,7 +31,7 @@ const DEFAULT_CLI_ENV_KEYS = new Set([
   "GEMINI_API_KEY",
   "GOOGLE_GENERATIVE_AI_API_KEY",
 ]);
-const RUNTIME_ENV_PREFIXES = ["OPENCODE_", "HERMES_", "OPENCLAW_"];
+const RUNTIME_ENV_PREFIXES = ["OPENCODE_", "HERMES_", "OPENCLAW_", "CODEX_"];
 
 export function shouldDetachCliProcess(): boolean {
   return platform() !== "win32";

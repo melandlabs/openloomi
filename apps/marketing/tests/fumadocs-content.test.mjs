@@ -21,10 +21,7 @@ function parseFrontmatter(filePath) {
       .split(/\r?\n/)
       .map((line) => line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/))
       .filter(Boolean)
-      .map(([, key, value]) => [
-        key,
-        value.trim().replace(/^["']|["']$/g, ""),
-      ]),
+      .map(([, key, value]) => [key, value.trim().replace(/^["']|["']$/g, "")]),
   );
 }
 
@@ -56,15 +53,26 @@ function assertMetaPages(metaPath, baseDir) {
   }
 }
 
-assertMetaPages(path.join(docsDir, "meta.json"), docsDir);
-assertMetaPages(
-  path.join(docsDir, "changelog", "meta.json"),
+function listDirectories(rootDir) {
+  const directories = [rootDir];
+  for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      directories.push(...listDirectories(path.join(rootDir, entry.name)));
+    }
+  }
+  return directories;
+}
+
+const contentDirectories = [
+  docsDir,
   path.join(docsDir, "changelog"),
-);
-assertMetaPages(
-  path.join(docsDir, "reference", "meta.json"),
-  path.join(docsDir, "reference"),
-);
+  ...listDirectories(path.join(docsDir, "reference")),
+];
+
+for (const dir of contentDirectories) {
+  const metaPath = path.join(dir, "meta.json");
+  if (fs.existsSync(metaPath)) assertMetaPages(metaPath, dir);
+}
 
 const docsPageTreeSource = fs.readFileSync(docsPageTreePath, "utf8");
 
@@ -79,11 +87,7 @@ assert.match(
   "docs page tree must keep the changelog folder collapsible",
 );
 
-for (const dir of [
-  docsDir,
-  path.join(docsDir, "changelog"),
-  path.join(docsDir, "reference"),
-]) {
+for (const dir of contentDirectories) {
   for (const fileName of fs
     .readdirSync(dir)
     .filter((file) => file.endsWith(".mdx"))) {

@@ -165,10 +165,10 @@ OpenLoomi automatically detects your Claude configuration — no extra setup req
 | OpenCode   | ✅ Supported   | Local `opencode run` integration with JSON event stream |
 | Hermes     | ✅ Supported   | Local `hermes acp` integration                          |
 | OpenClaw   | ✅ Supported   | Gateway-backed `openclaw acp` bridge                    |
-| Codex      | 🔜 Coming Soon | Metadata exists; a production adapter is not registered |
+| Codex      | ✅ Supported   | Local `codex exec --json` integration                   |
 | DeepAgents | 🔜 Coming Soon | Metadata exists; a production adapter is not registered |
 
-Runtime selection is intentionally server-controlled and is not shown as an in-app setting yet. Set `OPENLOOMI_AGENT_PROVIDER` before starting OpenLoomi; supported values are `claude`, `opencode`, `hermes`, and `openclaw`.
+Runtime selection is intentionally server-controlled and is not shown as an in-app setting yet. Set `OPENLOOMI_AGENT_PROVIDER` before starting OpenLoomi; supported values are `claude`, `opencode`, `hermes`, `openclaw`, and `codex`.
 
 ```bash
 # OpenCode
@@ -186,11 +186,18 @@ OPENLOOMI_AGENT_PROVIDER=openclaw
 OPENLOOMI_AGENT_OPENCLAW_COMMAND=openclaw
 OPENLOOMI_AGENT_OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789
 OPENLOOMI_AGENT_OPENCLAW_TOKEN_FILE=/path/to/gateway.token
+
+# Codex
+OPENLOOMI_AGENT_PROVIDER=codex
+OPENLOOMI_AGENT_CODEX_COMMAND=codex
+OPENLOOMI_AGENT_CODEX_SANDBOX=workspace-write
 ```
 
 OpenLoomi does not install or authenticate these CLIs. CLI subprocesses receive a restricted environment; use `OPENLOOMI_AGENT_ENV_ALLOWLIST` only when a runtime needs an additional named variable. Executable paths, runtime models, profiles, Gateway targets, and approval policy cannot be overridden by chat/API request bodies.
 
-Agent runtimes and sandboxes are separate layers: OpenCode, Hermes, and OpenClaw are registered through `AgentPlugin` and do not pretend to be sandbox providers. Filesystem or process isolation must still be selected and enforced independently by the host.
+Agent runtimes and sandboxes are separate layers: OpenCode, Hermes, OpenClaw, and Codex are registered through `AgentPlugin` and do not pretend to be sandbox providers. Filesystem or process isolation must still be selected and enforced independently by the host.
+
+See the **[Agent Runtimes reference](/docs/reference/agent-runtimes)** for detailed runtime setup and security behavior.
 
 **Configuring Your Agent**
 

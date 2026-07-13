@@ -1,0 +1,102 @@
+---
+title: "Hermes ACP Runtime"
+description: "Run OpenLoomi native agent tasks through Hermes over Agent Client Protocol"
+---
+
+# Hermes ACP Runtime
+
+The Hermes adapter launches `hermes acp` as a stdio Agent Client Protocol (ACP) server. OpenLoomi initializes the protocol, creates a session rooted at the task working directory, optionally selects a model with `session/set_model`, streams ACP updates, and relays permission requests. OpenLoomi does not install Hermes or create its profiles and provider credentials.
+
+## Install and configure Hermes
+
+Use the official installer for the same operating-system user that starts OpenLoomi.
+
+Linux, macOS, or WSL2:
+
+```bash
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+```
+
+Verify the command, then configure and test a model provider before connecting OpenLoomi:
+
+```bash
+hermes --version
+hermes setup
+# Or change only the provider/model:
+hermes model
+```
+
+The standard installer includes ACP support. A minimal source installation must include the `acp` extra; the official CLI reference documents `pip install -e '.[acp]'` for that case. See the Hermes [quickstart](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/getting-started/quickstart.md) and [CLI command reference](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md).
+
+Hermes normally stores secrets in `~/.hermes/.env` and non-secret configuration in `~/.hermes/config.yaml`. Profiles isolate configuration, sessions, skills, and memory. Confirm a profile exists with `hermes profile list` before naming it in OpenLoomi.
+
+## Configure OpenLoomi
+
+Set environment variables before starting OpenLoomi:
+
+```bash
+OPENLOOMI_AGENT_PROVIDER=hermes
+OPENLOOMI_AGENT_HERMES_COMMAND=hermes
+OPENLOOMI_AGENT_HERMES_PROFILE=coding
+OPENLOOMI_AGENT_HERMES_MODEL=provider/model-id
+OPENLOOMI_AGENT_HERMES_TIMEOUT_MS=300000
+```
+
+To explicitly qualify the ACP model with a Hermes inference provider, set both variables:
+
+```bash
+OPENLOOMI_AGENT_HERMES_PROVIDER=openrouter
+OPENLOOMI_AGENT_HERMES_MODEL=upstream-provider/model-id
+```
+
+OpenLoomi sends that pair to ACP as `openrouter:upstream-provider/model-id`. Leave both unset to use the selected Hermes profile's default model.
+
+## Environment reference
+
+| Variable                            | Default               | Behavior                                                                                   |
+| ----------------------------------- | --------------------- | ------------------------------------------------------------------------------------------ |
+| `OPENLOOMI_AGENT_HERMES_COMMAND`    | `hermes`              | Executable name or absolute path.                                                          |
+| `OPENLOOMI_AGENT_HERMES_PROFILE`    | Active Hermes profile | Adds `--profile <name>` before the `acp` subcommand.                                       |
+| `OPENLOOMI_AGENT_HERMES_MODEL`      | Profile default       | Selects the ACP session model with `session/set_model`.                                    |
+| `OPENLOOMI_AGENT_HERMES_PROVIDER`   | unset                 | Optional model qualifier; it is invalid unless `OPENLOOMI_AGENT_HERMES_MODEL` is also set. |
+| `OPENLOOMI_AGENT_HERMES_TIMEOUT_MS` | unset                 | Positive integer ACP prompt timeout in milliseconds.                                       |
+
+The runtime command, profile, provider, model, and timeout are server-owned configuration and cannot be replaced by values in a native-agent request.
+
+## Permissions and isolation
+
+Hermes ACP `session/request_permission` calls are relayed to OpenLoomi's permission handler. Planning always selects a deny/reject outcome. During execution, OpenLoomi selects a one-time or session allow option only after its permission handler explicitly returns `allow`; without a handler, it denies the request.
+
+OpenLoomi never launches Hermes with `--yolo`. This protects the ACP approval path, but Hermes remains a process running as the OpenLoomi operating-system user. Hermes tool configuration and terminal backend still determine the underlying filesystem and command isolation. The official Hermes configuration guide warns that the default local terminal backend has the user's filesystem access; use a containerized backend or another host sandbox where appropriate.
+
+The child process receives common provider keys, `HERMES_*` variables, and additional variable names explicitly allowed through `OPENLOOMI_AGENT_ENV_ALLOWLIST`. A selected profile can still load its own `.env` and configuration files.
+
+## Verify the integration
+
+Before enabling the adapter, run a normal Hermes chat with the selected profile and confirm the configured model can answer:
+
+```bash
+hermes --profile coding
+```
+
+Also confirm that `hermes --help` lists the `acp` command. Starting `hermes --profile coding acp` directly opens a stdio protocol server and waits for an ACP client; use `Ctrl+C` to stop it rather than typing a chat prompt into the protocol stream.
+
+After starting OpenLoomi with `OPENLOOMI_AGENT_PROVIDER=hermes`, run a read-only prompt. A healthy chain performs ACP `initialize`, `session/new`, optional `session/set_model`, and `session/prompt`, then returns streamed text, a result, and a done event.
+
+The repository's opt-in real test is `apps/web/tests/unit/hermes-real.integration.test.ts`. It is gated by `RUN_HERMES_REAL=1` and uses an explicitly selected saved OpenLoomi model setting so normal unit-test runs never contact a provider.
+
+## Troubleshooting
+
+- **Executable or ACP command not found:** run `hermes --version` and check that `hermes --help` lists `acp`; minimal source installations may need the ACP extra.
+- **Unknown profile:** run `hermes profile list`, correct `OPENLOOMI_AGENT_HERMES_PROFILE`, or leave it unset to use the active profile.
+- **Model selection fails:** verify the model in `hermes model`; when `OPENLOOMI_AGENT_HERMES_PROVIDER` is set, a model is required and the combined `provider:model` must be advertised by ACP.
+- **Tool request is denied:** this is expected during planning and whenever OpenLoomi has no explicit allow decision. Do not work around it by adding `--yolo` to a wrapper command.
+- **ACP exits or times out:** first verify a normal Hermes chat with the same profile and environment, then inspect provider credentials and increase `OPENLOOMI_AGENT_HERMES_TIMEOUT_MS` only if needed.
+
+See the official Hermes [configuration reference](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/configuration.md) for providers, profiles, credentials, terminal backends, and isolation options.

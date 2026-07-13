@@ -1,0 +1,106 @@
+---
+title: "OpenClaw ACP Runtime"
+description: "Connect OpenLoomi native agent tasks to an OpenClaw Gateway through ACP"
+---
+
+# OpenClaw ACP Runtime
+
+The OpenClaw adapter launches the official `openclaw acp` stdio bridge. The bridge connects to a running local or remote OpenClaw Gateway, and each OpenLoomi task is mapped to a Gateway session. The Gateway—not OpenLoomi—owns the model provider, agent workspace, tools, session history, and channel configuration.
+
+## Install and start the Gateway
+
+Install OpenClaw for the same operating-system user that starts OpenLoomi. If Node is already managed on the host, the official npm flow is:
+
+```bash
+npm install -g openclaw@latest
+openclaw onboard --install-daemon
+```
+
+OpenClaw also provides platform installer scripts and a native Windows option. Check the current Node and platform requirements in the official [installation guide](https://docs.openclaw.ai/install).
+
+Verify the CLI, configuration, and Gateway before enabling OpenLoomi:
+
+```bash
+openclaw --version
+openclaw doctor
+openclaw gateway status
+```
+
+Onboarding configures a model provider and normally creates token-authenticated Gateway settings. A remote Gateway must already be configured and reachable from the OpenLoomi host.
+
+## Configure OpenLoomi
+
+A local Gateway configuration can use an explicit WebSocket URL and token file:
+
+```bash
+OPENLOOMI_AGENT_PROVIDER=openclaw
+OPENLOOMI_AGENT_OPENCLAW_COMMAND=openclaw
+OPENLOOMI_AGENT_OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789
+OPENLOOMI_AGENT_OPENCLAW_TOKEN_FILE=/path/to/gateway.token
+OPENLOOMI_AGENT_OPENCLAW_SESSION=agent:main:main
+OPENLOOMI_AGENT_OPENCLAW_TIMEOUT_MS=300000
+```
+
+The token file must contain the Gateway token and be readable only by the OpenLoomi service user. Password authentication can use `OPENLOOMI_AGENT_OPENCLAW_PASSWORD_FILE` instead. The bridge can also read `OPENCLAW_GATEWAY_TOKEN` or `OPENCLAW_GATEWAY_PASSWORD` from the restricted child environment when no file option is supplied.
+
+For a remote Gateway, use `wss://` and always configure matching credentials. OpenClaw intentionally does not reuse implicit credentials when an explicit `--url` is supplied.
+
+## Environment reference
+
+| Variable                                    | Default          | Behavior                                                                                           |
+| ------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------- |
+| `OPENLOOMI_AGENT_OPENCLAW_COMMAND`          | `openclaw`       | Executable name or absolute path.                                                                  |
+| `OPENLOOMI_AGENT_OPENCLAW_GATEWAY_URL`      | OpenClaw config  | Gateway WebSocket URL; only `ws:` and `wss:` are accepted.                                         |
+| `OPENLOOMI_AGENT_OPENCLAW_TOKEN_FILE`       | unset            | Passes `--token-file`; preferred over placing a shared secret on the command line.                 |
+| `OPENLOOMI_AGENT_OPENCLAW_PASSWORD_FILE`    | unset            | Passes `--password-file` for password-authenticated Gateways.                                      |
+| `OPENLOOMI_AGENT_OPENCLAW_SESSION`          | Isolated ACP key | Uses an explicit Gateway session key, such as `agent:main:main`.                                   |
+| `OPENLOOMI_AGENT_OPENCLAW_SESSION_LABEL`    | unset            | Resolves an existing session by label; mutually exclusive with `OPENLOOMI_AGENT_OPENCLAW_SESSION`. |
+| `OPENLOOMI_AGENT_OPENCLAW_REQUIRE_EXISTING` | `false`          | Fails rather than creating a session; requires a session key or label.                             |
+| `OPENLOOMI_AGENT_OPENCLAW_RESET_SESSION`    | `false`          | Resets the selected session before the first prompt.                                               |
+| `OPENLOOMI_AGENT_OPENCLAW_NO_PREFIX_CWD`    | `false`          | Prevents the bridge from prefixing prompts with the OpenLoomi working directory.                   |
+| `OPENLOOMI_AGENT_OPENCLAW_PROVENANCE`       | OpenClaw default | Accepts `off`, `meta`, or `meta+receipt`.                                                          |
+| `OPENLOOMI_AGENT_OPENCLAW_TIMEOUT_MS`       | unset            | Positive integer ACP prompt timeout in milliseconds.                                               |
+
+Gateway targets, credential files, session routing, provenance, and timeouts are server-owned. Chat/API request bodies cannot redirect the adapter to another Gateway or session.
+
+## Sessions, pairing, and permissions
+
+Without a session key or label, OpenClaw creates an isolated `acp-bridge:<uuid>` Gateway session. Set a stable agent-scoped key to reuse context, set `RESET_SESSION=true` to clear that key before a run, or combine a key/label with `REQUIRE_EXISTING=true` when accidental session creation must fail. Session keys select the OpenClaw agent; the ACP bridge does not have a separate model selector.
+
+A new ACP client identity or a requested scope upgrade can require one-time device approval. On the Gateway host, inspect the exact requested role and scopes before approving it:
+
+```bash
+openclaw devices list
+openclaw devices approve <requestId>
+```
+
+For an explicit remote URL, pass the same Gateway URL and credential to the device commands. Do not confuse device pairing with chat-channel DM pairing; ACP uses the device approval flow.
+
+OpenClaw relays ACP permission requests only for the active prompt turn. OpenLoomi denies them during planning and requires an explicit allow decision during execution. Gateway tool policy, exec approvals, paired-device scopes, and operating-system permissions remain separate enforcement layers. Selecting OpenClaw is not itself a browser, filesystem, or process sandbox.
+
+## Verify the integration
+
+The official bridge includes an interactive ACP debug client:
+
+```bash
+openclaw acp client --server-args \
+  --url ws://127.0.0.1:18789 \
+  --token-file /path/to/gateway.token
+```
+
+Use it from a disposable working directory and send a read-only prompt. If it requests device pairing, approve the current request and retry. See the official [OpenClaw ACP reference](https://docs.openclaw.ai/cli/acp) for client options and the bridge permission model.
+
+Then start OpenLoomi with `OPENLOOMI_AGENT_PROVIDER=openclaw`. A healthy chain initializes ACP, creates a Gateway-backed session, streams text/tool updates, and returns a result and done event.
+
+The repository's opt-in real test is in `apps/web/tests/unit/cli-runtimes-real.integration.test.ts`. With `RUN_OPENCLAW_REAL=1`, it creates isolated OpenClaw state, starts a loopback token-authenticated Gateway, performs the device-approval flow, executes a real model prompt, and tears down the Gateway afterward.
+
+## Troubleshooting
+
+- **Gateway unavailable:** run `openclaw doctor` and `openclaw gateway status`, then verify the configured WebSocket URL from the OpenLoomi host.
+- **Authentication fails:** ensure the token/password file contains the current Gateway secret. When an explicit URL is used, provide credentials explicitly rather than relying on another configured Gateway.
+- **Pairing or scope upgrade required:** run `openclaw devices list`, review the current request, approve its exact `requestId`, and retry. A reconnect with changed scopes can replace an older pending ID.
+- **Session not found:** disable `OPENLOOMI_AGENT_OPENCLAW_REQUIRE_EXISTING`, or correct the configured session key/label. The key and label variables cannot both be set.
+- **Wrong agent or stale context:** use an agent-scoped session key, and set `OPENLOOMI_AGENT_OPENCLAW_RESET_SESSION=true` for a deliberate fresh transcript.
+- **Run times out:** test `openclaw acp client` against the same Gateway and credentials, inspect Gateway logs/model reachability, then adjust `OPENLOOMI_AGENT_OPENCLAW_TIMEOUT_MS`.
+
+See the official [Gateway documentation](https://docs.openclaw.ai/cli/gateway) and [device pairing reference](https://docs.openclaw.ai/cli/devices) for lifecycle, authentication, scope approval, and recovery details.

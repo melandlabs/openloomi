@@ -1,5 +1,7 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
+
+import spawn from "cross-spawn";
 
 import type { AgentOptions } from "@openloomi/ai/agent/types";
 import {
@@ -169,7 +171,10 @@ export async function* runOpenCodeCli(
       env: buildCliEnvironment(options.env),
       detached: shouldDetachCliProcess(),
       windowsHide: true,
-    });
+    }) as ChildProcessWithoutNullStreams;
+    // OpenCode accepts the prompt positionally. Close the otherwise unused
+    // pipe so current CLI versions do not wait for additional stdin input.
+    proc.stdin.end();
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     if (isCommandNotFoundError(err)) {

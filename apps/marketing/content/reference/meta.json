@@ -2,7 +2,5 @@
   "title": "Reference",
   "defaultOpen": false,
   "collapsible": true,
-  "pages": [
-    "openloomi-ctl"
-  ]
+  "pages": ["agent-runtimes", "openloomi-ctl"]
 }
