@@ -61,6 +61,15 @@ pub fn build_pet_window(app: &AppHandle) -> tauri::Result<()> {
     .shadow(false)
     .visible(true)
     .focused(false)
+    // Right-click into a borderless transparent window is silently
+    // dropped by default — see issue #314. `accept_first_mouse(true)`
+    // routes the very first interaction (including a right-click that
+    // lands before any left-click) straight to the webview; `focusable`
+    // makes the underlying NSWindow return `true` from
+    // `canBecomeKeyWindow` so right-mouse events flow through to
+    // WKWebView the same way they do in a standalone browser.
+    .accept_first_mouse(true)
+    .focusable(true)
     .drag_and_drop(false);
 
     #[cfg(not(windows))]
@@ -79,7 +88,9 @@ pub fn build_pet_window(app: &AppHandle) -> tauri::Result<()> {
     .skip_taskbar(true)
     .shadow(false)
     .visible(true)
-    .focused(false);
+    .focused(false)
+    .accept_first_mouse(true)
+    .focusable(true);
 
     let window = builder.build()?;
     super::macos_window::configure_for_all_spaces(&window);

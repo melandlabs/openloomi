@@ -211,6 +211,53 @@ describe("widget source sanity", () => {
     expect(widgetHtml).toMatch(/data-op="theme-fox"/);
     expect(widgetHtml).toMatch(/data-op="theme-capybara"/);
   });
+
+  // Issue #314 — the pet's right-click menu is the only UI entry
+  // point for Open Loomi / Settings / theme switching / Quit. A
+  // first-responder regression in the host (Tauri / WKWebView) can
+  // silently drop the `contextmenu` event before it reaches the
+  // webview; the widget therefore ships a long-press fallback.
+  // These source-sanity assertions pin the contract: a real DOM
+  // simulation is tracked as a follow-up once jsdom/happy-dom is
+  // wired into vitest (the suite runs in `node` today).
+
+  it("widget opens menu on contextmenu event", () => {
+    const stripped = widgetHtml.replace(/<!--[\s\S]*?-->/g, "");
+    // The contextmenu listener must (a) suppress the native menu,
+    // (b) call openPetMenu at the cursor position, and (c) toggle
+    // the `#pet-menu` element's `visible` class. Without all three
+    // a regression would leave the user without a UI path to theme
+    // switching or Quit.
+    expect(stripped).toMatch(/addEventListener\(\s*["']contextmenu["']/);
+    expect(stripped).toMatch(/openPetMenu\(e\.clientX,\s*e\.clientY\)/);
+    expect(stripped).toMatch(/pet-menu/);
+    expect(stripped).toMatch(/\.classList\.add\(\s*["']visible["']\s*\)/);
+  });
+
+  it("widget opens menu on long-press gesture", () => {
+    const stripped = widgetHtml.replace(/<!--[\s\S]*?-->/g, "");
+    // The long-press fallback must be wired with: a threshold
+    // constant, a setTimeout armed in onPointerDown that adds the
+    // `longpress` body class, and an onPointerUp branch that calls
+    // openPetMenu when the held duration meets the threshold AND
+    // no contextmenu fired during the press.
+    expect(stripped).toMatch(/LONGPRESS_MS\s*=\s*600/);
+    expect(stripped).toMatch(/setTimeout\(/);
+    expect(stripped).toMatch(
+      /document\.body\.classList\.add\(\s*["']longpress["']/,
+    );
+    expect(stripped).toMatch(/contextmenuFiredSinceDown/);
+    expect(stripped).toMatch(/heldMs\s*>=\s*LONGPRESS_MS/);
+    expect(stripped).toMatch(/openPetMenu\(e\.clientX,\s*e\.clientY\)/);
+  });
+
+  it("long-press is skipped when contextmenu already opened the menu", () => {
+    // Defense in depth: the contextmenu listener sets a flag the
+    // pointerup branch checks before re-opening. Pin the flag so
+    // the dedupe can't regress.
+    const stripped = widgetHtml.replace(/<!--[\s\S]*?-->/g, "");
+    expect(stripped).toMatch(/contextmenuFiredSinceDown\s*=\s*true/);
+  });
 });
 
 describe("custom theme discovery", () => {

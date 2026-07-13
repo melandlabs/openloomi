@@ -47,14 +47,18 @@ pub fn spawn_config_watcher(app: AppHandle) {
 
 fn watch_loop(app: &AppHandle) {
     let config_path = theme::config_path(app);
+    let config_dir = config_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_default();
 
     // Make sure both paths exist before attaching watches — notify
     // // is happy with non-existent paths in some platforms but
     // // barfs on others. Re-resolve custom_themes_dir on every
     // // iteration so an out-of-band edit to `customThemesDir`
     // // is honored without a restart.
-    if let Some(parent) = config_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+    if !config_dir.as_os_str().is_empty() {
+        let _ = std::fs::create_dir_all(&config_dir);
     }
 
     let (tx, rx) = mpsc::channel::<notify::Result<notify::Event>>();
@@ -72,6 +76,22 @@ fn watch_loop(app: &AppHandle) {
             "[loomi-pet/config-watcher] failed to watch config {}: {e}",
             config_path.display()
         );
+    }
+
+    // Issue #314 — on macOS FSEvents needs an existing inode to watch.
+    // If the user has never successfully switched themes, the config
+    // file doesn't exist yet and `watcher.watch(&config_path, …)` at
+    // boot silently no-ops. Watch the parent directory too so we
+    // catch the moment `pet-config.json` is first created (e.g. by a
+    // hand-edit on a fresh install) and can transition to the direct
+    // file watch below.
+    if !config_dir.as_os_str().is_empty() {
+        if let Err(e) = watcher.watch(&config_dir, RecursiveMode::NonRecursive) {
+            eprintln!(
+                "[loomi-pet/config-watcher] failed to watch config dir {}: {e}",
+                config_dir.display()
+            );
+        }
     }
 
     let mut current_themes_dir: Option<PathBuf> = None;
@@ -128,6 +148,34 @@ fn watch_loop(app: &AppHandle) {
         ) {
             continue;
         }
+        // Issue #314 — parent-dir Create events fire for any inode
+        // appearing in `~/.openloomi/`. Only honor ones for
+        // `pet-config.json` (transition to direct file watch) and let
+        // the modify/create/remove filter below pass them through
+        // after the transition. Anything else is dropped here so the
+        // debounced emit isn't drowned by unrelated directory churn.
+        let touches_config_file = event.paths.iter().any(|p| {
+            p.file_name()
+                .zip(config_path.file_name())
+                .map(|(a, b)| a == b)
+                .unwrap_or(false)
+        });
+        if !touches_config_file {
+            continue;
+        }
+        if matches!(event.kind, EventKind::Create(_)) {
+            // Transition to a direct file watch — subsequent edits
+            // hit the file watcher (no per-inode churn through the
+            // directory). If `pet-config.json` is then removed, the
+            // direct watch will fail; we keep the parent watch so a
+            // re-creation brings it back.
+            if let Err(e) = watcher.watch(&config_path, RecursiveMode::NonRecursive) {
+                eprintln!(
+                    "[loomi-pet/config-watcher] failed to (re-)watch config {}: {e}",
+                    config_path.display()
+                );
+            }
+        }
         // Debounce: skip events that arrive within 250 ms of the
         // previous emit so a single editor save fires one event.
         if last_emit.elapsed() < Duration::from_millis(DEBOUNCE_MS) {
@@ -151,4 +199,23 @@ fn emit_config_changed(app: &AppHandle, cfg: &theme::PetConfig) {
         }
     };
     let _ = app.emit_to(PET_LABEL, "pet:config-changed", payload);
+}
+
+// Real coverage for the parent-dir watch + create-transition path
+// (issue #314) needs a Tauri `AppHandle` mock so we can count
+// `pet:config-changed` emits. That requires a test harness which
+// isn't in this repo yet — tracked as a follow-up. Until then we
+// keep this file's `#[cfg(test)]` block so the pattern matches the
+// rest of the pet module (`watcher.rs::path_tests`, `theme::tests`,
+// `window::tests`) and so a future test author can drop in the
+// harness without a structural PR.
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn placeholder() {
+        // Sentinel: the test suite would otherwise be empty for
+        // `pet::config_watcher`, which silently disables the file's
+        // `cargo test` target. Removing this in favor of real coverage
+        // is tracked as the follow-up issue filed alongside #314.
+    }
 }

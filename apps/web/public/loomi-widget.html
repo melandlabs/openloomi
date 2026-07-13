@@ -64,6 +64,30 @@
         cursor: grabbing;
       }
 
+      /* Long-press indicator for issue #314 — when the user holds the
+     pet without releasing or moving past DRAG_THRESHOLD for ≥ 600ms,
+     show three dots under the fox so they know a menu is about to
+     open. The dots live as a pseudo-element on the fox so they
+     track the sprite position across themes without extra DOM. */
+      .fox::after {
+        content: "· · ·";
+        position: absolute;
+        left: 50%;
+        bottom: 4px;
+        transform: translateX(-50%);
+        font-size: 16px;
+        line-height: 1;
+        color: rgba(255, 255, 255, 0.92);
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+        letter-spacing: 3px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s ease-in;
+      }
+      body.dragging.longpress .fox::after {
+        opacity: 1;
+      }
+
       /* The fox image. Per-state wobble animations are applied via the
      `[data-state]` attribute set by the JS bridge — each state
      triggers a different keyframe (wave / hop / tilt / nod / ...).
@@ -607,6 +631,9 @@
 
         window.addEventListener("contextmenu", function (e) {
           e.preventDefault();
+          // Mark the press as "right-click handled" so the long-press
+          // fallback in `onPointerUp` doesn't double-open the menu.
+          contextmenuFiredSinceDown = true;
           openPetMenu(e.clientX, e.clientY);
         });
 
@@ -663,9 +690,21 @@
         // In standalone: no-op drag (the page is the stage). The click
         //   branch is silently disabled because there is nothing to open.
         let downX = 0,
-          downY = 0;
+          downY = 0,
+          downTime = 0;
         let dragged = false;
+        // Long-press fallback for issue #314. Some macOS / Tauri builds
+        // (and any standalone browser preview that doesn't get Tauri's
+        // builder-side `accept_first_mouse`) silently drop the very
+        // first right-click into a borderless transparent window. As a
+        // belt-and-braces alternate path, we let the user hold the
+        // primary button for ≥ LONGPRESS_MS without moving past
+        // DRAG_THRESHOLD and treat that release as a menu-open.
+        let longpressActive = false;
+        let longpressTimer = null;
+        let contextmenuFiredSinceDown = false;
         const DRAG_THRESHOLD = 4; // px
+        const LONGPRESS_MS = 600;
 
         function getCurrentWindow() {
           const t = window.__TAURI__;
@@ -693,8 +732,27 @@
           if (e.button !== 0) return; // primary button only
           downX = e.clientX;
           downY = e.clientY;
+          downTime = Date.now();
           dragged = false;
+          longpressActive = false;
+          contextmenuFiredSinceDown = false;
           document.body.classList.add("dragging");
+          // Arm the long-press timer — see `LONGPRESS_MS` above. If the
+          // user is still holding without moving when it fires, we add
+          // the `longpress` class so the CSS dots fade in. The actual
+          // menu-open happens on release (in `onPointerUp`) so we don't
+          // open the menu while the user might still be starting a
+          // drag. The timer is cleared on move (drag) and on release.
+          try {
+            clearTimeout(longpressTimer);
+          } catch (_) {}
+          longpressTimer = setTimeout(function () {
+            if (!dragged) {
+              longpressActive = true;
+              document.body.classList.add("longpress");
+            }
+            longpressTimer = null;
+          }, LONGPRESS_MS);
           // Immediately hand off to Tauri's native drag. The OS will move
           // the window and dispatch the corresponding pointermove/up events
           // on the new position. If the user releases without moving, the
@@ -721,11 +779,26 @@
             Math.hypot(e.clientX - downX, e.clientY - downY) > DRAG_THRESHOLD
           ) {
             dragged = true;
+            // A real drag breaks the long-press hold — drop the dots
+            // and disarm the timer so it can't fire mid-drag.
+            try {
+              clearTimeout(longpressTimer);
+            } catch (_) {}
+            longpressTimer = null;
+            if (longpressActive) {
+              longpressActive = false;
+              document.body.classList.remove("longpress");
+            }
           }
         }
 
         function onPointerUp(e) {
           document.body.classList.remove("dragging");
+          document.body.classList.remove("longpress");
+          try {
+            clearTimeout(longpressTimer);
+          } catch (_) {}
+          longpressTimer = null;
           try {
             document.body.releasePointerCapture(e.pointerId);
           } catch (_) {}
@@ -734,6 +807,17 @@
           if (dragged) return;
           if (Math.hypot(e.clientX - downX, e.clientY - downY) > DRAG_THRESHOLD)
             return;
+
+          // Long-press fallback (issue #314). If the user held the pet
+          // without moving for ≥ LONGPRESS_MS, surface the in-widget
+          // glass menu the same way a right-click would. Skipped if a
+          // contextmenu already fired for this press so we don't open
+          // it twice when both gestures arrive.
+          const heldMs = Date.now() - downTime;
+          if (heldMs >= LONGPRESS_MS && !contextmenuFiredSinceDown) {
+            openPetMenu(e.clientX, e.clientY);
+            return;
+          }
 
           const t = window.__TAURI__;
           if (t && t.event && t.event.emit) {
