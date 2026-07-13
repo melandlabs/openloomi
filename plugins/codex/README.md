@@ -619,7 +619,7 @@ For source checkouts, check project markers and likely CLI locations:
   "mode": "packaged | source | unconfigured",
   "installed": true,
   "ctlPath": "<resolved openloomi-ctl path>",
-  "version": "openloomi-ctl 0.7.0",
+  "version": "openloomi-ctl 0.7.5",
   "tokenPresent": true,
   "session": {
     "tokenPresent": true,
