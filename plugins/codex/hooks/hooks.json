@@ -5,8 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state presenting --event SessionStart",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\scripts\\loomi-bridge.mjs\" state presenting --event SessionStart",
+            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state presenting --event SessionStart --quiet",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\scripts\\loomi-bridge.mjs\" state presenting --event SessionStart --quiet",
             "timeout": 5
           }
         ]
@@ -17,8 +17,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state thinking --event UserPromptSubmit",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\scripts\\loomi-bridge.mjs\" state thinking --event UserPromptSubmit",
+            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state thinking --event UserPromptSubmit --quiet",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\scripts\\loomi-bridge.mjs\" state thinking --event UserPromptSubmit --quiet",
             "timeout": 5
           }
         ]
@@ -29,8 +29,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state working --event PreToolUse",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\scripts\\loomi-bridge.mjs\" state working --event PreToolUse",
+            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state working --event PreToolUse --quiet",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\scripts\\loomi-bridge.mjs\" state working --event PreToolUse --quiet",
             "timeout": 5
           }
         ]
@@ -41,8 +41,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state needsinput --event PermissionRequest",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\scripts\\loomi-bridge.mjs\" state needsinput --event PermissionRequest",
+            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state needsinput --event PermissionRequest --quiet",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\scripts\\loomi-bridge.mjs\" state needsinput --event PermissionRequest --quiet",
             "timeout": 5
           }
         ]
@@ -53,8 +53,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state thinking --event PostToolUse",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\scripts\\loomi-bridge.mjs\" state thinking --event PostToolUse",
+            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state thinking --event PostToolUse --quiet",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\scripts\\loomi-bridge.mjs\" state thinking --event PostToolUse --quiet",
             "timeout": 5
           }
         ]
@@ -65,8 +65,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state juggling --event SubagentStart",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\scripts\\loomi-bridge.mjs\" state juggling --event SubagentStart",
+            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state juggling --event SubagentStart --quiet",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\scripts\\loomi-bridge.mjs\" state juggling --event SubagentStart --quiet",
             "timeout": 5
           }
         ]
@@ -77,8 +77,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state thinking --event SubagentStop",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\scripts\\loomi-bridge.mjs\" state thinking --event SubagentStop",
+            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state thinking --event SubagentStop --quiet",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\scripts\\loomi-bridge.mjs\" state thinking --event SubagentStop --quiet",
             "timeout": 5
           }
         ]
@@ -89,8 +89,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state happy --event Stop",
-            "commandWindows": "node \"%PLUGIN_ROOT%\\scripts\\loomi-bridge.mjs\" state happy --event Stop",
+            "command": "node \"${PLUGIN_ROOT}/scripts/loomi-bridge.mjs\" state happy --event Stop --quiet",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\scripts\\loomi-bridge.mjs\" state happy --event Stop --quiet",
             "timeout": 5
           }
         ]

@@ -4653,22 +4653,34 @@ async function petCommand(args) {
 }
 
 function parseStateCommandArgs(args) {
-  const out = { state: args && args.length > 0 ? args[0] : null, event: null };
+  const out = {
+    state: args && args.length > 0 ? args[0] : null,
+    event: null,
+    quiet: false,
+  };
   for (let i = 1; i < (args || []).length; i += 1) {
     const arg = args[i];
     if (arg === "--event" && args[i + 1]) {
       out.event = args[i + 1];
       i += 1;
+    } else if (arg === "--quiet") {
+      out.quiet = true;
     }
   }
   return out;
 }
 
 async function stateCommand(args) {
-  const { state, event } = parseStateCommandArgs(args || []);
+  const { state, event, quiet } = parseStateCommandArgs(args || []);
+  const finish = (payload) => {
+    if (quiet) {
+      return;
+    }
+    return writeJson(payload);
+  };
 
   if (!state) {
-    return writeJson({
+    return finish({
       ok: false,
       state: null,
       event,
@@ -4679,7 +4691,7 @@ async function stateCommand(args) {
   }
 
   if (!CAPYBARA_STATES.has(state)) {
-    return writeJson({
+    return finish({
       ok: false,
       state,
       event,
@@ -4692,7 +4704,7 @@ async function stateCommand(args) {
   const tokenStatus = getTokenStatus();
   const token = readOpenLoomiAuthToken(tokenStatus);
   if (!token) {
-    return writeJson({
+    return finish({
       ok: false,
       state,
       event,
@@ -4712,7 +4724,7 @@ async function stateCommand(args) {
     attempts.push(result.attempt);
 
     if (result.ok) {
-      return writeJson({
+      return finish({
         ok: true,
         state,
         event,
@@ -4722,7 +4734,7 @@ async function stateCommand(args) {
     }
 
     if (result.code === "ENDPOINT_MISSING") {
-      return writeJson({
+      return finish({
         ok: false,
         state,
         event,
@@ -4734,7 +4746,7 @@ async function stateCommand(args) {
     }
 
     if (result.code === "PET_FAILED") {
-      return writeJson({
+      return finish({
         ok: false,
         state,
         event,
@@ -4746,7 +4758,7 @@ async function stateCommand(args) {
     }
   }
 
-  return writeJson({
+  return finish({
     ok: false,
     state,
     event,

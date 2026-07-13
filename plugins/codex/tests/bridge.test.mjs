@@ -12,7 +12,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { join, dirname, delimiter } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -831,6 +831,44 @@ test("state hook command posts non-blocking pet state metadata", async () => {
   );
 });
 
+test("state hook command can run quietly for Codex hooks", async () => {
+  await withPetApiServer(
+    (req, res, request) => {
+      assert.equal(request.method, "POST");
+      assert.equal(request.url, "/api/pet/state");
+      assert.deepEqual(request.json, {
+        state: "working",
+        source: "codex-plugin",
+        event: "PreToolUse",
+      });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    },
+    async ({ baseUrl }) => {
+      await withFakeHomeAsync(async (env) => {
+        writeFakeToken(env.HOME);
+        const result = spawnSync(
+          process.execPath,
+          [BRIDGE, "state", "working", "--event", "PreToolUse", "--quiet"],
+          {
+            cwd: PLUGIN_DIR,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              ...env,
+              OPENLOOMI_API_URL: baseUrl,
+              OPENLOOMI_BASE_URL: "",
+            },
+          },
+        );
+        assert.equal(result.status, 0);
+        assert.equal(result.stdout, "");
+        assert.equal(result.stderr, "");
+      });
+    },
+  );
+});
+
 test("state hook command skips without failing when token is missing", () => {
   withFakeHome((env) => {
     const r = runOutcome(["state", "working", "--event", "PreToolUse"], env);
@@ -865,7 +903,11 @@ test("plugin manifest declares Codex hook bundle", () => {
     assert.ok(Array.isArray(hooks.hooks[event]), `missing hook event ${event}`);
     const command = hooks.hooks[event][0].hooks[0];
     assert.match(command.command, /loomi-bridge\.mjs/);
+    assert.match(command.command, /--quiet/);
     assert.match(command.commandWindows, /loomi-bridge\.mjs/);
+    assert.match(command.commandWindows, /\$env:PLUGIN_ROOT/);
+    assert.doesNotMatch(command.commandWindows, /%PLUGIN_ROOT%/);
+    assert.match(command.commandWindows, /--quiet/);
     assert.equal(command.timeout, 5);
   }
 });
