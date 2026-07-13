@@ -13,19 +13,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { join, dirname, delimiter } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import {
+  createFakeOpenLoomiBin,
+  makePath,
+  mergeEnv,
+  withIsolatedHome,
+} from './helpers/platform-fixtures.mjs';
 
 const PLUGIN_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const BRIDGE = join(PLUGIN_DIR, 'scripts', 'loomi-bridge.mjs');
 
-function run(args, { env = {} } = {}) {
+function run(args, options = {}) {
+  const env = options && Object.prototype.hasOwnProperty.call(options, 'env')
+    ? options.env
+    : options;
   try {
     return execFileSync('node', [BRIDGE, ...args], {
       encoding: 'utf8',
-      env: { ...process.env, ...env },
+      env: mergeEnv(process.env, env),
     });
   } catch (e) {
     // Bridge intentionally exits with non-zero for known error cases
@@ -48,7 +57,7 @@ function runOutcome(args, env) {
   try {
     const stdout = execFileSync('node', [BRIDGE, ...args], {
       encoding: 'utf8',
-      env: { ...process.env, ...env },
+      env: mergeEnv(process.env, env),
     });
     return { code: 0, stdout, stderr: '' };
   } catch (e) {
@@ -65,37 +74,7 @@ function runJson(args, env) {
 }
 
 function withClaHome(fn) {
-  const tmp = mkdtempSync(join(tmpdir(), 'openloomi-test-'));
-  // Preserve PATH but GUARANTEE that the directory holding the current
-  // `node` binary is included, so spawned `node` is always discoverable.
-  const nodeDir = dirname(process.execPath);
-  const preservedPath = process.env.PATH || '/usr/bin:/bin';
-  const pathWithNode = preservedPath.includes(nodeDir)
-    ? preservedPath
-    : `${nodeDir}${delimiter}${preservedPath}`;
-  const homeEnv = {
-    HOME: tmp,
-    USERPROFILE: tmp,
-    PATH: pathWithNode,
-    OPENLOOMI_BIN: '',
-    OPENLOOMI_HOME: '',
-    OPENLOOMI_REPO_DIR: '',
-    OPENLOOMI_AUTH_TOKEN: '',
-    OPENLOOMI_BASE_URL: '',
-    CLAUDE_PLUGIN_DATA: '',
-    // Bridge reads these for sync-claude-env; test must wipe so leak
-    // tests can prove they don't accidentally pass when the user has
-    // real Anthropic credentials on the host.
-    ANTHROPIC_API_KEY: '',
-    ANTHROPIC_AUTH_TOKEN: '',
-    ANTHROPIC_BASE_URL: '',
-    ANTHROPIC_MODEL: '',
-  };
-  try {
-    return fn({ ...homeEnv, TMPDIR: tmp });
-  } finally {
-    rmSync(tmp, { recursive: true, force: true });
-  }
+  return withIsolatedHome(fn);
 }
 
 test('version subcommand emits plugin metadata', () => {
@@ -162,35 +141,13 @@ test('discovery: OPENLOOMI_NOT_INSTALLED when no helper is reachable', () => {
 
 test('discovery: respects OPENLOOMI_BIN env when binary present', () => {
   withClaHome((env) => {
-    // Spawn a fake helper by writing it to a temp dir. The fake prints just
-    // a version string — the bridge's version regex matches any X.Y.Z, so we
-    // don't need to mimic the real binary's full "name version" output.
-    const fake = join(env.HOME, 'fake-helper');
-    writeFileSync(fake, '#!/bin/sh\necho 9.9.9\n');
-    try { execFileSync('chmod', ['+x', fake]); } catch { /* noop */ }
-
-    // Build a PATH that has only the node binary's directory + minimal
-    // platform paths. This guarantees no real helper binary from the user's
-    // PATH interferes with the test.
-    const nodeDir = dirname(process.execPath);
-    const safePath = [nodeDir, '/usr/bin', '/bin'].join(delimiter);
+    const fake = createFakeOpenLoomiBin(join(env.HOME, 'fake-bin'), { name: 'fake-helper' });
 
     // Pass the env as a single object literal so it's easier to debug
     // what's actually being handed to execFileSync.
     const envPass = {
-      HOME: env.HOME,
-      USERPROFILE: env.USERPROFILE,
-      PATH: safePath,
-      OPENLOOMI_BIN: fake,
-      OPENLOOMI_HOME: '',
-      OPENLOOMI_REPO_DIR: '',
-      OPENLOOMI_AUTH_TOKEN: '',
-      OPENLOOMI_BASE_URL: '',
-      CLAUDE_PLUGIN_DATA: '',
-      ANTHROPIC_API_KEY: '',
-      ANTHROPIC_AUTH_TOKEN: '',
-      ANTHROPIC_BASE_URL: '',
-      ANTHROPIC_MODEL: '',
+      ...env,
+      OPENLOOMI_BIN: fake.binPath,
     };
 
     assert.equal(envPass.ANTHROPIC_AUTH_TOKEN, '', 'test must clear ANTHROPIC_AUTH_TOKEN');
@@ -210,8 +167,8 @@ test('discovery: respects OPENLOOMI_BIN env when binary present', () => {
       throw new Error(`expected installed; got: ${JSON.stringify(j, null, 2)}`);
     }
     assert.equal(j.installed, true);
-    assert.equal(j.binPath, fake);
-    assert.match(j.version, /9\.9\.9/);
+    assert.equal(j.binPath, fake.binPath);
+    assert.match(j.version, new RegExp(fake.expectedVersion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.equal(j.source, 'OPENLOOMI_BIN');
   });
 });
@@ -222,17 +179,13 @@ test('discovery: SOURCE_FOUND_CLI_NOT_BUILT when repo dir set without built ctl'
     mkdirSync(join(repo, 'apps', 'web', 'src-tauri'), { recursive: true });
     writeFileSync(join(repo, 'package.json'), '{}');
     writeFileSync(join(repo, 'apps', 'web', 'src-tauri', 'Cargo.toml'), '');
-    const nodeDir = dirname(process.execPath);
-    const safePath = [nodeDir, '/usr/bin', '/bin'].join(delimiter);
-
     let out;
     try {
       out = execFileSync('node', [BRIDGE, 'setup-status'], {
         encoding: 'utf8',
         env: {
-          HOME: env.HOME,
-          USERPROFILE: env.USERPROFILE,
-          PATH: safePath,
+          ...env,
+          PATH: makePath(),
           OPENLOOMI_REPO_DIR: repo,
           OPENLOOMI_BIN: '',
           OPENLOOMI_HOME: '',
@@ -264,17 +217,13 @@ test('claudeEnvSyncable reflects env presence without printing values', () => {
     return;
   }
   withClaHome((env) => {
-    const nodeDir = dirname(process.execPath);
-    const safePath = [nodeDir, '/usr/bin', '/bin'].join(delimiter);
-
     let out;
     try {
       out = execFileSync('node', [BRIDGE, 'setup-status'], {
         encoding: 'utf8',
         env: {
-          HOME: env.HOME,
-          USERPROFILE: env.USERPROFILE,
-          PATH: safePath,
+          ...env,
+          PATH: makePath(),
           OPENLOOMI_BIN: '/nonexistent-ctl',
           OPENLOOMI_HOME: '',
           OPENLOOMI_REPO_DIR: '',
@@ -445,7 +394,7 @@ test('hooks-merge.cjs install merges per-event into settings.hooks; uninstall re
     const settingsPath = join(env.HOME, '.claude', 'settings.json');
 
     // Make sure the dir exists for the atomic writer.
-    execFileSync('mkdir', ['-p', join(env.HOME, '.claude')]);
+    mkdirSync(join(env.HOME, '.claude'), { recursive: true });
 
     const installOut = execFileSync('node', [merge, 'install'], {
       env,
@@ -540,15 +489,13 @@ test('setup-status exposes canGuestLogin=false when API is unreachable', () => {
     return;
   }
   withClaHome((env) => {
-    const nodeDir = dirname(process.execPath);
-    const safePath = [nodeDir, '/usr/bin', '/bin'].join(delimiter);
     let out;
     try {
       out = execFileSync('node', [BRIDGE, 'setup-status'], {
         encoding: 'utf8',
         env: {
           ...env,
-          PATH: safePath,
+          PATH: makePath(),
           OPENLOOMI_BIN: '/nonexistent-ctl',
           OPENLOOMI_BASE_URL: 'http://127.0.0.1:1',
         },
