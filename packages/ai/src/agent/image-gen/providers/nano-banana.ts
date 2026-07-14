@@ -417,7 +417,6 @@ function mimeTypeForOutputFormat(
       return "image/jpeg";
     case "webp":
       return "image/webp";
-    case "png":
     default:
       return "image/png";
   }

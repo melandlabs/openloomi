@@ -33,12 +33,38 @@ import {
 
 const fetchMock = vi.fn();
 const usageRecords: ImageGenerationUsageRecord[] = [];
+const IMAGE_GENERATION_ENV_KEYS = [
+  "IMAGE_GENERATION_PROVIDER",
+  "NEXT_PUBLIC_APP_URL",
+  "OPENAI_API_KEY",
+  "OPENAI_IMAGE_MODEL",
+  "OPENAI_IMAGE_BASE_URL",
+  "OPENAI_IMAGE_GENERATION_URL",
+  "OPENAI_IMAGE_TIMEOUT_MS",
+  "IMAGE_GENERATION_TIMEOUT_MS",
+  "OPENROUTER_API_KEY",
+  "OPENROUTER_IMAGE_BASE_URL",
+  "OPENROUTER_IMAGE_GENERATION_URL",
+  "OPENROUTER_IMAGE_MODEL",
+  "OPENROUTER_IMAGE_TIMEOUT_MS",
+  "NANO_BANANA_API_KEY",
+  "NANO_BANANA_BASE_URL",
+  "NANO_BANANA_IMAGE_GENERATION_URL",
+  "NANO_BANANA_MODEL",
+  "NANO_BANANA_TIMEOUT_MS",
+];
 
 function request(body: unknown): Request {
   return new Request("http://localhost/api/ai/v1/images/generations", {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+function clearImageGenerationEnv(): void {
+  for (const key of IMAGE_GENERATION_ENV_KEYS) {
+    Reflect.deleteProperty(process.env, key);
+  }
 }
 
 describe("POST /api/ai/v1/images/generations", () => {
@@ -53,24 +79,7 @@ describe("POST /api/ai/v1/images/generations", () => {
     });
     authState.user = { id: "user-image-generation", type: "regular" };
     envState.tauriMode = false;
-    delete process.env.IMAGE_GENERATION_PROVIDER;
-    delete process.env.NEXT_PUBLIC_APP_URL;
-    delete process.env.OPENAI_API_KEY;
-    delete process.env.OPENAI_IMAGE_MODEL;
-    delete process.env.OPENAI_IMAGE_BASE_URL;
-    delete process.env.OPENAI_IMAGE_GENERATION_URL;
-    delete process.env.OPENAI_IMAGE_TIMEOUT_MS;
-    delete process.env.IMAGE_GENERATION_TIMEOUT_MS;
-    delete process.env.OPENROUTER_API_KEY;
-    delete process.env.OPENROUTER_IMAGE_BASE_URL;
-    delete process.env.OPENROUTER_IMAGE_GENERATION_URL;
-    delete process.env.OPENROUTER_IMAGE_MODEL;
-    delete process.env.OPENROUTER_IMAGE_TIMEOUT_MS;
-    delete process.env.NANO_BANANA_API_KEY;
-    delete process.env.NANO_BANANA_BASE_URL;
-    delete process.env.NANO_BANANA_IMAGE_GENERATION_URL;
-    delete process.env.NANO_BANANA_MODEL;
-    delete process.env.NANO_BANANA_TIMEOUT_MS;
+    clearImageGenerationEnv();
   });
 
   test("returns 401 when unauthenticated outside Tauri", async () => {
