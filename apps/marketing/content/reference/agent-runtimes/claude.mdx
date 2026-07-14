@@ -1,0 +1,131 @@
+---
+title: "Claude Agent Runtime"
+description: "Configure OpenLoomi's default Claude Agent SDK runtime"
+---
+
+# Claude Agent Runtime
+
+Claude is OpenLoomi's default agent runtime. When `OPENLOOMI_AGENT_PROVIDER` is unset—or explicitly set to `claude`—OpenLoomi uses the Claude Agent SDK `query()` interface and its Claude Code runtime to execute native agent tasks.
+
+Unlike the direct OpenCode and Codex CLI adapters, the Claude integration is an SDK-backed agent loop. OpenLoomi configures its working directory, model, tools, permissions, skills, MCP servers, system instructions, attachments, streaming, and cancellation, then maps the SDK message stream into OpenLoomi agent events.
+
+## Runtime availability
+
+Packaged OpenLoomi builds can include a bundled Claude runtime. When resolving the executable, OpenLoomi checks these sources in order:
+
+1. The Claude runtime bundled with OpenLoomi
+2. `CLAUDE_CODE_PATH`
+3. A user-installed `claude` executable
+
+If the packaged runtime is present, no separate Claude Code installation is required. Development checkouts and server deployments without the bundle must make Claude Code available to the operating-system user that starts OpenLoomi.
+
+Official native installation:
+
+macOS, Linux, or WSL:
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://claude.ai/install.ps1 | iex
+```
+
+Verify the installation:
+
+```bash
+claude --version
+claude doctor
+```
+
+See the official [Claude Code installation guide](https://code.claude.com/docs/en/installation) for current system requirements, Homebrew, WinGet, package-manager, and platform-specific instructions.
+
+## Authentication and model configuration
+
+For normal OpenLoomi use, configure the model in the application's API Settings. A saved `anthropic_compatible` setting supplies the endpoint, credential, and model for that user and takes precedence over request defaults.
+
+Server deployments can provide the same configuration through environment variables. For direct Anthropic API access:
+
+```bash
+OPENLOOMI_AGENT_PROVIDER=claude
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+ANTHROPIC_API_KEY=your-api-key
+ANTHROPIC_MODEL=your-model-id
+```
+
+For an Anthropic-compatible gateway that authenticates with a bearer token:
+
+```bash
+OPENLOOMI_AGENT_PROVIDER=claude
+ANTHROPIC_BASE_URL=https://gateway.example.com
+ANTHROPIC_AUTH_TOKEN=your-gateway-token
+ANTHROPIC_MODEL=your-gateway-model-id
+```
+
+`ANTHROPIC_AUTH_TOKEN` has precedence over `ANTHROPIC_API_KEY` in Claude Code authentication. Keep either credential in OpenLoomi's encrypted user setting or a deployment secret store; do not commit it to the repository.
+
+When no OpenLoomi API setting or API credential is supplied, the runtime can use an existing Claude Code configuration belonging to the same operating-system user. For products, shared services, and automated deployments, follow Anthropic's [Agent SDK authentication guidance](https://code.claude.com/docs/en/agent-sdk/overview) and use API or supported cloud-provider authentication rather than depending on a personal Claude subscription login.
+
+## Environment reference
+
+| Variable                   | Default                    | Behavior                                                                                |
+| -------------------------- | -------------------------- | --------------------------------------------------------------------------------------- |
+| `OPENLOOMI_AGENT_PROVIDER` | `claude`                   | Leave unset or set to `claude` to select the default runtime.                           |
+| `ANTHROPIC_BASE_URL`       | Selected provider endpoint | Anthropic API or Anthropic-compatible gateway base URL.                                 |
+| `ANTHROPIC_API_KEY`        | unset                      | API-key authentication for direct Anthropic access.                                     |
+| `ANTHROPIC_AUTH_TOKEN`     | unset                      | Bearer-token authentication for compatible gateways; takes precedence over the API key. |
+| `ANTHROPIC_MODEL`          | OpenLoomi default model    | Model identifier used when no saved user model overrides it.                            |
+| `CLAUDE_CODE_PATH`         | Auto-detected              | Executable override used when no packaged Claude runtime is available.                  |
+| `CLAUDE_CONFIG_DIR`        | Claude Code default        | Optional alternate location for Claude Code settings and credentials.                   |
+
+OpenLoomi also maps its `disabled`, `low`, or `adaptive` thinking selection to the runtime's thinking budget and applies the selected model consistently to the Sonnet, Haiku, and Opus aliases used by compatible endpoints.
+
+## Tools, skills, and attachments
+
+For normal runs and execution of an approved plan, the Claude runtime can expose Claude's file, shell, code-search, web, skill, task, language-server, and todo tools. OpenLoomi can additionally attach:
+
+- OpenLoomi business and knowledge tools through MCP
+- User-configured MCP servers
+- A selected sandbox provider's MCP tools
+- OpenLoomi and project Agent Skills
+- Images and supported PDF documents as native content blocks
+- Other file attachments materialized in the task workspace
+
+Planning is intentionally different: OpenLoomi starts the SDK without tools and asks it to return either a structured plan or a direct answer.
+
+The Agent SDK runs on the OpenLoomi host and works on files visible to that process. It is not the hosted Claude Managed Agents service. See the official [Claude Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview) for the distinction and the underlying SDK capabilities.
+
+## Permissions and isolation
+
+OpenLoomi passes its permission mode into the Claude Agent SDK. Interactive modes register a `canUseTool` callback so OpenLoomi can allow, deny, or adjust a tool request. A missing or failing interactive permission decision is denied. Tools explicitly listed as disallowed are removed from the available surface.
+
+When `bypassPermissions` is selected, the SDK is explicitly allowed to skip tool approval prompts. Use that mode only for trusted tasks or inside an isolation boundary you control.
+
+The Claude agent runtime and the Claude sandbox provider are separate components. Selecting `OPENLOOMI_AGENT_PROVIDER=claude` chooses the model/tool runtime; it does not automatically enable filesystem or process isolation. Configure a sandbox independently when tasks must not access the full OpenLoomi host workspace.
+
+See the official [Agent SDK permissions documentation](https://code.claude.com/docs/en/agent-sdk/permissions) for the SDK permission modes and approval model.
+
+## Verify the integration
+
+For a development or server installation, first verify the same operating-system user can authenticate and run a non-interactive Claude request:
+
+```bash
+claude -p "Reply with exactly: CLAUDE_READY"
+```
+
+Then leave `OPENLOOMI_AGENT_PROVIDER` unset—or set it to `claude`—start OpenLoomi, and submit a read-only prompt. A healthy run emits a session, streamed text and reasoning where available, tool events when used, a result containing usage information, and a final done event.
+
+To verify a custom Anthropic-compatible provider, use the same endpoint, token, and model in both the direct command environment and OpenLoomi API Settings. The provider must support the Anthropic Messages behavior required by the Claude Agent SDK and the tools used by the task.
+
+## Troubleshooting
+
+- **Claude runtime not found:** run `claude --version` as the OpenLoomi service user, set `CLAUDE_CODE_PATH` to an absolute executable path, or rebuild/package OpenLoomi with its Claude runtime bundle.
+- **Authentication fails:** check the saved OpenLoomi API setting and environment for conflicting credentials. `ANTHROPIC_AUTH_TOKEN` takes precedence over `ANTHROPIC_API_KEY`; use `/status` inside Claude Code or the official authentication guide to confirm the active method.
+- **Model not found:** verify the saved model or `ANTHROPIC_MODEL` is valid for the selected endpoint. Custom gateways may use model identifiers that differ from Anthropic's public IDs.
+- **Compatible endpoint rejects a request:** confirm it implements the Anthropic Messages and tool-use behavior required by the Agent SDK. Some text-only compatibility layers cannot run the Claude agent loop.
+- **Tool request is denied:** inspect the OpenLoomi permission mode, disabled tools, and sandbox policy. Do not switch to `bypassPermissions` merely to hide a configuration error.
+- **Claude works in a terminal but not OpenLoomi:** confirm both processes run as the same OS user and inherit the same `HOME`, `CLAUDE_CONFIG_DIR`, credentials, network proxy, and executable path.
+
+See the official [Claude Code authentication guide](https://code.claude.com/docs/en/authentication) for credential precedence, cloud-provider authentication, credential storage, and login troubleshooting.

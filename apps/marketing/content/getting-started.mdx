@@ -155,20 +155,20 @@ OpenLoomi uses your existing AI agent configuration to work. To get started, set
 
 **Default: Claude**
 
-OpenLoomi automatically detects your Claude configuration — no extra setup required if you're already using Claude Code or Claude for Desktop.
+OpenLoomi automatically detects an existing Claude Code configuration. For server deployments and shared installations, configure a Claude API key or an Anthropic-compatible endpoint in OpenLoomi instead of relying on a personal Claude login.
 
 **Supported Agents**
 
 | Agent      | Status         | Notes                                                   |
 | ---------- | -------------- | ------------------------------------------------------- |
 | Claude     | ✅ Supported   | Default built-in runtime                                |
+| Codex      | ✅ Supported   | Secondary option using local `codex exec --json`        |
 | OpenCode   | ✅ Supported   | Local `opencode run` integration with JSON event stream |
 | Hermes     | ✅ Supported   | Local `hermes acp` integration                          |
 | OpenClaw   | ✅ Supported   | Gateway-backed `openclaw acp` bridge                    |
-| Codex      | ✅ Supported   | Local `codex exec --json` integration                   |
 | DeepAgents | 🔜 Coming Soon | Metadata exists; a production adapter is not registered |
 
-Runtime selection is intentionally server-controlled and is not shown as an in-app setting yet. Set `OPENLOOMI_AGENT_PROVIDER` before starting OpenLoomi; supported values are `claude`, `opencode`, `hermes`, `openclaw`, and `codex`.
+Runtime selection is intentionally server-controlled and is not shown as an in-app setting yet. Claude is used when `OPENLOOMI_AGENT_PROVIDER` is unset; supported explicit values are `claude`, `codex`, `opencode`, `hermes`, and `openclaw`.
 
 ```bash
 # OpenCode

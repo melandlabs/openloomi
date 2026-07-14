@@ -1,27 +1,30 @@
 ---
 title: "Agent Runtimes"
-description: "Configure the CLI agent runtime used for OpenLoomi native agent tasks"
+description: "Choose and configure the agent runtime used for OpenLoomi native agent tasks"
 ---
 
 # Agent Runtimes
 
-OpenLoomi can delegate native agent tasks to locally installed CLI runtimes. Runtime selection is deployment configuration: set `OPENLOOMI_AGENT_PROVIDER` before starting OpenLoomi, then restart the process after changing it. The runtime cannot be selected or reconfigured from a chat/API request.
+OpenLoomi can delegate native agent tasks to its built-in Claude Agent SDK runtime or to locally installed CLI runtimes. Runtime selection is deployment configuration: set `OPENLOOMI_AGENT_PROVIDER` before starting OpenLoomi, then restart the process after changing it. The runtime cannot be selected or reconfigured from a chat/API request.
 
-| Provider                                            | Runtime path                          | Configuration source      |
-| --------------------------------------------------- | ------------------------------------- | ------------------------- |
-| Claude                                              | Built-in Claude adapter               | App and Claude settings   |
-| [OpenCode](/docs/reference/agent-runtimes/opencode) | `opencode run --format json`          | Environment and OpenCode  |
-| [Hermes](/docs/reference/agent-runtimes/hermes)     | `hermes acp`                          | Environment and Hermes    |
-| [OpenClaw](/docs/reference/agent-runtimes/openclaw) | `openclaw acp` plus a running Gateway | Environment and OpenClaw  |
-| [Codex](/docs/reference/agent-runtimes/codex)       | `codex exec --json`                   | Environment and Codex CLI |
+**Claude is the default agent runtime.** Leaving `OPENLOOMI_AGENT_PROVIDER` unset is equivalent to setting it to `claude`. **Codex is the secondary option** when a direct, locally authenticated CLI runtime is preferred.
+
+| Provider                                            | Role      | Runtime path                          | Configuration source         |
+| --------------------------------------------------- | --------- | ------------------------------------- | ---------------------------- |
+| [Claude](/docs/reference/agent-runtimes/claude)     | Default   | Claude Agent SDK `query()`            | OpenLoomi API settings / env |
+| [Codex](/docs/reference/agent-runtimes/codex)       | Secondary | `codex exec --json`                   | Environment and Codex CLI    |
+| [OpenCode](/docs/reference/agent-runtimes/opencode) | Optional  | `opencode run --format json`          | Environment and OpenCode     |
+| [Hermes](/docs/reference/agent-runtimes/hermes)     | Optional  | `hermes acp`                          | Environment and Hermes       |
+| [OpenClaw](/docs/reference/agent-runtimes/openclaw) | Optional  | `openclaw acp` plus a running Gateway | Environment and OpenClaw     |
 
 Each runtime guide covers installation, authentication, OpenLoomi environment variables, permission behavior, verification, and troubleshooting:
 
+- **[Claude Agent runtime](/docs/reference/agent-runtimes/claude)** — Default SDK runtime with built-in tools, skills, MCP, attachments, and streaming.
+- **[Codex CLI runtime](/docs/reference/agent-runtimes/codex)** — Direct `codex exec` integration with explicit sandbox modes.
 - **[OpenCode CLI runtime](/docs/reference/agent-runtimes/opencode)** — Direct non-interactive CLI integration with JSON events.
 - **[Hermes ACP runtime](/docs/reference/agent-runtimes/hermes)** — Local ACP server integration with profile and model selection.
 - **[OpenClaw ACP runtime](/docs/reference/agent-runtimes/openclaw)** — Gateway-backed ACP integration with session and device pairing.
-- **[Codex CLI runtime](/docs/reference/agent-runtimes/codex)** — Direct `codex exec` integration with explicit sandbox modes.
 
-Agent runtimes and sandboxes are separate layers. Selecting a runtime chooses the `AgentPlugin`/`IAgent` implementation that executes a task; it does not turn that runtime into an OpenLoomi sandbox provider. The host and selected CLI still enforce their own filesystem, process, network, and approval boundaries.
+Agent runtimes and sandboxes are separate layers. Selecting a runtime chooses the `AgentPlugin`/`IAgent` implementation that executes a task; it does not turn that runtime into an OpenLoomi sandbox provider. The host and selected runtime still enforce their own filesystem, process, network, and approval boundaries.
 
 > **Codex runtime vs. Codex plugin:** This section describes OpenLoomi calling Codex as its runtime. The repository's `plugins/codex` package works in the opposite direction: it gives Codex skills and a bridge for calling OpenLoomi.
