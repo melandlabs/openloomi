@@ -8,11 +8,14 @@ import {
   getUserProfile,
 } from "@/lib/db/queries";
 import { getUserFileById } from "@/lib/db/storageService";
+import { getUserMemoryPath } from "@/lib/utils/path";
 import type { DBMessage, Insight } from "@/lib/db/schema";
 import type {
   ImageGenerationRequest,
   ImageReference,
 } from "@openloomi/ai/agent";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 
 export type LifestyleReferenceImageRole = "style" | "subject";
 
@@ -23,6 +26,7 @@ export type LifestyleComposerWarningCode =
   | "chat_messages_unavailable"
   | "chat_insights_unavailable"
   | "recent_insights_unavailable"
+  | "user_memories_unavailable"
   | "reference_image_not_found"
   | "reference_image_unsupported_type"
   | "reference_image_invalid"
@@ -95,6 +99,10 @@ const DEFAULT_RECENT_INSIGHT_LIMIT = 12;
 const DEFAULT_CHAT_MESSAGE_LIMIT = 24;
 const DEFAULT_LOOKBACK_DAYS = 7;
 const MAX_REFERENCE_IMAGES = 4;
+const MAX_USER_MEMORY_FILES = 8;
+const MAX_MEMORY_SUMMARIES = 4;
+const MAX_MEMORY_SUMMARY_LENGTH = 160;
+const USER_MEMORY_CATEGORIES = ["people", "projects", "notes", "strategy"];
 const IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -106,14 +114,21 @@ export async function composeLifestyleImagePrompt(
   input: ComposeLifestyleImagePromptInput,
 ): Promise<ComposeLifestyleImagePromptResult> {
   const warnings: LifestyleComposerWarning[] = [];
-  const [profile, settings, chatContext, recentInsights, referenceImages] =
-    await Promise.all([
-      loadProfile(input.userId, warnings),
-      loadInsightSettings(input.userId, warnings),
-      loadChatContext(input, warnings),
-      loadRecentInsights(input, warnings),
-      normalizeReferenceImages(input.userId, input.referenceImages, warnings),
-    ]);
+  const [
+    profile,
+    settings,
+    chatContext,
+    recentInsights,
+    userMemories,
+    referenceImages,
+  ] = await Promise.all([
+    loadProfile(input.userId, warnings),
+    loadInsightSettings(input.userId, warnings),
+    loadChatContext(input, warnings),
+    loadRecentInsights(input, warnings),
+    loadUserMemories(input.userId, warnings),
+    normalizeReferenceImages(input.userId, input.referenceImages, warnings),
+  ]);
 
   const allInsights = dedupeInsights([
     ...chatContext.insights,
@@ -136,7 +151,10 @@ export async function composeLifestyleImagePrompt(
     ...allInsights.flatMap(extractInsightKeywords),
     ...focus.topics,
   ]).slice(0, 12);
-  const memories = summarizeMemories(allInsights).slice(0, 6);
+  const memories = dedupeStrings([
+    ...userMemories,
+    ...summarizeMemories(allInsights),
+  ]).slice(0, MAX_MEMORY_SUMMARIES);
   const sourceSummary: LifestylePromptSourceSummary = {
     profile: profileSummary,
     focus,
@@ -313,6 +331,85 @@ async function loadRecentInsights(
     });
     return [];
   }
+}
+
+async function loadUserMemories(
+  userId: string,
+  warnings: LifestyleComposerWarning[],
+): Promise<string[]> {
+  try {
+    const memoryRoot = getUserMemoryPath(userId);
+    const filesByCategory = await Promise.all(
+      USER_MEMORY_CATEGORIES.map((category) =>
+        readMemoryCategory(memoryRoot, category),
+      ),
+    );
+    const files = filesByCategory.flat().slice(0, MAX_USER_MEMORY_FILES);
+    const memories = await Promise.all(
+      files.map(async (file) => {
+        const content = await readFile(file.filePath, "utf8");
+        return summarizeUserMemoryFile(content, file.category, file.fileName);
+      }),
+    );
+    return memories.filter((memory): memory is string => Boolean(memory));
+  } catch (error) {
+    warnings.push({
+      code: "user_memories_unavailable",
+      source: "userMemories",
+      message: messageFromError(error, "User memories are unavailable."),
+    });
+    return [];
+  }
+}
+
+async function readMemoryCategory(
+  memoryRoot: string,
+  category: string,
+): Promise<Array<{ category: string; fileName: string; filePath: string }>> {
+  const categoryDir = path.join(memoryRoot, category);
+  try {
+    const entries = await readdir(categoryDir, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+      .map((entry) => ({
+        category,
+        fileName: entry.name,
+        filePath: path.join(categoryDir, entry.name),
+      }));
+  } catch (error) {
+    if (isNodeErrorCode(error, "ENOENT")) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+function summarizeUserMemoryFile(
+  content: string,
+  category: string,
+  fileName: string,
+): string | null {
+  const lines = content
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^[-*_]{3,}$/.test(line));
+  const heading = lines
+    .find((line) => /^#{1,6}\s+\S/.test(line))
+    ?.replace(/^#{1,6}\s+/, "")
+    .trim();
+  const body = lines
+    .filter((line) => !/^#{1,6}\s+/.test(line))
+    .map((line) => line.replace(/^[-*]\s+/, "").trim())
+    .filter(Boolean)
+    .slice(0, 1)
+    .join(" ");
+  const title = heading || fileName.replace(/\.md$/i, "").replace(/[-_]/g, " ");
+  return clipText(
+    `${category}: ${title}${body ? ` - ${body}` : ""}`,
+    MAX_MEMORY_SUMMARY_LENGTH,
+  );
 }
 
 async function normalizeReferenceImages(
@@ -746,4 +843,13 @@ function normalizeText(value: string): string {
 
 function messageFromError(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return (
+    Boolean(error) &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }

@@ -33,6 +33,17 @@ const storageMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/db/storageService", () => storageMocks);
 
+const fsMocks = vi.hoisted(() => ({
+  readdir: vi.fn(),
+  readFile: vi.fn(),
+}));
+
+vi.mock("node:fs/promises", () => fsMocks);
+
+vi.mock("@/lib/utils/path", () => ({
+  getUserMemoryPath: (userId: string) => `/mock-memory/${userId}`,
+}));
+
 import { POST } from "@/app/api/ai/v1/images/lifestyle/compose/route";
 import { composeLifestyleImagePrompt } from "@/lib/ai/image-generation/lifestyle-composer";
 
@@ -57,6 +68,13 @@ function insight(overrides: Record<string, unknown>) {
     categories: [],
     learning: null,
     ...overrides,
+  };
+}
+
+function markdownFile(name: string) {
+  return {
+    name,
+    isFile: () => true,
   };
 }
 
@@ -119,6 +137,30 @@ function mockDefaultSources() {
     ],
     hasMore: false,
   });
+  fsMocks.readdir.mockImplementation(async (dir: string) => {
+    if (dir.includes("notes")) {
+      return [
+        markdownFile("memory-1.md"),
+        markdownFile("memory-2.md"),
+        markdownFile("memory-3.md"),
+        markdownFile("memory-4.md"),
+        markdownFile("memory-5.md"),
+      ];
+    }
+    const error = new Error("missing") as Error & { code: string };
+    error.code = "ENOENT";
+    throw error;
+  });
+  fsMocks.readFile.mockImplementation(async (filePath: string) => {
+    const match = filePath.match(/memory-(\d+)\.md$/);
+    const index = match?.[1] ?? "1";
+    return [
+      `# Memory ${index}`,
+      "",
+      `Durable user context item ${index}.`,
+      `Additional detail ${index} that should not be copied into the prompt.`,
+    ].join("\n");
+  });
 }
 
 describe("composeLifestyleImagePrompt", () => {
@@ -171,6 +213,14 @@ describe("composeLifestyleImagePrompt", () => {
     expect(result.sourceSummary.lifeKeywords).toEqual(
       expect.arrayContaining(["storytelling", "image generation"]),
     );
+    expect(result.sourceSummary.memories).toHaveLength(4);
+    expect(result.sourceSummary.memories[0]).toBe(
+      "notes: Memory 1 - Durable user context item 1.",
+    );
+    expect(result.sourceSummary.memories.join(" ")).not.toContain(
+      "Additional detail",
+    );
+    expect(result.sourceSummary.memories.join(" ")).not.toContain("Memory 5");
     expect(result.sourceSummary.referenceImages[0]).toMatchObject({
       fileId: "file-1",
       role: "style",
