@@ -133,6 +133,9 @@ export * from "./native-cli";
 // Video Generation
 export * from "./video-gen";
 
+// Image Generation
+export * from "./image-gen";
+
 // Utils
 export { extractJsonFromMarkdown } from "./utils";
 
