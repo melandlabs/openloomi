@@ -12,6 +12,7 @@ import type {
 } from "@openloomi/indexeddb";
 import {
   parseRawMessageGraphEvolutionOptions,
+  parseRawMessageGraphLifecycleOptions,
   storeRawMessagesWithGraphEvolution,
 } from "@openloomi/indexeddb";
 import {
@@ -121,6 +122,9 @@ function parseForgettingCycleOptions(value: unknown) {
         ? options.hardDeleteArchivedOlderThan
         : undefined,
     shadowDiagnostics: parseShadowDiagnosticsOptions(options.shadowDiagnostics),
+    graphLifecycle: parseRawMessageGraphLifecycleOptions(
+      options.graphLifecycle,
+    ),
   };
 }
 

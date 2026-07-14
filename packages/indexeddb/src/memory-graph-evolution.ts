@@ -473,7 +473,7 @@ export function createRawMessageMemoryGraphStore(input: {
   };
 }
 
-function ownerScopeFromMessage(message: RawMessage): OwnerScope {
+export function ownerScopeFromMessage(message: RawMessage): OwnerScope {
   const stored = message.metadata?.memoryOwnerScope;
   if (isRecord(stored) && typeof stored.userId === "string") {
     return {
@@ -485,7 +485,7 @@ function ownerScopeFromMessage(message: RawMessage): OwnerScope {
   return { userId: message.userId };
 }
 
-function applicabilityFromMessage(
+export function applicabilityFromMessage(
   message: RawMessage,
 ): MemoryApplicabilityContext {
   const stored = message.metadata?.memoryApplicability;

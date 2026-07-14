@@ -4,6 +4,7 @@ export * from "./evaluation";
 export * from "./evidence-cluster";
 export * from "./graph-contracts";
 export * from "./graph-evolution";
+export * from "./graph-lifecycle";
 export * from "./graph-retrieval";
 export * from "./governance";
 export * from "./plan";

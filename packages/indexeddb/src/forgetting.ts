@@ -4,6 +4,7 @@ import type {
   RunMemoryConsolidationShadowDiagnosticsInput,
 } from "../../ai/memory-consolidation/src/shadow";
 import {
+  type MemoryDeprecateRecordsInput,
   type MemoryForgettingPolicyOverrides,
   type MemoryLockHandle,
   type MemoryPageResult,
@@ -27,6 +28,11 @@ import type {
   MemorySummaryRecord,
   RawMessage,
 } from "./manager";
+import {
+  type MemoryGraphLifecycleRuntimeResult,
+  type RawMessageGraphLifecycleOptions,
+  runMemoryGraphLifecycleCycle,
+} from "./memory-graph-lifecycle";
 
 /**
  * Bridge layer between IndexedDB manager and the shared memory engine APIs.
@@ -233,6 +239,17 @@ function hasMoreByLength<T>(items: T[], pageSize: number): MemoryPageResult<T> {
 export function createIndexedDBMemoryStorageAdapter(
   manager: IndexedDBManager,
 ): MemoryStorageAdapter {
+  const deprecationManager = manager as IndexedDBManager & {
+    deprecateMessages?: (
+      messageIds: string[],
+      input?: {
+        userId?: string;
+        deprecatedAt?: number;
+        reason?: string;
+        supersededBySummaryId?: string;
+      },
+    ) => Promise<number>;
+  };
   return {
     async acquireLock(input) {
       // Process-local lock for re-entrancy control.
@@ -313,6 +330,21 @@ export function createIndexedDBMemoryStorageAdapter(
       // Upsert keeps cycles idempotent when a run retries after partial progress.
       await manager.upsertSummaries(summaries.map(toSummaryRecord));
     },
+
+    ...(typeof deprecationManager.deprecateMessages === "function"
+      ? {
+          async deprecateRecords(input: MemoryDeprecateRecordsInput) {
+            return (
+              deprecationManager.deprecateMessages?.(input.ids, {
+                userId: input.userId,
+                deprecatedAt: input.deprecatedAt,
+                reason: input.reason,
+                supersededBySummaryId: input.supersededBySummaryId,
+              }) ?? 0
+            );
+          },
+        }
+      : {}),
 
     async transitionRecords(input) {
       // Persist stage transition and reference the generated summary for traceability.
@@ -545,6 +577,7 @@ export interface RunMemoryForgettingCycleOptions {
   policy?: MemoryForgettingPolicyOverrides;
   hardDeleteArchivedOlderThan?: number;
   shadowDiagnostics?: RunMemoryForgettingCycleShadowDiagnosticsOptions;
+  graphLifecycle?: RawMessageGraphLifecycleOptions;
 }
 
 export interface RunMemoryForgettingCycleResult {
@@ -560,6 +593,7 @@ export interface RunMemoryForgettingCycleResult {
   archivedDetailRecords: number;
   hardDeletedRecords: number;
   shadowDiagnostics?: MemoryConsolidationShadowDiagnosticsRunResult;
+  graphLifecycle?: MemoryGraphLifecycleRuntimeResult;
 }
 
 export async function runMemoryForgettingCycle(
@@ -569,14 +603,53 @@ export async function runMemoryForgettingCycle(
 ): Promise<RunMemoryForgettingCycleResult> {
   // Build engine with IndexedDB-backed adapter; policy can be overridden by caller.
   const storage = createIndexedDBMemoryStorageAdapter(manager);
-  const engine = createMemoryForgettingEngine({
-    storage,
-    policy: options?.policy,
-  });
   const now =
     options?.shadowDiagnostics === undefined
       ? options?.now
       : (options.now ?? Date.now());
+  if (options?.graphLifecycle?.enabled === true) {
+    const graphLifecycle = await runMemoryGraphLifecycleCycle({
+      manager,
+      storage,
+      userId,
+      options: {
+        ...options.graphLifecycle,
+        dryRun: options.graphLifecycle.dryRun ?? options.dryRun,
+      },
+      now,
+    });
+    let hardDeletedRecords = 0;
+    if (
+      !graphLifecycle.dryRun &&
+      options.hardDeleteArchivedOlderThan !== undefined
+    ) {
+      hardDeletedRecords = await manager.hardDeleteArchived(
+        options.hardDeleteArchivedOlderThan,
+        userId,
+      );
+    }
+    return {
+      status:
+        graphLifecycle.status === "skipped-locked"
+          ? "skipped_locked"
+          : "success",
+      dryRun: graphLifecycle.dryRun,
+      userId,
+      startedAt: now ?? Date.now(),
+      finishedAt: Date.now(),
+      scannedRecords: 0,
+      eligibleRecords: graphLifecycle.stableClusters,
+      createdSummaries: graphLifecycle.createdSummaries,
+      transitionedRecords: 0,
+      archivedDetailRecords: 0,
+      hardDeletedRecords,
+      graphLifecycle,
+    };
+  }
+  const engine = createMemoryForgettingEngine({
+    storage,
+    policy: options?.policy,
+  });
   let shadowDiagnostics:
     | MemoryConsolidationShadowDiagnosticsRunResult
     | undefined;

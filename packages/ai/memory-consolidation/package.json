@@ -11,6 +11,7 @@
     "./evidence-cluster": "./src/evidence-cluster.ts",
     "./graph-contracts": "./src/graph-contracts.ts",
     "./graph-evolution": "./src/graph-evolution.ts",
+    "./graph-lifecycle": "./src/graph-lifecycle.ts",
     "./graph-retrieval": "./src/graph-retrieval.ts",
     "./governance": "./src/governance.ts",
     "./persistence": "./src/persistence.ts",

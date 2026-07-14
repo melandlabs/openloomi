@@ -18,6 +18,7 @@ import {
   type RawMessageGraphEvolutionOptions,
   storeRawMessagesWithGraphEvolution,
 } from "./memory-graph-evolution";
+import type { RawMessageGraphLifecycleOptions } from "./memory-graph-lifecycle";
 import {
   ensureRawMessagesSQLiteMigration,
   migrateIndexedDBRawMessagesToSQLite,
@@ -52,6 +53,7 @@ export interface RunMemoryForgettingCycleForUserOptions {
   dryRun?: boolean;
   hardDeleteArchivedOlderThan?: number;
   shadowDiagnostics?: RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions;
+  graphLifecycle?: RawMessageGraphLifecycleOptions;
 }
 
 export interface RunMemoryForgettingCycleForUserResult {
@@ -62,6 +64,7 @@ export interface RunMemoryForgettingCycleForUserResult {
   archivedDetailRecords?: number;
   hardDeletedRecords?: number;
   shadowDiagnostics?: RunMemoryForgettingCycleResult["shadowDiagnostics"];
+  graphLifecycle?: RunMemoryForgettingCycleResult["graphLifecycle"];
   error?: string;
 }
 
@@ -480,6 +483,7 @@ export async function runMemoryForgettingCycleForUser(
       archivedDetailRecords: result.archivedDetailRecords,
       hardDeletedRecords: result.hardDeletedRecords,
       shadowDiagnostics: result.shadowDiagnostics,
+      graphLifecycle: result.graphLifecycle,
     };
   } catch (error) {
     console.error(
