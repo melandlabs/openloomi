@@ -52,7 +52,7 @@ tag_name=$(printf '%s' "${release_json}" \
   | head -n1 || true)
 
 # Strip a leading "v" / "V" from tag_name so downstream consumers get a
-# clean semver-ish version (e.g. "v0.7.5" → "0.7.5"). Fall back to "" if
+# clean semver-ish version (e.g. "v0.7.6" → "0.7.6"). Fall back to "" if
 # the API didn't return a tag_name.
 version=$(printf '%s' "${tag_name}" | sed -E 's/^[vV]//')
 
