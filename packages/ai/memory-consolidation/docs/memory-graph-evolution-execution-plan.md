@@ -1,461 +1,162 @@
 # Memory Graph Evolution Execution Plan
 
-## Purpose
+Status: Proposed delivery plan. It becomes active when the referenced
+requirements, architecture, and ADRs are accepted and merged upstream.
 
-This plan turns the
-[Memory Graph Evolution architecture RFC](./memory-graph-evolution-architecture.md)
-into an implementation route. It does not replace the RFC. The RFC defines the
-target architecture and vocabulary; this document defines the order of execution,
-phase gates, review boundaries, and acceptance criteria for future Codex or
-human implementation sessions.
+This document defines delivery order only. It does not restate requirements,
+architecture, or decisions.
 
-The plan is intentionally architecture-first. It should not be read as a helper
-queue or a list of small implementation PRs. Each phase must leave the system
-clearer, more observable, and more reversible before runtime behavior changes.
+Authoritative references:
+
+- [Requirements](./memory-graph-evolution-requirements.md)
+- [Architecture](./memory-graph-evolution-architecture.md)
+- [ADR index](./adr/README.md)
 
 ## Current Baseline
 
-The current codebase already contains pieces that fit into the dynamic memory
-graph direction:
-
-- relation graph assignment
-- relation pipeline execution
-- operational relation kinds: `support`, `compete`, and `related`
-- competition groups
-- diagnostics reports
-- semantic draft candidates
-- forgetting engine
-- summary plus soft-deprecation
-- `includeDeprecated` audit path
-
-These pieces are useful foundation, but they do not yet form a complete runtime
-memory graph. Current graph work is mostly package-local and diagnostic. Current
-forgetting/consolidation work can summarize and soft-hide source records, but it
-is not yet driven by a durable graph lifecycle. Current retrieval can hide
-deprecated records and run semantic draft comparisons, but default ranking is
-not yet graph-aware.
-
-## Execution Principles
-
-- Architecture first, interfaces second, implementation third.
-- Dry-run before persistence.
-- Opt-in before default behavior.
-- Graph state must be scoped by user, workspace, or tenant.
-- Raw audit chain must be preserved.
-- Do not start with a broad storage rewrite.
-- Do not change runtime behavior without observability.
-- Every phase must be independently reviewable.
-- Every phase must describe rollback or no-op behavior before persistence.
-- Existing relation helpers should be assigned to boundaries before new helpers
-  are proposed.
-- Production code should not be written until the phase's contract, report
-  shape, and acceptance criteria are clear.
-
-## Required Execution Order
-
-The work must proceed in this order:
-
-1. Architecture stability
-2. Interface design
-3. Dry-run / report
-4. Opt-in persistence
-5. Runtime integration
-6. Retrieval behavior
-7. Evaluation / rollout
-
-If a future task needs to jump ahead, split it. For example, if a retrieval
-change requires graph persistence, define the persistence boundary first; do not
-silently merge retrieval behavior into an earlier dry-run phase.
-
-## Phase 0: Architecture Stability Gate
-
-Goal: stabilize the architecture RFC and make sure future phases refer to a
-shared vocabulary before any new production behavior is attempted.
-
-Inputs:
-
-- `memory-graph-evolution-architecture.md`
-- current `roadmap.md`
-- current `execution-plan.md`
-- current relation graph, relation pipeline, forgetting, soft-deprecation, and
-  retrieval diagnostics code
-
-Outputs:
-
-- confirmed architecture terms
-- confirmed phase sequence
-- explicit mapping from existing work to architecture layers
-- known open questions
-- decision log for scope boundaries
-
-Acceptance:
-
-- The dynamic memory graph remains the main line, not a collection of isolated
-  helper tasks.
-- The RFC can answer how new memory affects old memory.
-- The RFC can explain cluster formation, stabilization, decay, supersession, and
-  audit-only visibility.
-- The RFC clearly places summary and soft-deprecation after cluster
-  stabilization.
-- The RFC states that graph scope is isolated by user, workspace, or tenant.
-- No production code, tests, storage migrations, UI, scheduler, or helper
-  implementation is required in this phase.
-
-Open questions:
-
-- Which product scope is primary for graph state: user, workspace, tenant, or a
-  composite key?
-- Should cross-workspace memory sharing be impossible by default or represented
-  as an explicit edge type later?
-- Which existing diagnostics should become durable graph operation reports?
-
-## Phase 1: Interface Boundary Design
-
-Goal: turn the RFC boundaries into concrete interface drafts without requiring
-implementation.
-
-Boundaries:
-
-- `MemoryGraphStore`
-- `GraphInteractionEngine`
-- `ClusterLifecyclePolicy`
-- `MemoryConsolidationPlanner`
-- `GraphAwareRetriever`
-- `GraphEvolutionReport`
-
-Each interface draft must describe:
-
-- input
-- output
-- non-responsibilities
-- existing code it maps to
-- expected first consumer
-- open questions
-
-Existing-code mapping:
-
-- `relation-graph.ts` maps mainly to `MemoryGraphStore` read models and
-  `ClusterLifecyclePolicy` inputs.
-- `pipeline.ts` relation candidate and judgment helpers map to
-  `GraphInteractionEngine`.
-- `buildMemoryConsolidationPlan` and summary candidate generation map to
-  `MemoryConsolidationPlanner`.
-- current forgetting engine behavior maps to the early
-  Forgetting / Consolidation runtime consumer.
-- current retrieval comparison and semantic draft retrieval helpers map to
-  `GraphAwareRetriever` dry-run inputs.
-- current diagnostics reports map to `GraphEvolutionReport`.
-
-Acceptance:
-
-- Current helpers can be assigned to one primary boundary.
-- The document can explain how `support`, `compete`, and `related` map to
-  higher-level relation semantics.
-- The graph scope model prevents cross-user or cross-workspace pollution.
-- Each boundary has at least one expected first consumer.
-- Each boundary has explicit non-responsibilities, so future work does not
-  collapse into a broad provider/helper layer.
-
-Review focus:
-
-- Are storage, interaction, policy, consolidation, retrieval, and reporting still
-  separated?
-- Does any boundary accidentally require a real-time LLM?
-- Does any boundary imply deleting raw audit evidence?
-
-## Phase 2: Graph Update Plan Dry Run
-
-Goal: when new memory enters the system, produce a graph update plan without
-persistence.
-
-Inputs:
-
-- new memory node
-- candidate existing records or summaries
-- explicit relation keys, metadata, or similarity candidates
-- current graph snapshot if available
-- owner scope such as user, workspace, or tenant
-
-Outputs:
-
-- proposed edges
-- reinforcement events
-- weakening or decay observations
-- cluster assignment impact
-- `GraphEvolutionReport`
-
-Expected behavior:
-
-- Similar new memory can propose reinforcement for an existing cluster.
-- Unrelated new memory does not pollute an existing cluster.
-- Conflict and competition signals can be represented.
-- Weak `same-topic` or `related` observations do not force cluster merges.
-- All results can be inspected as dry-run report data.
-- Runtime default behavior does not change.
-
-Acceptance:
-
-- A dry-run report can show which existing nodes were considered.
-- A dry-run report can show why an edge was proposed, weakened, or rejected.
-- A dry-run report can show potential cluster impact without writing graph
-  state.
-- The plan remains scoped to the caller's user/workspace/tenant.
-- No storage write is required.
-
-Open questions:
-
-- Should candidate retrieval begin from existing semantic recall, raw candidate
-  listing, relation keys, or a combined strategy?
-- What minimum evidence should be required before a proposed edge becomes
-  persistable?
-- How should explicit user feedback override automatic relation candidates?
-
-## Phase 3: Cluster Lifecycle Policy Dry Run
-
-Goal: make `forming`, `active`, `stable`, `decaying`, `superseded`, and
-`audit-only` computable states before any default persistence or retrieval
-behavior changes.
-
-Inputs:
-
-- graph snapshot
-- edge weights
-- activation history
-- support count
-- `compete` / conflict signals
-- consolidation and deprecation status
-- lifecycle thresholds
-
-Outputs:
-
-- lifecycle transition candidates
-- representative suggestions
-- consolidation eligibility
-- decay recommendations
-- audit-only recommendations
-- lifecycle section in `GraphEvolutionReport`
-
-Acceptance:
-
-- Repeated support can move a cluster from `forming` to `active` to `stable`.
-- Stale isolated nodes can move toward `decaying`.
-- Superseded source records can move toward `audit-only`.
-- Contested clusters are not summarized too early.
-- Lifecycle policy is separated from storage and summarizer behavior.
-- Lifecycle reports can be reviewed without changing persisted state.
-
-Review focus:
-
-- Are thresholds conservative enough to avoid false merges?
-- Can a contested cluster remain useful without becoming a summary?
-- Can the policy explain why a cluster is not eligible for consolidation?
-
-## Phase 4: Opt-in Persistence and Graph-aware Consolidation Planning
-
-Goal: allow graph plans and consolidation plans to persist only through explicit
-opt-in boundaries. Forgetting/consolidation should start consuming cluster
-lifecycle, but default runtime behavior should remain controlled.
-
-Actions:
-
-- persist graph update plans after dry-run approval
-- summarize stable clusters
-- soft-deprecate source raw records after successful summary or artifact
-  persistence
-- preserve contested clusters
-- decay weak structures
-- keep audit provenance
-
-Inputs:
-
-- stable or decaying lifecycle output
-- source record ids
-- relation evidence
-- summary or artifact candidate metadata
-- opt-in persistence mode
-
-Outputs:
-
-- persisted graph operation result
-- summary candidate or artifact candidate
-- soft-deprecation plan and result
-- preservation or decay diagnostics
-- audit provenance links
-
-Acceptance:
-
-- Stable cluster can produce a summary candidate.
-- After summary persistence succeeds, source raw records can be soft-deprecated.
-- `includeDeprecated` can recover the source evidence chain.
-- Deprecation failure becomes diagnostics and does not break the main flow unless
-  policy explicitly requires hard failure.
-- Audit chain is not deleted.
-- Persistence can be disabled or run in no-op mode for old adapters.
-
-Review focus:
-
-- Does the phase preserve raw source records?
-- Are persistence writes opt-in and observable?
-- Are graph operations and memory storage writes distinguishable in reports?
-
-## Phase 5: Controlled Runtime Integration
-
-Goal: gradually connect dry-run and opt-in persistence capabilities to real
-runtime paths without changing default behavior too early.
-
-Suggested stages:
+Already available in the runtime:
+
+- summary persistence and source soft-deprecation
+- default hiding of deprecated raw records
+- `includeDeprecated` audit retrieval
+- opt-in graph-aware ranking and filtering of baseline retrieval candidates
+- relation and competition-oriented diagnostics
+
+The remaining product gap is dynamic write-side evolution: new evidence must
+change graph relations, cluster state, lifecycle, and later consolidation in an
+explainable and reversible way.
+
+## Delivery Rules
+
+- Deliver functional behavior, not isolated helper collections.
+- Every PR must identify requirement IDs, applicable ADRs, affected architecture
+  components, and user-visible acceptance scenarios.
+- Mutation remains controlled until its failure, no-op, audit, and rollback
+  behavior is verified.
+- A later PR must build on the accepted behavior of earlier PRs instead of
+  maintaining parallel implementations.
+- UI, scheduler, broad storage migration, and real-time LLM requirements remain
+  outside this sequence.
+
+## PR 1: New Evidence Evolves the Graph
+
+### Functional Outcome
+
+New memory can interact with existing same-scope memory and produce a durable,
+auditable graph change when explicitly enabled.
+
+The capability includes:
+
+- candidate discovery from existing memory
+- support, competition, related, or no-relation decisions
+- preservation of task, conversation, channel, project, and validity context
+- cluster join or new-cluster decisions
+- reinforcement without duplicate-source inflation
+- competition without immediate overwrite
+- dry-run and opt-in persistence using one evolution plan
+- an explanation of considered evidence and applied operations
+
+### References
+
+- Requirements: MR-1, MR-2, MR-3, MR-4, MR-9, MR-10
+- ADRs: ADR-0001, ADR-0002, ADR-0003, ADR-0005
+- Architecture: Candidate Discovery, Graph Interaction Engine, Memory Graph
+  Store, New Evidence Interaction
+
+### Acceptance Gate
+
+- Repeated compatible evidence reinforces one cluster.
+- Duplicate evidence does not create false independent support.
+- Replaying the same evolution operation does not duplicate reinforcement or
+  membership changes.
+- Unrelated evidence remains separate.
+- Contradictory evidence creates competition and preserves both alternatives.
+- Context-specific evidence does not become global through recency alone.
+- Cross-scope candidates cannot affect the plan or result.
+- Disabled or unavailable graph behavior preserves baseline memory behavior.
+
+## PR 2: Cluster Lifecycle Drives Consolidation and Forgetting
+
+### Functional Outcome
+
+Accumulated graph evidence changes cluster lifecycle, and lifecycle drives
+stable representation, weakening, supersession, and default visibility.
+
+The capability includes:
+
+- forming, active, stable, decaying, superseded, and audit-only transitions
+- competition-aware lifecycle decisions
+- stable cluster representative selection
+- summary or artifact persistence before source soft-deprecation
+- decay of weak isolated structures without weakening supported clusters
+- failure ordering that prevents partial visibility loss
+
+### References
+
+- Requirements: MR-3, MR-4, MR-5, MR-6, MR-9, MR-10
+- ADRs: ADR-0002, ADR-0003, ADR-0004, ADR-0005
+- Architecture: Cluster Lifecycle Policy, Consolidation and Forgetting Planner,
+  Lifecycle and Consolidation
+
+### Acceptance Gate
+
+- Repeated support can move a cluster toward stable.
+- A temporary exception cannot supersede stable memory.
+- Sustained stronger competition can supersede an older cluster.
+- A representative is persisted before source visibility changes.
+- Failed representative persistence leaves source records normally retrievable.
+- Retrying a partially applied plan converges without duplicating lifecycle or
+  visibility changes.
+- Audit retrieval recovers all retained source evidence.
+
+## PR 3: Correction, Evaluation, and Controlled Rollout
+
+### Functional Outcome
+
+Automatic evolution can be inspected, corrected, rolled back, evaluated, and
+enabled through explicit rollout gates.
+
+The capability includes:
+
+- correction of content, status, membership, or preferred representative
+- rollback of persisted graph and visibility operations
+- conflict-sensitive and audit retrieval explanations
+- evaluation scenarios for false merge, false decay, contradiction handling,
+  noise suppression, scope isolation, and audit completeness
+- rollout decisions based on required evidence rather than feature presence
+
+### References
+
+- Requirements: MR-7, MR-8, MR-9, MR-10
+- ADRs: ADR-0002, ADR-0003, ADR-0004, ADR-0005
+- Architecture: Graph-aware Retriever, Evolution Report and Governance,
+  Correction and Audit
+- Rollout governance gate:
+  [memory-graph-rollout-governance.md](./memory-graph-rollout-governance.md)
+
+### Acceptance Gate
+
+- An incorrect automatic merge can be corrected without deleting history.
+- A persisted evolution can be rolled back or explicitly blocked.
+- Default retrieval suppresses superseded noise.
+- Audit retrieval exposes provenance and visibility decisions.
+- Conflict-sensitive retrieval can expose competing alternatives.
+- Missing required evaluation artifacts block broader rollout.
+
+## Completion Gate
+
+The feature is complete when the end-to-end loop defined in the requirements is
+demonstrated under controlled runtime evaluation:
 
 ```text
-off
-dry-run
-log-only
-developer opt-in
-limited rollout
-default-on
+new evidence
+  -> graph evolution
+  -> cluster lifecycle
+  -> consolidation or weakening
+  -> retrieval
+  -> audit or correction
 ```
 
-Runtime integration surfaces:
-
-- ingest-time graph interaction
-- batch graph maintenance
-- forgetting/consolidation runtime
-- audit retrieval path
-- graph evolution reporting
-
-Acceptance:
-
-- Every stage is reversible.
-- Every graph mutation has a report.
-- Default behavior changes only after evaluation data exists.
-- UI is not required.
-- Scheduler is not required all at once.
-- Old adapters without graph/deprecation support degrade to no-op diagnostics.
-
-Review focus:
-
-- Can operators compare runtime behavior with and without graph participation?
-- Is there an escape hatch for each mutation type?
-- Are graph reports sufficient to debug wrong merges or wrong decay?
-
-## Phase 6: Graph-aware Retrieval Behavior
-
-Goal: compare baseline retrieval with graph-aware retrieval before changing
-default ranking, then enable graph-aware behavior only through controlled modes.
-
-Inputs:
-
-- query
-- semantic candidates
-- graph snapshot
-- lifecycle state
-- visibility mode
-
-Outputs:
-
-- baseline result
-- graph-expanded result
-- ranking differences
-- hidden deprecated count
-- audit expansion trace
-- explanation of graph signals used in ranking
-
-Expected behavior:
-
-- Stable summaries can rank ahead of duplicate raw traces.
-- Deprecated raw records are hidden by default.
-- Audit mode can expand source evidence.
-- Contested clusters can be explicitly exposed when conflict matters.
-- Reports can explain why ranking changed.
-
-Acceptance:
-
-- Graph-aware retrieval can run as dry-run comparison before default ranking
-  changes.
-- `includeDeprecated` remains an audit capability, not the normal retrieval path.
-- Retrieval can explain when it selected an active summary instead of source raw
-  records.
-- Retrieval can expose competing clusters intentionally rather than mixing them
-  as noise.
-- Ranking behavior remains feature-gated until evaluated.
-
-Open questions:
-
-- Should graph expansion happen before or after semantic score thresholds?
-- How should recency interact with cluster stability?
-- What should the retriever do when the best semantic hit is deprecated but its
-  summary is missing?
-
-## Phase 7: Evaluation and Rollout Criteria
-
-Goal: define how to prove that the dynamic graph system improves on isolated
-records plus similarity search.
-
-Metrics:
-
-- duplicate memory reduction
-- stable preference recall
-- contradiction handling
-- retrieval noise suppression
-- audit chain completeness
-- graph mutation explainability
-- false merge rate
-- false decay rate
-- runtime cost
-
-Acceptance:
-
-- Every metric has at least one scenario.
-- Reports can compare graph-aware behavior with baseline behavior.
-- Failure modes can be identified and categorized.
-- Rollout gates are explicit.
-- Evaluation includes both quality and safety: better recall should not come at
-  the cost of lost auditability or cross-scope contamination.
-
-Suggested rollout gates:
-
-- No cross-user/workspace graph edges in default mode.
-- No raw audit chain deletion.
-- False merge rate below an agreed threshold.
-- False decay cases are inspectable and reversible.
-- Retrieval dry-run shows noise reduction without hiding necessary evidence.
-- Runtime cost is bounded for expected candidate sizes.
-
-Rollout governance gate:
-[memory-graph-rollout-governance.md](./memory-graph-rollout-governance.md)
-
-## Deliverables
-
-This planning task delivers only documentation:
-
-1. `memory-graph-evolution-execution-plan.md`
-2. A link from `memory-graph-evolution-architecture.md` to this execution plan
-3. No production code
-4. No test changes
-5. No new helper
-
-## Review Checklist
-
-- Does the plan still serve the dynamic memory graph direction?
-- Does it avoid becoming a helper checklist?
-- Does it put interface design before implementation?
-- Does it make the dry-run / persistence / runtime order explicit?
-- Does it preserve the audit chain?
-- Does it clearly isolate graph state by user, workspace, or tenant?
-- Does it leave clear phase boundaries for future Codex execution sessions?
-- Does each phase have reviewable acceptance criteria?
-- Does any phase accidentally require UI, scheduler, storage rewrite, or
-  real-time LLM behavior?
-
-## Final Reporting Template
-
-Future execution sessions should report:
-
-- documents changed
-- phase being advanced
-- phase goal
-- new or changed interface boundary
-- dry-run/report status
-- persistence/runtime status
-- unresolved architecture questions
-- verification performed
-- whether checkpoint/commit is recommended
+Completion requires all requirements to be mapped to accepted behavior and all
+accepted ADRs to remain satisfied. Documentation-only completion, isolated
+helpers, or dry-run reports without a validated runtime path are insufficient.

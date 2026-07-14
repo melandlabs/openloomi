@@ -1,5 +1,14 @@
 # Memory Consolidation Roadmap
 
+For the proposed Dynamic Memory Cluster Evolution scope, use the
+[requirements](./memory-graph-evolution-requirements.md),
+[architecture](./memory-graph-evolution-architecture.md),
+[ADR index](./adr/README.md), and
+[execution plan](./memory-graph-evolution-execution-plan.md). This roadmap
+provides broader package history and direction. The linked documents become
+authoritative when accepted and merged upstream, and then override this roadmap
+for Memory Graph Evolution decisions.
+
 ## Goal
 
 The long-term goal of `@openloomi/memory-consolidation` is not to make agents
