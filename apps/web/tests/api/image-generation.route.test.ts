@@ -25,8 +25,14 @@ vi.mock("@/lib/env/constants", () => ({
 
 import { POST } from "@/app/api/ai/v1/images/generations/route";
 import { __resetImageGenerationServiceForTests } from "@/lib/ai/image-generation/service";
+import {
+  __resetImageGenerationUsageRecorderForTests,
+  __setImageGenerationUsageRecorderForTests,
+  type ImageGenerationUsageRecord,
+} from "@/lib/ai/image-generation/usage";
 
 const fetchMock = vi.fn();
+const usageRecords: ImageGenerationUsageRecord[] = [];
 
 function request(body: unknown): Request {
   return new Request("http://localhost/api/ai/v1/images/generations", {
@@ -39,7 +45,12 @@ describe("POST /api/ai/v1/images/generations", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockReset();
+    usageRecords.length = 0;
     __resetImageGenerationServiceForTests();
+    __resetImageGenerationUsageRecorderForTests();
+    __setImageGenerationUsageRecorderForTests((record) => {
+      usageRecords.push(record);
+    });
     authState.user = { id: "user-image-generation", type: "regular" };
     envState.tauriMode = false;
     delete process.env.IMAGE_GENERATION_PROVIDER;
@@ -94,6 +105,19 @@ describe("POST /api/ai/v1/images/generations", () => {
       success: false,
       provider: "openai",
       errorType: "configuration_error",
+    });
+    expect(usageRecords).toHaveLength(1);
+    expect(usageRecords[0]).toMatchObject({
+      userId: "user-image-generation",
+      endpoint: "api/ai/v1/images/generations",
+      provider: "openai",
+      model: "gpt-image-2",
+      imageCount: 1,
+      creditsUsed: 750,
+      status: "failed",
+      errorType: "configuration_error",
+      costMode: "estimated",
+      quotaMode: "record_only",
     });
   });
 
@@ -219,6 +243,18 @@ describe("POST /api/ai/v1/images/generations", () => {
       success: true,
       provider: "openrouter",
       dataUrl: "data:image/png;base64,aGVsbG8=",
+    });
+    expect(usageRecords).toHaveLength(1);
+    expect(usageRecords[0]).toMatchObject({
+      userId: "user-image-generation",
+      endpoint: "api/ai/v1/images/generations",
+      provider: "openrouter",
+      model: "bytedance-seed/seedream-4.5",
+      imageCount: 1,
+      creditsUsed: 750,
+      status: "success",
+      costMode: "estimated",
+      quotaMode: "record_only",
     });
   });
 

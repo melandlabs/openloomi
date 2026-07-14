@@ -1,7 +1,11 @@
 import { auth } from "@/app/(auth)/auth";
 import { generateImageForApi } from "@/lib/ai/image-generation/service";
+import { recordImageGenerationUsage } from "@/lib/ai/image-generation/usage";
 import { isTauriMode } from "@/lib/env/constants";
-import type { ImageGenerationRequest } from "@openloomi/ai/agent";
+import type {
+  ImageGenerationRequest,
+  ImageGenerationResponse,
+} from "@openloomi/ai/agent";
 
 export const runtime = "nodejs";
 
@@ -46,9 +50,33 @@ export async function POST(request: Request) {
   }
 
   const result = await generateImageForApi(normalized.request);
+  await recordUsageSafely(session?.user?.id ?? null, result);
   return Response.json(result, {
     status: result.success ? 200 : statusFromErrorType(result.errorType),
   });
+}
+
+async function recordUsageSafely(
+  userId: string | null,
+  result: ImageGenerationResponse,
+): Promise<void> {
+  try {
+    await recordImageGenerationUsage({
+      userId,
+      endpoint: "api/ai/v1/images/generations",
+      provider: result.provider,
+      model: result.model,
+      imageCount: result.imageCount,
+      creditsUsed: result.creditsUsed ?? 0,
+      status: result.success ? "success" : "failed",
+      errorType: result.errorType,
+      costMode: "estimated",
+      quotaMode: "record_only",
+      createdAt: new Date(),
+    });
+  } catch (error) {
+    console.warn("[image-generation] usage tracking failed", error);
+  }
 }
 
 function normalizeImageGenerationBody(
