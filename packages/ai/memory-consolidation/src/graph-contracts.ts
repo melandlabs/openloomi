@@ -4,6 +4,22 @@ export interface OwnerScope {
   tenantId?: string;
 }
 
+export type MemoryApplicabilityScope =
+  | "global"
+  | "task"
+  | "conversation"
+  | "channel"
+  | "project"
+  | "custom";
+
+export interface MemoryApplicabilityContext {
+  scope: MemoryApplicabilityScope;
+  key?: string;
+  validFrom?: number;
+  validUntil?: number;
+  metadata?: Record<string, unknown>;
+}
+
 export type MemoryGraphNodeType = "raw" | "summary" | "artifact";
 
 export type MemoryGraphRelationKind =
@@ -30,6 +46,7 @@ export interface MemoryGraphNode {
   createdAt: number;
   updatedAt?: number;
   visibility: MemoryGraphVisibility;
+  applicability?: MemoryApplicabilityContext;
   metadata?: Record<string, unknown>;
 }
 
@@ -43,6 +60,7 @@ export interface MemoryGraphEdge {
   confidence?: number;
   evidenceNodeIds: string[];
   reasonCodes: string[];
+  applicability?: MemoryApplicabilityContext;
   createdAt: number;
   updatedAt?: number;
   metadata?: Record<string, unknown>;
@@ -58,6 +76,7 @@ export interface MemoryGraphClusterSnapshot {
   competitionKey?: string;
   updatedAt: number;
   reasonCodes: string[];
+  applicability?: MemoryApplicabilityContext;
   metadata?: Record<string, unknown>;
 }
 
@@ -75,6 +94,7 @@ export type MemoryGraphOperationKind =
   | "create-edge"
   | "reinforce-edge"
   | "weaken-edge"
+  | "upsert-cluster"
   | "set-cluster-lifecycle"
   | "set-cluster-representative"
   | "supersede-node";
@@ -99,10 +119,13 @@ export interface MemoryGraphPersistenceMode {
 }
 
 export interface MemoryGraphUpdatePlan {
+  planId?: string;
   ownerScope: OwnerScope;
   candidateNodes: MemoryGraphNode[];
   candidateEdges: MemoryGraphEdge[];
+  candidateClusters?: MemoryGraphClusterSnapshot[];
   operations: MemoryGraphOperation[];
+  expectedVersion?: string;
   persistence: MemoryGraphPersistenceMode;
   reasonCodes: string[];
   metadata?: Record<string, unknown>;
@@ -116,6 +139,9 @@ export interface MemoryGraphUpdateResult {
     reasonCodes: string[];
   }>;
   mutatesGraph: boolean;
+  version?: string;
+  replayed?: boolean;
+  conflict?: boolean;
   diagnostics: string[];
   metadata?: Record<string, unknown>;
 }

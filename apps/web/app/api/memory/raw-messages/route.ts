@@ -11,6 +11,10 @@ import type {
   RawMessageQuery,
 } from "@openloomi/indexeddb";
 import {
+  parseRawMessageGraphEvolutionOptions,
+  storeRawMessagesWithGraphEvolution,
+} from "@openloomi/indexeddb";
+import {
   queryMemoryWithFallback,
   runMemoryForgettingCycle,
 } from "@openloomi/indexeddb/forgetting";
@@ -308,12 +312,19 @@ export async function POST(request: NextRequest) {
           userId,
           createdAt: message.createdAt ?? now,
         })) as RawMessage[];
-        const ids = await manager.storeMessages(normalized);
+        const stored = await storeRawMessagesWithGraphEvolution({
+          storage: manager,
+          messages: normalized,
+          graphEvolution: parseRawMessageGraphEvolutionOptions(
+            body.graphEvolution,
+          ),
+        });
         await upsertRawMessagesToChroma(normalized);
         return Response.json({
           success: true,
-          stored: ids.length,
+          stored: stored.ids.length,
           errors: 0,
+          graphEvolution: stored.graphEvolution,
         });
       }
 
