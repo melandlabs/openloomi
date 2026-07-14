@@ -5435,10 +5435,7 @@ describe("memory consolidation evaluation scenarios", () => {
     ]);
     expect(
       report.gates.filter((gate) => gate.passed).map((gate) => gate.gateId),
-    ).toEqual([
-      "governance.correction-command",
-      "governance.rollback-command",
-    ]);
+    ).toEqual(["governance.correction-command", "governance.rollback-command"]);
     expect(report.reasonCodes).toEqual(
       expect.arrayContaining([
         "metric_gate_failed",
