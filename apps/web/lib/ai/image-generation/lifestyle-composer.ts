@@ -846,10 +846,6 @@ function messageFromError(error: unknown, fallback: string): string {
 }
 
 function isNodeErrorCode(error: unknown, code: string): boolean {
-  return (
-    Boolean(error) &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: unknown }).code === code
-  );
+  if (!error || typeof error !== "object") return false;
+  return "code" in error && (error as { code?: unknown }).code === code;
 }
