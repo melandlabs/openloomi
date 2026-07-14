@@ -1,17 +1,21 @@
 import type {
+  RawMessageSemanticSearchInput,
+  RunRawMessageEmbeddingDreamInput,
+} from "./embedding";
+import type {
+  RunMemoryForgettingCycleResult,
+  RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions,
+} from "./forgetting";
+import type {
   MemorySummaryRecord,
   RawMessage,
   RawMessageEmbeddingUpdate,
   RawMessageQuery,
 } from "./manager";
 import type {
-  RunRawMessageEmbeddingDreamInput,
-  RawMessageSemanticSearchInput,
-} from "./embedding";
-import type {
-  RunMemoryForgettingCycleResult,
-  RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions,
-} from "./forgetting";
+  MemoryGraphEvolutionRunResult,
+  RawMessageGraphEvolutionOptions,
+} from "./memory-graph-evolution";
 
 export type SQLiteRawMessageQueryResultItem =
   | (RawMessage & { sourceType: "raw" })
@@ -259,17 +263,25 @@ export async function sqliteStoreRawMessagesFromInsight(
     embeddingUpdatedAt?: number;
     metadata?: Record<string, any>;
   }>,
-): Promise<{ success: boolean; stored: number; errors: number }> {
+  graphEvolution?: RawMessageGraphEvolutionOptions,
+): Promise<{
+  success: boolean;
+  stored: number;
+  errors: number;
+  graphEvolution?: MemoryGraphEvolutionRunResult;
+}> {
   const response = await requestSQLiteRawMessages<{
     success: boolean;
     stored: number;
     errors: number;
+    graphEvolution?: MemoryGraphEvolutionRunResult;
   }>("store", {
     messages: messages.map((message) => ({
       ...message,
       userId,
       createdAt: currentUnixSeconds(),
     })),
+    graphEvolution,
   });
   return response;
 }

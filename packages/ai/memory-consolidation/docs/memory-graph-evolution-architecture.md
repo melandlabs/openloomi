@@ -1,663 +1,407 @@
-# Memory Graph Evolution: Dynamic Clusters, Reinforcement, and Forgetting
+# Memory Graph Evolution Architecture
 
-Execution plan: [memory-graph-evolution-execution-plan.md](./memory-graph-evolution-execution-plan.md)
+Status: Proposed target architecture for
+[Memory Graph Evolution Requirements](./memory-graph-evolution-requirements.md).
+It becomes binding when accepted and merged upstream.
 
-## Problem
+Decision records: [ADR index](./adr/README.md).
 
-OpenLoomi's long-term memory should not remain a bag of isolated records plus
-semantic similarity search. That model is useful as an initial retrieval layer,
-but it does not explain how memory becomes more stable, more concise, or more
-trustworthy over time.
+Delivery order: [Execution plan](./memory-graph-evolution-execution-plan.md).
 
-The main gaps are:
+## Architecture Objective
 
-- Duplicate memories cannot naturally merge. Similar traces may be retrieved
-  together, but the system has no durable structure that says they support the
-  same belief, preference, fact, or working pattern.
-- New evidence cannot strengthen or weaken older memories. A new trace may be
-  similar to an old trace, but similarity alone does not update confidence,
-  relation weight, cluster status, or competition between alternatives.
-- Forgetting based only on time and per-record value is too coarse. A single old
-  record can be noisy, but an old cluster with repeated activation may still be
-  important. Likewise, a recent record may be noise if it never connects to
-  anything else.
-- Retrieval can return fragment noise. Similarity search can surface several
-  near-duplicate raw records, weak one-off traces, or conflicting records without
-  enough graph context to choose stable memory over evidence fragments.
-- Summary and deprecation are currently sedimentation actions, not a complete
-  graph mechanism. A summary can supersede source records, and soft-deprecation
-  can hide raw evidence by default, but the system still needs an explicit model
-  for how clusters form, stabilize, decay, compete, and remain auditable.
+The architecture adds a write-side memory evolution loop to OpenLoomi's existing
+summary, soft-deprecation, and graph-aware retrieval capabilities.
 
-The desired evolution is a dynamic memory graph: new memories interact with old
-memories, update relations, reshape clusters, and feed forgetting,
-consolidation, retrieval, and audit flows.
+New evidence must be able to change memory structure without turning ingestion
+into an irreversible overwrite operation. The system therefore separates
+candidate discovery, relation judgment, graph mutation, lifecycle policy,
+consolidation, retrieval, and audit.
 
-## Design Goals
+```text
+new evidence
+  -> candidate discovery
+  -> interaction planning
+  -> graph mutation
+  -> cluster lifecycle
+  -> consolidation / weakening
+  -> retrieval
+  -> audit / correction
+```
 
-- Represent memory records as a dynamic graph rather than isolated fragments.
-- Let new memory influence old memory by reinforcing, weakening, contradicting,
-  elaborating, or superseding existing graph structures.
-- Give memory clusters an explicit lifecycle so the system can distinguish
-  forming, active, stable, decaying, superseded, and audit-only memory.
-- Treat forgetting as a graph operation, not simple deletion. Forgetting should
-  hide, decay, archive, or supersede evidence according to graph state and audit
-  constraints.
-- Use graph signals during retrieval, including cluster stability, edge weight,
-  conflict status, summary coverage, recency, and source evidence quality.
-- Preserve audit trails from summaries and artifacts back to source records,
-  relation evidence, and the graph operations that changed visibility.
-- Keep graph state scoped to the owning user, workspace, or tenant. Cross-scope
-  edges should be opt-in product behavior, not a default graph operation.
+Semantic similarity remains a candidate-discovery mechanism. The memory graph
+is the durable explanation of how evidence supports, competes with, or
+supersedes other memory.
 
-## Non-goals
+## Domain Model
 
-- Do not rewrite storage as part of the first architecture step.
-- Do not build UI.
-- Do not require real-time LLM calls for every memory write.
-- Do not implement a complete scheduler in one step.
-- Do not delete the raw audit chain.
-- Do not bind all relation judgment to one embedding strategy. Embeddings,
-  rules, metadata, explicit user feedback, and optional model judgments should
-  all be possible sources of graph evidence.
+### Owner Scope
 
-## Core Concepts
+Every graph object belongs to a composite owner scope:
+
+- `userId` is required
+- `workspaceId` optionally narrows the user's workspace context
+- `tenantId` optionally adds a tenant isolation boundary
+
+The complete tuple is part of identity and authorization, not optional metadata.
+Workspace or tenant identity does not replace user identity in the current
+product model.
+
+### Applicability Context
+
+Applicability describes where and when evidence is valid independently of owner
+scope. It may constrain evidence to:
+
+- a task or interaction
+- a conversation or channel
+- a person, platform, project, or other product context
+- a validity interval
+- global applicability within the owner scope
+
+Applicability is carried by evidence and by relation or cluster decisions that
+depend on that evidence. Context-specific evidence must not become global solely
+through recency. A plan may broaden applicability only when explicit evidence or
+repeated support across independent contexts justifies generalization.
 
 ### Memory Node
 
-A `Memory Node` is a graph-addressable memory unit. It may represent:
+A node is a graph-addressable memory unit:
 
-- `raw`: source traces such as messages, observations, or interaction fragments.
-- `summary`: stable cluster sedimentation used for compact long-term recall.
-- `artifact`: a durable memory product, report, plan, preference profile, or
-  externalized knowledge object.
+- `raw`: source evidence such as messages or observations
+- `summary`: compact representative of a stable cluster
+- `artifact`: durable memory product derived from one or more clusters
 
-Nodes should keep identity, timestamps, source type, visibility state, and
-provenance. A node does not need to know every cluster it belongs to; cluster
-membership can be derived or stored by the graph layer.
-
-Graph identity must include the owning scope, such as user, workspace, or
-tenant. A graph operation should not connect nodes across scopes unless a caller
-explicitly opts into a product feature that permits shared memory.
+A node records identity, owner scope, source identity, timestamps, visibility,
+and provenance metadata. A summary or artifact does not replace its source nodes
+in the audit model.
 
 ### Memory Edge
 
-A `Memory Edge` records a relationship between nodes. The architecture should
-allow at least these relation kinds:
+The operational relation vocabulary is:
 
-- `supports`: two nodes reinforce the same memory pattern.
-- `contradicts`: two nodes conflict or compete.
-- `elaborates`: one node adds detail to another without replacing it.
-- `supersedes`: one node is the preferred canonical representation of another.
-- `co-occurs`: nodes were observed or activated together.
-- `same-topic`: nodes are semantically adjacent but not yet judged as support or
-  conflict.
+- `support`: evidence reinforces a compatible memory structure
+- `compete`: evidence represents a conflicting alternative
+- `related`: evidence is relevant but insufficient for support or competition
+- `supersede`: a preferred representative covers older evidence
 
-Edges should carry weight, confidence, evidence count, last activation time,
-reason codes, and source evidence. Some edges are strong enough to shape
-clusters; others remain weak observations.
-
-Current relation-graph helpers already use a smaller operational vocabulary:
-`support`, `compete`, and `related`. The richer relation kinds above should be
-treated as architecture-level semantics that can project down into those current
-edge classes:
-
-- `supports` maps to `support`.
-- `contradicts` maps to `compete`.
-- `same-topic`, weak `elaborates`, and uncertain co-activation map to `related`.
-- `supersedes` is primarily a consolidation/audit relation and should connect to
-  summary or artifact provenance rather than force raw clusters to merge.
-
-This keeps existing helpers useful while leaving room for later interfaces to
-represent more nuance.
+Edges carry weight, confidence, evidence references, reason codes, activation
+time, and mutation history. Edge weight is not equivalent to embedding
+similarity; it represents accumulated graph evidence.
 
 ### Memory Cluster
 
-A `Memory Cluster` is a stable or forming group of memory nodes connected by
-supporting evidence. A cluster is not just a search result. It is an evolving
-memory structure with its own lifecycle, score, evidence set, relation history,
-and possible competition with other clusters.
+A cluster is an evolving memory structure formed primarily from supporting
+relations. It owns:
 
-Clusters should be able to contain raw nodes, summaries, and artifacts. A
-summary can become the active representative of a stable cluster while raw
-source nodes remain linked for audit.
+- member node identities
+- representative node identity, when one exists
+- support and activation signals
+- competing cluster references
+- lifecycle state
+- provenance and reason codes
 
-### Reinforcement
+Related evidence does not automatically become cluster membership. Competing
+clusters remain distinct.
 
-`Reinforcement` happens when new evidence increases confidence in an existing
-node, edge, or cluster. Examples:
+### Cluster Lifecycle
 
-- a new raw trace supports an existing preference cluster
-- a retrieved memory is reused successfully in an answer
-- multiple source records co-activate in the same task context
-- explicit user feedback confirms a prior memory
+The lifecycle states are:
 
-Reinforcement should update edge weights, cluster stability, activation counts,
-and retrieval priority. It should not automatically overwrite raw evidence.
+- `forming`: insufficient evidence for normal long-term use
+- `active`: useful and still evolving
+- `stable`: eligible for durable representation
+- `decaying`: losing support or activation
+- `superseded`: replaced by a preferred cluster or representative
+- `audit-only`: excluded from default retrieval but retained for traceability
 
-### Weakening / Decay
+Competition is orthogonal to lifecycle. An active or stable cluster may be
+contested and must remain visible to conflict-aware policy.
 
-`Weakening` happens when evidence becomes stale, unsupported, contradicted, or
-unused. `Decay` is time-based weakening, but weakening can also come from new
-contradictory evidence or failed retrieval outcomes.
+## Architectural Invariants
 
-Decay should operate on graph structure:
+### Scope Isolation
 
-- isolated raw nodes decay faster than reinforced clusters
-- weak edges decay when they are not reactivated
-- contradicted clusters can lose active status
-- superseded clusters can move toward audit-only visibility
+No default operation may read, connect, mutate, rank, or return graph objects
+from another owner scope.
 
-### Consolidation
+### Evidence Preservation
 
-`Consolidation` turns stable graph structures into compact durable memory:
-summaries, artifacts, or canonical cluster representatives. Consolidation should
-consume cluster state and source evidence rather than treating records as an
-unordered batch.
+Consolidation and forgetting may change default visibility but must preserve the
+source evidence chain. Hard deletion is outside this architecture.
 
-The consolidation output should preserve provenance: source node ids, relation
-evidence, reason codes, quality/confidence signals, and the cluster lifecycle
-state that justified sedimentation.
+### Plan Before Persist
 
-### Soft Forgetting
+Relation, membership, lifecycle, consolidation, and visibility changes are
+represented as a plan before persistence. The same plan shape supports dry-run,
+evaluation, persistence, and audit.
 
-`Soft Forgetting` hides source raw records from default retrieval after a stable
-summary or artifact supersedes them. It does not delete audit evidence.
+### Idempotent and Versioned Mutation
 
-Soft-forgotten records should keep fields such as deprecation timestamp, reason,
-superseding summary or artifact id, and source linkage. Default retrieval should
-prefer the active summary/cluster representative; audit retrieval should be able
-to include deprecated raw records.
+Every persisted plan has a stable operation identity and an expected graph
+version or equivalent concurrency guard. Replaying a completed operation is a
+no-op. Retrying a partially applied operation resumes the unapplied work without
+duplicating reinforcement, membership, lifecycle, consolidation, or visibility
+changes.
 
-### Audit Trail
+Version conflicts return an observable conflict result and require the plan to
+be rebuilt against a current snapshot.
 
-The `Audit Trail` is the reversible chain from a summary or artifact back to:
+### No Immediate Overwrite
 
-- source raw records
-- relation evidence
-- graph update operations
-- cluster lifecycle decisions
-- deprecation or visibility changes
+A new contradictory trace cannot directly replace a stable cluster. It creates
+competition and contributes evidence toward a later lifecycle or supersession
+decision.
 
-Audit is a first-class requirement. It lets operators answer why a memory exists,
-what evidence supports it, what was hidden by default, and how to recover the raw
-source chain when needed.
+Context-specific evidence competes within overlapping applicability. It cannot
+supersede a broader stable cluster until policy has evidence that the new memory
+also applies more broadly.
 
-## Architecture Layers
+### Representative Is Not the Graph
 
-### Graph Layer
+A summary or artifact is an active cluster representative. It does not become
+the sole source of truth and does not erase the cluster's graph history.
 
-Responsibility: express memory nodes, edges, clusters, lifecycle state, and
-graph snapshots.
+### Retrieval Does Not Own Evolution
 
-The Graph Layer stores or derives:
+Retrieval consumes graph state but does not mutate cluster lifecycle by default.
+Any feedback-based reinforcement is a separate, explicit interaction event.
 
-- node identity and visibility
-- edge kind, weight, confidence, and provenance
-- cluster membership and cluster representatives
-- competition relationships between clusters
-- graph version or operation metadata
-- owner scope, so graph reads and writes stay isolated by user, workspace, or
-  tenant
+### Baseline Compatibility
 
-It should not decide which model/provider judges relation meaning. It should not
-perform final retrieval ranking by itself. It should expose enough graph state
-for interaction, lifecycle, consolidation, retrieval, and audit layers.
+When graph state, policy, or persistence is unavailable, the system falls back
+to existing semantic, keyword, recency, and soft-deprecation behavior.
 
-### Interaction Layer
+## Component Boundaries
 
-Responsibility: let new memory interact with existing memory and produce a graph
-update plan.
+### Candidate Discovery
 
-The Interaction Layer takes new memory nodes plus candidate existing nodes or
-clusters. It proposes:
+Responsibility:
 
-- new edges
-- edge reinforcement
-- edge weakening
-- cluster joins or splits
-- conflict/competition observations
-- reason codes and evidence links
+- find same-scope nodes and clusters that may relate to new evidence
+- combine semantic, metadata, relation-key, recency, and activation signals
+- filter or annotate candidates by applicability overlap
+- return candidates without deciding graph mutation
 
-It should support multiple signal sources: metadata rules, explicit relation
-keys, embeddings, co-activation, user feedback, and optional model judgment. It
-should output a plan before persistence so callers can dry-run, audit, or gate
-graph changes.
+It does not create edges or cluster membership.
 
-### Cluster Lifecycle Layer
+### Graph Interaction Engine
 
-Responsibility: manage cluster state transitions.
+Responsibility:
 
-Suggested lifecycle states:
+- classify candidate relationships as support, compete, related, or none
+- propose new edges and edge reinforcement or weakening
+- propose cluster joins, new clusters, or competition links
+- preserve or propose applicability without silently generalizing context
+- emit evidence-backed reason codes
 
-- `forming`: early evidence exists but is not stable.
-- `active`: the cluster is useful in retrieval and still evolving.
-- `stable`: evidence is strong enough for consolidation.
-- `decaying`: evidence or activation is weakening.
-- `superseded`: another summary, artifact, or cluster is the preferred
-  representative.
-- `audit-only`: hidden from default retrieval but retained for traceability.
+Input:
 
-The lifecycle layer consumes graph state and policy. It should not generate
-summary text, mutate storage directly, or decide UI presentation.
+- normalized new nodes
+- candidate nodes and clusters
+- current same-scope graph snapshot
+- available relation signals
 
-### Forgetting / Consolidation Layer
+Output:
 
-Responsibility: convert stable or decaying cluster state into memory operations.
+- graph update plan
+- skipped or uncertain observations
+- interaction report
 
-Operations can include:
+It does not persist directly or decide final lifecycle transitions.
 
-- generate summary candidates from stable clusters
-- persist summaries or artifacts
-- soft-deprecate source raw records
-- archive source details when policy allows
-- mark weak clusters as decaying or audit-only
-- preserve contested clusters without premature summarization
+### Memory Graph Store
 
-This layer is where current summary plus soft-deprecation behavior belongs. It
-should consume cluster lifecycle decisions and produce auditable actions.
+Responsibility:
 
-### Retrieval Layer
+- read owner-scoped graph snapshots
+- persist validated graph update plans
+- enforce operation identity, version checks, and idempotent replay
+- preserve operation and provenance history
+- provide audit traversal for nodes, edges, clusters, and operations
 
-Responsibility: use graph signals during recall.
+It does not judge relation meaning, generate summaries, or rank retrieval hits.
 
-Retrieval should start with semantic, keyword, recency, or metadata candidates,
-then use graph state to:
+### Cluster Lifecycle Policy
 
-- expand from a raw hit to its active cluster representative
-- suppress deprecated source records by default
-- prefer stable summaries when they cover noisy raw traces
-- include conflicting clusters when contradiction matters
-- rank by relation strength, activation, lifecycle state, and evidence quality
-- support audit mode via `includeDeprecated` and provenance expansion
+Responsibility:
 
-Graph-aware retrieval should not replace all semantic search. It should make
-semantic candidates more contextual and less fragmentary.
+- evaluate support, activation, competition, supersession, applicability, and
+  decay signals
+- propose lifecycle transitions
+- identify stable, contested, decaying, and audit-only candidates
+- suggest representatives and consolidation eligibility
 
-### Observability Layer
+It does not write graph state or storage records directly.
 
-Responsibility: report how the graph changed and why.
+### Consolidation and Forgetting Planner
 
-Reports should include:
+Responsibility:
 
-- graph diffs
-- created/updated edges
-- reinforcement and decay events
-- cluster lifecycle transitions
-- consolidation outputs
-- source soft-deprecation outcomes
-- retrieval changes compared with baseline search
-- audit chain completeness
+- create summary or artifact candidates from stable clusters
+- plan source soft-deprecation after representative persistence
+- preserve contested clusters
+- plan weakening, supersession, archive, or audit-only actions
 
-The observability layer makes the system operable before fully automatic graph
-behavior is enabled.
+It consumes lifecycle decisions and does not re-judge all source relations.
 
-## Data Flows
+### Graph-aware Retriever
 
-### Ingest-time Flow
+Responsibility:
+
+- begin from baseline semantic, keyword, or metadata candidates
+- map candidates to graph nodes and active cluster representatives
+- prefer candidates whose applicability matches the current request
+- apply lifecycle, competition, relation strength, and visibility signals
+- expand source evidence in audit mode
+- explain ranking and filtering changes
+
+It does not replace baseline candidate search or mutate the graph by default.
+
+### Evolution Report and Governance
+
+Responsibility:
+
+- describe proposed and applied graph changes
+- compare graph-aware behavior with baseline behavior
+- expose scope violations, uncertain judgments, and partial failures
+- support correction, rollback, and rollout gates
+
+Reports are outputs of the architecture, not an alternative source of graph
+state.
+
+## Core Flows
+
+### New Evidence Interaction
 
 ```text
-new memory
-  -> normalize node
-  -> retrieve candidate existing nodes/clusters
-  -> infer relation candidates
+normalize new evidence
+  -> resolve owner scope and applicability
+  -> discover same-scope candidates
+  -> classify relations
   -> build graph update plan
-  -> reinforce / weaken / create edges
-  -> update cluster membership and lifecycle signals
-  -> emit GraphEvolutionReport
+  -> validate scope and evidence
+  -> persist when enabled
+  -> evaluate affected clusters
+  -> emit evolution report
 ```
 
-The ingest path should be incremental. It does not need to summarize
-immediately. Its job is to make the new memory interact with existing memory so
-future consolidation and retrieval have graph context.
+Uncertain evidence remains a weak observation or no-op. It must not force a
+cluster merge.
 
-### Batch Consolidation Flow
+### Reinforcement and Competition
 
 ```text
-stable cluster
-  -> consolidation planner
-  -> summary or artifact draft
-  -> persist summary/artifact
-  -> soft-deprecate source raw records
-  -> update cluster representative
-  -> emit consolidation and deprecation diagnostics
+supporting evidence
+  -> reinforce edge
+  -> increase cluster support
+  -> update activation
+  -> evaluate stability
+
+contradictory evidence
+  -> create or reinforce competition
+  -> preserve alternatives
+  -> evaluate relative support over time
+  -> optionally supersede weaker cluster
 ```
 
-This is the sedimentation path. The summary is not a replacement for the graph;
-it is the active compact representation of a stable cluster. Source raw records
-remain audit-linked and can be retrieved with audit options.
+Duplicate source identity must not count as independent reinforcement.
+Repeated support across independent contexts may propose broader applicability;
+repetition inside one context does not automatically generalize memory.
 
-### Retrieval Flow
+### Lifecycle and Consolidation
+
+```text
+affected cluster snapshot
+  -> lifecycle policy
+  -> stable / contested / decaying decision
+  -> consolidation and forgetting plan
+  -> persist representative
+  -> soft-deprecate covered source records
+  -> update representative and visibility
+```
+
+Source visibility changes occur only after representative persistence succeeds.
+
+### Retrieval
 
 ```text
 query
-  -> semantic / keyword / metadata candidates
-  -> graph expansion
+  -> baseline candidates
+  -> graph node mapping
+  -> applicability filtering
+  -> representative and competition expansion
   -> lifecycle and visibility filtering
   -> graph-aware ranking
-  -> active summaries and selected raw records
+  -> explanation
 ```
 
-Default retrieval should hide deprecated raw source records when an active
-summary covers them. When the query needs evidence or conflict, retrieval can
-expand to source records, related clusters, or competing clusters.
+Default retrieval suppresses superseded evidence noise. Audit retrieval can
+recover deprecated raw evidence. Conflict-sensitive retrieval can expose
+competing clusters.
 
-### Audit Flow
+### Correction and Audit
 
 ```text
-summary or artifact
-  -> source record ids
-  -> relation evidence
-  -> graph operations
-  -> lifecycle decisions
-  -> deprecation / visibility history
+memory or cluster
+  -> source evidence
+  -> relation and operation history
+  -> lifecycle and visibility decisions
+  -> correction or rollback plan
+  -> explicit persistence
 ```
 
-Audit mode should prove why a summary exists and why raw records are hidden by
-default. It should recover source evidence without turning audit records back
-into normal retrieval noise.
-
-## Interface Boundary
-
-These names are conceptual boundaries, not final helper names. Each boundary
-should stay small enough to test independently and broad enough to guide future
-implementation.
-
-### MemoryGraphStore
-
-Input:
-
-- node writes and reads
-- edge writes and reads
-- cluster snapshots or cluster update operations
-- graph operation metadata
-- owner scope for every graph read and write
-
-Output:
-
-- graph snapshot for candidate records or clusters
-- persisted graph update result
-- audit provenance for nodes, edges, and clusters
-
-Not responsible for:
-
-- judging relation meaning
-- deciding lifecycle policy
-- generating summaries
-- final retrieval ranking
-
-Consumed by:
-
-- GraphInteractionEngine
-- ClusterLifecyclePolicy
-- MemoryConsolidationPlanner
-- GraphAwareRetriever
-- Observability Layer
-
-### GraphInteractionEngine
-
-Input:
-
-- new memory nodes
-- candidate existing nodes/clusters
-- signal sources such as embeddings, metadata, relation keys, co-activation, or
-  optional model judgments
-
-Output:
-
-- graph update plan
-- relation candidates and judgments
-- reinforcement or weakening events
-- evidence and reason codes
-
-Not responsible for:
-
-- storage schema migration
-- final persistence without caller approval
-- summary generation
-- default retrieval behavior
-
-Consumed by:
-
-- ingest-time memory pipeline
-- batch graph maintenance
-- GraphEvolutionReport
-
-### ClusterLifecyclePolicy
-
-Input:
-
-- graph snapshot
-- cluster scores
-- edge weights
-- activation history
-- conflict and supersession signals
-- policy thresholds
-
-Output:
-
-- lifecycle transitions
-- cluster representative suggestions
-- consolidation eligibility
-- decay or audit-only recommendations
-
-Not responsible for:
-
-- creating raw relation evidence
-- writing summaries
-- deleting raw records
-- ranking query results directly
-
-Consumed by:
-
-- MemoryConsolidationPlanner
-- GraphAwareRetriever
-- Observability Layer
-
-### MemoryConsolidationPlanner
-
-Input:
-
-- stable or decaying cluster state
-- source node ids and evidence
-- lifecycle recommendations
-- summarization or artifact constraints
-
-Output:
-
-- summary/artifact candidates
-- source soft-deprecation plan
-- archive recommendations
-- diagnostics for preserve / observe / decay decisions
-
-Not responsible for:
-
-- judging every relation from scratch
-- direct UI presentation
-- mandatory online writes
-- removing audit evidence
-
-Consumed by:
-
-- forgetting/consolidation runtime
-- summary/artifact generation boundary
-- audit tooling
-
-### GraphAwareRetriever
-
-Input:
-
-- query
-- semantic/keyword candidate hits
-- graph snapshot
-- visibility mode such as default retrieval or audit retrieval
-
-Output:
-
-- ranked memory hits
-- graph expansion explanation
-- active summaries/raw records
-- optional audit source chains
-
-Not responsible for:
-
-- mutating graph state by default
-- deciding cluster lifecycle
-- generating summaries
-- replacing the underlying semantic index
-
-Consumed by:
-
-- agent context assembly
-- memory search APIs
-- evaluation and retrieval dry-runs
-
-### GraphEvolutionReport
-
-Input:
-
-- graph update plan
-- persisted graph update result
-- lifecycle transitions
-- consolidation/deprecation outcomes
-- retrieval diff data
-
-Output:
-
-- human-readable and machine-readable graph diff
-- reinforcement and weakening summary
-- cluster lifecycle summary
-- audit chain completeness
-- warnings and no-op diagnostics
-
-Not responsible for:
-
-- deciding policy
-- mutating storage
-- ranking memories
-- summarizing source content
-
-Consumed by:
-
-- tests and evals
-- operators
-- future UI surfaces
-- rollout gates
-
-## Phased Implementation Plan
-
-### Phase 1: Architecture + Conceptual Contracts
-
-Define the graph architecture, terms, lifecycle states, and interface boundaries.
-Keep this phase documentation-first. Any contracts should be conceptual or
-dry-run only. The success criterion is shared understanding of where graph,
-interaction, lifecycle, consolidation, retrieval, and observability concerns
-belong.
-
-### Phase 2: Ingest-time Graph Interaction
-
-Add an opt-in path where new memory retrieves candidate existing memory and
-produces a graph update plan. Start with explicit metadata/relation keys and
-simple similarity candidates. Persist only behind a controlled boundary, with
-reports showing proposed edges, reinforcement, weakening, and cluster impact.
-
-### Phase 3: Cluster Lifecycle State
-
-Introduce lifecycle state for clusters. Compute forming, active, stable,
-decaying, superseded, and audit-only transitions from graph signals. Keep the
-policy separate from storage and summarization. Add dry-run lifecycle reports
-before changing default runtime behavior.
-
-### Phase 4: Graph-aware Forgetting / Consolidation
-
-Make forgetting and consolidation consume cluster lifecycle state. Stable
-clusters produce summaries or artifacts; source raw records are soft-deprecated
-after successful persistence; weak or unsupported structures decay; contested
-clusters are preserved for observation rather than prematurely summarized.
-
-### Phase 5: Graph-aware Retrieval
-
-Use graph state to improve retrieval. Start with dry-run comparison reports:
-baseline semantic candidates versus graph-expanded and graph-ranked results.
-Then enable controlled retrieval paths where active summaries represent stable
-clusters and deprecated raw source records are hidden by default but available
-for audit.
-
-### Phase 6: Evaluation and Observability
-
-Build evaluation scenarios and reports for:
-
-- duplicate memory reduction
-- stable preference recall
-- conflict handling
-- source evidence traceability
-- noise suppression
-- graph-aware retrieval quality
-- audit chain completeness
-
-Observability should make every graph operation explainable before broad runtime
-enablement.
-
-## Relationship to Existing Work
-
-- Relation graph and relation discovery already form the foundation of the Graph
-  Layer and Interaction Layer. Existing relation candidates, relation judgment,
-  graph assignment, competition groups, and lifecycle signals can be treated as
-  early graph mechanics.
-- Current `support`, `compete`, and `related` relation edges are the operational
-  projection of the broader relation taxonomy proposed here. Future interfaces
-  can add richer relation kinds without invalidating the current graph pipeline.
-- The current forgetting engine is an early Forgetting / Consolidation Layer. It
-  scans eligible memory, groups records, generates summaries, transitions tiers,
-  and provides a place for graph-aware cluster decisions to be consumed later.
-- Summary plus soft-deprecation is the sedimentation action after cluster
-  stabilization. It should eventually be driven by stable cluster lifecycle
-  state rather than only by record age or batch grouping.
-- `includeDeprecated` and audit retrieval are the foundation of the Audit Trail.
-  Default retrieval can hide superseded raw records, while audit retrieval can
-  recover the source chain behind a summary or artifact.
-- Existing semantic retrieval dry-runs and retrieval comparison reports can
-  become the evaluation harness for graph-aware retrieval before changing
-  default ranking.
-
-## Acceptance Criteria
-
-This architecture is sufficient when it can answer the following questions:
-
-- How does new memory affect old memory?
-
-  New memory becomes a node, retrieves candidate neighbors, produces relation
-  updates, reinforces or weakens edges, and can update cluster membership and
-  lifecycle state.
-
-- How do memory clusters form, stabilize, and decay?
-
-  Clusters form from supporting edges, become active through evidence and
-  activation, stabilize when policy thresholds are met, decay when unsupported or
-  contradicted, and move to superseded or audit-only states when a summary or
-  artifact becomes the active representative.
-
-- Why is forgetting a graph operation?
-
-  Forgetting must consider whether a record is isolated noise, part of a stable
-  cluster, contradicted by a stronger cluster, superseded by a summary, or still
-  needed for audit. Those are graph states, not simple per-record age checks.
-
-- Where do summary and deprecation sit in the architecture?
-
-  They are consolidation outputs after cluster stabilization. A summary or
-  artifact becomes the compact active representative; source raw records are
-  soft-deprecated by default but remain linked for audit.
-
-- How does retrieval use graph signals instead of only similarity?
-
-  Retrieval starts from semantic or keyword candidates, then expands and ranks by
-  cluster membership, edge strength, lifecycle state, contradiction,
-  supersession, activation, and visibility mode.
-
-- Which boundaries should future interface design use?
-
-  Future interfaces should center on `MemoryGraphStore`,
-  `GraphInteractionEngine`, `ClusterLifecyclePolicy`,
-  `MemoryConsolidationPlanner`, `GraphAwareRetriever`, and
-  `GraphEvolutionReport`.
+A correction adds an authoritative operation; it does not rewrite historical
+evidence.
+
+## Failure and Degradation Rules
+
+- Missing graph snapshot: keep baseline behavior and report a no-op.
+- Relation judgment failure: preserve candidates without mutation.
+- Scope mismatch: reject the affected result or operation.
+- Applicability mismatch: preserve the evidence without treating it as global
+  support or competition.
+- Version conflict: reject persistence and rebuild the plan from a current graph
+  snapshot.
+- Replayed completed operation: return the prior result without applying the
+  mutation again.
+- Graph persistence failure: do not apply dependent lifecycle or visibility
+  changes.
+- Representative persistence failure: do not soft-deprecate source records.
+- Partial persistence failure: retain applied-operation records and retry only
+  unapplied operations or execute an explicit rollback plan.
+- Partial candidate coverage: preserve non-hidden baseline retrieval hits.
+- Missing audit provenance: block consolidation or rollout when provenance is
+  required by policy.
+- Correction conflict: preserve both the automatic result and correction record
+  until an explicit resolution is applied.
+
+## Current Capability Mapping
+
+Already available:
+
+- summary persistence and source soft-deprecation
+- deprecated-record filtering and `includeDeprecated` audit retrieval
+- graph-aware filtering and ranking of baseline retrieval candidates
+- relation observations and competition-oriented diagnostics
+
+Next architecture gap:
+
+- ingest-time interaction that updates durable graph relations and clusters
+- lifecycle decisions driven by accumulated graph evidence
+- consolidation and weakening driven by lifecycle state
+- explicit correction and rollback of graph evolution
+
+## PR Reference Contract
+
+Every Memory Graph Evolution PR must state:
+
+- requirement identifiers from
+  [memory-graph-evolution-requirements.md](./memory-graph-evolution-requirements.md)
+- applicable ADRs from [adr/README.md](./adr/README.md)
+- architecture components changed
+- invariants that must remain true
+- user-visible behavior added or changed
+- no-op, failure, and rollback behavior
+- focused acceptance scenarios and verification
+
+PR descriptions must reference these documents instead of copying them.

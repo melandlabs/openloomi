@@ -1,7 +1,7 @@
 ---
 name: openloomi-loop
-description: "openloomi's Loop — the proactive execution brain. Loop runs inside the main web app (apps/web/lib/loop/) and is reached through its HTTP API. Use this skill to inspect state, run a tick, schedule / cancel decision actions, and tune preferences. Triggers: 'openloomi loop', 'loop tick', 'loop schedule', 'loop inbox', 'loop run', 'proactive decisions', 'signal → decision → execute', 'pull signals', 'decision queue'"
-allowed-tools: Bash(curl *), Bash(jq *), Bash(cat ~/.openloomi/token *), Bash(base64 -d *), Bash(ls ~/.openloomi/loop/*)
+description: "openloomi's Loop — the proactive execution brain. Loop runs inside the main web app (apps/web/lib/loop/) and is reached through its HTTP API. Use this skill to inspect state, run a tick, schedule / cancel decision actions, tune preferences, and extend Loop with user-defined decision types, Composio-backed signal channels, or deterministic classifier rules. Triggers: 'openloomi loop', 'loop tick', 'loop schedule', 'loop inbox', 'loop run', 'proactive decisions', 'signal → decision → execute', 'pull signals', 'decision queue', 'register loop type', 'add loop decision type', 'register custom channel', 'add composio channel', 'add loop rule', 'register classifier rule', 'force loop type', 'dry-run loop rule', 'list my loop extensions', 'remove loop type', 'delete loop channel'"
+allowed-tools: Bash(curl *), Bash(jq *), Bash(cat ~/.openloomi/token *), Bash(base64 -d *), Bash(ls ~/.openloomi/loop/*), Read(~/.openloomi/loop/custom-types.json), Read(~/.openloomi/loop/custom-channels.json), Read(~/.openloomi/loop/classifier-rules.json)
 metadata:
   version: 0.7.6
 ---
@@ -20,7 +20,7 @@ skill is a thin Claude-side wrapper around the Loop's HTTP API.
 | Concern | Location |
 |---|---|
 | Business logic | `apps/web/lib/loop/` |
-| HTTP API | `apps/web/app/api/loop/{state,decisions,decision/[id],card/[id],connectors,brief,wrap,tick,preferences,action/*}/route.ts` |
+| HTTP API | `apps/web/app/api/loop/{state,decisions,decision/[id],card/[id],connectors,brief,wrap,tick,preferences,action/*,types,types/[id],channels,channels/[id],classifier-rules,classifier-rules/[id],classifier-rules/dry-run}/route.ts` |
 | Persistence | `~/.openloomi/loop/{signals.jsonl,decisions.json,status.json,connectors.json,config.json}` |
 | Scheduler | `lib/loop/scheduler.ts` registers 3 `ScheduledJob` rows (`loop.tick` / `loop.brief` / `loop.wrap`) driven by `lib/cron/local-scheduler` |
 | Pet surface | Tauri Rust thread `loomi-pet-decision-watcher` (`apps/web/src-tauri/src/pet/watcher.rs`) polls `decisions.json` mtime every 2s and emits `loop:state` / `loop:decision` to bubble + card webviews. The widget (`apps/web/public/loomi-widget.html`) supports two built-in themes (`fox`, `capybara`) and a `presenting` state surfaced when a decision moves to `done` before the user has reviewed it — click the bubble to flip back to `happy`. User-editable theme config lives at `~/.openloomi/pet-config.json`; see `apps/web/src-tauri/src/pet/theme.rs` and `config_watcher.rs`. |
@@ -69,6 +69,16 @@ Then pass `-H "Authorization: Bearer $TOKEN"` on every call below.
 | GET  | `/api/loop/preferences` | read prefs |
 | PUT  | `/api/loop/preferences` `{...patch}` | write prefs + sync the 3 `ScheduledJob` rows |
 | GET  | `/api/loop/connectors?refresh=1` | list integration health |
+| GET  | `/api/loop/types` | list user-defined decision types (per-user extension to the closed `DecisionType` union) |
+| PUT  | `/api/loop/types` `{id,label,icon,actionKind,description?}` | upsert a custom decision type. `actionKind` must be one of the 14 built-in `ActionKind` literals; `id` must not collide with a built-in `DecisionType`. |
+| DELETE | `/api/loop/types/[id]` | remove a custom decision type |
+| GET  | `/api/loop/channels` | list user-defined signal channels (Composio-backed pullers) |
+| PUT  | `/api/loop/channels` `{id,label,toolkit,toolSlug,pollIntervalSec,signalType,payloadShape?,eventFilter?}` | upsert a custom channel. `toolSlug` follows the `VENDOR_ACTION` convention (e.g. `STRIPE_LIST_CHARGES`); the watcher invokes it via the `composio` CLI on the registered cadence. |
+| DELETE | `/api/loop/channels/[id]` | remove a custom signal channel |
+| GET  | `/api/loop/classifier-rules` | list user-defined deterministic classifier rules (override the LLM's classification when conditions match) |
+| PUT  | `/api/loop/classifier-rules` `{id,label?,when[],then{type,actionKind?,confidence?},description?}` | upsert a classifier rule. `when` is a non-empty array of up to 8 `{field,op,value?\|pattern?}` predicates (`signal.type` / `signal.payload.*` paths; ops: `eq` `neq` `contains` `matches` `startsWith` `endsWith` `gt` `lt` `gte` `lte` `exists` `absent`). `then.type` is a built-in or custom `DecisionType`, or `"noop"` to suppress the decision entirely. |
+| DELETE | `/api/loop/classifier-rules/[id]` | remove a classifier rule |
+| POST | `/api/loop/classifier-rules/dry-run` `{signal}` | preview which rules would match a given signal — returns `{matches:[{ruleId,then}], trace:[{ruleId,matched}], totalRules}`. Pure read; does not mutate state. |
 
 ## Examples
 
@@ -114,7 +124,209 @@ curl -sS -X PUT "$BASE/api/loop/preferences" \
 
 # Refresh connector probes
 curl -sS "$BASE/api/loop/connectors?refresh=1" -H "Authorization: Bearer $TOKEN"
+
+# Register a deterministic classifier rule (see "Register a
+# deterministic classifier rule" below for the full schema)
+curl -sS -X PUT "$BASE/api/loop/classifier-rules" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+    "id":"force_birthday_today",
+    "when":[
+      {"field":"signal.type","op":"eq","value":"contact_birthday"},
+      {"field":"signal.payload.daysUntilNext","op":"eq","value":0}
+    ],
+    "then":{"type":"birthday_wish","actionKind":"email_reply","confidence":0.9}
+  }'
+
+# Dry-run a signal through the rule list (read-only preview)
+curl -sS -X POST "$BASE/api/loop/classifier-rules/dry-run" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"signal":{"type":"contact_birthday","payload":{"daysUntilNext":0}}}'
 ```
+
+## Registering custom extensions
+
+Loop's closed `DecisionType` and `ConnectorEntry` unions are
+intentionally narrow, but the user can extend both at runtime without
+restarting anything. Custom entries live in
+`~/.openloomi/loop/custom-{types,channels}.json` and are visible to the
+tick prompt, the watcher, the web UI, and the pet bubble + card
+immediately. The user can speak in plain English — Claude translates
+the request to the right PUT body.
+
+### Register a custom decision type
+
+> "I want a new Loop type called `birthday_wish` — when a contact's
+> birthday is in 3 days, draft an email saying happy birthday."
+
+Claude translates the request to:
+
+```bash
+curl -sS -X PUT "$BASE/api/loop/types" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+    "id": "birthday_wish",
+    "label": "Birthday wish",
+    "icon": "ri-cake-2-line",
+    "actionKind": "email_reply",
+    "description": "Draft a happy-birthday email when a contact has a birthday in 3 days"
+  }'
+```
+
+- `id` — snake_case, 2-41 chars, must NOT collide with a built-in
+  `DecisionType` (`rsvp`, `draft_reply`, `review_pr`, `todo`,
+  `slack_reply`, `deadline_reminder`, `release_plan`,
+  `requirement_synthesis`, `linear_review`, `contact_update`,
+  `doc_update`, `brief`, `wrap`, `quiet_digest`, `noop`,
+  `tick_summary`, `unknown`).
+- `actionKind` — must be one of the 14 built-in `ActionKind` literals
+  (`calendar_rsvp`, `email_reply`, `slack_reply`, `github_review`,
+  `deadline_notify`, `todo`, `linear_review`,
+  `requirement_synthesis`, `release_plan`, `contact_update`,
+  `doc_update`, `brief`, `wrap`, `quiet_digest`). Custom types
+  cannot register a new execution path — the runner only knows the
+  built-ins.
+- `icon` — optional remix-icon class. Empty string falls back to
+  `ri-question-line` everywhere.
+- `description` — optional, surfaces in tooltips and the tick
+  prompt's classifier list.
+
+### Register a Composio-backed channel
+
+> "Add a channel that polls Stripe for new charges every 15 minutes."
+
+Claude translates the request to:
+
+```bash
+curl -sS -X PUT "$BASE/api/loop/channels" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+    "id": "stripe_charges",
+    "label": "Stripe charges",
+    "toolkit": "stripe",
+    "toolSlug": "STRIPE_LIST_CHARGES",
+    "pollIntervalSec": 900,
+    "signalType": "stripe_charge",
+    "payloadShape": "{id, amount, status, customer}"
+  }'
+```
+
+- `toolkit` — Composio toolkit slug (lowercase, e.g. `stripe`,
+  `github`, `notion`). The user must have already connected the
+  toolkit in their Composio account — the channel entry is just
+  loop-side configuration.
+- `toolSlug` — Composio tool slug, `VENDOR_ACTION` convention
+  (e.g. `STRIPE_LIST_CHARGES`).
+- `pollIntervalSec` — minimum 60, default 600. The watcher
+  (`lib/loop/watcher.ts`) throttles to this cadence using
+  `sync-state.json` so a re-poll is cheap.
+- `signalType` — value written to `LoopSignal.type` for each
+  record the tool returns. Convention: `<channel>_<event>`
+  (e.g. `stripe_charge`).
+- `payloadShape` — optional natural-language description of the
+  record shape, injected into the tick prompt so the agent knows
+  how to classify records.
+- `eventFilter` — optional array of `{field,op,value}` predicates
+  applied to each record before it becomes a signal. Supports
+  `eq` / `neq` / `gt` / `lt` / `contains`.
+
+### List / remove custom extensions
+
+```bash
+# List
+curl -sS "$BASE/api/loop/types"    -H "Authorization: Bearer $TOKEN" | jq .
+curl -sS "$BASE/api/loop/channels" -H "Authorization: Bearer $TOKEN" | jq .
+
+# Remove
+curl -sS -X DELETE "$BASE/api/loop/types/birthday_wish"    -H "Authorization: Bearer $TOKEN"
+curl -sS -X DELETE "$BASE/api/loop/channels/stripe_charges" -H "Authorization: Bearer $TOKEN"
+```
+
+### Register a deterministic classifier rule
+
+Sometimes the LLM's classification drifts — it might call a same-day
+birthday signal `draft_reply` when you really want it as a
+`birthday_wish` card. **Classifier rules** let you pin routing
+deterministically. Each rule is a small safe AST: a `when` array of
+field predicates (no eval, no JS — just a closed op set), plus a
+`then` block that forces `type` / `actionKind` / a confidence floor.
+
+> "When a contact's birthday is today, force the decision to
+> `birthday_wish` (email_reply, conf ≥ 0.9)."
+
+Claude translates the request to:
+
+```bash
+curl -sS -X PUT "$BASE/api/loop/classifier-rules" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+    "id": "force_birthday_today",
+    "label": "Same-day birthday → birthday_wish",
+    "when": [
+      { "field": "signal.type",                  "op": "eq", "value": "contact_birthday" },
+      { "field": "signal.payload.daysUntilNext", "op": "eq", "value": 0 }
+    ],
+    "then": {
+      "type": "birthday_wish",
+      "actionKind": "email_reply",
+      "confidence": 0.9
+    },
+    "description": "Force same-day birthdays into the birthday_wish type."
+  }'
+```
+
+The rule is enforced **twice** for safety:
+
+1. The tick prompt's §5 classifier list gets a new "User-defined
+   classifier rules (HARD CONSTRAINTS — deterministic overrides)"
+   block so the agent honours the rule on first pass.
+2. After the agentic tick writes decisions to `decisions.json`, the
+   server-side post-processor (`tick.ts::applyClassifierRules`)
+   re-evaluates each newly-added decision against the rule list and
+   pins `type` / `actionKind` / `confidence` in `decisions.update()`.
+   This belt-and-suspenders enforcement catches cases where the LLM
+   drifted or the prompt hint was truncated.
+
+Field paths use dotted notation: `signal.type`, `signal.source`,
+`signal.payload.<key>` (one level of nesting). Supported ops:
+`eq` `neq` `contains` `matches` `startsWith` `endsWith` `gt` `lt`
+`gte` `lte` `exists` `absent`. `matches` takes a `pattern` string
+(JS regex syntax) instead of `value`.
+
+`then.confidence` is a **floor** — `Math.max(agent_value, rule_floor)`
+— so a rule can't lower an LLM's confidence, only raise it. A rule
+with `then.type === "noop"` **suppresses** the decision entirely:
+it moves to `dismissed` with `suppressedByRule: <rule id>` so an
+admin can audit later.
+
+You can preview which rules would match a given signal without
+running a tick:
+
+```bash
+curl -sS -X POST "$BASE/api/loop/classifier-rules/dry-run" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+    "signal": {
+      "id": "sig_1",
+      "ts": "2026-07-14T10:00:00.000Z",
+      "source": "contact_birthdays",
+      "type": "contact_birthday",
+      "payload": { "displayName": "Sarah", "daysUntilNext": 0 }
+    }
+  }'
+# → { "matches":[{"ruleId":"force_birthday_today","then":{...}}],
+#     "trace":[{"ruleId":"force_birthday_today","matched":true}, ...],
+#     "totalRules":2 }
+```
+
+Rules are first-match-wins in insertion order; put more specific
+rules first. To re-order, remove and re-insert.
 
 ## How a tick flows
 

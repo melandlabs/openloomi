@@ -24,11 +24,18 @@ const WEB_DIR = resolve(__dirname, "..");
 const ROOT_DIR = resolve(WEB_DIR, "..", "..");
 
 function findTsxBin() {
-  const candidates = [
-    join(ROOT_DIR, "node_modules", ".bin", "tsx"),
-    join(WEB_DIR, "node_modules", ".bin", "tsx"),
+  const isWindows = process.platform === "win32";
+  const exts = isWindows ? ["tsx.CMD", "tsx"] : ["tsx"];
+  const bases = [
+    join(ROOT_DIR, "node_modules", ".bin"),
+    join(WEB_DIR, "node_modules", ".bin"),
   ];
-  for (const p of candidates) if (existsSync(p)) return p;
+  for (const base of bases) {
+    for (const ext of exts) {
+      const p = join(base, ext);
+      if (existsSync(p)) return p;
+    }
+  }
   return null;
 }
 
@@ -46,9 +53,11 @@ if (!existsSync(cli)) {
   process.exit(1);
 }
 
+const isCmd = tsx.toLowerCase().endsWith(".cmd");
 const child = spawn(tsx, [cli, ...process.argv.slice(2)], {
   stdio: "inherit",
-  cwd: process.cwd(),
+  cwd: WEB_DIR,
+  shell: isCmd,
 });
 child.on("exit", (code) => process.exit(code ?? 0));
 child.on("error", (e) => {

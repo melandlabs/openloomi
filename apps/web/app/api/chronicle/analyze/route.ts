@@ -5,18 +5,20 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { DEFAULT_AI_MODEL } from "@/lib/env";
 import { extractCloudAuthToken } from "@/lib/ai/request-context";
+import { resolveLlmProvider } from "@/lib/ai/provider-resolver";
+import type { LlmProvider } from "@/lib/ai/provider";
 import { getUserVisionLlmSettings } from "@/lib/db/queries";
 
 const analyzeSchema = z.object({
   screenshotPath: z.string(),
 });
 
-// Chronicle uses the local Anthropic Messages API proxy. The proxy at
-// `/api/ai/v1/messages` reads the user's `anthropic_compatible` provider
-// config from the DB (or env fallback) and forwards this body as-is to the
-// upstream — no shape conversion. This is the path the original alloomi
-// reference used, and it matches what the user's "Anthropic compatible"
-// provider (configured in API Settings) is wired to handle.
+// Chronicle resolves its LLM provider via the shared `resolveLlmProvider`
+// helper. This honours the user's saved `anthropic_compatible` HTTP config
+// (or env fallback) when present, and otherwise falls back to the
+// configured agent runtime (Codex / OpenCode / Hermes / Openclaw) so a
+// user who has set `OPENLOOMI_AGENT_PROVIDER` but no HTTP API key still
+// gets a working vision analysis.
 const ANTHROPIC_MESSAGES_PATH = "/api/ai/v1/messages";
 
 const ANALYSIS_SYSTEM_PROMPT = `You are a screen content analyzer used to build a personal "screen memory" that the user will later query in natural language.
@@ -218,6 +220,7 @@ export async function POST(request: Request) {
             imageBuffer,
             cloudToken,
             requestUrl: request.url,
+            userId: session.user.id,
           }),
         );
       }
@@ -258,60 +261,15 @@ interface AnalysisResult {
   extractedText: string;
 }
 
-interface AnthropicTextBlock {
-  type: "text";
-  text: string;
-}
-
-interface AnthropicMessagesResponse {
-  content?: Array<
-    AnthropicTextBlock | { type: string; [key: string]: unknown }
-  >;
-  error?: { message?: string };
-}
-
-function extractTextFromMessagesResponse(
-  data: AnthropicMessagesResponse,
-): string {
-  const blocks = data.content ?? [];
-
-  const text = blocks
-    .filter((b): b is AnthropicTextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n")
-    .trim();
-  if (text) return text;
-
-  // Last-resort: some OpenRouter adapters route reasoning-model output into
-  // `thinking` / `redacted_thinking` blocks even when `thinking: disabled`
-  // is requested. If JSON happened to land inside the thinking stream we
-  // still want to recover it; parseAnalysisJson tolerates leading prose.
-  return blocks
-    .map((b) => {
-      const block = b as { type?: string; thinking?: unknown };
-      if (
-        (block.type === "thinking" || block.type === "redacted_thinking") &&
-        typeof block.thinking === "string"
-      ) {
-        return block.thinking;
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-}
-
 async function analyzeScreenshotWithMessagesAPI(params: {
   imageBuffer: Buffer;
   cloudToken: string | undefined;
   requestUrl: string;
+  userId: string;
 }): Promise<AnalysisResult> {
-  const { imageBuffer, cloudToken, requestUrl } = params;
+  const { imageBuffer, userId } = params;
 
   const base64 = imageBuffer.toString("base64");
-  const targetUrl = new URL(ANTHROPIC_MESSAGES_PATH, requestUrl).toString();
-  const model = process.env.ANTHROPIC_MODEL || DEFAULT_AI_MODEL;
 
   // Sniff media type from magic bytes so we can correctly label JPEGs that the
   // client now produces (PNG capture → 1080p JPEG re-encode to shrink the
@@ -319,88 +277,66 @@ async function analyzeScreenshotWithMessagesAPI(params: {
   // original Tauri capture always emits.
   const mediaType = detectImageMediaType(imageBuffer);
 
-  const requestBody = {
-    model,
-    // OCR-style full transcription needs significant headroom; long screens
-    // with code or chats easily exceed 1-2k tokens. With reasoning models
-    // (kimi-k2.6 on OpenRouter) the chain-of-thought also eats from this
-    // budget, so we leave room for both the thinking pass and the final JSON.
-    max_tokens: 8000,
-    stream: false,
-    // Disable extended thinking. Some OpenRouter Anthropic adapters default
-    // to `thinking: enabled` for newer Claude models and spend the entire
-    // token budget producing `thinking` / `redacted_thinking` blocks. We
-    // explicitly turn it off so the model emits a `text` block we can parse.
-    thinking: { type: "disabled" },
-    system: ANALYSIS_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mediaType,
-              data: base64,
-            },
-          },
-          {
-            type: "text",
-            text: 'Transcribe every visible string on this screenshot into "extractedText" verbatim, and fill "description" and "keyContent" per the system instructions. Return strict JSON only.',
-          },
-        ],
-      },
-    ],
-  };
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (cloudToken) {
-    headers.Authorization = `Bearer ${cloudToken}`;
-  }
-
-  const response = await fetch(targetUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(requestBody),
+  // Resolve the provider directly via the shared resolver. This:
+  //  - Honours the user's saved `anthropic_compatible` HTTP config when present.
+  //  - Falls back to the configured agent runtime (Codex / OpenCode / Hermes
+  //    / Openclaw) when no HTTP provider is configured — so a user who has
+  //    set `OPENLOOMI_AGENT_PROVIDER=codex` and no API key still gets a
+  //    working vision analysis.
+  const provider: LlmProvider | undefined = await resolveLlmProvider({
+    userId,
+    prefer: "anthropic_messages",
   });
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "");
-    const retryAfterMs = parseRetryAfterHeader(
-      response.headers.get("retry-after"),
-    );
+  if (!provider) {
     throw classifyUpstreamError(
-      response.status,
-      `Messages API ${response.status}: ${errText.slice(0, 300)}`,
-      retryAfterMs,
+      400,
+      "Anthropic-compatible provider is not configured and no agent runtime is available. Save one in Preferences → API Settings, set ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN/ANTHROPIC_MODEL, or set OPENLOOMI_AGENT_PROVIDER.",
+      undefined,
     );
   }
 
-  const responseContentType = response.headers.get("content-type") || "";
+  // The Anthropic-style model name (ANTHROPIC_MODEL) only makes sense for the
+  // HTTP path. For the agent runtime, let the runtime pick its own model
+  // (typically `OPENLOOMI_AGENT_<RUNTIME>_MODEL`, or the runtime's default).
+  // Codex would reject `claude-sonnet-5` outright; OpenCode / Hermes /
+  // Openclaw have their own model ecosystems.
+  const model =
+    provider.flavor === "agent_runtime"
+      ? undefined
+      : process.env.ANTHROPIC_MODEL || DEFAULT_AI_MODEL;
 
-  let data: AnthropicMessagesResponse;
-  if (responseContentType.includes("text/event-stream")) {
-    data = await collapseAnthropicStream(response);
-  } else {
-    data = (await response.json()) as AnthropicMessagesResponse;
-  }
-  if (data.error) {
-    throw new Error(`Messages API error: ${data.error.message}`);
-  }
+  // OCR-style full transcription needs significant headroom; long screens
+  // with code or chats easily exceed 1-2k tokens. With reasoning models
+  // (kimi-k2.6 on OpenRouter) the chain-of-thought also eats from this
+  // budget, so we leave room for both the thinking pass and the final JSON.
+  // 8000 is also enough for Codex / OpenCode / Hermes / Openclaw vision
+  // outputs.
+  const maxTokens = 8000;
 
-  const textContent = extractTextFromMessagesResponse(data);
+  let textContent: string;
+  try {
+    const result = await provider.complete({
+      system: ANALYSIS_SYSTEM_PROMPT,
+      userContent:
+        'Transcribe every visible string on this screenshot into "extractedText" verbatim, and fill "description" and "keyContent" per the system instructions. Return strict JSON only.',
+      images: [{ base64, mediaType }],
+      model,
+      maxTokens,
+      timeoutMs: 120_000,
+    });
+    textContent = result.text;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw classifyUpstreamError(
+      502,
+      `LLM provider (${provider.flavor}) failed: ${message}`,
+      undefined,
+    );
+  }
 
   if (!textContent) {
-    const blockTypes = (data.content || []).map(
-      (b) => (b as { type?: string }).type || "unknown",
-    );
     throw new Error(
-      `Messages API returned no usable text. blockTypes=${JSON.stringify(
-        blockTypes,
-      )} preview=${JSON.stringify(data).slice(0, 300)}`,
+      `LLM provider (${provider.flavor}) returned no usable text`,
     );
   }
 
@@ -509,73 +445,6 @@ async function analyzeScreenshotWithCustomVisionLlm(params: {
     textContent.slice(0, 200),
   );
   return parseAnalysisJson(textContent);
-}
-
-/**
- * Defensive SSE collapser for Anthropic Messages streams. We request
- * non-stream, but the proxy may still hand back text/event-stream. We
- * collect `text_delta` (the normal path) and fall back to
- * `thinking_delta` / `partial_json_delta` for adapter quirks. The caller
- * will throw if all three are empty.
- */
-async function collapseAnthropicStream(
-  response: Response,
-): Promise<AnthropicMessagesResponse> {
-  if (!response.body) return { content: [] };
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let text = "";
-  let partialJson = "";
-  let thinking = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const rawLine of lines) {
-        const line = rawLine.trim();
-        if (!line.startsWith("data:")) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === "[DONE]") continue;
-
-        try {
-          const evt = JSON.parse(payload) as {
-            type?: string;
-            delta?: {
-              type?: string;
-              text?: string;
-              partial_json?: string;
-              thinking?: string;
-            };
-          };
-          if (evt.type !== "content_block_delta" || !evt.delta) continue;
-          if (typeof evt.delta.text === "string") text += evt.delta.text;
-          if (typeof evt.delta.partial_json === "string")
-            partialJson += evt.delta.partial_json;
-          if (typeof evt.delta.thinking === "string")
-            thinking += evt.delta.thinking;
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch {
-      /* ignore */
-    }
-  }
-
-  const chosen = text || partialJson || thinking;
-  return { content: chosen ? [{ type: "text", text: chosen }] : [] };
 }
 
 function parseAnalysisJson(text: string): AnalysisResult {

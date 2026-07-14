@@ -51,6 +51,52 @@ export { readPreferences, writePreferences } from "./preferences";
 export { QUIET_DAY_MODULES, runQuietDayModule } from "./quiet-modules";
 export type { QuietDayContext, QuietDayModule } from "./quiet-modules";
 export {
+  customTypes,
+  validateCustomType,
+  BUILTIN_ACTION_KINDS,
+  BUILTIN_DECISION_TYPES,
+  CUSTOM_TYPE_ID_RE,
+  REMIX_ICON_RE,
+} from "./custom-types";
+export type {
+  CustomDecisionType,
+  CustomTypeValidationResult,
+  BuiltInActionKind,
+} from "./custom-types";
+export {
+  customChannels,
+  validateCustomChannel,
+  CUSTOM_CHANNEL_ID_RE,
+  COMPOSIO_SLUG_RE,
+  FILTER_OPS,
+  MIN_POLL_INTERVAL_SEC,
+  DEFAULT_POLL_INTERVAL_SEC,
+} from "./custom-channels";
+export type {
+  CustomChannel,
+  ChannelEventFilter,
+  FilterOp,
+  CustomChannelValidationResult,
+} from "./custom-channels";
+export {
+  classifierRules,
+  validateClassifierRule,
+  evaluateRule,
+  findMatchingRule,
+  resolveField,
+  RULE_OPS,
+  RULE_ID_RE,
+} from "./classifier-rules";
+export type {
+  ClassifierRule,
+  ClassifierRulesFile,
+  RuleCondition,
+  RuleAction,
+  RuleOp,
+  RuleEvaluation,
+  ClassifierRuleValidationResult,
+} from "./classifier-rules";
+export {
   state,
   listDecisions,
   getDecision,

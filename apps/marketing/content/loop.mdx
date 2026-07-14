@@ -142,6 +142,172 @@ If you're new to Loop:
 
 ---
 
+## Extending Loop: Custom Types & Channels
+
+Out of the box, Loop ships with five built-in sources (Email / Calendar / GitHub / Slack / Linear) and a closed set of typed actions (`draft_reply`, `rsvp`, `review_pr`, `slack_reply`, `todo`, …). For most users that's enough — but if you live inside other tools (Stripe, Notion, Linear, GitLab, internal CRMs, …) and want Loop to surface decisions from those, you can **register your own types and channels** without touching the source.
+
+Loop exposes three extension points, both per-user and persisted in your local OpenLoomi home directory:
+
+| You want to…                                                                                                                                  | Register a…              | Stored in                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------- |
+| Add a new **kind of decision card** with a custom label and icon (e.g. `birthday_wish`, `pr_followup`)                                        | **Custom decision type** | `~/.openloomi/loop/custom-types.json`     |
+| Pull signals from a **new data source** Loop doesn't ship with (e.g. Stripe charges, Linear reviews)                                          | **Custom channel**       | `~/.openloomi/loop/custom-channels.json`  |
+| **Pin routing** for specific signal patterns so the LLM's classification can't drift (e.g. "any same-day birthday is always `birthday_wish`") | **Classifier rule**      | `~/.openloomi/loop/classifier-rules.json` |
+
+### How the extension model stays safe
+
+The runner that actually executes approved cards is a `switch` over a closed set of `ActionKind` literals. We deliberately don't open that switch up to user-typed strings — that would mean every new type requires a code change. Instead, every custom type **must map its `actionKind` to one of the 14 built-in runners** (`email_reply`, `slack_reply`, `calendar_rsvp`, `github_review`, `linear_review`, `todo`, `deadline_notify`, `release_plan`, `requirement_synthesis`, `contact_update`, `doc_update`, `brief`, `wrap`, `quiet_digest`). The classifier reads your registered list and adds the new ids to its candidate set; the UI reads it for label and icon; the runner is the only thing that doesn't change.
+
+Likewise, custom channels don't introduce a new polling runtime — they wrap an existing [Composio](https://composio.dev) toolkit. If Composio supports it, Loop can read it. Each channel is a small JSON record describing **which tool, how often, what shape to extract**, and the watcher throttles per-channel so a custom pull never starves the built-in sources.
+
+### Registering via the `openloomi-loop` skill (natural language)
+
+The fastest way to extend Loop is to talk to the [`openloomi-loop`](/docs/skills#openloomi-loop) skill from Claude Code or your favourite OpenLoomi-compatible CLI. The skill is wired to recognise phrases like:
+
+- "Register a new loop type called `birthday_wish` for birthday greetings, icon `ri-cake-2-line`, it should send an email."
+- "Add a custom channel that polls Stripe charges every 15 minutes."
+- "List my current loop extensions."
+- "Delete the `pr_followup` type."
+
+The skill translates your request into the four HTTP endpoints below, and the response is reflected in the very next Loop tick — no app restart, no rebuild.
+
+### Registering directly (HTTP API)
+
+If you'd rather script it, the same registry is exposed as four plain JSON endpoints under `/api/loop/`. All four require the same Bearer token you use for the rest of the OpenLoomi API.
+
+| Verb / Path                               | Body                                                                                         | Effect                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/loop/types`                     | —                                                                                            | List every custom decision type you've registered (id, label, icon, actionKind, description, createdAt)                                                                                                                                                                                                               |
+| `PUT /api/loop/types`                     | `{ id, label, icon, actionKind, description? }`                                              | Upsert a custom type. `id` must be snake_case (2–41 chars) and must not collide with the 16 built-in `DecisionType` values                                                                                                                                                                                            |
+| `DELETE /api/loop/types/:id`              | —                                                                                            | Remove a custom type. The next tick will no longer consider it                                                                                                                                                                                                                                                        |
+| `GET /api/loop/channels`                  | —                                                                                            | List every custom channel                                                                                                                                                                                                                                                                                             |
+| `PUT /api/loop/channels`                  | `{ id, label, toolkit, toolSlug, pollIntervalSec, signalType, payloadShape?, eventFilter? }` | Upsert a custom channel. `pollIntervalSec` must be ≥ 60, and `toolkit` / `toolSlug` must already exist in Composio                                                                                                                                                                                                    |
+| `DELETE /api/loop/channels/:id`           | —                                                                                            | Remove a custom channel                                                                                                                                                                                                                                                                                               |
+| `GET /api/loop/classifier-rules`          | —                                                                                            | List every deterministic classifier rule                                                                                                                                                                                                                                                                              |
+| `PUT /api/loop/classifier-rules`          | `{ id, label?, when[], then{type, actionKind?, confidence?}, description? }`                 | Upsert a rule. `when` is up to 8 `{field, op, value?\|pattern?}` predicates over `signal.type` / `signal.payload.*` (closed op set: `eq` `neq` `contains` `matches` `startsWith` `endsWith` `gt` `lt` `gte` `lte` `exists` `absent`). `then.type` can be a built-in or custom `DecisionType`, or `"noop"` (suppress). |
+| `DELETE /api/loop/classifier-rules/:id`   | —                                                                                            | Remove a rule                                                                                                                                                                                                                                                                                                         |
+| `POST /api/loop/classifier-rules/dry-run` | `{ signal }`                                                                                 | Pure read — returns `{ matches, trace, totalRules }` showing which rules would fire on a given signal                                                                                                                                                                                                                 |
+
+A worked example using `curl` (the same one the skill emits):
+
+```bash
+TOKEN=$(cat ~/.openloomi/token | base64 -d)
+BASE=http://localhost:3414
+
+# A new card type for birthday greetings, executed as an email_reply
+curl -sS -X PUT "$BASE/api/loop/types" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+        "id": "birthday_wish",
+        "label": "Birthday wish",
+        "icon": "ri-cake-2-line",
+        "actionKind": "email_reply",
+        "description": "Send a birthday greeting to a contact whose birthday is today"
+      }'
+
+# A new channel that polls Stripe charges every 15 minutes
+curl -sS -X PUT "$BASE/api/loop/channels" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+        "id": "stripe_charges",
+        "label": "Stripe charges",
+        "toolkit": "stripe",
+        "toolSlug": "STRIPE_LIST_CHARGES",
+        "pollIntervalSec": 900,
+        "signalType": "stripe_charge",
+        "payloadShape": "{id, amount, status, customer}"
+      }'
+```
+
+### Register a deterministic classifier rule
+
+Sometimes you want **specific signal patterns to always route a certain way** — regardless of how the LLM interprets them. The classic example: a same-day birthday signal should always become a `birthday_wish` card, never a generic `draft_reply`. Classifier rules let you pin that routing deterministically.
+
+A rule is a tiny safe AST — a `when` array of field predicates (no `eval`, no JS — just a closed op set), plus a `then` block that forces `type` / `actionKind` / a confidence floor.
+
+> "Any same-day birthday signal should always become a `birthday_wish` card with confidence at least 0.9."
+
+The skill translates that to:
+
+```bash
+curl -sS -X PUT "$BASE/api/loop/classifier-rules" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+        "id": "force_birthday_today",
+        "label": "Same-day birthday → birthday_wish",
+        "when": [
+          { "field": "signal.type",                  "op": "eq", "value": "contact_birthday" },
+          { "field": "signal.payload.daysUntilNext", "op": "eq", "value": 0 }
+        ],
+        "then": {
+          "type": "birthday_wish",
+          "actionKind": "email_reply",
+          "confidence": 0.9
+        },
+        "description": "Force same-day birthdays into the birthday_wish type."
+      }'
+```
+
+A rule is enforced **twice** for safety:
+
+1. **In the prompt** — the tick prompt's §5 classifier list gets a new "User-defined classifier rules (HARD CONSTRAINTS — deterministic overrides)" block so the agent honours the rule on first pass.
+2. **Server-side, after the agentic tick** — `tick.ts::applyClassifierRules` re-evaluates every newly-added decision against the rule list and pins `type` / `actionKind` / `confidence` in `decisions.update()`. This catches cases where the LLM drifted, or where a long prompt truncated the hint.
+
+The end result on a same-day birthday signal — the LLM would have classified this as a generic `draft_reply`; with `force_birthday_today` in place, the card surfaces as your custom type instead:
+
+<p align="center">
+  <img
+    src="/img/openloomi/loop/birthday-wish-card.png"
+    alt="Loomi card showing a custom birthday_wish decision — same-day birthday for Sarah Chen, routed by the force_birthday_today classifier rule to type=birthday_wish with the ri-cake-2-line icon and confidence 0.92"
+    width="360"
+  />
+</p>
+
+Field paths use dotted notation: `signal.type`, `signal.source`, `signal.payload.<key>` (one level of nesting is supported). The closed op set covers:
+
+- Equality / ordering — `eq`, `neq`, `gt`, `lt`, `gte`, `lte` (numeric and string coercion)
+- String — `contains`, `startsWith`, `endsWith`
+- Regex — `matches` (takes a `pattern` string instead of `value`)
+- Presence — `exists`, `absent`
+
+`then.confidence` is a **floor** — the rule can raise the LLM's confidence but never lower it (`max(agent, rule)`). A rule with `then.type === "noop"` **suppresses** the decision entirely: it moves to `dismissed` with a `suppressedByRule` provenance field so an admin can audit later.
+
+Want to preview which rules would fire before committing? Use the dry-run endpoint:
+
+```bash
+curl -sS -X POST "$BASE/api/loop/classifier-rules/dry-run" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+        "signal": {
+          "type": "contact_birthday",
+          "payload": { "displayName": "Sarah", "daysUntilNext": 0 }
+        }
+      }'
+# → { "matches":[{"ruleId":"force_birthday_today","then":{...}}],
+#     "trace":[{"ruleId":"force_birthday_today","matched":true}, ...],
+#     "totalRules":2 }
+```
+
+Rules are first-match-wins in insertion order, so put more specific rules first and fall-through rules last. To re-order, remove and re-insert.
+
+### What you actually get
+
+On the very next tick:
+
+- The classifier sees a "User-defined types" block listing `birthday_wish` alongside the built-ins, with a clear note that it routes to `email_reply` — so it can decide "this is a birthday wish" the same way it decides "this is a draft reply".
+- The expected-toolkits list picks up `stripe`, and a new "User-defined channels" block in the prompt tells the agent **what shape** the Stripe records will have (`{id, amount, status, customer}`) so it can name and prioritise them correctly.
+- The "User-defined classifier rules" block lists `force_birthday_today` as a hard constraint — the agent writes decisions honouring the rule on first pass, and the server-side post-processor pins anything the LLM drifted on.
+- The watcher throttles each custom channel independently via `lastPolledAt` in `syncState.json`, so an aggressive `pollIntervalSec` on one channel can't starve the others.
+- The decision-card UI (in the main OpenLoomi window, in the [Attention Agent bubble](/docs/attention-agent), and in the pet card surface) automatically picks up the custom `label` and `icon` — no client change required.
+
+> 💡 **Scope is per-user, not per-workspace.** Custom types, channels, and classifier rules live in your local `~/.openloomi/loop/` directory and do not sync to teammates. If you want to share an extension, copy the JSON file to another machine.
+
+---
+
 ## Relationship to the Legacy `openloomi-loop` Skill
 
 If you've read OpenLoomi's open-source skill docs before, you may have seen a skill called [`openloomi-loop`](/docs/skills#openloomi-loop). Its core idea (turn scattered signals into decision cards, wait for user approval, then execute) is **exactly** the same as the Loop above — the new Loop is just integrated into the OpenLoomi desktop app, so you no longer run `claude -p` and `loop web` manually.
@@ -219,3 +385,7 @@ The morning "Today's To-Do" and evening "Today's Done" come from Loop — but th
 ### What's the relationship between Loop and Chat?
 
 If you tap "📝 Edit Draft" on a decision card, you jump straight into Chat in the main OpenLoomi window — you can chat with OpenLoomi to say "make paragraph three shorter" and it'll redraft the card; once it looks right, tap Approve to execute. [Learn more about Chat →](/docs/chat)
+
+### Can I add my own kinds of decision cards or new signal sources?
+
+Yes. Loop exposes three per-user extension points — **custom decision types** (a new card label + icon, routed to one of the 14 built-in action runners), **custom channels** (a Composio-backed signal source like Stripe or Linear), and **classifier rules** (deterministic overrides that pin `type` / `actionKind` / a confidence floor when a signal's payload matches a small safe AST of predicates). You can register them through the [`openloomi-loop`](/docs/skills#openloomi-loop) skill in plain English ("register a loop type called `birthday_wish` for birthday greetings", "always route same-day birthdays to `birthday_wish`") or via the `/api/loop/types`, `/api/loop/channels`, and `/api/loop/classifier-rules` HTTP endpoints. State is stored locally in `~/.openloomi/loop/custom-{types,channels,classifier-rules}.json` and applies to the very next tick — no rebuild needed. See the [Extending Loop](#extending-loop-custom-types--channels) section above for the full design, the API reference, and a worked `curl` example.

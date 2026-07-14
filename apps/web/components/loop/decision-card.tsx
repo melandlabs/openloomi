@@ -16,9 +16,16 @@
  *  - pending  → 4 action buttons visible
  *  - done     → "Ran at <ts>" footer, action buttons hidden
  *  - dismissed → "Dismissed" footer with optional reason, action buttons hidden
+ *
+ * Custom decision types: the user can register new `type` strings via
+ * `PUT /api/loop/types`. Built-in `TYPE_ICON` / `TYPE_LABEL` are static
+ * at module load; the per-user extensions are fetched once on mount and
+ * merged at render time via the `customTypeMeta` lookup below. When the
+ * fetch fails or is empty, the card falls back to the built-ins
+ * (`ri-question-line` / raw type id) so unknown types still render.
  */
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 
@@ -104,6 +111,73 @@ const TYPE_LABEL: Record<string, string> = {
   wrap: "Evening wrap",
 };
 
+interface CustomTypeMeta {
+  icon: string;
+  label: string;
+}
+
+/**
+ * Per-card hook that fetches the user's custom decision types once on
+ * mount and exposes a `lookup(type) → {icon,label}` helper. Returns
+ * `null` for types the user has not registered, so callers can fall
+ * back to the built-in `TYPE_ICON` / `TYPE_LABEL` constants. Never
+ * throws — a failed fetch is treated as "no custom types".
+ */
+function useCustomTypeMeta(): {
+  lookup: (type: string) => CustomTypeMeta | null;
+} {
+  const [customTypes, setCustomTypes] = useState<
+    Record<string, CustomTypeMeta>
+  >({});
+  useEffect(() => {
+    let cancelled = false;
+    const apiBase =
+      typeof window !== "undefined" &&
+      (window as unknown as { __OPENLOOMI_API__?: string }).__OPENLOOMI_API__
+        ? (window as unknown as { __OPENLOOMI_API__: string }).__OPENLOOMI_API__
+        : "";
+    fetch(`${apiBase}/api/loop/types`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: unknown) => {
+        if (cancelled || !data || typeof data !== "object") return;
+        const list = (data as { types?: unknown }).types;
+        if (!Array.isArray(list)) return;
+        const out: Record<string, CustomTypeMeta> = {};
+        for (const item of list) {
+          if (!item || typeof item !== "object") continue;
+          const t = item as {
+            id?: unknown;
+            label?: unknown;
+            icon?: unknown;
+          };
+          if (typeof t.id !== "string" || !t.id) continue;
+          const icon =
+            typeof t.icon === "string" && t.icon.length > 0
+              ? t.icon
+              : "ri-question-line";
+          const label =
+            typeof t.label === "string" && t.label.length > 0 ? t.label : t.id;
+          out[t.id] = { icon, label };
+        }
+        if (!cancelled) setCustomTypes(out);
+      })
+      .catch(() => {
+        /* best-effort — built-in dispatch tables still apply */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const lookup = useMemo(
+    () => (type: string) => customTypes[type] ?? null,
+    [customTypes],
+  );
+  return { lookup };
+}
+
 function priorityFromConfidence(c?: number): "P0" | "P1" | "P2" {
   if (c == null) return "P2";
   if (c >= 0.85) return "P0";
@@ -161,9 +235,14 @@ export function DecisionCard({
   const [pendingAction, setPendingAction] = useState<LoopActionKind | null>(
     null,
   );
+  const { lookup: lookupCustomType } = useCustomTypeMeta();
 
-  const typeIcon = TYPE_ICON[decision.type] ?? TYPE_ICON.unknown;
-  const typeLabel = TYPE_LABEL[decision.type] ?? decision.type;
+  // User-defined types win when present; built-ins are the fallback so
+  // the card never renders an undefined icon for an unknown id.
+  const custom = lookupCustomType(decision.type);
+  const typeIcon =
+    custom?.icon ?? TYPE_ICON[decision.type] ?? TYPE_ICON.unknown;
+  const typeLabel = custom?.label ?? TYPE_LABEL[decision.type] ?? decision.type;
   const priority = priorityFromConfidence(decision.confidence);
   const priorityTone =
     priority === "P0"

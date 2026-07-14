@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { Badge, Button, Input, Label, Separator, Switch } from "@openloomi/ui";
+import { Badge, Button, Input, Label, Separator } from "@openloomi/ui";
 import { RemixIcon } from "@/components/remix-icon";
 import { toast } from "@/components/toast";
 import { fetchWithAuth } from "@/lib/utils";
@@ -43,7 +43,6 @@ type ProviderDraft = {
   apiKey: string;
   baseUrl: string;
   model: string;
-  enabled: boolean;
 };
 
 const providers: Array<{
@@ -86,7 +85,6 @@ const emptyDraft: ProviderDraft = {
   apiKey: "",
   baseUrl: "",
   model: "",
-  enabled: false,
 };
 
 const MASKED_API_KEY_CHAR = "•";
@@ -120,7 +118,6 @@ function createDraft(setting?: AiSetting): ProviderDraft {
     apiKey: "",
     baseUrl: setting?.baseUrl ?? "",
     model: setting?.model ?? "",
-    enabled: setting?.enabled ?? false,
   };
 }
 
@@ -231,16 +228,22 @@ export function AiApiSettings() {
     }));
   };
 
-  const saveProvider = async (
-    providerType: ProviderType,
-    options: { enabled?: boolean; showToast?: boolean } = {},
-  ) => {
+  const saveProvider = async (providerType: ProviderType) => {
     const draft = drafts[providerType];
-    const previousDraft = draft;
-    const nextEnabled = options.enabled ?? draft.enabled;
-    if (typeof options.enabled === "boolean") {
-      updateDraft(providerType, { enabled: options.enabled });
-    }
+    // Issue #286: there is no Enabled toggle in the UI — Save is the
+    // single commit point. `enabled` is derived from draft completeness:
+    // a complete config (api key + base URL + model) becomes active,
+    // missing any field disables it. That makes first-time setup
+    // friction-free (paste key + URL + model, click Save, done) without
+    // needing a separate "I want this provider to run" gesture.
+    const nextApiKey = draft.apiKey.trim();
+    const existingSetting = settingsByProvider.get(providerType);
+    const hasSavedApiKey = existingSetting?.hasApiKey ?? false;
+    const hasDraftApiKey = nextApiKey.length > 0 || hasSavedApiKey;
+    const hasDraftBaseUrl = draft.baseUrl.trim().length > 0;
+    const hasDraftModel = draft.model.trim().length > 0;
+    const isCompleteDraft = hasDraftApiKey && hasDraftBaseUrl && hasDraftModel;
+    const nextEnabled = isCompleteDraft;
     setSavingProvider(providerType);
     try {
       const payload: {
@@ -256,7 +259,6 @@ export function AiApiSettings() {
         enabled: nextEnabled,
       };
 
-      const nextApiKey = draft.apiKey.trim();
       if (nextApiKey) {
         payload.apiKey = nextApiKey;
       }
@@ -297,7 +299,6 @@ export function AiApiSettings() {
       ]);
       updateDraft(providerType, {
         apiKey: "",
-        enabled: savedSetting.enabled,
       });
       // Notify listeners in the same webview (kept for backwards compat).
       window.dispatchEvent(new Event(AI_SETTINGS_CHANGED_EVENT));
@@ -327,17 +328,17 @@ export function AiApiSettings() {
       ) {
         router.replace("/?page=chat", { scroll: false });
       }
-      if (options.showToast !== false) {
-        toast({
-          type: "success",
-          description: t("settings.aiSettingsSaved", "AI settings saved."),
-        });
-      }
+      toast({
+        type: "success",
+        description: isCompleteDraft
+          ? t(
+              "settings.aiSettingsSavedAndEnabled",
+              "API settings saved and provider enabled.",
+            )
+          : t("settings.aiSettingsSaved", "AI settings saved."),
+      });
     } catch (error) {
       console.error("[AI Settings] Failed to save settings", error);
-      if (typeof options.enabled === "boolean") {
-        updateDraft(providerType, { enabled: previousDraft.enabled });
-      }
       toast({
         type: "error",
         description: t(
@@ -349,11 +350,6 @@ export function AiApiSettings() {
       setSavingProvider(null);
     }
   };
-
-  const updateProviderEnabled = (
-    providerType: ProviderType,
-    enabled: boolean,
-  ) => saveProvider(providerType, { enabled, showToast: false });
 
   const resetProvider = async (providerType: ProviderType) => {
     setResettingProvider(providerType);
@@ -508,7 +504,7 @@ export function AiApiSettings() {
             const draft = drafts[provider.type];
             const defaults = systemDefaults[provider.type];
             const hasSavedSetting = Boolean(setting);
-            const hasOverride = draft.enabled;
+            const hasOverride = hasSavedSetting;
             const isSaving = savingProvider === provider.type;
             const isTesting = testingProvider === provider.type;
             const isResetting = resettingProvider === provider.type;
@@ -567,22 +563,6 @@ export function AiApiSettings() {
                           provider.descriptionFallback,
                         )}
                       </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Label
-                        htmlFor={`${provider.type}-enabled`}
-                        className="text-sm font-normal text-muted-foreground"
-                      >
-                        {t("settings.aiSettingsEnabled", "Enabled")}
-                      </Label>
-                      <Switch
-                        id={`${provider.type}-enabled`}
-                        checked={draft.enabled}
-                        disabled={disabled}
-                        onCheckedChange={(enabled) =>
-                          updateProviderEnabled(provider.type, enabled)
-                        }
-                      />
                     </div>
                   </div>
 

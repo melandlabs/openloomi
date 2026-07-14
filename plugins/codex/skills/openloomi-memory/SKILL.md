@@ -2,6 +2,8 @@
 name: openloomi-memory
 description: "Use OpenLoomi memory workflows from Codex for personal memory search, recall, context gathering, and memory-backed follow-up. Trigger when users ask Loomi to remember, recall, search memory, or use personal context."
 allowed-tools: "Bash(node $SKILL_DIR/../../scripts/loomi-bridge.mjs *)"
+metadata:
+  version: 0.7.6
 ---
 
 # OpenLoomi Memory

@@ -14,6 +14,11 @@ import type {
   RawMessageQuery,
 } from "./manager";
 import {
+  type MemoryGraphEvolutionRunResult,
+  type RawMessageGraphEvolutionOptions,
+  storeRawMessagesWithGraphEvolution,
+} from "./memory-graph-evolution";
+import {
   ensureRawMessagesSQLiteMigration,
   migrateIndexedDBRawMessagesToSQLite,
   shouldUseRawMessageApiStorage,
@@ -134,10 +139,20 @@ export async function storeRawMessagesFromInsight(
     embeddingUpdatedAt?: number;
     metadata?: Record<string, any>;
   }>,
-): Promise<{ success: boolean; stored: number; errors: number }> {
+  graphEvolution?: RawMessageGraphEvolutionOptions,
+): Promise<{
+  success: boolean;
+  stored: number;
+  errors: number;
+  graphEvolution?: MemoryGraphEvolutionRunResult;
+}> {
   if (shouldUseRawMessageApiStorage()) {
     try {
-      return await sqliteStoreRawMessagesFromInsight(userId, messages);
+      return await sqliteStoreRawMessagesFromInsight(
+        userId,
+        messages,
+        graphEvolution,
+      );
     } catch (error) {
       console.warn(
         "[Client Raw Messages API] Failed to store messages, falling back to IndexedDB:",
@@ -156,11 +171,16 @@ export async function storeRawMessagesFromInsight(
       createdAt: Date.now() / 1000,
     }));
 
-    const results = await manager.storeMessages(messagesWithUserId);
+    const stored = await storeRawMessagesWithGraphEvolution({
+      storage: manager,
+      messages: messagesWithUserId,
+      graphEvolution,
+    });
     return {
       success: true,
-      stored: results.length,
+      stored: stored.ids.length,
       errors: 0,
+      graphEvolution: stored.graphEvolution,
     };
   } catch (error) {
     console.error("[Client IndexedDB] Failed to store messages:", error);

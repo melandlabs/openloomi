@@ -1,9 +1,9 @@
 ---
 name: openloomi
 description: "OpenLoomi runtime integration for Claude Code. Use when the user mentions OpenLoomi, wants to install/configure it, sync their ANTHROPIC_API_KEY/BASE_URL/MODEL into OpenLoomi's AI provider, query their local memory via the Loomi runtime, change the Loomi Pet state, view LLM usage, run a one-shot task through the local runtime, or install the optional hooks that mirror Claude Code's lifecycle onto the Loomi Pet and auto-archive every Stop into OpenLoomi memory. Triggers: openloomi, loomi, /openloomi:*, ANTHROPIC_API_KEY sync, sync claude env, local memory, RAG search, insights, loop, pet state."
-metadata:
-  version: 0.1.0
 allowed-tools: Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/loomi-bridge.mjs *)
+metadata:
+  version: 0.7.6
 ---
 
 # OpenLoomi Claude Plugin Skill

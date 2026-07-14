@@ -2631,6 +2631,60 @@
           p2: 0,
         };
 
+        // ---------- User-defined decision types ----------
+        //
+        // Mirrors `apps/web/components/loop/decision-card.tsx` — the
+        // user can register a new `type` string via
+        // `PUT /api/loop/types`, and the dispatch tables above
+        // (TYPE_ICONS / TYPE_LABELS / TYPE_RECOMMENDATIONS) need to
+        // know about it so the card renders the user's icon and label
+        // instead of falling back to `ri-question-line`. We fetch once
+        // on load, merge the user's entries into the existing maps,
+        // and re-render any open decision. A failed fetch is silent —
+        // the built-in dispatch tables still apply.
+        function applyCustomTypes(list) {
+          if (!Array.isArray(list)) return;
+          for (const t of list) {
+            if (!t || typeof t.id !== "string" || !t.id) continue;
+            if (typeof t.icon === "string" && t.icon.length > 0) {
+              TYPE_ICONS[t.id] = t.icon;
+            }
+            if (typeof t.label === "string" && t.label.length > 0) {
+              TYPE_LABELS[t.id] = t.label.toUpperCase();
+            }
+            if (typeof t.description === "string" && t.description.length > 0) {
+              // Mirror the action-button layout for built-in types:
+              // a single "Open in dashboard" ghost button is enough
+              // for unknown custom types — the user can wire the
+              // real action semantics in the agent later.
+              if (!TYPE_ACTIONS[t.id]) {
+                TYPE_ACTIONS[t.id] = [
+                  { action: "open", label: "↗ Open", variant: "ghost" },
+                  { action: "dismiss", label: "✕ Dismiss", variant: "danger" },
+                  { action: "run", label: "▶ Run", variant: "primary" },
+                ];
+              }
+              TYPE_RECOMMENDATIONS[t.id] = t.description.slice(0, 80);
+            }
+          }
+        }
+        if (typeof fetch === "function") {
+          const apiBase =
+            (typeof window !== "undefined" && window.__OPENLOOMI_API__) || "";
+          fetch(`${apiBase}/api/loop/types`, {
+            credentials: "include",
+            cache: "no-store",
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+              if (data && Array.isArray(data.types))
+                applyCustomTypes(data.types);
+            })
+            .catch(() => {
+              /* best-effort — built-in dispatch tables still apply */
+            });
+        }
+
         // ---------- Toast ----------
         function showToast(text, isError) {
           toast.textContent = text;

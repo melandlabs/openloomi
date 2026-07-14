@@ -12,9 +12,9 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
-use crate::panic_guard::{
-    catch_unwind_result, catch_unwind_str, flatten_spawn_result, lock_recovered,
-};
+#[cfg(target_os = "macos")]
+use crate::panic_guard::flatten_spawn_result;
+use crate::panic_guard::{catch_unwind_result, catch_unwind_str, lock_recovered};
 
 // ============ Global Shortcut ============
 
@@ -886,6 +886,7 @@ fn copy_file_to_clipboard_impl(path: String) -> Result<(), String> {
                 stderr.trim()
             ));
         }
+        return Ok(());
     }
     #[cfg(target_os = "linux")]
     {
@@ -899,7 +900,6 @@ fn copy_file_to_clipboard_impl(path: String) -> Result<(), String> {
     {
         return Err("Unsupported platform".to_string());
     }
-    Ok(())
 }
 
 // ============ Path Utilities ============

@@ -44,6 +44,24 @@ export const LOOP_PATHS = {
   inbox: join(LOOP_HOME, "inbox"),
   /** Per-connector lastSyncAt — read by watcher, written after each pass. */
   syncState: join(LOOP_HOME, "sync-state.json"),
+  /**
+   * User-defined decision types (label / icon / actionKind). Per-user
+   * extension to the closed `DecisionType` union — see `lib/loop/custom-types.ts`.
+   */
+  customTypes: join(LOOP_HOME, "custom-types.json"),
+  /**
+   * User-defined signal channels (Composio-backed pullers). Per-user
+   * extension to the FALLBACK_CONNECTORS list — see `lib/loop/custom-channels.ts`.
+   */
+  customChannels: join(LOOP_HOME, "custom-channels.json"),
+  /**
+   * User-defined deterministic classifier rules. Per-user extension to the
+   * hard-coded rules in `classify.ts` and the agentic prompt's §5
+   * classifier list — see `lib/loop/classifier-rules.ts`. Rules take
+   * priority over the LLM's natural-language classification (server-side
+   * enforcement after the agentic tick).
+   */
+  classifierRules: join(LOOP_HOME, "classifier-rules.json"),
 } as const;
 
 export function ensureDirs(): void {

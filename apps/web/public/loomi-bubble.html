@@ -229,6 +229,48 @@
           },
         };
 
+        // ---------- User-defined decision types ----------
+        //
+        // Mirrors the merge in `apps/web/public/loomi-card.html` and
+        // `apps/web/components/loop/decision-card.tsx` — when the user
+        // has registered a new `type` via `PUT /api/loop/types`, the
+        // bubble's `TYPE_PHRASES` map needs a phrase entry so the
+        // bubble shows something on-screen instead of falling through
+        // to the state-driven fallback. We fetch once on load and
+        // merge; a failed fetch is silent.
+        function applyCustomTypes(list) {
+          if (!Array.isArray(list)) return;
+          for (const t of list) {
+            if (!t || typeof t.id !== "string" || !t.id) continue;
+            if (TYPE_PHRASES[t.id]) continue;
+            const lead =
+              typeof t.label === "string" && t.label.length > 0
+                ? t.label
+                : t.id;
+            const sub =
+              typeof t.description === "string" && t.description.length > 0
+                ? t.description.slice(0, 60)
+                : "tap to review";
+            TYPE_PHRASES[t.id] = { lead, sub };
+          }
+        }
+        if (typeof fetch === "function") {
+          const apiBase =
+            (typeof window !== "undefined" && window.__OPENLOOMI_API__) || "";
+          fetch(`${apiBase}/api/loop/types`, {
+            credentials: "include",
+            cache: "no-store",
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+              if (data && Array.isArray(data.types))
+                applyCustomTypes(data.types);
+            })
+            .catch(() => {
+              /* best-effort — built-in phrases still apply */
+            });
+        }
+
         // Pet-state driven phrases. Surfaced when there's no pending
         // decision so the bubble still has something on-screen while the
         // pet sweeps / thinks / sleeps. The `idle` entry is intentionally

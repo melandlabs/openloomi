@@ -3,6 +3,10 @@ import {
   getRawMessageManager,
   getRawMessageStorageBackend,
 } from "@/lib/memory/raw-message-store";
+import {
+  parseRawMessageGraphEvolutionOptions,
+  storeRawMessagesWithGraphEvolution,
+} from "@openloomi/indexeddb";
 import { AppError } from "@openloomi/shared/errors";
 import type { NextRequest } from "next/server";
 
@@ -20,7 +24,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { messages } = body as {
+    const { messages, graphEvolution } = body as {
       messages: Array<{
         messageId: string;
         platform: string;
@@ -37,6 +41,7 @@ export async function POST(request: NextRequest) {
         }>;
         metadata?: Record<string, any>;
       }>;
+      graphEvolution?: unknown;
     };
 
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -65,13 +70,18 @@ export async function POST(request: NextRequest) {
 
     const manager = await getRawMessageManager();
     const storage = getRawMessageStorageBackend();
-    const ids = await manager.storeMessages(messagesWithUserId as any);
+    const stored = await storeRawMessagesWithGraphEvolution({
+      storage: manager,
+      messages: messagesWithUserId as any,
+      graphEvolution: parseRawMessageGraphEvolutionOptions(graphEvolution),
+    });
     return Response.json({
       success: true,
       message: `Messages stored in ${storage}`,
       storage,
-      stored: ids.length,
-      count: ids.length,
+      stored: stored.ids.length,
+      count: stored.ids.length,
+      graphEvolution: stored.graphEvolution,
     });
   } catch (error) {
     console.error("[Raw Messages API] Error:", error);

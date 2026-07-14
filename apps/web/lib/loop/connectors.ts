@@ -39,6 +39,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { ensureDirs, LOOP_PATHS } from "./paths";
+import { customChannels } from "./custom-channels";
 import type { ConnectorEntry } from "./types";
 
 const CACHE_TTL_MS = 1 * 60 * 60 * 1000;
@@ -204,7 +205,7 @@ export async function listConnectors(
 ): Promise<ConnectorEntry[]> {
   if (!opts.force) {
     const cached = readCache();
-    if (cached) return cached.connectors;
+    if (cached) return appendCustomChannels(cached.connectors);
   }
   // Cache miss (or force=true) → delegate to refresh. When called from
   // the regular UI path, this fires a short-timeout silent probe
@@ -260,6 +261,36 @@ function readProbeCooldown(): number {
   } catch {
     return 0;
   }
+}
+
+/**
+ * Append per-user custom channels to a connector list. The user-defined
+ * entries are sourced from `~/.openloomi/loop/custom-channels.json` and
+ * are always shown alongside the built-in `FALLBACK_CONNECTORS` (in
+ * that order — built-ins first, custom last so the UI's stable layout
+ * doesn't reshuffle when a channel is added or removed). The probe
+ * never tries to confirm them: their connection state lives in the
+ * user's Composio account, and the watcher's pass will surface a real
+ * error if the toolkit isn't reachable.
+ */
+function appendCustomChannels(seed: ConnectorEntry[]): ConnectorEntry[] {
+  const extras = customChannels.list();
+  if (extras.length === 0) return seed;
+  const now = new Date().toISOString();
+  const out = seed.slice();
+  for (const c of extras) {
+    out.push({
+      id: c.id,
+      label: c.label,
+      // Conservatively report as not-yet-probed; the watcher's pass
+      // surfaces real failures when the toolkit isn't reachable.
+      connected: false,
+      accountCount: 0,
+      probed: false,
+      fetchedAt: now,
+    });
+  }
+  return out;
 }
 
 function writeProbeCooldownMarker(): void {
@@ -360,8 +391,8 @@ export async function refreshConnectors(
   // or slow agent from being hammered on rapid card re-opens.
   if (opts.silent && Date.now() < readProbeCooldown()) {
     const cached = readCache();
-    if (cached) return cached.connectors;
-    return FALLBACK_CONNECTORS;
+    if (cached) return appendCustomChannels(cached.connectors);
+    return appendCustomChannels(FALLBACK_CONNECTORS);
   }
 
   const probe: Promise<ConnectorEntry[] | null> = (async () => {
@@ -389,20 +420,20 @@ export async function refreshConnectors(
     if (!probed || probed.length === 0) {
       writeProbeCooldownMarker();
       const cached = readCache();
-      if (cached) return cached.connectors;
-      return FALLBACK_CONNECTORS;
+      if (cached) return appendCustomChannels(cached.connectors);
+      return appendCustomChannels(FALLBACK_CONNECTORS);
     }
-    return probed;
+    return appendCustomChannels(probed);
   }
 
   probed = await probe;
   if (probed && probed.length > 0) {
-    return probed;
+    return appendCustomChannels(probed);
   }
   // Probe failed — degrade gracefully.
   const cached = readCache();
   if (cached) {
-    return cached.connectors;
+    return appendCustomChannels(cached.connectors);
   }
-  return FALLBACK_CONNECTORS;
+  return appendCustomChannels(FALLBACK_CONNECTORS);
 }

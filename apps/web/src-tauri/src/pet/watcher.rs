@@ -357,12 +357,16 @@ fn should_emit_update(
 
 /// Build the `loop:decision` payload that the bubble + card webviews
 /// listen for. Mirrors the shape consumed by `loomi-bubble.html` /
-/// `loomi-card.html` (id, type, title, dialogue, priority, source chain,
-/// why bullets). Includes `status: "pending"` so the card can
-/// self-describe the top-pending payload against the same field
-/// contract the terminal emit uses (status=done|dismissed) — without
-/// this, the success branch in the card cannot distinguish "no payload
-/// yet" from "still pending".
+/// `loomi-card.html` (id, type, title, dialogue, priority, confidence,
+/// source chain, why bullets). Includes `status: "pending"` so the
+/// card can self-describe the top-pending payload against the same
+/// field contract the terminal emit uses (status=done|dismissed) —
+/// without this, the success branch in the card cannot distinguish
+/// "no payload yet" from "still pending". Note: `confidence` is
+/// emitted as-is (`Option<f32>` → `null` if missing) so the card's
+/// meta-node row can render `Math.round(c * 100) + "%"` directly;
+/// priority is derived from the same value upstream so card and
+/// payload stay consistent.
 fn build_decision_payload(d: &DecItem) -> serde_json::Value {
     let priority = match d.confidence {
         Some(c) if c >= 0.85 => "p0",
@@ -379,6 +383,7 @@ fn build_decision_payload(d: &DecItem) -> serde_json::Value {
         "title": d.title,
         "dialogue": d.dialogue,
         "priority": priority,
+        "confidence": d.confidence,
         "source": source,
         "source_type": source_type,
         "source_ts": source_ts,
@@ -1270,6 +1275,42 @@ mod tests {
             "top-pending payload must include status=pending"
         );
         assert_eq!(v.get("id").and_then(|s| s.as_str()), Some("dec_x"));
+    }
+
+    #[test]
+    fn build_decision_payload_includes_confidence() {
+        // The card's meta-node row renders `Math.round(confidence * 100) +
+        // "%"`. The top-pending emit (`loop:decision`) is the only event
+        // that drives that row, so it must carry confidence too — the
+        // priority chip is derived from the same value upstream so the
+        // raw number on the card matches the chip. Without this test the
+        // field was forgotten and the card rendered "—" even for a
+        // decision with confidence=0.92 (bug surfaced via the
+        // birthday_wish demo screenshot, 2026-07-14).
+        let d = dec_with_id("dec_y");
+        let v = build_decision_payload(&d);
+        let conf = v.get("confidence").and_then(|c| c.as_f64());
+        assert!(
+            conf.is_some(),
+            "top-pending payload must include numeric confidence; got {:?}",
+            v.get("confidence"),
+        );
+        let conf = conf.unwrap();
+        assert!(
+            (0.0..=1.0).contains(&conf),
+            "confidence must be in [0,1]; got {conf}"
+        );
+        // The priority field is derived from confidence upstream, so the
+        // two values must agree on the chip bucket (0.92 → p0).
+        let p = v.get("priority").and_then(|s| s.as_str()).unwrap_or("");
+        let expected = if conf >= 0.85 {
+            "p0"
+        } else if conf >= 0.75 {
+            "p1"
+        } else {
+            "p2"
+        };
+        assert_eq!(p, expected, "priority must match confidence bucket");
     }
 
     #[test]

@@ -1,22 +1,41 @@
-import { describe, expect, it } from "vitest";
 import {
+  type GraphAwareRetrievalResult,
+  type MemoryEvidenceRecord,
+  type MemorySemanticRetrievalCandidate,
+  type MemorySemanticRetrievalComparisonReport,
+  type MemorySemanticRetrievalConfig,
+  type MemorySemanticRetrievalDraft,
+  type MemorySemanticRetrievalDryRunReport,
+  type MemorySemanticRetrievalEvalScenarioReport,
+  type MemorySemanticRetrievalMergedResultSet,
+  type MemorySemanticRetrievalPlanningInput,
+  type MemorySemanticRetrievalPlanningResult,
+  type SemanticMemoryArtifactStorageAdapter,
+  type SemanticMemoryArtifactStorageRecord,
+  type SemanticMemoryDraftStore,
+  type SemanticMemoryDraftSummarizer,
+  type SemanticMemoryDraftSummarizerProviderInvoke,
+  type SemanticMemoryRevisionCompetitionDiagnostics,
+  type SemanticMemoryRevisionExplanationReport,
+  type SemanticMemoryRevisionRelationPlan,
+  type SemanticMemoryRevisionStatusSignal,
   adaptMemoryRecordsForConsolidation,
   adaptRuntimeMemoryRecordsForConsolidation,
-  analyzeSemanticMemoryDraftReadiness,
   analyzeMemoryEvidenceClusters,
+  analyzeSemanticMemoryDraftReadiness,
   assignMemoryRelationGraph,
-  calculateMemoryConsolidationEvalMetrics,
+  buildCallerProvidedMemoryRelationCandidateDiscoveryReport,
+  buildMemoryConsolidationDiagnosticsBundle,
+  buildMemoryConsolidationDiagnosticsReport,
+  buildMemoryConsolidationDiagnosticsRunReport,
+  buildMemoryConsolidationPlan,
+  buildMemoryConsolidationRuntimeRecordSelectors,
+  buildMemoryConsolidationShadowReport,
+  buildMemoryEvidenceClusters,
   buildMemoryGovernanceAuditScenarioReport,
   buildMemoryGovernanceCommandDryRunReport,
   buildMemoryGovernanceExplanationReport,
-  buildMemoryConsolidationPlan,
-  buildMemoryConsolidationDiagnosticsBundle,
-  buildMemoryConsolidationDiagnosticsReport,
-  buildCallerProvidedMemoryRelationCandidateDiscoveryReport,
-  buildMemoryEvidenceClusters,
-  buildMemoryConsolidationDiagnosticsRunReport,
-  buildMemoryConsolidationRuntimeRecordSelectors,
-  buildMemoryWeakRelationObservationReport,
+  buildMemoryGraphRolloutGovernanceReport,
   buildMemoryRelationCandidates,
   buildMemoryRelationPipeline,
   buildMemoryRelationPipelineDiagnostics,
@@ -25,49 +44,32 @@ import {
   buildMemorySemanticRetrievalEvalScenarioReport,
   buildMemorySemanticRetrievalMergedResults,
   buildMemorySemanticRetrievalPlan,
-  buildMemoryConsolidationShadowReport,
+  buildMemoryWeakRelationObservationReport,
   buildSemanticMemoryArtifactStorageDryRunReport,
+  buildSemanticMemoryDraftCandidates,
   buildSemanticMemoryDraftPersistencePreparationReport,
+  buildSemanticMemoryDraftSummarizerDiagnostics,
+  buildSemanticMemoryDraftSummarizerInputContract,
   buildSemanticMemoryRevisionCompetitionDiagnostics,
   buildSemanticMemoryRevisionExplanationReport,
   buildSemanticMemoryRevisionRelationPlan,
   buildSemanticMemoryRevisionStatusSignal,
-  buildSemanticMemoryDraftSummarizerInputContract,
-  buildSemanticMemoryDraftSummarizerDiagnostics,
-  buildSemanticMemoryDraftCandidates,
-  deserializeSemanticMemoryArtifactStorageRecord,
+  calculateMemoryConsolidationEvalMetrics,
   deriveMemoryRelationGraphLifecycle,
-  invokeSemanticMemoryDraftSummarizerProviderBatch,
-  invokeSemanticMemoryDraftSummarizerProvider,
-  logMemoryConsolidationDiagnosticsRun,
-  judgeMemoryRelationCandidates,
-  persistSemanticMemoryDrafts,
+  deserializeSemanticMemoryArtifactStorageRecord,
   invokeMemoryRelationJudgeProvider,
+  invokeSemanticMemoryDraftSummarizerProvider,
+  invokeSemanticMemoryDraftSummarizerProviderBatch,
+  judgeMemoryRelationCandidates,
+  logMemoryConsolidationDiagnosticsRun,
+  persistSemanticMemoryDrafts,
+  resolveMemorySemanticRetrievalConfig,
   runMemoryConsolidationDiagnostics,
   runMemoryConsolidationShadowDiagnostics,
   serializeSemanticMemoryArtifactStorageRecord,
   summarizeSemanticMemoryDraftCandidate,
-  resolveMemorySemanticRetrievalConfig,
-  type MemoryEvidenceRecord,
-  type MemorySemanticRetrievalConfig,
-  type MemorySemanticRetrievalCandidate,
-  type MemorySemanticRetrievalComparisonReport,
-  type MemorySemanticRetrievalDryRunReport,
-  type MemorySemanticRetrievalDraft,
-  type MemorySemanticRetrievalEvalScenarioReport,
-  type MemorySemanticRetrievalMergedResultSet,
-  type MemorySemanticRetrievalPlanningInput,
-  type MemorySemanticRetrievalPlanningResult,
-  type SemanticMemoryRevisionCompetitionDiagnostics,
-  type SemanticMemoryRevisionExplanationReport,
-  type SemanticMemoryRevisionRelationPlan,
-  type SemanticMemoryRevisionStatusSignal,
-  type SemanticMemoryArtifactStorageAdapter,
-  type SemanticMemoryArtifactStorageRecord,
-  type SemanticMemoryDraftStore,
-  type SemanticMemoryDraftSummarizerProviderInvoke,
-  type SemanticMemoryDraftSummarizer,
 } from "@openloomi/memory-consolidation";
+import { describe, expect, it } from "vitest";
 import {
   DefaultMemoryRecordScorer,
   type MemoryRecord,
@@ -5133,6 +5135,421 @@ describe("memory consolidation evaluation scenarios", () => {
     expect(report.metadata).toEqual({
       mode: "fixture-only",
     });
+  });
+
+  it("builds memory graph rollout gates for eval, audit, correction, and rollback readiness", () => {
+    const ownerScope = { userId: "eval-user" };
+    const consolidationMetrics = calculateMemoryConsolidationEvalMetrics([
+      {
+        scenarioId: "stable-language-preference",
+        metricTags: ["adaptation"],
+        expectedPreservedClusterKey: "cluster:language-stable",
+        preservedClusterKeys: ["cluster:language-stable"],
+      },
+      {
+        scenarioId: "duplicate-noise-suppression",
+        metricTags: ["noise"],
+        expectedPreservedClusterKey: "cluster:stable-project",
+        preservedClusterKeys: ["cluster:stable-project"],
+        noiseClusterKeys: ["cluster:duplicate-noise"],
+      },
+      {
+        scenarioId: "temporary-override",
+        metricTags: ["temporary-override"],
+        expectedPreservedClusterKey: "cluster:canonical-preference",
+        preservedClusterKeys: ["cluster:canonical-preference"],
+        temporaryClusterKeys: ["cluster:temporary-override"],
+      },
+      {
+        scenarioId: "conflict-and-decay",
+        metricTags: ["conflict", "stale"],
+        expectedPreservedClusterKey: "cluster:active",
+        preservedClusterKeys: ["cluster:active"],
+        expectedContestedClusterKeys: ["cluster:competing"],
+        contestedClusterKeys: ["cluster:competing"],
+        expectedDecayedClusterKeys: ["cluster:stale"],
+        decayedClusterKeys: ["cluster:stale"],
+      },
+    ]);
+    const defaultGraphRetrieval = {
+      ownerScope,
+      rankedNodeIds: ["summary:language", "raw:fresh"],
+      hiddenDeprecatedNodeIds: ["raw:deprecated"],
+      expandedClusterIds: ["cluster:language-stable"],
+      reasonCodes: ["graph_retrieval_dry_run", "default_hides_deprecated_raw"],
+    } satisfies GraphAwareRetrievalResult;
+    const auditGraphRetrieval = {
+      ownerScope,
+      rankedNodeIds: ["summary:language", "raw:deprecated", "raw:fresh"],
+      hiddenDeprecatedNodeIds: [],
+      expandedClusterIds: ["cluster:language-stable"],
+      auditTrail: [
+        {
+          ownerScope,
+          nodeId: "summary:language",
+          sourceNodeIds: ["raw:deprecated"],
+          edgeIds: ["edge:supersede-language"],
+          operationIds: ["op:summary-language"],
+          reasonCodes: ["graph_retrieval_audit_trail"],
+        },
+        {
+          ownerScope,
+          nodeId: "raw:deprecated",
+          sourceNodeIds: ["raw:deprecated"],
+          edgeIds: ["edge:supersede-language"],
+          operationIds: ["op:summary-language"],
+          reasonCodes: ["deprecated_raw_included"],
+        },
+      ],
+      reasonCodes: ["include_deprecated_requested", "audit_trail_available"],
+    } satisfies GraphAwareRetrievalResult;
+    const semanticRetrievalScenario = {
+      scenarioId: "semantic-retrieval-prefers-summary",
+      query: "language preference",
+      enabled: true,
+      selectedDraftIds: ["draft:summary-language"],
+      suppressedDraftIds: ["draft:raw-duplicate"],
+      fallbackRecordIds: ["raw:fresh"],
+      missingSelectedDraftIds: [],
+      missingSuppressedDraftIds: [],
+      missingFallbackRecordIds: [],
+      selectedPassed: true,
+      suppressedPassed: true,
+      fallbackPassed: true,
+      passed: true,
+      reasonCodes: ["semantic_retrieval_eval_scenario"],
+    } satisfies MemorySemanticRetrievalEvalScenarioReport;
+    const staleEnglish = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:english",
+      artifactStatus: "deprecated",
+      sourceRecordIds: ["trace-en-a"],
+      confidence: 0.62,
+      rollback: {
+        operationId: "rollout-governance",
+        sourceArtifactId: "artifact:preference:chinese",
+      },
+    });
+    const activeChinese = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:chinese",
+      artifactStatus: "consolidated",
+      sourceRecordIds: ["trace-zh-a"],
+      confidence: 0.92,
+    });
+    const explanation = buildMemoryGovernanceExplanationReport({
+      memories: [staleEnglish, activeChinese],
+      sourceRecords: [
+        {
+          id: "trace-en-a",
+          userId: "eval-user",
+          timestamp: 20 * DAY_MS,
+          text: "Use English.",
+          tier: "long",
+        },
+        {
+          id: "trace-zh-a",
+          userId: "eval-user",
+          timestamp: NOW,
+          text: "Use Chinese.",
+          tier: "short",
+        },
+      ],
+    });
+    const commands = buildMemoryGovernanceCommandDryRunReport({
+      explanationReport: explanation,
+      commands: [
+        {
+          commandId: "cmd:correct-chinese",
+          type: "correct-content",
+          artifactId: "artifact:preference:chinese",
+          correctedContent: "User prefers Chinese for repo work.",
+        },
+        {
+          commandId: "cmd:rollback-stale-english",
+          type: "rollback-artifact",
+          artifactId: "artifact:preference:english",
+        },
+      ],
+    });
+    const auditScenario = buildMemoryGovernanceAuditScenarioReport({
+      scenarioId: "polluted-language-preference",
+      pollutedArtifactIds: ["artifact:preference:english"],
+      explanationReport: explanation,
+      commandReport: commands,
+    });
+
+    const report = buildMemoryGraphRolloutGovernanceReport({
+      scenarioId: "memory-graph-rollout",
+      consolidationMetrics,
+      graphRetrievalScenarios: [
+        {
+          scenarioId: "default-hides-deprecated",
+          result: defaultGraphRetrieval,
+          expectedRankedNodeIds: ["summary:language"],
+          expectedHiddenDeprecatedNodeIds: ["raw:deprecated"],
+          forbiddenNodeIds: ["raw:deprecated"],
+          crossScopeNodeIds: ["raw:foreign"],
+        },
+        {
+          scenarioId: "audit-recovers-source-chain",
+          result: auditGraphRetrieval,
+          expectedRankedNodeIds: ["summary:language", "raw:deprecated"],
+          expectedAuditTrailNodeIds: ["summary:language", "raw:deprecated"],
+          crossScopeNodeIds: ["raw:foreign"],
+        },
+      ],
+      semanticRetrievalScenarios: [semanticRetrievalScenario],
+      auditScenarioReport: auditScenario,
+      commandReport: commands,
+      metadata: {
+        stage: "limited-rollout-gate",
+      },
+    });
+
+    expect(report.summary).toEqual({
+      scenarioId: "memory-graph-rollout",
+      decision: "ready-for-limited-rollout",
+      gateCount: 12,
+      passedGateCount: 12,
+      failedGateCount: 0,
+      graphRetrievalScenarioCount: 2,
+      graphRetrievalPassedCount: 2,
+      semanticRetrievalScenarioCount: 1,
+      semanticRetrievalPassedCount: 1,
+      dryRun: true,
+    });
+    expect(report.gates.map((gate) => gate.gateId)).toEqual([
+      "consolidation.expected-candidate-accuracy",
+      "consolidation.noise-promotion-rate",
+      "consolidation.temporary-override-leakage-rate",
+      "consolidation.contested-cluster-coverage",
+      "consolidation.decay-precision-proxy",
+      "retrieval.graph-scenarios",
+      "retrieval.audit-trail",
+      "retrieval.cross-scope-isolation",
+      "retrieval.semantic-eval-scenarios",
+      "governance.polluted-memory-unresolved",
+      "governance.correction-command",
+      "governance.rollback-command",
+    ]);
+    expect(report.graphRetrievalScenarios).toEqual([
+      expect.objectContaining({
+        scenarioId: "default-hides-deprecated",
+        passed: true,
+        rankedNodeIds: ["summary:language", "raw:fresh"],
+        hiddenDeprecatedNodeIds: ["raw:deprecated"],
+        leakedForbiddenNodeIds: [],
+        crossScopeLeakNodeIds: [],
+      }),
+      expect.objectContaining({
+        scenarioId: "audit-recovers-source-chain",
+        passed: true,
+        auditTrailNodeIds: ["summary:language", "raw:deprecated"],
+        missingAuditTrailNodeIds: [],
+      }),
+    ]);
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "memory_graph_rollout_governance",
+        "dry_run_only",
+        "metric_gate_passed",
+        "retrieval_eval_gate_passed",
+        "semantic_retrieval_eval_gate_passed",
+        "audit_trail_gate_passed",
+        "cross_scope_gate_passed",
+        "polluted_memory_gate_passed",
+        "correction_command_gate_passed",
+        "rollback_command_gate_passed",
+      ]),
+    );
+    expect(report.metadata).toEqual({
+      stage: "limited-rollout-gate",
+    });
+    expect(staleEnglish.revisionStatus).toBe("deprecated");
+    expect(activeChinese.revisionStatus).toBe("active");
+  });
+
+  it("blocks graph rollout when required eval artifacts are missing", () => {
+    const memory = buildSemanticMemoryRevisionStatusSignal({
+      artifactId: "artifact:preference:chinese",
+      artifactStatus: "consolidated",
+      sourceRecordIds: ["trace-zh-a"],
+      confidence: 0.92,
+      rollback: {
+        operationId: "missing-artifacts-rollout",
+        sourceArtifactId: "artifact:preference:previous",
+      },
+    });
+    const explanation = buildMemoryGovernanceExplanationReport({
+      memories: [memory],
+      sourceRecords: [
+        {
+          id: "trace-zh-a",
+          userId: "eval-user",
+          timestamp: NOW,
+          text: "Use Chinese.",
+          tier: "short",
+        },
+      ],
+    });
+    const commands = buildMemoryGovernanceCommandDryRunReport({
+      explanationReport: explanation,
+      commands: [
+        {
+          commandId: "cmd:correct-chinese",
+          type: "correct-content",
+          artifactId: "artifact:preference:chinese",
+          correctedContent: "User prefers Chinese for repo work.",
+        },
+        {
+          commandId: "cmd:rollback-chinese",
+          type: "rollback-artifact",
+          artifactId: "artifact:preference:chinese",
+        },
+      ],
+    });
+
+    const report = buildMemoryGraphRolloutGovernanceReport({
+      scenarioId: "missing-required-rollout-artifacts",
+      commandReport: commands,
+    });
+
+    expect(report.summary).toEqual({
+      scenarioId: "missing-required-rollout-artifacts",
+      decision: "blocked",
+      gateCount: 6,
+      passedGateCount: 2,
+      failedGateCount: 4,
+      graphRetrievalScenarioCount: 0,
+      graphRetrievalPassedCount: 0,
+      semanticRetrievalScenarioCount: 0,
+      semanticRetrievalPassedCount: 0,
+      dryRun: true,
+    });
+    expect(
+      report.gates.filter((gate) => !gate.passed).map((gate) => gate.gateId),
+    ).toEqual([
+      "consolidation.metrics",
+      "retrieval.graph-scenarios",
+      "retrieval.semantic-eval-scenarios",
+      "governance.polluted-memory-unresolved",
+    ]);
+    expect(
+      report.gates.filter((gate) => gate.passed).map((gate) => gate.gateId),
+    ).toEqual(["governance.correction-command", "governance.rollback-command"]);
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "metric_gate_failed",
+        "retrieval_eval_gate_failed",
+        "semantic_retrieval_eval_gate_failed",
+        "polluted_memory_gate_failed",
+        "correction_command_gate_passed",
+        "rollback_command_gate_passed",
+      ]),
+    );
+  });
+
+  it("blocks graph rollout when eval or governance gates expose unsafe memory behavior", () => {
+    const ownerScope = { userId: "eval-user" };
+    const unsafeGraphRetrieval = {
+      ownerScope,
+      rankedNodeIds: ["raw:deprecated", "raw:foreign"],
+      hiddenDeprecatedNodeIds: [],
+      expandedClusterIds: [],
+      reasonCodes: ["graph_retrieval_dry_run"],
+    } satisfies GraphAwareRetrievalResult;
+    const unresolvedAuditScenario = buildMemoryGovernanceAuditScenarioReport({
+      scenarioId: "unresolved-polluted-memory",
+      pollutedArtifactIds: ["artifact:polluted"],
+    });
+    const emptyCommands = buildMemoryGovernanceCommandDryRunReport({
+      commands: [],
+    });
+
+    const report = buildMemoryGraphRolloutGovernanceReport({
+      scenarioId: "unsafe-memory-graph-rollout",
+      consolidationMetrics: {
+        scenarioCount: 1,
+        expectedCandidateAccuracy: 0,
+        noisePromotionRate: 1,
+        temporaryOverrideLeakageRate: 1,
+        adaptationAccuracy: 0,
+        projectStateAccuracy: 0,
+        contestedClusterCoverage: 0,
+        decayPrecisionProxy: 0,
+      },
+      graphRetrievalScenarios: [
+        {
+          scenarioId: "default-leaks-deprecated-and-cross-scope",
+          result: unsafeGraphRetrieval,
+          expectedRankedNodeIds: ["summary:language"],
+          expectedHiddenDeprecatedNodeIds: ["raw:deprecated"],
+          expectedAuditTrailNodeIds: ["summary:language"],
+          forbiddenNodeIds: ["raw:deprecated"],
+          crossScopeNodeIds: ["raw:foreign"],
+        },
+      ],
+      semanticRetrievalScenarios: [
+        {
+          scenarioId: "semantic-retrieval-missed-summary",
+          query: "language preference",
+          enabled: true,
+          selectedDraftIds: [],
+          suppressedDraftIds: [],
+          fallbackRecordIds: ["raw:deprecated"],
+          missingSelectedDraftIds: ["draft:summary-language"],
+          missingSuppressedDraftIds: [],
+          missingFallbackRecordIds: [],
+          selectedPassed: false,
+          suppressedPassed: true,
+          fallbackPassed: true,
+          passed: false,
+          reasonCodes: ["semantic_retrieval_eval_scenario"],
+        },
+      ],
+      auditScenarioReport: unresolvedAuditScenario,
+      commandReport: emptyCommands,
+    });
+
+    expect(report.summary.decision).toBe("blocked");
+    expect(report.summary.failedGateCount).toBeGreaterThan(0);
+    expect(report.graphRetrievalScenarios[0]).toEqual(
+      expect.objectContaining({
+        passed: false,
+        missingRankedNodeIds: ["summary:language"],
+        missingHiddenDeprecatedNodeIds: ["raw:deprecated"],
+        missingAuditTrailNodeIds: ["summary:language"],
+        leakedForbiddenNodeIds: ["raw:deprecated"],
+        crossScopeLeakNodeIds: ["raw:foreign"],
+      }),
+    );
+    expect(
+      report.gates.filter((gate) => !gate.passed).map((gate) => gate.gateId),
+    ).toEqual([
+      "consolidation.expected-candidate-accuracy",
+      "consolidation.noise-promotion-rate",
+      "consolidation.temporary-override-leakage-rate",
+      "consolidation.contested-cluster-coverage",
+      "consolidation.decay-precision-proxy",
+      "retrieval.graph-scenarios",
+      "retrieval.audit-trail",
+      "retrieval.cross-scope-isolation",
+      "retrieval.semantic-eval-scenarios",
+      "governance.polluted-memory-unresolved",
+      "governance.correction-command",
+      "governance.rollback-command",
+    ]);
+    expect(report.reasonCodes).toEqual(
+      expect.arrayContaining([
+        "metric_gate_failed",
+        "retrieval_eval_gate_failed",
+        "semantic_retrieval_eval_gate_failed",
+        "audit_trail_gate_failed",
+        "cross_scope_gate_failed",
+        "polluted_memory_gate_failed",
+        "correction_command_gate_failed",
+        "rollback_command_gate_failed",
+      ]),
+    );
   });
 
   it("normalizes caller-provided relation candidates before judgment", () => {

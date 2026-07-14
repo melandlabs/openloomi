@@ -5,8 +5,10 @@
 #![allow(unused)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
 use tauri::Manager;
-use tauri::{ActivationPolicy, Emitter, Listener};
+use tauri::{Emitter, Listener};
 
 use serde_json;
 
@@ -256,7 +258,7 @@ fn main() {
 
     println!("╔══════════════════════════════════════╗");
     println!(
-             "║       openloomi Tauri App v{}     ║",
+        "║       openloomi Tauri App v{}     ║",
         env!("CARGO_PKG_VERSION")
     );
     println!("╚══════════════════════════════════════╝");

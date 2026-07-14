@@ -14,6 +14,7 @@
 import { LOOP_PATHS, ensureDirs, migrate } from "./paths";
 import { decisions, log, writeStatus } from "./store";
 import { buildTickPrompt } from "./tick-prompt";
+import { classifierRules, findMatchingRule } from "./classifier-rules";
 import type { LoopDecision, LoopTickResult } from "./types";
 
 const TICK_LOOKBACK_MS = 2 * 60 * 60 * 1000; // 2h
@@ -183,6 +184,17 @@ async function runAgentic(opts: TickOptions): Promise<LoopTickResult> {
     newDecisions = pendingAddedSince(before);
   }
 
+  // Deterministic classifier-rules post-processor (see
+  // `classifier-rules.ts`). For each freshly-added decision, check whether
+  // any registered rule matches its `source_signal`. If a rule matches,
+  // the rule's `then` overrides the agent's choice for `type`,
+  // `action.kind`, and `confidence` (as a floor). This is the
+  // belt-and-suspenders layer that backs the prompt-level hint — even if
+  // the LLM drifts on a rule, the server enforces the deterministic
+  // routing. A `type: "noop"` rule suppresses the decision entirely
+  // (drops it from `pending`), which is `#288`-equivalent behaviour.
+  const overridesApplied = applyClassifierRules(newDecisions);
+
   const result: LoopTickResult = {
     scanned,
     surfaced,
@@ -262,6 +274,71 @@ function snapshotCounts(): CountsSnapshot {
 function pendingAddedSince(before: CountsSnapshot): LoopDecision[] {
   const after = decisions.list("pending");
   return after.filter((d) => !before.pendingIds.has(d.id));
+}
+
+/**
+ * Apply user-defined classifier rules to a batch of newly-persisted
+ * decisions. Mutates `decisions.json` via `decisions.update()` /
+ * `decisions.moveTo()` (for `noop` suppression). Returns a small
+ * summary that the caller may log.
+ *
+ * Rules are evaluated in registration order; the first match wins.
+ * `type: "noop"` moves the decision from `pending` → `dismissed` so it
+ * never reaches the pet bubble or any external watch loop's
+ * notification fan-out. Other `type` overrides keep the decision in
+ * `pending` with the new routing.
+ */
+function applyClassifierRules(decs: LoopDecision[]): {
+  overridden: number;
+  suppressed: number;
+} {
+  const rules = classifierRules.list();
+  if (rules.length === 0 || decs.length === 0) {
+    return { overridden: 0, suppressed: 0 };
+  }
+  let overridden = 0;
+  let suppressed = 0;
+  for (const dec of decs) {
+    const src = dec.source_signal;
+    if (!src || typeof src !== "object") continue;
+    const match = findMatchingRule(src, rules);
+    if (!match) continue;
+    if (match.then.type === "noop") {
+      // Suppress entirely. We treat it like a dismiss with provenance
+      // pointing at the rule so an admin can audit later.
+      decisions.moveTo(dec.id, "dismissed", { suppressedByRule: match.id });
+      suppressed++;
+      log(
+        `[tick.classifierRules] suppressed decision=${dec.id} by rule=${match.id}`,
+      );
+      continue;
+    }
+    // Build the patch. Confidence is a FLOOR — the agent's value wins
+    // if it's higher. action.kind is overwritten when the rule sets it.
+    const floorConf =
+      typeof match.then.confidence === "number" ? match.then.confidence : null;
+    const nextConfidence =
+      floorConf === null
+        ? dec.confidence
+        : typeof dec.confidence === "number"
+          ? Math.max(dec.confidence, floorConf)
+          : floorConf;
+    const nextAction =
+      match.then.actionKind !== undefined
+        ? { ...dec.action, kind: match.then.actionKind }
+        : dec.action;
+    const patch: Partial<LoopDecision> = {
+      type: match.then.type as LoopDecision["type"],
+      action: nextAction,
+      ...(nextConfidence !== undefined ? { confidence: nextConfidence } : {}),
+    };
+    decisions.update(dec.id, patch);
+    overridden++;
+    log(
+      `[tick.classifierRules] overrode decision=${dec.id} type=${dec.type}→${match.then.type} rule=${match.id} conf=${nextConfidence}`,
+    );
+  }
+  return { overridden, suppressed };
 }
 
 export { LOOP_PATHS };

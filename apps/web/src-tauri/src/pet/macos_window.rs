@@ -197,7 +197,11 @@ pub fn configure_for_all_spaces(_window: &tauri::WebviewWindow) {}
 /// the builder-level `.accept_first_mouse(true)`.
 #[cfg(target_os = "macos")]
 pub fn configure_as_floating_panel(window: &tauri::WebviewWindow) {
-    use objc2::{class, ffi, msg_send, runtime::{AnyClass, AnyObject}, sel};
+    use objc2::{
+        class, ffi, msg_send,
+        runtime::{AnyClass, AnyObject},
+        sel,
+    };
 
     let label = window.label().to_string();
     let label_on_main = label.clone();

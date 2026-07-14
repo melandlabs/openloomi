@@ -24,6 +24,9 @@
  */
 
 import { LOOP_PATHS } from "./paths";
+import { customTypes } from "./custom-types";
+import { customChannels } from "./custom-channels";
+import { classifierRules } from "./classifier-rules";
 
 export interface TickPromptOptions {
   /** Days to look back for insights / signals. Default: 1. */
@@ -40,6 +43,54 @@ export function buildTickPrompt(opts: TickPromptOptions = {}): string {
   const mutesPath = LOOP_PATHS.mutes;
   const loopCli = "apps/web/scripts/loop-cli.mjs";
   const sinceDaysStr = String(sinceDays);
+
+  const userTypes = customTypes.list();
+  const userChannels = customChannels.list();
+  const userRules = classifierRules.list();
+  const userTypesBlock =
+    userTypes.length === 0
+      ? ""
+      : `\n  ### User-defined types (per-user extension to DecisionType)\n\n  The user has registered the following custom decision types via \`PUT /api/loop/types\`. Treat each as a candidate in the classifier below — the \`type\` field on the resulting decision is the snake_case \`id\`, and the \`action.kind\` is the listed \`actionKind\`. If none of the built-in branches below match but a user-defined type clearly does, use it.\n\n${userTypes
+          .map(
+            (t) =>
+              `  - id: \`${t.id}\`  label: "${t.label}"  action.kind: \`${t.actionKind}\`${t.description ? `  description: ${t.description}` : ""}`,
+          )
+          .join("\n")}\n`;
+  // Deterministic classifier rules — HARD CONSTRAINTS layered above the
+  // classifier list. When a rule's `when` predicates match a signal, the
+  // server-side post-processor will pin `type` / `actionKind` /
+  // `confidence` regardless of what the agent outputs. The agent still
+  // produces the title / dialogue / why[] / params, but routing is
+  // forced. The watcher logs an `[override]` line for every hit.
+  const userRulesBlock =
+    userRules.length === 0
+      ? ""
+      : `\n  ### User-defined classifier rules (HARD CONSTRAINTS — deterministic overrides)\n\n  The user has registered the following rules via \`PUT /api/loop/classifier-rules\`. **These are hard constraints** — when a signal matches a rule's \`when\` predicates, the resulting decision MUST use the listed \`type\` (and \`actionKind\` if specified, and the \`confidence\` floor). The server-side post-processor enforces this even if your output disagrees, but you should still honour it on first pass. \`type: "noop"\` means the signal is suppressed entirely (do not include it in \`newDecisions\`).\n\n${userRules
+          .map((r) => {
+            const condLines = r.when
+              .map(
+                (c) =>
+                  `      - ${c.field} ${c.op} ${
+                    c.op === "matches"
+                      ? `/${c.pattern ?? c.value}/`
+                      : JSON.stringify(c.value)
+                  }`,
+              )
+              .join("\n");
+            return `  - id: \`${r.id}\`${r.label ? `  label: "${r.label}"` : ""}
+    when:
+${condLines}
+    then: type=\`${r.then.type}\`${
+      r.then.actionKind ? ` action.kind=\`${r.then.actionKind}\`` : ""
+    }${typeof r.then.confidence === "number" ? ` confidence≥${r.then.confidence}` : ""}${
+      r.description ? `\n    description: ${r.description}` : ""
+    }`;
+          })
+          .join("\n\n")}\n`;
+  const userChannelIds = userChannels.map((c) => c.id);
+  const userToolkits = Array.from(
+    new Set(userChannels.map((c) => c.toolkit)),
+  ).join(", ");
 
   return `You are running one tick of the openloomi Loop. Your job: pull fresh external signals via the available Composio surface, write them to the loop's local signal store, enrich with openloomi-memory, classify, and surface any new decisions for the user.
 
@@ -87,7 +138,11 @@ Check which of the three surfaces above are actually usable in this session:
   - **openloomi-memory insights** — \`node $OPENLOOMI_MEMORY_DIR/scripts/openloomi-memory.cjs list-insights --days=${sinceDaysStr}\`. Always available when insights are seeded.
 
 Note which surfaces are reachable (record in the \`surfaces_used\` field of your
-result event). The expected toolkits are: gmail, googlecalendar, github, slack.
+result event). The expected toolkits are: gmail, googlecalendar, github, slack${
+    userToolkits
+      ? `, plus the user-defined custom channels' toolkits: ${userToolkits}`
+      : ""
+  }.
 A toolkit is "reachable" on a surface if the surface reports it as connected;
 otherwise that surface simply contributes nothing for that toolkit, and the
 other surfaces cover it. If no surface is reachable at all, continue with
@@ -200,6 +255,31 @@ accounted for in \`loop.log\`.
     safely dropped from the decision queue. They remain visible in \`signals.jsonl\` for
     debugging and can be promoted to a typed classifier branch later if needed.
 
+${
+  userChannels.length === 0
+    ? ""
+    : `  ### 2.3 User-defined channels (custom signal sources)
+
+  The user has registered the following Composio-backed channels via \`PUT /api/loop/channels\`.
+  The watcher (lib/loop/watcher.ts) polls each on its own \`pollIntervalSec\` cadence and
+  appends one \`LoopSignal\` per record to \`${signalsPath}\`. You do NOT pull these yourself —
+  the records are already on disk by the time you read \`signals.jsonl\`. The agent's job is
+  to recognise their \`type\` and map them onto a typed decision (preferably a user-defined
+  type from the block below; otherwise an \`unknown\` action is acceptable for novel sources).
+
+${userChannels
+  .map(
+    (c) =>
+      `  - ${c.id} (toolkit: \`${c.toolkit}\`, tool: \`${c.toolSlug}\`, signal type: \`${c.signalType}\`)${c.payloadShape ? ` — payload: ${c.payloadShape}` : ""}${c.eventFilter ? ` — filter: ${JSON.stringify(c.eventFilter)}` : ""}`,
+  )
+  .join("\n")}
+
+  When a custom-sourced signal in \`signals.jsonl\` matches the \`type\` of one of these
+  channels, use its payload description to construct a decision — choose the user-defined
+  \`type\` whose label / description best fits the payload's semantics. If no user-defined
+  type fits, emit an \`unknown\` action so the user can promote it manually.
+`
+}
   Co-equal pass — deadline extraction. While you build each payload above, also scan its
   \`body\` / \`text\` / \`description\` / \`title\` / \`path\` (obsidian) for natural-language
   deadlines. Common patterns:
@@ -353,8 +433,7 @@ lib-level classifier exactly):
     - obsidian_note_changed in customers/                             -> requirement_synthesis (requirement_synthesis)
     - obsidian_note_changed in ideas/ or drafts/                      -> doc_update    (doc_update)
     - obsidian_note_changed (other paths)                             -> doc_update    (doc_update)
-
-For each surviving signal, persist the decision by running:
+${userTypesBlock}${userRulesBlock}For each surviving signal, persist the decision by running:
 
 \`\`\`bash
 node ${loopCli} ingest-decision '<json>'
@@ -449,7 +528,16 @@ The tick caller parses a \`result\` event from your SSE stream. Emit exactly one
     { "id": "github",          "label": "GitHub",          "connected": <bool>, "accountCount": <int>, "lastError": "<optional>" },
     { "id": "slack",           "label": "Slack",           "connected": <bool>, "accountCount": <int>, "lastError": "<optional>" },
     { "id": "linear",          "label": "Linear",          "connected": <bool>, "accountCount": <int>, "lastError": "<optional>" },
-    { "id": "obsidian",        "label": "Obsidian",        "connected": false,  "accountCount": 0,     "lastError": "local-only" }
+    { "id": "obsidian",        "label": "Obsidian",        "connected": false,  "accountCount": 0,     "lastError": "local-only" }${
+      userChannelIds.length === 0
+        ? ""
+        : `,\n${userChannels
+            .map(
+              (c) =>
+                `    { "id": "${c.id}", "label": ${JSON.stringify(c.label)}, "connected": <bool>, "accountCount": <int>, "lastError": "<optional>" }`,
+            )
+            .join(",\n")}`
+    }
   ]
 }
 \`\`\`
