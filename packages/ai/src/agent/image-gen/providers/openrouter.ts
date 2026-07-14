@@ -10,41 +10,42 @@ import type {
   ImageModelInfo,
 } from "../types";
 
-const OPENAI_BASE_URL = "https://api.openai.com/v1";
-const DEFAULT_MODEL = "gpt-image-2";
-const DEFAULT_SIZE = "1024x1024";
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const DEFAULT_MODEL = "bytedance-seed/seedream-4.5";
 
-const OPENAI_IMAGE_MODELS: ImageModelInfo[] = [
+const OPENROUTER_IMAGE_MODELS: ImageModelInfo[] = [
   {
-    id: "gpt-image-2",
-    name: "gpt-image-2",
-    displayName: "GPT-Image-2",
+    id: "bytedance-seed/seedream-4.5",
+    name: "bytedance-seed/seedream-4.5",
+    displayName: "Seedream 4.5 (OpenRouter)",
     supportedModality: ["text"],
-    supportedSizes: ["1024x1024", "1024x1536", "1536x1024", "auto"],
+    supportedSizes: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     supportedQualities: ["auto", "low", "medium", "high"],
     supportedOutputFormats: ["png", "jpeg", "webp"],
   },
 ];
 
-const OPENAI_CAPABILITIES: ImageGenerationCapabilities = {
+const OPENROUTER_CAPABILITIES: ImageGenerationCapabilities = {
   supportsTextToImage: true,
   supportsImageReference: false,
   supportsUrlOutput: false,
   supportsBase64Output: true,
-  supportedSizes: ["1024x1024", "1024x1536", "1536x1024", "auto"],
+  supportedSizes: ["1:1", "16:9", "9:16", "4:3", "3:4"],
   supportedQualities: ["auto", "low", "medium", "high"],
   supportedOutputFormats: ["png", "jpeg", "webp"],
 };
 
-type OpenAIImageGenProviderOptions = {
+type OpenRouterImageGenProviderOptions = {
   apiKey?: string;
   baseUrl?: string;
   imageGenerationUrl?: string;
   defaultModel?: string;
   timeoutMs?: number;
+  referer?: string;
+  title?: string;
 };
 
-type OpenAIImageResponse = {
+type OpenRouterImageResponse = {
   data?: Array<{
     b64_json?: string;
     url?: string;
@@ -57,28 +58,32 @@ type OpenAIImageResponse = {
   };
 };
 
-export class OpenAIImageGenProvider extends ImageGenProvider {
+export class OpenRouterImageGenProvider extends ImageGenProvider {
   private apiKey?: string;
   private baseUrl: string;
   private imageGenerationUrl?: string;
   private model: string;
   private timeoutMs: number;
+  private referer?: string;
+  private title?: string;
 
-  constructor(options: OpenAIImageGenProviderOptions = {}) {
+  constructor(options: OpenRouterImageGenProviderOptions = {}) {
     super();
     this.apiKey = options.apiKey;
-    this.baseUrl = options.baseUrl || OPENAI_BASE_URL;
+    this.baseUrl = options.baseUrl || OPENROUTER_BASE_URL;
     this.imageGenerationUrl = options.imageGenerationUrl;
     this.model = options.defaultModel || DEFAULT_MODEL;
     this.timeoutMs = options.timeoutMs || 120_000;
+    this.referer = options.referer;
+    this.title = options.title;
   }
 
   get name(): string {
-    return "openai";
+    return "openrouter";
   }
 
   get displayName(): string {
-    return "OpenAI Images";
+    return "OpenRouter Images";
   }
 
   isAvailable(): boolean {
@@ -86,7 +91,7 @@ export class OpenAIImageGenProvider extends ImageGenProvider {
   }
 
   listModels(): ImageModelInfo[] {
-    return OPENAI_IMAGE_MODELS;
+    return OPENROUTER_IMAGE_MODELS;
   }
 
   defaultModel(): string | null {
@@ -94,7 +99,7 @@ export class OpenAIImageGenProvider extends ImageGenProvider {
   }
 
   capabilities(): ImageGenerationCapabilities {
-    return OPENAI_CAPABILITIES;
+    return OPENROUTER_CAPABILITIES;
   }
 
   async generate(
@@ -116,7 +121,7 @@ export class OpenAIImageGenProvider extends ImageGenProvider {
         imageCount,
         modality,
         creditsUsed,
-        error: "OPENAI_API_KEY is not configured",
+        error: "OPENROUTER_API_KEY is not configured",
         errorType: "configuration_error",
       });
     }
@@ -129,7 +134,7 @@ export class OpenAIImageGenProvider extends ImageGenProvider {
         modality,
         creditsUsed,
         error:
-          "Reference images are not supported by the Day 1 OpenAI text-to-image provider.",
+          "Reference images are not supported by the Day 1 OpenRouter text-to-image provider.",
         errorType: "validation_error",
       });
     }
@@ -139,17 +144,18 @@ export class OpenAIImageGenProvider extends ImageGenProvider {
         buildImagesUrl(this.baseUrl, this.imageGenerationUrl),
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            "Content-Type": "application/json",
-          },
+          headers: buildHeaders({
+            apiKey: this.apiKey,
+            referer: this.referer,
+            title: this.title,
+          }),
           body: JSON.stringify(buildPayload(request, model, imageCount)),
           signal: AbortSignal.timeout(this.timeoutMs),
         },
       );
 
       const text = await response.text();
-      const parsed = parseJson<OpenAIImageResponse>(text);
+      const parsed = parseJson<OpenRouterImageResponse>(text);
 
       if (!response.ok) {
         return failure({
@@ -160,8 +166,8 @@ export class OpenAIImageGenProvider extends ImageGenProvider {
           creditsUsed,
           error:
             parsed?.error?.message ||
-            `OpenAI image API error ${response.status}: ${text}`,
-          errorType: mapStatusToErrorType(response.status, parsed?.error?.type),
+            `OpenRouter image API error ${response.status}: ${text}`,
+          errorType: mapStatusToErrorType(response.status),
         });
       }
 
@@ -173,7 +179,7 @@ export class OpenAIImageGenProvider extends ImageGenProvider {
           imageCount,
           modality,
           creditsUsed,
-          error: "OpenAI image API returned no image data",
+          error: "OpenRouter image API returned no image data",
           errorType: "provider_error",
         });
       }
@@ -205,11 +211,27 @@ export class OpenAIImageGenProvider extends ImageGenProvider {
         error:
           error instanceof Error
             ? error.message
-            : "OpenAI image generation failed",
+            : "OpenRouter image generation failed",
         errorType: isTimeout ? "timeout" : "unknown_error",
       });
     }
   }
+}
+
+function buildHeaders(options: {
+  apiKey: string;
+  referer?: string;
+  title?: string;
+}): Record<string, string> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${options.apiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  if (options.referer) headers["HTTP-Referer"] = options.referer;
+  if (options.title) headers["X-Title"] = options.title;
+
+  return headers;
 }
 
 function buildPayload(
@@ -221,23 +243,12 @@ function buildPayload(
     model,
     prompt: request.prompt,
     n: imageCount,
-    size: request.size || DEFAULT_SIZE,
   };
 
-  if (request.quality) {
-    payload.quality = request.quality;
-  }
-
-  if (request.outputFormat) {
-    payload.output_format = request.outputFormat;
-  }
-
-  if (usesLegacyImageResponseFormat(model) && request.responseFormat) {
-    payload.response_format =
-      request.responseFormat === "data_url"
-        ? "b64_json"
-        : request.responseFormat;
-  }
+  const aspectRatio = request.aspectRatio || aspectRatioFromSize(request.size);
+  if (aspectRatio) payload.aspect_ratio = aspectRatio;
+  if (request.quality) payload.quality = request.quality;
+  if (request.outputFormat) payload.output_format = request.outputFormat;
 
   return payload;
 }
@@ -247,18 +258,11 @@ function buildImagesUrl(baseUrl: string, imageGenerationUrl?: string): string {
   if (direct) return direct;
 
   const normalized = baseUrl.replace(/\/+$/, "");
-  return normalized.endsWith("/v1")
-    ? `${normalized}/images/generations`
-    : `${normalized}/v1/images/generations`;
-}
-
-function usesLegacyImageResponseFormat(model: string): boolean {
-  const normalized = model.toLowerCase();
-  return normalized.startsWith("dall-e-");
+  return normalized.endsWith("/images") ? normalized : `${normalized}/images`;
 }
 
 function normalizeImages(
-  result: OpenAIImageResponse | null,
+  result: OpenRouterImageResponse | null,
   outputFormat?: ImageGenerationOutputFormat,
 ): GeneratedImage[] {
   const mimeType = mimeTypeForOutputFormat(outputFormat);
@@ -296,7 +300,7 @@ function failure(args: {
 }): ImageGenerationResponse {
   return {
     success: false,
-    provider: "openai",
+    provider: "openrouter",
     model: args.model,
     prompt: args.prompt,
     modality: args.modality,
@@ -309,13 +313,24 @@ function failure(args: {
 
 function mapStatusToErrorType(
   status: number,
-  providerType?: string,
 ): ImageGenerationResponse["errorType"] {
   if (status === 401 || status === 403) return "configuration_error";
   if (status === 429) return "rate_limit";
-  if (providerType?.includes("safety")) return "safety_blocked";
   if (status >= 500) return "provider_error";
   return "provider_error";
+}
+
+function aspectRatioFromSize(size: string | undefined): string | undefined {
+  switch (size) {
+    case "1024x1024":
+      return "1:1";
+    case "1536x1024":
+      return "3:2";
+    case "1024x1536":
+      return "2:3";
+    default:
+      return undefined;
+  }
 }
 
 function parseJson<T>(text: string): T | null {

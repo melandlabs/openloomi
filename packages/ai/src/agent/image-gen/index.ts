@@ -26,4 +26,5 @@ export {
 } from "./registry";
 
 export { OpenAIImageGenProvider } from "./providers/openai";
+export { OpenRouterImageGenProvider } from "./providers/openrouter";
 export { NanoBananaImageGenProvider } from "./providers/nano-banana";

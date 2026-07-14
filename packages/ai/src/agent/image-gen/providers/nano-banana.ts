@@ -40,6 +40,7 @@ type NanoBananaImageGenProviderOptions = {
   baseUrl?: string;
   imageGenerationUrl?: string;
   defaultModel?: string;
+  timeoutMs?: number;
 };
 
 type ProviderImageCandidate = {
@@ -57,6 +58,7 @@ export class NanoBananaImageGenProvider extends ImageGenProvider {
   private baseUrl?: string;
   private imageGenerationUrl?: string;
   private model: string;
+  private timeoutMs: number;
 
   constructor(options: NanoBananaImageGenProviderOptions = {}) {
     super();
@@ -64,6 +66,7 @@ export class NanoBananaImageGenProvider extends ImageGenProvider {
     this.baseUrl = options.baseUrl;
     this.imageGenerationUrl = options.imageGenerationUrl;
     this.model = options.defaultModel || DEFAULT_MODEL;
+    this.timeoutMs = options.timeoutMs || 120_000;
   }
 
   get name(): string {
@@ -138,7 +141,7 @@ export class NanoBananaImageGenProvider extends ImageGenProvider {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(buildPayload(request, model, imageCount)),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
 
       const text = await response.text();

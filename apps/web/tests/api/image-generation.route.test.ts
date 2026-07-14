@@ -43,13 +43,23 @@ describe("POST /api/ai/v1/images/generations", () => {
     authState.user = { id: "user-image-generation", type: "regular" };
     envState.tauriMode = false;
     delete process.env.IMAGE_GENERATION_PROVIDER;
+    delete process.env.NEXT_PUBLIC_APP_URL;
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_IMAGE_MODEL;
     delete process.env.OPENAI_IMAGE_BASE_URL;
+    delete process.env.OPENAI_IMAGE_GENERATION_URL;
+    delete process.env.OPENAI_IMAGE_TIMEOUT_MS;
+    delete process.env.IMAGE_GENERATION_TIMEOUT_MS;
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_IMAGE_BASE_URL;
+    delete process.env.OPENROUTER_IMAGE_GENERATION_URL;
+    delete process.env.OPENROUTER_IMAGE_MODEL;
+    delete process.env.OPENROUTER_IMAGE_TIMEOUT_MS;
     delete process.env.NANO_BANANA_API_KEY;
     delete process.env.NANO_BANANA_BASE_URL;
     delete process.env.NANO_BANANA_IMAGE_GENERATION_URL;
     delete process.env.NANO_BANANA_MODEL;
+    delete process.env.NANO_BANANA_TIMEOUT_MS;
   });
 
   test("returns 401 when unauthenticated outside Tauri", async () => {
@@ -133,6 +143,83 @@ describe("POST /api/ai/v1/images/generations", () => {
       mimeType: "image/png",
     });
     expect(body.creditsUsed).toBeGreaterThan(0);
+  });
+
+  test("uses OpenAI full image generation endpoint without appending a path", async () => {
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.OPENAI_IMAGE_GENERATION_URL = "https://images.example/draw";
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: "aGVsbG8=" }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await POST(
+      request({
+        provider: "openai",
+        model: "gpt-image-2",
+        prompt: "a lifestyle image",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://images.example/draw",
+      expect.any(Object),
+    );
+  });
+
+  test("uses OpenRouter image API shape with aspect_ratio output", async () => {
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    process.env.OPENROUTER_IMAGE_MODEL = "bytedance-seed/seedream-4.5";
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: "aGVsbG8=" }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await POST(
+      request({
+        provider: "openrouter",
+        prompt: "a lifestyle image",
+        size: "1024x1024",
+        outputFormat: "png",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://openrouter.ai/api/v1/images",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-openrouter-key",
+          "HTTP-Referer": "http://localhost:3000",
+          "X-Title": "OpenLoomi",
+        }),
+      }),
+    );
+    const [, options] = fetchMock.mock.calls[0];
+    const payload = JSON.parse((options as RequestInit).body as string);
+    expect(payload).toMatchObject({
+      model: "bytedance-seed/seedream-4.5",
+      prompt: "a lifestyle image",
+      aspect_ratio: "1:1",
+      output_format: "png",
+    });
+    expect(payload.size).toBeUndefined();
+
+    expect(await response.json()).toMatchObject({
+      success: true,
+      provider: "openrouter",
+      dataUrl: "data:image/png;base64,aGVsbG8=",
+    });
   });
 
   test("uses request provider over env default and accepts Nano Banana url output", async () => {
