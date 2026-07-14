@@ -628,7 +628,19 @@ For source checkouts, check project markers and likely CLI locations:
   },
   "aiProviderConfigured": true,
   "aiProviderStatus": "runtime_configured",
-  "connectorStatusAvailable": false,
+  "connectorStatusAvailable": true,
+  "connectors": [
+    {
+      "id": "gmail",
+      "label": "Gmail",
+      "connected": false,
+      "accountCount": 0
+    }
+  ],
+  "connectorSetupRecommended": true,
+  "recommendedNextAction": "configure_connectors",
+  "recommendedReason": "CONNECTOR_SETUP_REQUIRED",
+  "connectorSetupUrl": "http://localhost:3515/connectors",
   "apiReachable": false,
   "ready": true,
   "nextAction": "run",
@@ -646,10 +658,30 @@ For source checkouts, check project markers and likely CLI locations:
           "modelPresent": true
         }
       ]
+    },
+    "connectors": {
+      "checked": true,
+      "available": true,
+      "reason": "CONNECTOR_STATUS_LOADED",
+      "setupRecommended": true
     }
   }
 }
 ```
+
+Connector readiness is a status-only advisory. Missing Gmail, Slack, GitHub,
+Calendar, or Linear connections should not block memory-only or local runtime
+workflows, so `ready` can remain `true` while `connectorSetupRecommended`
+points the user to the OpenLoomi-owned `/connectors` setup surface. Connector
+tokens, account identifiers, OAuth secrets, passwords, and Composio secrets
+must never be printed by the Codex bridge.
+
+The bridge first reads the Loop connector status endpoint and then, when a local
+session token is available, merges OpenLoomi-owned native integration accounts
+from `/api/integrations` as status-only rows. This lets Codex show native
+connections such as Gmail or QQbot as connected even when the Loop/Composio
+probe is unavailable or slow, while still keeping all credentials inside
+OpenLoomi-owned surfaces.
 
 Common `nextAction` values:
 

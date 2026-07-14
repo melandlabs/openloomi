@@ -211,7 +211,7 @@ function writeRunLock(home, { startedAt = Date.now(), pid = 99999 } = {}) {
   return lockPath;
 }
 
-async function withPetApiServer(handler, fn) {
+async function withLocalApiServer(handler, fn) {
   const requests = [];
   const server = createServer((req, res) => {
     let raw = "";
@@ -244,6 +244,10 @@ async function withPetApiServer(handler, fn) {
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+}
+
+async function withPetApiServer(handler, fn) {
+  return withLocalApiServer(handler, fn);
 }
 
 function writeFakeCtl(home) {
@@ -285,6 +289,70 @@ function writeFakeCtl(home) {
   );
   chmodSync(shim, 0o755);
   return shim;
+}
+
+function writeJsonResponse(res, status, payload, headers = {}) {
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+    ...headers,
+  });
+  res.end(JSON.stringify(payload));
+}
+
+function createReadySetupApiHandler({
+  connectorStatus = 200,
+  connectorPayload = { items: [] },
+  integrationStatus = 200,
+  integrationPayload = { accounts: [] },
+} = {}) {
+  return (req, res) => {
+    const url = req.url || "/";
+
+    if (url === "/" || url === "") {
+      writeJsonResponse(res, 200, { ok: true });
+      return;
+    }
+
+    if (url.startsWith("/api/auth/set-token")) {
+      writeJsonResponse(
+        res,
+        200,
+        { ok: true },
+        {
+          "Set-Cookie": "authjs.session-token=fake-session; Path=/; HttpOnly",
+        },
+      );
+      return;
+    }
+
+    if (url.startsWith("/api/preferences/ai")) {
+      writeJsonResponse(res, 200, {
+        settings: [
+          {
+            providerType: "anthropic_compatible",
+            enabled: true,
+            hasApiKey: true,
+            baseUrl: "https://api.example.invalid",
+            model: "claude-test",
+          },
+        ],
+        systemDefaults: {},
+      });
+      return;
+    }
+
+    if (url.startsWith("/api/loop/connectors")) {
+      writeJsonResponse(res, connectorStatus, connectorPayload);
+      return;
+    }
+
+    if (url.startsWith("/api/integrations")) {
+      writeJsonResponse(res, integrationStatus, integrationPayload);
+      return;
+    }
+
+    writeJsonResponse(res, 404, { error: "not found" });
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -393,6 +461,216 @@ test("setup-status exposes the protocol contract fields", () => {
   }
 });
 
+test("setup-status recommends connector setup when monitored connectors are disconnected", async () => {
+  await withFakeHomeAsync(async (env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+
+    await withLocalApiServer(
+      createReadySetupApiHandler({
+        connectorPayload: {
+          items: [
+            {
+              id: "gmail",
+              label: "Gmail",
+              connected: false,
+              accountCount: 0,
+              probed: true,
+              fetchedAt: "2026-07-14T00:00:00.000Z",
+            },
+            {
+              id: "slack",
+              label: "Slack",
+              connected: false,
+              accountCount: 0,
+              probed: true,
+            },
+            {
+              id: "obsidian",
+              label: "Obsidian",
+              connected: false,
+              accountCount: 0,
+              lastError: "local-only",
+            },
+          ],
+        },
+      }),
+      async ({ baseUrl }) => {
+        const j = await runJsonAsync(["setup-status"], {
+          ...env,
+          OPENLOOMI_CTL: ctl,
+          OPENLOOMI_BASE_URL: baseUrl,
+        });
+
+        assert.equal(j.ready, true);
+        assert.equal(j.nextAction, "run");
+        assert.equal(j.reason, "READY");
+        assert.equal(j.connectorStatusAvailable, true);
+        assert.equal(j.connectorSetupRecommended, true);
+        assert.equal(j.recommendedNextAction, "configure_connectors");
+        assert.equal(j.recommendedReason, "CONNECTOR_SETUP_REQUIRED");
+        assert.equal(j.connectorSetupUrl, `${baseUrl}/connectors`);
+        assert.equal(j.checks.connectors.available, true);
+        assert.equal(j.checks.connectors.setupRecommended, true);
+        assert.ok(Array.isArray(j.connectors));
+        assert.equal(j.connectors[0].id, "gmail");
+        assert.equal(j.connectors[0].connected, false);
+        assert.equal(j.connectors[0].accountCount, 0);
+      },
+    );
+  });
+});
+
+test("setup-status does not recommend connector setup when a monitored connector is connected", async () => {
+  await withFakeHomeAsync(async (env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+
+    await withLocalApiServer(
+      createReadySetupApiHandler({
+        connectorPayload: {
+          items: [
+            {
+              id: "gmail",
+              label: "Gmail",
+              connected: true,
+              accountCount: 1,
+              word_id: "must-not-leak",
+              oauthToken: "must-not-leak",
+              lastError: "bearer must-not-leak",
+            },
+          ],
+        },
+      }),
+      async ({ baseUrl }) => {
+        const j = await runJsonAsync(["setup-status"], {
+          ...env,
+          OPENLOOMI_CTL: ctl,
+          OPENLOOMI_BASE_URL: baseUrl,
+        });
+
+        assert.equal(j.ready, true);
+        assert.equal(j.connectorStatusAvailable, true);
+        assert.equal(j.connectorSetupRecommended, false);
+        assert.equal(j.recommendedNextAction, null);
+        assert.equal(j.recommendedReason, null);
+        assert.equal(j.connectors.length, 1);
+        assert.deepEqual(j.connectors[0], {
+          id: "gmail",
+          label: "Gmail",
+          connected: true,
+          accountCount: 1,
+          lastError: "redacted",
+        });
+        const serialized = JSON.stringify(j.connectors);
+        assert.equal(serialized.includes("must-not-leak"), false);
+        assert.equal(serialized.includes("word_id"), false);
+        assert.equal(serialized.includes("oauthToken"), false);
+      },
+    );
+  });
+});
+
+test("setup-status keeps core readiness when connector status endpoint fails", async () => {
+  await withFakeHomeAsync(async (env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+
+    await withLocalApiServer(
+      createReadySetupApiHandler({
+        connectorStatus: 500,
+        connectorPayload: { error: "connectors failed" },
+        integrationStatus: 500,
+        integrationPayload: { error: "integrations failed" },
+      }),
+      async ({ baseUrl }) => {
+        const j = await runJsonAsync(["setup-status"], {
+          ...env,
+          OPENLOOMI_CTL: ctl,
+          OPENLOOMI_BASE_URL: baseUrl,
+        });
+
+        assert.equal(j.ready, true);
+        assert.equal(j.nextAction, "run");
+        assert.equal(j.reason, "READY");
+        assert.equal(j.connectorStatusAvailable, false);
+        assert.equal(j.connectorSetupRecommended, true);
+        assert.equal(j.recommendedNextAction, "configure_connectors");
+        assert.equal(j.recommendedReason, "CONNECTOR_SETUP_REQUIRED");
+        assert.deepEqual(j.connectors, []);
+        assert.equal(j.checks.connectors.available, false);
+        assert.equal(j.checks.connectors.reason, "CONNECTOR_STATUS_HTTP_500");
+        assert.equal(
+          j.checks.connectors.nativeReason,
+          "NATIVE_INTEGRATIONS_HTTP_500",
+        );
+      },
+    );
+  });
+});
+
+test("setup-status falls back to native integrations when loop connector status fails", async () => {
+  await withFakeHomeAsync(async (env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+
+    await withLocalApiServer(
+      createReadySetupApiHandler({
+        connectorStatus: 500,
+        connectorPayload: { error: "connectors failed" },
+        integrationPayload: {
+          accounts: [
+            {
+              id: "native-gmail-account",
+              platform: "gmail",
+              externalId: "must-not-leak",
+              displayName: "Gmail",
+              status: "connected",
+            },
+            {
+              id: "native-qq-account",
+              platform: "qqbot",
+              externalId: "must-not-leak",
+              displayName: "QQ",
+              status: "connected",
+            },
+          ],
+        },
+      }),
+      async ({ baseUrl }) => {
+        const j = await runJsonAsync(["setup-status"], {
+          ...env,
+          OPENLOOMI_CTL: ctl,
+          OPENLOOMI_BASE_URL: baseUrl,
+        });
+
+        assert.equal(j.ready, true);
+        assert.equal(j.connectorStatusAvailable, true);
+        assert.equal(j.connectorSetupRecommended, false);
+        assert.equal(j.recommendedNextAction, null);
+        assert.equal(j.recommendedReason, null);
+        assert.equal(
+          j.connectorStatus.reason,
+          "CONNECTOR_STATUS_HTTP_500_WITH_NATIVE_INTEGRATIONS",
+        );
+        assert.deepEqual(
+          j.connectors.map((connector) => ({
+            id: connector.id,
+            connected: connector.connected,
+            accountCount: connector.accountCount,
+          })),
+          [
+            { id: "gmail", connected: true, accountCount: 1 },
+            { id: "qqbot", connected: true, accountCount: 1 },
+          ],
+        );
+        const serialized = JSON.stringify(j.connectors);
+        assert.equal(serialized.includes("must-not-leak"), false);
+      },
+    );
+  });
+});
+
 test("setup-status aiProvider checks only report presence, never values", () => {
   withFakeHome((env) => {
     const j = runJson(["setup-status"], env);
@@ -415,7 +693,7 @@ test("setup-status aiProvider checks only report presence, never values", () => 
   });
 });
 
-test('run preserves the direct runner by not synthesizing OPENLOOMI_API_URL', () => {
+test("run preserves the direct runner by not synthesizing OPENLOOMI_API_URL", () => {
   withFakeHome((env) => {
     const ctl = writeFakeCtl(env.HOME);
     writeFakeToken(env.HOME);
@@ -433,34 +711,34 @@ test('run preserves the direct runner by not synthesizing OPENLOOMI_API_URL', ()
     assert.equal(r.code, 0, r.stderr || r.stdout);
     const j = JSON.parse(r.stdout);
     assert.equal(j.ready, true);
-    assert.equal(j.reason, 'RUN_COMPLETE');
+    assert.equal(j.reason, "RUN_COMPLETE");
     assert.equal(j.result.env.OPENLOOMI_API_URL, null);
-    assert.equal(j.result.prompt, 'Reply with exactly: OpenLoomi ready.');
-    assert.ok(!r.stdout.includes('sk-test-never-print'));
+    assert.equal(j.result.prompt, "Reply with exactly: OpenLoomi ready.");
+    assert.ok(!r.stdout.includes("sk-test-never-print"));
   });
 });
 
-test('run preserves an explicitly configured OPENLOOMI_API_URL', () => {
+test("run preserves an explicitly configured OPENLOOMI_API_URL", () => {
   withFakeHome((env) => {
     const ctl = writeFakeCtl(env.HOME);
     writeFakeToken(env.HOME);
     const r = runOutcomeWithInput(
-      ['run'],
+      ["run"],
       {
         ...env,
         OPENLOOMI_CTL: ctl,
-        OPENLOOMI_BASE_URL: 'http://localhost:3414',
-        OPENLOOMI_API_URL: 'http://localhost:3515',
-        ANTHROPIC_API_KEY: 'sk-test-never-print',
+        OPENLOOMI_BASE_URL: "http://localhost:3414",
+        OPENLOOMI_API_URL: "http://localhost:3515",
+        ANTHROPIC_API_KEY: "sk-test-never-print",
       },
-      'Reply with exactly: OpenLoomi ready.',
+      "Reply with exactly: OpenLoomi ready.",
     );
     assert.equal(r.code, 0, r.stderr || r.stdout);
     const j = JSON.parse(r.stdout);
     assert.equal(j.ready, true);
-    assert.equal(j.reason, 'RUN_COMPLETE');
-    assert.equal(j.result.env.OPENLOOMI_API_URL, 'http://localhost:3515');
-    assert.ok(!r.stdout.includes('sk-test-never-print'));
+    assert.equal(j.reason, "RUN_COMPLETE");
+    assert.equal(j.result.env.OPENLOOMI_API_URL, "http://localhost:3515");
+    assert.ok(!r.stdout.includes("sk-test-never-print"));
   });
 });
 

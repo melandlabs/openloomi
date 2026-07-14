@@ -35,3 +35,15 @@ printf "%s" "<user connector request>" | node "$SKILL_DIR/../../scripts/loomi-br
 
 Keep connector authentication, sync, message access, and platform-specific
 actions inside OpenLoomi runtime.
+
+When `setup-status` includes `connectorStatusAvailable: true`, report only the
+status-only connector fields such as `id`, `connected`, and `accountCount`. When
+it includes `connectorSetupRecommended: true`, treat
+`recommendedNextAction: "configure_connectors"` as a non-blocking setup
+recommendation and hand the user to the reported OpenLoomi `/connectors` URL.
+Do not treat this as core runtime failure when `ready: true`.
+
+`setup-status` may merge Loop connector rows with OpenLoomi native integration
+accounts (for example Gmail or QQbot) as status-only connector rows. Report that
+connected state when present, but keep all authentication, sync, and account
+management inside OpenLoomi.

@@ -30,9 +30,46 @@ const SESSION_BOOTSTRAP_TIMEOUT_MS = 30000;
 const SESSION_BOOTSTRAP_POLL_MS = 2000;
 const SESSION_API_TIMEOUT_MS = 5000;
 const API_PROBE_TIMEOUT_MS = 1000;
+const CONNECTOR_STATUS_TIMEOUT_MS = 2500;
 const MAX_COMMAND_OUTPUT = 4096;
 const RUN_LOCK_TTL_MS = RUN_TIMEOUT_MS + 60_000;
 const DEBUG_DISCOVERY = process.env.OPENLOOMI_DEBUG_DISCOVERY === "1";
+const MONITORING_CONNECTOR_IDS = new Set([
+  "gmail",
+  "google_calendar",
+  "github",
+  "slack",
+  "linear",
+]);
+const NATIVE_CONNECTOR_LABELS = {
+  asana: "Asana",
+  dingtalk: "DingTalk",
+  discord: "Discord",
+  facebook_messenger: "Messenger",
+  feishu: "Feishu",
+  github: "GitHub",
+  gmail: "Gmail",
+  google_calendar: "Google Calendar",
+  google_docs: "Google Docs",
+  google_drive: "Google Drive",
+  google_meet: "Google Meet",
+  hubspot: "HubSpot",
+  imessage: "iMessage",
+  instagram: "Instagram",
+  jira: "Jira",
+  linear: "Linear",
+  linkedin: "LinkedIn",
+  notion: "Notion",
+  outlook: "Outlook",
+  outlook_calendar: "Outlook Calendar",
+  qqbot: "QQ",
+  slack: "Slack",
+  teams: "Teams",
+  telegram: "Telegram",
+  twitter: "X",
+  weixin: "Weixin",
+  whatsapp: "WhatsApp",
+};
 const OFFICIAL_RELEASE_SOURCE = {
   owner: "melandlabs",
   repo: "openloomi",
@@ -267,6 +304,11 @@ async function buildSetupStatus() {
     apiProbe.source = "aiProviderRuntime";
   }
 
+  const connectorStatus = await getConnectorStatus(
+    apiProbe.reachableUrl,
+    token,
+  );
+
   const baseStatus = {
     mode: discovery.mode,
     installed: discovery.installed,
@@ -275,7 +317,22 @@ async function buildSetupStatus() {
     tokenPresent: token.present,
     aiProviderConfigured: aiProvider.configured,
     aiProviderStatus: aiProvider.status,
-    connectorStatusAvailable: false,
+    connectorStatusAvailable: connectorStatus.available,
+    connectors: connectorStatus.connectors,
+    connectorSetupRecommended: connectorStatus.setupRecommended,
+    recommendedNextAction: connectorStatus.recommendedNextAction,
+    recommendedReason: connectorStatus.recommendedReason,
+    connectorSetupUrl: connectorStatus.setupUrl,
+    connectorStatus: {
+      checked: connectorStatus.checked,
+      available: connectorStatus.available,
+      reason: connectorStatus.reason,
+      baseUrl: connectorStatus.baseUrl,
+      endpoint: connectorStatus.endpoint,
+      connectedCount: connectorStatus.connectedCount,
+      monitoringConnected: connectorStatus.monitoringConnected,
+      monitoringConnectorIds: [...MONITORING_CONNECTOR_IDS],
+    },
     apiReachable: Boolean(apiProbe.reachableUrl),
     apiBaseUrl: apiProbe.reachableUrl,
     apiProbe: {
@@ -308,6 +365,7 @@ async function buildSetupStatus() {
       aiProvider: aiProvider.checked,
       aiProviderRuntime: aiProvider.runtime,
       apiProbe: apiProbe.attempts,
+      connectors: connectorStatus.check,
       discovery: discovery.checked,
       codexRuntimeEnv: {
         key: codexRuntimeEnv.key,
@@ -328,6 +386,481 @@ async function buildSetupStatus() {
       apiProbe,
     ),
   };
+}
+
+async function getConnectorStatus(baseUrl, tokenStatus) {
+  const normalizedBaseUrl = normalizeLocalApiUrl(baseUrl);
+  const endpoint = "/api/loop/connectors";
+  const setupUrl = normalizedBaseUrl ? `${normalizedBaseUrl}/connectors` : null;
+
+  if (!normalizedBaseUrl) {
+    return buildConnectorStatus({
+      checked: false,
+      available: false,
+      reason: "OPENLOOMI_API_UNREACHABLE",
+      baseUrl: null,
+      endpoint,
+      setupUrl,
+    });
+  }
+
+  if (typeof fetch !== "function") {
+    return buildConnectorStatus({
+      checked: true,
+      available: false,
+      reason: "FETCH_UNAVAILABLE",
+      baseUrl: normalizedBaseUrl,
+      endpoint,
+      setupUrl,
+    });
+  }
+
+  const nativeStatus = await getNativeIntegrationConnectorStatus(
+    normalizedBaseUrl,
+    tokenStatus,
+  );
+
+  try {
+    const response = await fetchWithTimeout(
+      `${normalizedBaseUrl}${endpoint}`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+        redirect: "manual",
+      },
+      CONNECTOR_STATUS_TIMEOUT_MS,
+    );
+
+    if (!response.ok) {
+      return buildConnectorStatusWithNativeFallback(
+        {
+          checked: true,
+          available: false,
+          reason: `CONNECTOR_STATUS_HTTP_${response.status}`,
+          status: response.status,
+          baseUrl: normalizedBaseUrl,
+          endpoint,
+          setupUrl,
+        },
+        nativeStatus,
+      );
+    }
+
+    let payload;
+    try {
+      payload = await response.json();
+    } catch {
+      return buildConnectorStatusWithNativeFallback(
+        {
+          checked: true,
+          available: false,
+          reason: "CONNECTOR_STATUS_MALFORMED_RESPONSE",
+          status: response.status,
+          baseUrl: normalizedBaseUrl,
+          endpoint,
+          setupUrl,
+        },
+        nativeStatus,
+      );
+    }
+
+    const rawConnectors = extractConnectorList(payload);
+
+    if (!rawConnectors) {
+      return buildConnectorStatusWithNativeFallback(
+        {
+          checked: true,
+          available: false,
+          reason: "CONNECTOR_STATUS_MISSING_ITEMS",
+          status: response.status,
+          baseUrl: normalizedBaseUrl,
+          endpoint,
+          setupUrl,
+        },
+        nativeStatus,
+      );
+    }
+
+    const connectors = mergeConnectorEntries(
+      rawConnectors.map(summarizeConnectorEntry).filter(Boolean),
+      nativeStatus.connectors,
+    );
+
+    return buildConnectorStatus({
+      checked: true,
+      available: true,
+      reason: nativeStatus.available
+        ? "CONNECTOR_STATUS_LOADED_WITH_NATIVE_INTEGRATIONS"
+        : "CONNECTOR_STATUS_LOADED",
+      status: response.status,
+      baseUrl: normalizedBaseUrl,
+      endpoint,
+      setupUrl,
+      connectors,
+      sources: nativeStatus.available
+        ? ["loop-connectors", "native-integrations"]
+        : ["loop-connectors"],
+      nativeReason: nativeStatus.reason,
+    });
+  } catch (error) {
+    return buildConnectorStatusWithNativeFallback(
+      {
+        checked: true,
+        available: false,
+        reason:
+          error && error.name === "AbortError"
+            ? "CONNECTOR_STATUS_TIMEOUT"
+            : "CONNECTOR_STATUS_UNREACHABLE",
+        baseUrl: normalizedBaseUrl,
+        endpoint,
+        setupUrl,
+      },
+      nativeStatus,
+    );
+  }
+}
+
+function buildConnectorStatusWithNativeFallback(baseStatus, nativeStatus) {
+  if (nativeStatus.available) {
+    return buildConnectorStatus({
+      ...baseStatus,
+      available: true,
+      reason: `${baseStatus.reason}_WITH_NATIVE_INTEGRATIONS`,
+      connectors: nativeStatus.connectors,
+      sources: ["native-integrations"],
+      nativeReason: nativeStatus.reason,
+    });
+  }
+
+  return buildConnectorStatus({
+    ...baseStatus,
+    sources: [],
+    nativeReason: nativeStatus.reason,
+  });
+}
+
+async function getNativeIntegrationConnectorStatus(baseUrl, tokenStatus) {
+  const endpoint = "/api/integrations";
+
+  if (!tokenStatus?.present) {
+    return {
+      available: false,
+      reason: "NATIVE_INTEGRATIONS_TOKEN_MISSING",
+      connectors: [],
+    };
+  }
+
+  const token = readOpenLoomiAuthToken(tokenStatus);
+
+  if (!hasValue(token)) {
+    return {
+      available: false,
+      reason: "NATIVE_INTEGRATIONS_TOKEN_UNREADABLE",
+      connectors: [],
+    };
+  }
+
+  try {
+    const sessionResponse = await fetchWithTimeout(
+      `${baseUrl}/api/auth/set-token?token=${encodeURIComponent(token)}`,
+      {
+        method: "GET",
+        redirect: "manual",
+      },
+      SESSION_API_TIMEOUT_MS,
+    );
+    const cookieHeader = toCookieHeader(
+      getSetCookieHeaders(sessionResponse.headers),
+    );
+
+    if (!cookieHeader) {
+      return {
+        available: false,
+        reason: "NATIVE_INTEGRATIONS_SESSION_COOKIE_MISSING",
+        connectors: [],
+      };
+    }
+
+    const response = await fetchWithTimeout(
+      `${baseUrl}${endpoint}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Cookie: cookieHeader,
+        },
+        redirect: "manual",
+      },
+      CONNECTOR_STATUS_TIMEOUT_MS,
+    );
+
+    if (!response.ok) {
+      return {
+        available: false,
+        reason: `NATIVE_INTEGRATIONS_HTTP_${response.status}`,
+        connectors: [],
+      };
+    }
+
+    let payload;
+    try {
+      payload = await response.json();
+    } catch {
+      return {
+        available: false,
+        reason: "NATIVE_INTEGRATIONS_MALFORMED_RESPONSE",
+        connectors: [],
+      };
+    }
+
+    const accounts = Array.isArray(payload?.accounts) ? payload.accounts : null;
+
+    if (!accounts) {
+      return {
+        available: false,
+        reason: "NATIVE_INTEGRATIONS_MISSING_ACCOUNTS",
+        connectors: [],
+      };
+    }
+
+    return {
+      available: true,
+      reason: "NATIVE_INTEGRATIONS_LOADED",
+      connectors: summarizeNativeIntegrationAccounts(accounts),
+    };
+  } catch (error) {
+    return {
+      available: false,
+      reason:
+        error && error.name === "AbortError"
+          ? "NATIVE_INTEGRATIONS_TIMEOUT"
+          : "NATIVE_INTEGRATIONS_UNREACHABLE",
+      connectors: [],
+    };
+  }
+}
+
+function summarizeNativeIntegrationAccounts(accounts) {
+  const counts = new Map();
+
+  for (const account of accounts) {
+    if (!account || typeof account !== "object") {
+      continue;
+    }
+
+    const id = normalizeConnectorId(account.platform);
+
+    if (!id || !isNativeIntegrationConnected(account)) {
+      continue;
+    }
+
+    counts.set(id, (counts.get(id) || 0) + 1);
+  }
+
+  return [...counts.entries()].map(([id, accountCount]) => ({
+    id,
+    label: NATIVE_CONNECTOR_LABELS[id] || formatConnectorLabel(id),
+    connected: true,
+    accountCount,
+  }));
+}
+
+function isNativeIntegrationConnected(account) {
+  const status =
+    typeof account.status === "string" ? account.status.toLowerCase() : "";
+
+  return !["disabled", "disconnected", "revoked", "error"].includes(status);
+}
+
+function mergeConnectorEntries(primary, secondary) {
+  const byId = new Map();
+
+  for (const connector of [...primary, ...secondary]) {
+    if (!connector?.id) {
+      continue;
+    }
+
+    const existing = byId.get(connector.id);
+
+    if (!existing) {
+      byId.set(connector.id, connector);
+      continue;
+    }
+
+    byId.set(connector.id, {
+      ...existing,
+      ...connector,
+      connected: Boolean(existing.connected || connector.connected),
+      accountCount: Math.max(
+        existing.accountCount || 0,
+        connector.accountCount || 0,
+      ),
+      lastError: connector.connected
+        ? undefined
+        : existing.lastError || connector.lastError,
+    });
+  }
+
+  return [...byId.values()].map((connector) => {
+    if (connector.lastError === undefined) {
+      const { lastError, ...rest } = connector;
+      return rest;
+    }
+
+    return connector;
+  });
+}
+
+function buildConnectorStatus({
+  checked,
+  available,
+  reason,
+  status = null,
+  baseUrl,
+  endpoint,
+  setupUrl,
+  connectors = [],
+  sources = [],
+  nativeReason = null,
+}) {
+  const connectedCount = connectors.filter(
+    (connector) => connector.connected,
+  ).length;
+  const monitoringConnectors = connectors.filter((connector) =>
+    MONITORING_CONNECTOR_IDS.has(connector.id),
+  );
+  const monitoringConnected = monitoringConnectors.some(
+    (connector) => connector.connected,
+  );
+  const setupRecommended = Boolean(
+    (!available && checked && setupUrl) || (available && connectedCount === 0),
+  );
+
+  return {
+    checked,
+    available,
+    reason,
+    status,
+    baseUrl,
+    endpoint,
+    setupUrl,
+    connectors,
+    connectedCount,
+    monitoringConnected,
+    sources,
+    nativeReason,
+    setupRecommended,
+    recommendedNextAction: setupRecommended ? "configure_connectors" : null,
+    recommendedReason: setupRecommended ? "CONNECTOR_SETUP_REQUIRED" : null,
+    check: {
+      checked,
+      available,
+      reason,
+      status,
+      baseUrl,
+      endpoint,
+      connectedCount,
+      monitoringConnected,
+      sources,
+      nativeReason,
+      setupRecommended,
+    },
+  };
+}
+
+function extractConnectorList(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.items)) {
+    return payload.items;
+  }
+
+  if (Array.isArray(payload?.connectors)) {
+    return payload.connectors;
+  }
+
+  return null;
+}
+
+function normalizeConnectorId(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function formatConnectorLabel(id) {
+  return id
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function summarizeConnectorEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const id = normalizeConnectorId(entry.id);
+
+  if (!id) {
+    return null;
+  }
+
+  const label =
+    typeof entry.label === "string" && entry.label.trim()
+      ? entry.label.trim()
+      : id;
+  const accountCount = normalizeConnectorAccountCount(entry.accountCount);
+  const connector = {
+    id,
+    label,
+    connected: Boolean(entry.connected),
+    accountCount,
+  };
+  const lastError = sanitizeConnectorLastError(entry.lastError);
+
+  if (lastError) {
+    connector.lastError = lastError;
+  }
+
+  if (typeof entry.probed === "boolean") {
+    connector.probed = entry.probed;
+  }
+
+  if (typeof entry.fetchedAt === "string" && entry.fetchedAt.trim()) {
+    connector.fetchedAt = entry.fetchedAt.trim();
+  }
+
+  return connector;
+}
+
+function normalizeConnectorAccountCount(value) {
+  const count = Number(value);
+
+  if (!Number.isFinite(count) || count < 0) {
+    return 0;
+  }
+
+  return Math.floor(count);
+}
+
+function sanitizeConnectorLastError(value) {
+  if (!hasValue(value)) {
+    return null;
+  }
+
+  const text = String(value).replace(/\s+/g, " ").trim();
+
+  if (!text) {
+    return null;
+  }
+
+  if (/token|secret|password|authorization|bearer|api[_-]?key/i.test(text)) {
+    return "redacted";
+  }
+
+  return text.slice(0, 160);
 }
 
 function installInstructions() {
