@@ -5,10 +5,10 @@ import { useEffect, useMemo, useRef } from "react";
 import { useChatContext } from "@/components/chat-context";
 import { isTauri } from "@/lib/tauri";
 import {
-  derivePetSettleState,
-  derivePetRuntimeState,
-  getLatestAssistantActivity,
   type PetRuntimeState,
+  derivePetRuntimeState,
+  derivePetSettleState,
+  getLatestAssistantActivity,
 } from "./pet-runtime-state";
 
 type RuntimePayloadState =
@@ -45,6 +45,8 @@ export function PetRuntimeBridge() {
     activeChatRunning: isAgentRunning,
     runningChatCount,
     executingToolCount: activity.executingToolCount,
+    executingMemoryRetrievalCount: activity.executingMemoryRetrievalCount,
+    executingOtherToolCount: activity.executingOtherToolCount,
     hasAssistantOutput: activity.hasAssistantOutput,
   });
 
@@ -82,7 +84,13 @@ export function PetRuntimeBridge() {
 
     const resultIsVisible =
       document.visibilityState === "visible" && document.hasFocus();
-    const settle = derivePetSettleState(activity, resultIsVisible);
+    const settle = derivePetSettleState(
+      {
+        hasAssistantOutput: activity.hasAssistantOutput,
+        hasError: activity.hasError,
+      },
+      resultIsVisible,
+    );
     emitOnce(settle.state, settle.monologue);
     if (settle.durationMs > 0) {
       settleTimerRef.current = setTimeout(

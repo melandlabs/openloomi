@@ -7,11 +7,15 @@ export interface PetRuntimeSnapshot {
   activeChatRunning: boolean;
   runningChatCount: number;
   executingToolCount: number;
+  executingMemoryRetrievalCount: number;
+  executingOtherToolCount: number;
   hasAssistantOutput: boolean;
 }
 
 export interface AssistantActivity {
   executingToolCount: number;
+  executingMemoryRetrievalCount: number;
+  executingOtherToolCount: number;
   hasAssistantOutput: boolean;
   hasError: boolean;
 }
@@ -25,9 +29,31 @@ export interface PetSettleState {
 interface ActivityPart {
   type?: string;
   status?: string;
+  toolName?: string;
   toolOutput?: unknown;
   isError?: boolean;
   text?: unknown;
+}
+
+const MEMORY_RETRIEVAL_TOOL_NAMES = new Set([
+  "searchUnifiedMemory",
+  "searchMemoryPath",
+  "getRawMessages",
+  "searchRawMessages",
+  "searchKnowledgeBase",
+  "getFullDocumentContent",
+]);
+
+function normalizeToolName(toolName: string): string {
+  const segments = toolName.split("__");
+  return segments[segments.length - 1] || toolName;
+}
+
+export function isMemoryRetrievalTool(toolName: unknown): boolean {
+  return (
+    typeof toolName === "string" &&
+    MEMORY_RETRIEVAL_TOOL_NAMES.has(normalizeToolName(toolName))
+  );
 }
 
 export function derivePetRuntimeState(
@@ -43,8 +69,15 @@ export function derivePetRuntimeState(
     snapshot.runningChatCount > 0;
   if (!isBusy) return "idle";
 
+  if (snapshot.executingOtherToolCount > 0) {
+    return "working";
+  }
+
+  if (snapshot.executingMemoryRetrievalCount > 0) {
+    return "thinking";
+  }
+
   if (
-    snapshot.executingToolCount > 0 ||
     snapshot.hasAssistantOutput ||
     (snapshot.runningChatCount > 0 && !snapshot.activeChatRunning)
   ) {
@@ -63,12 +96,21 @@ export function getLatestAssistantActivity(
   const parts = Array.isArray(latest?.parts) ? latest.parts : [];
 
   let executingToolCount = 0;
+  let executingMemoryRetrievalCount = 0;
+  let executingOtherToolCount = 0;
   let hasAssistantOutput = false;
   let hasError = false;
 
   for (const part of parts as ActivityPart[]) {
     if (part?.type === "tool-native") {
-      if (part.status === "executing") executingToolCount += 1;
+      if (part.status === "executing") {
+        executingToolCount += 1;
+        if (isMemoryRetrievalTool(part.toolName)) {
+          executingMemoryRetrievalCount += 1;
+        } else {
+          executingOtherToolCount += 1;
+        }
+      }
       if (part.status === "completed" || part.toolOutput) {
         hasAssistantOutput = true;
       }
@@ -84,7 +126,13 @@ export function getLatestAssistantActivity(
     }
   }
 
-  return { executingToolCount, hasAssistantOutput, hasError };
+  return {
+    executingToolCount,
+    executingMemoryRetrievalCount,
+    executingOtherToolCount,
+    hasAssistantOutput,
+    hasError,
+  };
 }
 
 export function derivePetSettleState(
