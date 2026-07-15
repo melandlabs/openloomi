@@ -300,10 +300,27 @@ function writeJsonResponse(res, status, payload, headers = {}) {
 }
 
 function createReadySetupApiHandler({
+  aiPreferencePayload = {
+    settings: [
+      {
+        providerType: "anthropic_compatible",
+        enabled: true,
+        hasApiKey: true,
+        baseUrl: "https://api.example.invalid",
+        model: "claude-test",
+      },
+    ],
+    systemDefaults: {},
+  },
   connectorStatus = 200,
   connectorPayload = { items: [] },
   integrationStatus = 200,
   integrationPayload = { accounts: [] },
+  nativeProviderStatus = 200,
+  nativeProviderPayload = {
+    defaultAgent: "claude",
+    agents: [{ type: "claude", name: "Claude" }],
+  },
 } = {}) {
   return (req, res) => {
     const url = req.url || "/";
@@ -326,18 +343,12 @@ function createReadySetupApiHandler({
     }
 
     if (url.startsWith("/api/preferences/ai")) {
-      writeJsonResponse(res, 200, {
-        settings: [
-          {
-            providerType: "anthropic_compatible",
-            enabled: true,
-            hasApiKey: true,
-            baseUrl: "https://api.example.invalid",
-            model: "claude-test",
-          },
-        ],
-        systemDefaults: {},
-      });
+      writeJsonResponse(res, 200, aiPreferencePayload);
+      return;
+    }
+
+    if (url.startsWith("/api/native/providers")) {
+      writeJsonResponse(res, nativeProviderStatus, nativeProviderPayload);
       return;
     }
 
@@ -459,6 +470,86 @@ test("setup-status exposes the protocol contract fields", () => {
       `unexpected nextAction when not installed: ${j.nextAction}`,
     );
   }
+});
+
+test("setup-status treats active native Codex runtime as execution-ready without an AI provider", async () => {
+  await withFakeHomeAsync(async (env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+
+    await withLocalApiServer(
+      createReadySetupApiHandler({
+        aiPreferencePayload: {
+          settings: [],
+          systemDefaults: {},
+        },
+        nativeProviderPayload: {
+          defaultAgent: "codex",
+          agents: [{ type: "codex", name: "Codex CLI" }],
+        },
+      }),
+      async ({ baseUrl }) => {
+        const j = await runJsonAsync(["setup-status"], {
+          ...env,
+          OPENLOOMI_CTL: ctl,
+          OPENLOOMI_BASE_URL: baseUrl,
+          OPENLOOMI_AGENT_PROVIDER: "codex",
+        });
+
+        assert.equal(j.aiProviderConfigured, false);
+        assert.equal(j.executionProviderReady, true);
+        assert.equal(j.executionProviderSource, "native_codex_runtime");
+        assert.equal(j.nativeRuntimeActive, true);
+        assert.equal(j.nativeRuntimeProvider, "codex");
+        assert.equal(j.nativeRuntime.codexAgentAvailable, true);
+        assert.equal(j.ready, true);
+        assert.equal(j.nextAction, "run");
+        assert.equal(j.reason, "READY");
+        assert.equal(j.readinessSource, "native_codex_runtime");
+        assert.equal(j.checks.nativeProvider.active, true);
+      },
+    );
+  });
+});
+
+test("setup-status still requires an AI provider when the native Codex runtime is inactive", async () => {
+  await withFakeHomeAsync(async (env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+
+    await withLocalApiServer(
+      createReadySetupApiHandler({
+        aiPreferencePayload: {
+          settings: [],
+          systemDefaults: {},
+        },
+        nativeProviderPayload: {
+          defaultAgent: "claude",
+          agents: [
+            { type: "claude", name: "Claude" },
+            { type: "codex", name: "Codex CLI" },
+          ],
+        },
+      }),
+      async ({ baseUrl }) => {
+        const j = await runJsonAsync(["setup-status"], {
+          ...env,
+          OPENLOOMI_CTL: ctl,
+          OPENLOOMI_BASE_URL: baseUrl,
+        });
+
+        assert.equal(j.aiProviderConfigured, false);
+        assert.equal(j.executionProviderReady, false);
+        assert.equal(j.executionProviderSource, null);
+        assert.equal(j.nativeRuntimeActive, false);
+        assert.equal(j.nativeRuntimeProvider, "claude");
+        assert.equal(j.nativeRuntime.codexAgentAvailable, true);
+        assert.equal(j.ready, false);
+        assert.equal(j.nextAction, "configure_ai_provider");
+        assert.equal(j.reason, "AI_PROVIDER_REQUIRED");
+      },
+    );
+  });
 });
 
 test("setup-status recommends connector setup when monitored connectors are disconnected", async () => {

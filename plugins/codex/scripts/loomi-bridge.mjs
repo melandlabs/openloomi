@@ -308,6 +308,13 @@ async function buildSetupStatus() {
     apiProbe.reachableUrl,
     token,
   );
+  const nativeProviderStatus = await getNativeProviderStatus(
+    apiProbe.reachableUrl,
+  );
+  const executionProvider = getExecutionProviderStatus(
+    aiProvider,
+    nativeProviderStatus,
+  );
 
   const baseStatus = {
     mode: discovery.mode,
@@ -317,6 +324,22 @@ async function buildSetupStatus() {
     tokenPresent: token.present,
     aiProviderConfigured: aiProvider.configured,
     aiProviderStatus: aiProvider.status,
+    executionProviderReady: executionProvider.ready,
+    executionProviderSource: executionProvider.source,
+    nativeRuntimeActive: nativeProviderStatus.active,
+    nativeRuntimeProvider: nativeProviderStatus.defaultAgent,
+    nativeRuntimeStatus: nativeProviderStatus.reason,
+    nativeRuntime: {
+      checked: nativeProviderStatus.checked,
+      available: nativeProviderStatus.available,
+      active: nativeProviderStatus.active,
+      reason: nativeProviderStatus.reason,
+      baseUrl: nativeProviderStatus.baseUrl,
+      endpoint: nativeProviderStatus.endpoint,
+      defaultAgent: nativeProviderStatus.defaultAgent,
+      codexAgentAvailable: nativeProviderStatus.codexAgentAvailable,
+      agents: nativeProviderStatus.agents,
+    },
     connectorStatusAvailable: connectorStatus.available,
     connectors: connectorStatus.connectors,
     connectorSetupRecommended: connectorStatus.setupRecommended,
@@ -364,6 +387,7 @@ async function buildSetupStatus() {
       auth: token.checked,
       aiProvider: aiProvider.checked,
       aiProviderRuntime: aiProvider.runtime,
+      nativeProvider: nativeProviderStatus,
       apiProbe: apiProbe.attempts,
       connectors: connectorStatus.check,
       discovery: discovery.checked,
@@ -384,7 +408,147 @@ async function buildSetupStatus() {
       aiProvider,
       codexRuntimeEnv,
       apiProbe,
+      nativeProviderStatus,
     ),
+  };
+}
+
+async function getNativeProviderStatus(baseUrl) {
+  const normalizedBaseUrl = normalizeLocalApiUrl(baseUrl);
+  const endpoint = "/api/native/providers";
+
+  if (!normalizedBaseUrl) {
+    return buildNativeProviderStatus({
+      checked: false,
+      available: false,
+      reason: "OPENLOOMI_API_UNREACHABLE",
+      baseUrl: null,
+      endpoint,
+    });
+  }
+
+  if (typeof fetch !== "function") {
+    return buildNativeProviderStatus({
+      checked: true,
+      available: false,
+      reason: "FETCH_UNAVAILABLE",
+      baseUrl: normalizedBaseUrl,
+      endpoint,
+    });
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      `${normalizedBaseUrl}${endpoint}`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+        redirect: "manual",
+      },
+      API_PROBE_TIMEOUT_MS,
+    );
+
+    if (!response.ok) {
+      return buildNativeProviderStatus({
+        checked: true,
+        available: false,
+        reason: `NATIVE_PROVIDERS_HTTP_${response.status}`,
+        baseUrl: normalizedBaseUrl,
+        endpoint,
+        status: response.status,
+      });
+    }
+
+    const payload = await response.json().catch(() => null);
+    const agents = Array.isArray(payload?.agents)
+      ? payload.agents.map(summarizeNativeAgent)
+      : [];
+    const defaultAgent =
+      typeof payload?.defaultAgent === "string" ? payload.defaultAgent : null;
+    const codexAgentAvailable = agents.some(
+      (agent) => agent.type === CODEX_RUNTIME_PROVIDER,
+    );
+    const active =
+      defaultAgent === CODEX_RUNTIME_PROVIDER && codexAgentAvailable;
+
+    return buildNativeProviderStatus({
+      checked: true,
+      available: true,
+      active,
+      reason: active ? "CODEX_RUNTIME_ACTIVE" : "CODEX_RUNTIME_INACTIVE",
+      baseUrl: normalizedBaseUrl,
+      endpoint,
+      status: response.status,
+      defaultAgent,
+      codexAgentAvailable,
+      agents,
+    });
+  } catch (error) {
+    return buildNativeProviderStatus({
+      checked: true,
+      available: false,
+      reason: error?.name === "AbortError" ? "API_TIMEOUT" : "API_UNREACHABLE",
+      baseUrl: normalizedBaseUrl,
+      endpoint,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function buildNativeProviderStatus({
+  checked,
+  available,
+  active = false,
+  reason,
+  baseUrl,
+  endpoint,
+  status = null,
+  defaultAgent = null,
+  codexAgentAvailable = false,
+  agents = [],
+  error = null,
+}) {
+  return {
+    checked,
+    available,
+    active,
+    reason,
+    baseUrl,
+    endpoint,
+    status,
+    defaultAgent,
+    codexAgentAvailable,
+    agents,
+    error,
+  };
+}
+
+function summarizeNativeAgent(agent) {
+  return {
+    type: typeof agent?.type === "string" ? agent.type : null,
+    name: typeof agent?.name === "string" ? agent.name : null,
+  };
+}
+
+function getExecutionProviderStatus(aiProvider, nativeProvider) {
+  if (aiProvider.configured) {
+    return {
+      ready: true,
+      source: "ai_provider",
+    };
+  }
+
+  if (nativeProvider.active) {
+    return {
+      ready: true,
+      source: "native_codex_runtime",
+    };
+  }
+
+  return {
+    ready: false,
+    source: null,
   };
 }
 
@@ -4479,12 +4643,14 @@ function getReadinessDecision(
   aiProvider,
   codexRuntimeEnv,
   apiProbe,
+  nativeProviderStatus,
 ) {
   // codexRuntimeEnv is intentionally NOT a gate here: a missing
   // OPENLOOMI_AGENT_PROVIDER only blocks the OpenLoomi GUI desktop from
   // routing through Codex; the bridge itself can still drive openloomi-ctl.
   // The setup state machine handles that branch separately.
   void codexRuntimeEnv;
+  const nativeCodexRuntimeReady = Boolean(nativeProviderStatus?.active);
 
   if (discovery.status === "invalid") {
     return {
@@ -4532,7 +4698,20 @@ function getReadinessDecision(
       reason: "READY_SESSION_BOOTSTRAP_PENDING",
       sessionInitializationRequired: true,
       message:
-        "OpenLoomi is installed. The bridge will initialize a local guest/session token on run, then re-check OpenLoomi AI provider settings.",
+        nativeCodexRuntimeReady
+          ? "OpenLoomi is installed and the native Codex runtime is active. The bridge will initialize a local guest/session token on run before execution."
+          : "OpenLoomi is installed. The bridge will initialize a local guest/session token on run, then re-check OpenLoomi AI provider settings.",
+    };
+  }
+
+  if (!aiProvider.configured && nativeCodexRuntimeReady) {
+    return {
+      ready: true,
+      nextAction: "run",
+      reason: "READY",
+      readinessSource: "native_codex_runtime",
+      message:
+        "OpenLoomi is ready through the native Codex runtime. A separate OpenLoomi AI provider is not required for native Codex execution.",
     };
   }
 

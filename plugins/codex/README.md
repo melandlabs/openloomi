@@ -628,6 +628,24 @@ For source checkouts, check project markers and likely CLI locations:
   },
   "aiProviderConfigured": true,
   "aiProviderStatus": "runtime_configured",
+  "executionProviderReady": true,
+  "executionProviderSource": "ai_provider | native_codex_runtime",
+  "nativeRuntimeActive": false,
+  "nativeRuntimeProvider": "claude | codex | null",
+  "nativeRuntime": {
+    "checked": true,
+    "available": true,
+    "active": false,
+    "reason": "CODEX_RUNTIME_INACTIVE",
+    "defaultAgent": "claude",
+    "codexAgentAvailable": true,
+    "agents": [
+      {
+        "type": "codex",
+        "name": "Codex CLI"
+      }
+    ]
+  },
   "connectorStatusAvailable": true,
   "connectors": [
     {
@@ -659,6 +677,12 @@ For source checkouts, check project markers and likely CLI locations:
         }
       ]
     },
+    "nativeProvider": {
+      "checked": true,
+      "available": true,
+      "active": false,
+      "reason": "CODEX_RUNTIME_INACTIVE"
+    },
     "connectors": {
       "checked": true,
       "available": true,
@@ -668,6 +692,15 @@ For source checkouts, check project markers and likely CLI locations:
   }
 }
 ```
+
+`aiProviderConfigured` only describes OpenLoomi-owned direct
+OpenAI-compatible or Anthropic-compatible provider settings. Native Codex CLI
+execution is tracked separately through `nativeRuntime*` and
+`executionProvider*` fields. When `/api/native/providers` reports
+`defaultAgent: "codex"` and the Codex agent metadata is present,
+`setup-status` may return `ready: true` with
+`executionProviderSource: "native_codex_runtime"` even while
+`aiProviderConfigured` remains `false`.
 
 Connector readiness is a status-only advisory. Missing Gmail, Slack, GitHub,
 Calendar, or Linear connections should not block memory-only or local runtime
