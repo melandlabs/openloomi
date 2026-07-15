@@ -490,6 +490,57 @@ describe("memory graph lifecycle forgetting runtime", () => {
     );
   });
 
+  it("resolves all alternatives in a connected multi-way competition", async () => {
+    const manager = new GraphLifecycleTestManager();
+    await storeEvidence(manager, [
+      rawMessage("multi-zh", { relationValue: "zh" }),
+    ]);
+    await storeEvidence(
+      manager,
+      [rawMessage("multi-en", { relationValue: "en" })],
+      { now: NOW + 1000 },
+    );
+    await storeEvidence(
+      manager,
+      [rawMessage("multi-ja-1", { relationValue: "ja" })],
+      { now: NOW + 2000 },
+    );
+    await storeEvidence(
+      manager,
+      [rawMessage("multi-ja-2", { relationValue: "ja" })],
+      { now: NOW + 3000 },
+    );
+    await storeEvidence(
+      manager,
+      [rawMessage("multi-ja-3", { relationValue: "ja" })],
+      { now: NOW + 4000 },
+    );
+
+    const result = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 5000, graphLifecycle: { enabled: true } },
+    );
+    expect(result.graphLifecycle?.createdSummaries).toBe(1);
+    const graph = await snapshot(manager);
+    expect(
+      graph.clusters.find((cluster) => cluster.nodeIds.includes("multi-zh"))
+        ?.lifecycleStatus,
+    ).toBe("superseded");
+    expect(
+      graph.clusters.find((cluster) => cluster.nodeIds.includes("multi-en"))
+        ?.lifecycleStatus,
+    ).toBe("superseded");
+    expect(
+      graph.clusters.find((cluster) => cluster.nodeIds.includes("multi-ja-1")),
+    ).toEqual(
+      expect.objectContaining({
+        lifecycleStatus: "stable",
+        representativeNodeId: expect.any(String),
+      }),
+    );
+  });
+
   it("supports dry-run, owner-scope isolation, and stale singleton decay", async () => {
     const manager = new GraphLifecycleTestManager();
     await storeEvidence(manager, [rawMessage("workspace-a")], {
@@ -546,5 +597,67 @@ describe("memory graph lifecycle forgetting runtime", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it("applies the same lifecycle transition again after an explicit reset", async () => {
+    const manager = new GraphLifecycleTestManager();
+    await storeEvidence(manager, [rawMessage("repeat-decay")], { now: NOW });
+
+    const firstDecay = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      {
+        now: NOW + 1000,
+        graphLifecycle: { enabled: true, decayAfterMs: 0 },
+      },
+    );
+    expect(firstDecay.graphLifecycle?.status).toBe("applied");
+
+    const graphStore = createRawMessageMemoryGraphStore({
+      storage: manager,
+      ownerScope: OWNER,
+      now: () => NOW + 2000,
+    });
+    const decayed = await graphStore.readSnapshot({
+      ownerScope: OWNER,
+      includeAuditOnly: true,
+    });
+    const cluster = decayed.clusters[0];
+    expect(cluster.lifecycleStatus).toBe("decaying");
+    await graphStore.persistPlan({
+      planId: "test-reset-lifecycle",
+      ownerScope: OWNER,
+      candidateNodes: [],
+      candidateEdges: [],
+      candidateClusters: [{ ...cluster, lifecycleStatus: "forming" }],
+      operations: [
+        {
+          operationId: "test-reset-lifecycle-operation",
+          ownerScope: OWNER,
+          kind: "set-cluster-lifecycle",
+          nodeIds: [...cluster.nodeIds],
+          clusterId: cluster.clusterId,
+          fromStatus: "decaying",
+          toStatus: "forming",
+          reasonCodes: ["test_explicit_reset"],
+        },
+      ],
+      expectedVersion: decayed.version,
+      persistence: { mode: "write", enabled: true },
+      reasonCodes: ["test_explicit_reset"],
+    });
+
+    const repeatedDecay = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      {
+        now: NOW + 3000,
+        graphLifecycle: { enabled: true, decayAfterMs: 0 },
+      },
+    );
+    expect(repeatedDecay.graphLifecycle?.status).toBe("applied");
+    expect((await snapshot(manager)).clusters[0].lifecycleStatus).toBe(
+      "decaying",
+    );
   });
 });

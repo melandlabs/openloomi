@@ -127,7 +127,93 @@ export function applicabilityEquivalent(
   left: MemoryApplicabilityContext | undefined,
   right: MemoryApplicabilityContext | undefined,
 ): boolean {
-  return applicabilityKey(left) === applicabilityKey(right);
+  return (
+    applicabilityKey(left) === applicabilityKey(right) &&
+    left?.validFrom === right?.validFrom &&
+    left?.validUntil === right?.validUntil
+  );
+}
+
+export interface MemoryGraphCompetitionComponent {
+  componentKey: string;
+  clusters: MemoryGraphClusterSnapshot[];
+}
+
+export function buildMemoryGraphCompetitionComponents(input: {
+  ownerScope: OwnerScope;
+  clusters: MemoryGraphClusterSnapshot[];
+  edges: MemoryGraphEdge[];
+}): MemoryGraphCompetitionComponent[] {
+  const clustersById = new Map(
+    input.clusters.map((cluster) => [cluster.clusterId, cluster]),
+  );
+  const clusterIdByNodeId = new Map<string, string>();
+  for (const cluster of input.clusters) {
+    for (const nodeId of cluster.nodeIds) {
+      clusterIdByNodeId.set(nodeId, cluster.clusterId);
+    }
+  }
+  const adjacency = new Map<string, Set<string>>();
+  for (const edge of input.edges) {
+    if (
+      edge.kind !== "compete" ||
+      edge.weight <= 0 ||
+      edge.metadata?.inactive === true ||
+      edge.metadata?.rolledBack === true ||
+      !sameOwnerScope(edge.ownerScope, input.ownerScope)
+    ) {
+      continue;
+    }
+    const leftId = clusterIdByNodeId.get(edge.fromNodeId);
+    const rightId = clusterIdByNodeId.get(edge.toNodeId);
+    if (!leftId || !rightId || leftId === rightId) continue;
+    const left = clustersById.get(leftId);
+    const right = clustersById.get(rightId);
+    if (
+      !left ||
+      !right ||
+      !applicabilityEquivalent(left.applicability, right.applicability)
+    ) {
+      continue;
+    }
+    const leftPeers = adjacency.get(leftId) ?? new Set<string>();
+    leftPeers.add(rightId);
+    adjacency.set(leftId, leftPeers);
+    const rightPeers = adjacency.get(rightId) ?? new Set<string>();
+    rightPeers.add(leftId);
+    adjacency.set(rightId, rightPeers);
+  }
+
+  const components: MemoryGraphCompetitionComponent[] = [];
+  const visited = new Set<string>();
+  for (const clusterId of adjacency.keys()) {
+    if (visited.has(clusterId)) continue;
+    const queue = [clusterId];
+    const componentIds: string[] = [];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || visited.has(current)) continue;
+      visited.add(current);
+      componentIds.push(current);
+      for (const peer of adjacency.get(current) ?? []) {
+        if (!visited.has(peer)) queue.push(peer);
+      }
+    }
+    const clusters = componentIds
+      .map((id) => clustersById.get(id))
+      .filter((cluster): cluster is MemoryGraphClusterSnapshot =>
+        Boolean(cluster),
+      );
+    if (clusters.length < 2) continue;
+    components.push({
+      componentKey: `competition-component:${componentIds
+        .sort()
+        .map(stablePart)
+        .join(":")}`,
+      clusters,
+    });
+  }
+  return components;
 }
 
 function evidenceToRecord(

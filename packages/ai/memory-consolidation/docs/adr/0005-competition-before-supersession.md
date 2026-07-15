@@ -16,6 +16,11 @@ merged, retrieval cannot explain which alternative is active.
 Contradictory evidence creates or reinforces competition between distinct memory
 structures before any supersession decision.
 
+Competition membership is derived from connected active `compete` edges within
+the same exact applicability identity. Pairwise metadata must not split a
+multi-alternative competition or cause lifecycle policy to ignore one of the
+connected alternatives.
+
 Supersession requires sustained evidence, policy evaluation, and preserved
 provenance. Temporary or context-specific evidence remains scoped or contested
 unless it accumulates enough support to become the preferred alternative.
