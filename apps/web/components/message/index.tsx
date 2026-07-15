@@ -994,6 +994,8 @@ const PurePreviewMessage = ({
                         // Image rendering - convert mediaType to contentType
                         const attachment = {
                           ...filePart,
+                          name: name ?? "image",
+                          url: url ?? blobPath ?? "",
                           contentType: mediaType, // Convert field name
                         };
                         return (
@@ -1324,16 +1326,16 @@ const PurePreviewMessage = ({
                   {message.role === "assistant" && imageParts.length > 0 && (
                     <div className="flex flex-wrap gap-2 items-center">
                       {imageParts.map(({ part, key }) => {
-                        const { url, name, mediaType, source } = part;
+                        const { url, name, mediaType, source, blobPath } = part;
                         const shouldEnableImageLightbox =
                           isLifestyleImagePart(part);
                         return (
                           <PreviewAttachment
                             key={key}
                             attachment={{
-                              url,
-                              name,
-                              contentType: mediaType,
+                              url: url ?? blobPath ?? "",
+                              name: name ?? "image",
+                              contentType: mediaType ?? "image/png",
                               source,
                             }}
                             enableImageLightbox={shouldEnableImageLightbox}
