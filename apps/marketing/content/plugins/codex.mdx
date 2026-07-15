@@ -325,12 +325,12 @@ The valid states are: `happy`, `idle`, `juggling`, `needsinput`, `presenting`, `
 | `version`                  | detected OpenLoomi version                                                            |
 | `tokenPresent`             | a local auth token exists                                                             |
 | `session`                  | `tokenPresent`, `guestBootstrapSupported`, `guestBootstrapMode`                       |
-| `aiProviderConfigured`     | a direct OpenAI-compatible or Anthropic-compatible AI provider is configured           |
+| `aiProviderConfigured`     | a direct OpenAI-compatible or Anthropic-compatible AI provider is configured          |
 | `aiProviderStatus`         | `runtime_configured` \| `unavailable`                                                 |
-| `executionProviderReady`   | direct AI provider or native Codex runtime can execute tasks                           |
+| `executionProviderReady`   | direct AI provider or native Codex runtime can execute tasks                          |
 | `executionProviderSource`  | `ai_provider` \| `native_codex_runtime` \| `null`                                     |
-| `nativeRuntimeActive`      | `/api/native/providers` reports Codex as the active default native runtime             |
-| `nativeRuntime`            | summarized `/api/native/providers` probe result                                        |
+| `nativeRuntimeActive`      | `/api/native/providers` reports Codex as the active default native runtime            |
+| `nativeRuntime`            | summarized `/api/native/providers` probe result                                       |
 | `connectorStatusAvailable` | whether the local API can report connector status                                     |
 | `apiReachable`             | local HTTP API responded                                                              |
 | `ready`                    | everything needed is in place                                                         |

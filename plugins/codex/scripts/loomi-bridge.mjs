@@ -4697,10 +4697,9 @@ function getReadinessDecision(
       nextAction: "run",
       reason: "READY_SESSION_BOOTSTRAP_PENDING",
       sessionInitializationRequired: true,
-      message:
-        nativeCodexRuntimeReady
-          ? "OpenLoomi is installed and the native Codex runtime is active. The bridge will initialize a local guest/session token on run before execution."
-          : "OpenLoomi is installed. The bridge will initialize a local guest/session token on run, then re-check OpenLoomi AI provider settings.",
+      message: nativeCodexRuntimeReady
+        ? "OpenLoomi is installed and the native Codex runtime is active. The bridge will initialize a local guest/session token on run before execution."
+        : "OpenLoomi is installed. The bridge will initialize a local guest/session token on run, then re-check OpenLoomi AI provider settings.",
     };
   }
 
