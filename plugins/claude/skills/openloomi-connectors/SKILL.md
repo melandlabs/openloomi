@@ -2,7 +2,7 @@
 name: openloomi-connectors
 description: "openloomi Connectors tools - manage platform integrations (OAuth connections, list accounts, check status). Triggers: connect platform, integration status, list accounts, disconnect"
 metadata:
-  version: 0.7.6
+  version: 0.7.7
 allowed-tools: Bash(node $SKILL_DIR/scripts/openloomi-connectors.cjs *)
 ---
 

@@ -2,7 +2,7 @@
 name: openloomi-pet
 description: "OpenLoomi Pet sprite & state helper for Claude Code. Use when the user wants to change their Loomi Pet state, list the available states, or ask Claude to mirror its lifecycle onto the pet. Triggers: pet state, /openloomi:pet, set pet, loomi pet, pet to happy, pet to working, pet to thinking, fox sprite, capybara sprite."
 metadata:
-  version: 0.7.6
+  version: 0.7.7
 allowed-tools: Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/loomi-bridge.mjs *)
 ---
 

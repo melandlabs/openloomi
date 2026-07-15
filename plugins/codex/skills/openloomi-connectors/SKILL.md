@@ -3,7 +3,7 @@ name: openloomi-connectors
 description: "Use OpenLoomi connector readiness guidance from Codex for Slack, Gmail, Calendar, GitHub, and other integrations. Trigger when users ask whether connectors are configured, need setup, or block a Loomi workflow."
 allowed-tools: "Bash(node $SKILL_DIR/../../scripts/loomi-bridge.mjs *)"
 metadata:
-  version: 0.7.6
+  version: 0.7.7
 ---
 
 # OpenLoomi Connectors

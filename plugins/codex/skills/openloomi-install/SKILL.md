@@ -3,7 +3,7 @@ name: openloomi-install
 description: "OpenLoomi install & first-use setup helper for Codex. Use when the user wants to install OpenLoomi, configure it, or troubleshoot `INSTALL_REQUIRED` / `SOURCE_FOUND_CLI_NOT_BUILT` / `AI_PROVIDER_REQUIRED` / `SESSION_INITIALIZATION_REQUIRED` after running setup-status. Triggers: install openloomi, configure openloomi, setup openloomi, openloomi not installed, openloomi not finalized, install_required, install missing, AI provider setup, guest session."
 allowed-tools: "Bash(node $SKILL_DIR/../../scripts/loomi-bridge.mjs *)"
 metadata:
-  version: 0.7.6
+  version: 0.7.7
 ---
 
 # OpenLoomi Install Sub-skill

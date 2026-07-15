@@ -2,7 +2,7 @@
 name: openloomi-install
 description: "OpenLoomi install & first-use setup helper for Claude Code. Use when the user wants to install OpenLoomi, configure it, or troubleshoot `OPENLOOMI_NOT_INSTALLED` / `OPENLOOMI_NOT_FINALIZED` errors after running `/openloomi:setup` or `/openloomi:status`. Triggers: install openloomi, 配置 openloomi, setup openloomi, openloomi not installed, openloomi not finalized, install_required, install missing, claude env sync."
 metadata:
-  version: 0.7.6
+  version: 0.7.7
 allowed-tools: Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/loomi-bridge.mjs *)
 ---
 
