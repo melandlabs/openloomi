@@ -30,8 +30,8 @@
 //     the bearer; its contents are never printed.
 //   - All status checks report presence/absence only.
 
-import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   existsSync,
   readFileSync,
@@ -40,21 +40,21 @@ import {
   mkdirSync,
   statSync,
   chmodSync,
-} from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { EOL } from 'node:os';
-import { homedir, platform, tmpdir } from 'node:os';
-import { join, delimiter, sep, dirname, basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
+} from "node:fs";
+import { readFile } from "node:fs/promises";
+import { EOL } from "node:os";
+import { homedir, platform, tmpdir } from "node:os";
+import { join, delimiter, sep, dirname, basename } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ---------------------------------------------------------------------------
 // Constants & state
 // ---------------------------------------------------------------------------
 
-const PLUGIN_VERSION = '0.1.0';
-const CLAUDE_NATIVE_PROVIDER = 'claude';
-const DEFAULT_PROVIDER_BASE = 'https://api.anthropic.com';
-const DEFAULT_PROVIDER_MODEL = 'claude-opus-4-6';
+const PLUGIN_VERSION = "0.1.0";
+const CLAUDE_NATIVE_PROVIDER = "claude";
+const DEFAULT_PROVIDER_BASE = "https://api.anthropic.com";
+const DEFAULT_PROVIDER_MODEL = "claude-opus-4-6";
 // Matches the documented ports in skills/openloomi-api/SKILL.md; the
 // desktop app falls back to 3515 when 3414 is busy.
 const OPENLOOMI_PORT_DEFAULT = 3414;
@@ -63,9 +63,9 @@ let _resolvedPort = OPENLOOMI_PORT_DEFAULT;
 const STATE_HTTP_TIMEOUT_MS = 2000;
 const ARCHIVE_HTTP_TIMEOUT_MS = 15_000;
 const CLAUDE_CLI_PROBE_TIMEOUT_MS = 5000;
-const ARCHIVE_MAX_BYTES = 5 * 1024 * 1024;       // 5 MB cap on transcripts
-const ARCHIVE_MAX_TURNS = 6;                      // 6 user+assistant turns
-const ARCHIVE_MAX_CONTENT_CHARS = 6000;           // 6k char summary cap
+const ARCHIVE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB cap on transcripts
+const ARCHIVE_MAX_TURNS = 6; // 6 user+assistant turns
+const ARCHIVE_MAX_CONTENT_CHARS = 6000; // 6k char summary cap
 
 // 9-state capybara sprite set (apps/web/public/loomi-pet/assets/capybara/).
 // The plugin ships fox-sprite branding in `assets/`, but the bridge itself
@@ -74,39 +74,39 @@ const ARCHIVE_MAX_CONTENT_CHARS = 6000;           // 6k char summary cap
 // OpenLoomi runtime's `map_state_to_pet` watcher decides which sprite
 // to render per the user's chosen theme.
 const CAPYBARA_STATES = new Set([
-  'happy',
-  'idle',
-  'juggling',
-  'needsinput',
-  'presenting',
-  'sleeping',
-  'sweeping',
-  'thinking',
-  'working',
+  "happy",
+  "idle",
+  "juggling",
+  "needsinput",
+  "presenting",
+  "sleeping",
+  "sweeping",
+  "thinking",
+  "working",
 ]);
 
-const MARKER = '_openloomi_plugin';
-const PLUGIN_BLOCK_KEY = '__openloomi_claude_plugin_hooks__';
+const MARKER = "_openloomi_plugin";
+const PLUGIN_BLOCK_KEY = "__openloomi_claude_plugin_hooks__";
 const PLUGIN_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
-const HOOKS_FILE = join(PLUGIN_DIR, 'hooks', 'hooks.json');
+const HOOKS_FILE = join(PLUGIN_DIR, "hooks", "hooks.json");
 const PLUGIN_DATA_DIR = (() => {
   const explicit = process.env.CLAUDE_PLUGIN_DATA;
   if (explicit) return explicit;
-  return join(homedir(), '.claude', 'plugins', 'openloomi');
+  return join(homedir(), ".claude", "plugins", "openloomi");
 })();
 
 const NEXT_ACTIONS = new Set([
-  'install_openloomi',
-  'provide_install_or_repo_path',
-  'build_or_stage_openloomi',
-  'login_openloomi',
-  'configure_ai_provider',
-  'install_claude_cli',
-  'login_claude_cli',
-  'inspect_claude_cli',
-  'configure_connectors',
-  'show_openloomi_skills',
-  'run',
+  "install_openloomi",
+  "provide_install_or_repo_path",
+  "build_or_stage_openloomi",
+  "login_openloomi",
+  "configure_ai_provider",
+  "install_claude_cli",
+  "login_claude_cli",
+  "inspect_claude_cli",
+  "configure_connectors",
+  "show_openloomi_skills",
+  "run",
 ]);
 
 function pluginDataDir() {
@@ -122,11 +122,11 @@ function pluginDataDir() {
 
 function readSavedBinPath() {
   try {
-    const cfg = join(pluginDataDir(), 'config.json');
+    const cfg = join(pluginDataDir(), "config.json");
     if (!existsSync(cfg)) return null;
-    const txt = readFileSync(cfg, 'utf8');
+    const txt = readFileSync(cfg, "utf8");
     const j = JSON.parse(txt);
-    if (typeof j?.binPath === 'string' && existsSync(j.binPath)) {
+    if (typeof j?.binPath === "string" && existsSync(j.binPath)) {
       return j.binPath;
     }
   } catch {
@@ -137,8 +137,11 @@ function readSavedBinPath() {
 
 function saveBinPath(p) {
   try {
-    const cfg = join(pluginDataDir(), 'config.json');
-    writeFileSync(cfg, JSON.stringify({ binPath: p, savedAt: Date.now() }, null, 2));
+    const cfg = join(pluginDataDir(), "config.json");
+    writeFileSync(
+      cfg,
+      JSON.stringify({ binPath: p, savedAt: Date.now() }, null, 2),
+    );
   } catch {
     /* non-fatal */
   }
@@ -165,20 +168,20 @@ function sleep(ms) {
 
 function detectPlatform() {
   const p = platform();
-  if (p === 'darwin') return 'macos';
-  if (p === 'win32') return 'windows';
-  return 'linux';
+  if (p === "darwin") return "macos";
+  if (p === "win32") return "windows";
+  return "linux";
 }
 
 function envBool(v) {
   if (v == null) return false;
   const s = String(v).toLowerCase().trim();
-  return s === '1' || s === 'true' || s === 'yes';
+  return s === "1" || s === "true" || s === "yes";
 }
 
 function normPath(p) {
   if (!p) return null;
-  return p.endsWith('/') || p.endsWith('\\') ? p.replace(/[\\/]+$/, '') : p;
+  return p.endsWith("/") || p.endsWith("\\") ? p.replace(/[\\/]+$/, "") : p;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,10 +192,10 @@ function parseArgs(argv) {
   const out = { _: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith('--')) {
+    if (a.startsWith("--")) {
       const key = a.slice(2);
       const next = argv[i + 1];
-      if (next === undefined || next.startsWith('--')) {
+      if (next === undefined || next.startsWith("--")) {
         out[key] = true;
       } else {
         out[key] = next;
@@ -225,24 +228,28 @@ function isExecutable(p) {
 function packageDefaults() {
   const home = homedir();
   switch (detectPlatform()) {
-    case 'macos':
+    case "macos":
       return [
         // Standard macOS install (where Drag-to-Applications puts it).
         // We deliberately do NOT also look at ~/Applications — the user
         // installed OpenLoomi system-wide and we want a single source of
         // truth (/Applications) so the bridge never disagrees with the
         // desktop app about where the bundle lives.
-        '/Applications/OpenLoomi.app/Contents/MacOS/openloomi',
+        "/Applications/OpenLoomi.app/Contents/MacOS/openloomi",
       ];
-    case 'windows':
+    case "windows":
       return [
-        join(process.env.LOCALAPPDATA || join(home, 'AppData', 'Local'), 'OpenLoomi', 'openloomi.exe'),
+        join(
+          process.env.LOCALAPPDATA || join(home, "AppData", "Local"),
+          "OpenLoomi",
+          "openloomi.exe",
+        ),
       ];
     default:
       return [
-        join(home, '.local', 'bin', 'openloomi'),
-        '/opt/openloomi/openloomi',
-        '/usr/local/bin/openloomi',
+        join(home, ".local", "bin", "openloomi"),
+        "/opt/openloomi/openloomi",
+        "/usr/local/bin/openloomi",
       ];
   }
 }
@@ -257,22 +264,25 @@ function packageDefaults() {
 function detectDesktopInstalled() {
   const home = homedir();
   switch (detectPlatform()) {
-    case 'macos':
+    case "macos":
       // System-wide /Applications only. We do NOT fall back to
       // ~/Applications — the bridge and the desktop app must agree on
       // a single install location.
       {
-        const marker = '/Applications/OpenLoomi.app';
+        const marker = "/Applications/OpenLoomi.app";
         if (existsSync(marker)) return { installed: true, marker };
       }
       return { installed: false, marker: null };
-    case 'windows': {
+    case "windows": {
       const roots = [
-        process.env.LOCALAPPDATA || join(home, 'AppData', 'Local'),
-        process.env.PROGRAMFILES || 'C:\\Program Files',
+        process.env.LOCALAPPDATA || join(home, "AppData", "Local"),
+        process.env.PROGRAMFILES || "C:\\Program Files",
       ];
       for (const root of roots) {
-        for (const marker of [join(root, 'OpenLoomi'), join(root, 'OpenLoomi', 'OpenLoomi.exe')]) {
+        for (const marker of [
+          join(root, "OpenLoomi"),
+          join(root, "OpenLoomi", "OpenLoomi.exe"),
+        ]) {
           if (existsSync(marker)) return { installed: true, marker };
         }
       }
@@ -280,9 +290,9 @@ function detectDesktopInstalled() {
     }
     default:
       for (const marker of [
-        '/opt/openloomi',
-        join(home, '.local', 'share', 'openloomi'),
-        join(home, '.local', 'share', 'applications', 'openloomi.desktop'),
+        "/opt/openloomi",
+        join(home, ".local", "share", "openloomi"),
+        join(home, ".local", "share", "applications", "openloomi.desktop"),
       ]) {
         if (existsSync(marker)) return { installed: true, marker };
       }
@@ -292,14 +302,15 @@ function detectDesktopInstalled() {
 
 function expandHome(p) {
   if (!p) return p;
-  if (p === '~') return homedir();
-  if (p.startsWith('~/')) return homedir() + p.slice(1);
-  if (p.startsWith('~\\')) return homedir() + p.slice(2);
+  if (p === "~") return homedir();
+  if (p.startsWith("~/")) return homedir() + p.slice(1);
+  if (p.startsWith("~\\")) return homedir() + p.slice(2);
   return p;
 }
 
-function lookupOnPath(name, pathEnv = process.env.PATH || '') {
-  const exts = detectPlatform() === 'windows' ? ['.exe', '.cmd', '.bat', ''] : [''];
+function lookupOnPath(name, pathEnv = process.env.PATH || "") {
+  const exts =
+    detectPlatform() === "windows" ? [".exe", ".cmd", ".bat", ""] : [""];
   for (const dir of pathEnv.split(delimiter).filter(Boolean)) {
     for (const ext of exts) {
       const candidate = join(dir, name + ext);
@@ -314,11 +325,11 @@ function lookupOnPath(name, pathEnv = process.env.PATH || '') {
 // the layout of any internal helper CLI the runtime may bundle.
 function searchInstallRoot(root) {
   if (!root) return null;
-  const exe = detectPlatform() === 'windows' ? 'openloomi.exe' : 'openloomi';
+  const exe = detectPlatform() === "windows" ? "openloomi.exe" : "openloomi";
   const candidates = [
     join(root, exe),
-    join(root, 'Contents', 'MacOS', exe),       // macOS bundle
-    join(root, 'bin', exe),                    // Linux packaging
+    join(root, "Contents", "MacOS", exe), // macOS bundle
+    join(root, "bin", exe), // Linux packaging
   ];
   for (const c of candidates) {
     if (isExecutable(c)) return c;
@@ -330,9 +341,9 @@ function searchInstallRoot(root) {
 // main binary lives in `target/release/`.
 function searchRepoLayout(root) {
   if (!root) return null;
-  const exe = detectPlatform() === 'windows' ? 'openloomi.exe' : 'openloomi';
+  const exe = detectPlatform() === "windows" ? "openloomi.exe" : "openloomi";
   const candidates = [
-    join(root, 'apps', 'web', 'src-tauri', 'target', 'release', exe),
+    join(root, "apps", "web", "src-tauri", "target", "release", exe),
   ];
   for (const c of candidates) {
     if (isExecutable(c)) return c;
@@ -351,46 +362,58 @@ function desktopBundleForBin(binPath) {
   const macos = dirname(binPath); // Contents/MacOS
   const contents = dirname(macos); // Contents
   const bundle = dirname(contents); // <App>.app
-  if (!bundle || bundle === '.' || bundle === contents) return null;
-  if (!bundle.endsWith('.app')) return null;
+  if (!bundle || bundle === "." || bundle === contents) return null;
+  if (!bundle.endsWith(".app")) return null;
   // Sanity check: Info.plist must exist for this to be a real bundle.
-  if (!existsSync(join(bundle, 'Contents', 'Info.plist'))) return null;
+  if (!existsSync(join(bundle, "Contents", "Info.plist"))) return null;
   return bundle;
 }
 
 function discovery({ explicit = null } = {}) {
   // Step 1: OPENLOOMI_BIN
   if (process.env.OPENLOOMI_BIN && isExecutable(process.env.OPENLOOMI_BIN)) {
-    return { binPath: normPath(process.env.OPENLOOMI_BIN), mode: 'env', source: 'OPENLOOMI_BIN' };
+    return {
+      binPath: normPath(process.env.OPENLOOMI_BIN),
+      mode: "env",
+      source: "OPENLOOMI_BIN",
+    };
   }
   // Step 2: OPENLOOMI_HOME / OPENLOOMI_INSTALL_DIR
-  for (const k of ['OPENLOOMI_HOME', 'OPENLOOMI_INSTALL_DIR']) {
+  for (const k of ["OPENLOOMI_HOME", "OPENLOOMI_INSTALL_DIR"]) {
     const v = expandHome(process.env[k]);
     const hit = searchInstallRoot(v);
-    if (hit) return { binPath: normPath(hit), mode: 'packaged', source: k };
+    if (hit) return { binPath: normPath(hit), mode: "packaged", source: k };
   }
   // Step 3: OPENLOOMI_REPO_DIR
   if (process.env.OPENLOOMI_REPO_DIR) {
-    const repoHit = searchRepoLayout(expandHome(process.env.OPENLOOMI_REPO_DIR));
+    const repoHit = searchRepoLayout(
+      expandHome(process.env.OPENLOOMI_REPO_DIR),
+    );
     if (repoHit) {
-      return { binPath: normPath(repoHit), mode: 'source', source: 'OPENLOOMI_REPO_DIR' };
+      return {
+        binPath: normPath(repoHit),
+        mode: "source",
+        source: "OPENLOOMI_REPO_DIR",
+      };
     }
     // Source dir is set but the main binary isn't built yet — return a hint.
-    const exe = detectPlatform() === 'windows' ? 'openloomi.exe' : 'openloomi';
+    const exe = detectPlatform() === "windows" ? "openloomi.exe" : "openloomi";
     return {
       binPath: null,
-      mode: 'source',
-      source: 'OPENLOOMI_REPO_DIR',
+      mode: "source",
+      source: "OPENLOOMI_REPO_DIR",
       hint: {
         repoDir: expandHome(process.env.OPENLOOMI_REPO_DIR),
-        needed: join('apps', 'web', 'src-tauri', 'target', 'release', exe),
+        needed: join("apps", "web", "src-tauri", "target", "release", exe),
       },
     };
   }
   // Step 4: PATH lookup for the main `openloomi` binary
-  const onPath = lookupOnPath(detectPlatform() === 'windows' ? 'openloomi.exe' : 'openloomi');
+  const onPath = lookupOnPath(
+    detectPlatform() === "windows" ? "openloomi.exe" : "openloomi",
+  );
   if (onPath) {
-    return { binPath: normPath(onPath), mode: 'packaged', source: 'PATH' };
+    return { binPath: normPath(onPath), mode: "packaged", source: "PATH" };
   }
   // Step 5: Platform default packaged install paths
   for (const def of packageDefaults()) {
@@ -401,8 +424,8 @@ function discovery({ explicit = null } = {}) {
       const desktopMarker = desktopBundleForBin(def);
       return {
         binPath: normPath(def),
-        mode: 'packaged',
-        source: 'platform-default',
+        mode: "packaged",
+        source: "platform-default",
         desktopInstalled: !!desktopMarker,
         desktopMarker,
       };
@@ -411,44 +434,55 @@ function discovery({ explicit = null } = {}) {
   // Step 6: Saved plugin config
   const saved = readSavedBinPath();
   if (saved) {
-    return { binPath: normPath(saved), mode: 'packaged', source: 'saved-config' };
+    return {
+      binPath: normPath(saved),
+      mode: "packaged",
+      source: "saved-config",
+    };
   }
   // Step 7: User-provided --bin-path
   if (explicit && isExecutable(explicit)) {
-    return { binPath: normPath(explicit), mode: 'packaged', source: 'flag' };
+    return { binPath: normPath(explicit), mode: "packaged", source: "flag" };
   }
   // Step 8: No main `openloomi` binary found via the explicit paths above.
-// Still detect whether the OpenLoomi desktop app itself is present. If it
-// is, try to derive the binary path from the install marker — many users
-// have `OpenLoomi.app` in /Applications but the inner main binary lives
-// under Contents/MacOS and isn't always on PATH.
-const desktop = detectDesktopInstalled();
-if (desktop.installed) {
-  const exe = detectPlatform() === 'windows' ? 'openloomi.exe' : 'openloomi';
-  const candidate = join(desktop.marker, 'Contents', 'MacOS', exe);
-  const winCandidate = join(desktop.marker, exe);
-  const bin =
-    isExecutable(candidate) ? candidate :
-    isExecutable(winCandidate) ? winCandidate :
-    null;
-  if (bin) {
+  // Still detect whether the OpenLoomi desktop app itself is present. If it
+  // is, try to derive the binary path from the install marker — many users
+  // have `OpenLoomi.app` in /Applications but the inner main binary lives
+  // under Contents/MacOS and isn't always on PATH.
+  const desktop = detectDesktopInstalled();
+  if (desktop.installed) {
+    const exe = detectPlatform() === "windows" ? "openloomi.exe" : "openloomi";
+    const candidate = join(desktop.marker, "Contents", "MacOS", exe);
+    const winCandidate = join(desktop.marker, exe);
+    const bin = isExecutable(candidate)
+      ? candidate
+      : isExecutable(winCandidate)
+        ? winCandidate
+        : null;
+    if (bin) {
+      return {
+        binPath: normPath(bin),
+        mode: "packaged",
+        source: "desktop-marker",
+        desktopInstalled: true,
+        desktopMarker: desktop.marker,
+      };
+    }
     return {
-      binPath: normPath(bin),
-      mode: 'packaged',
-      source: 'desktop-marker',
+      binPath: null,
+      mode: "packaged",
+      source: "desktop-only",
       desktopInstalled: true,
       desktopMarker: desktop.marker,
     };
   }
   return {
     binPath: null,
-    mode: 'packaged',
-    source: 'desktop-only',
-    desktopInstalled: true,
-    desktopMarker: desktop.marker,
+    mode: "unconfigured",
+    source: null,
+    desktopInstalled: false,
+    desktopMarker: null,
   };
-}
-return { binPath: null, mode: 'unconfigured', source: null, desktopInstalled: false, desktopMarker: null };
 }
 
 async function runBin(
@@ -457,11 +491,11 @@ async function runBin(
   { stdin = null, timeoutMs = 120_000, env = process.env, shell = false } = {},
 ) {
   return await new Promise((resolve) => {
-    let stdout = '';
-    let stderr = '';
+    let stdout = "";
+    let stderr = "";
     let resolved = false;
     const child = spawn(binPath, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
       env,
       shell,
       windowsHide: true,
@@ -469,26 +503,45 @@ async function runBin(
     const timer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        try { child.kill('SIGKILL'); } catch { /* noop */ }
-        resolve({ ok: false, error: { code: 'timeout', message: `helper timed out after ${timeoutMs}ms` } });
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* noop */
+        }
+        resolve({
+          ok: false,
+          error: {
+            code: "timeout",
+            message: `helper timed out after ${timeoutMs}ms`,
+          },
+        });
       }
     }, timeoutMs);
-    child.stdout.on('data', (b) => (stdout += b.toString('utf8')));
-    child.stderr.on('data', (b) => (stderr += b.toString('utf8')));
-    child.on('error', (e) => {
+    child.stdout.on("data", (b) => (stdout += b.toString("utf8")));
+    child.stderr.on("data", (b) => (stderr += b.toString("utf8")));
+    child.on("error", (e) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timer);
-      resolve({ ok: false, error: { code: 'spawn_failed', message: String(e?.message || e) }, stderr });
+      resolve({
+        ok: false,
+        error: { code: "spawn_failed", message: String(e?.message || e) },
+        stderr,
+      });
     });
-    child.on('exit', (code, signal) => {
+    child.on("exit", (code, signal) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timer);
       if (code === 0) {
         resolve({ ok: true, stdout, stderr });
       } else {
-        resolve({ ok: false, error: { code: `exit_${code ?? signal ?? 'unknown'}` }, stdout, stderr });
+        resolve({
+          ok: false,
+          error: { code: `exit_${code ?? signal ?? "unknown"}` },
+          stdout,
+          stderr,
+        });
       }
     });
     if (stdin != null) {
@@ -498,31 +551,35 @@ async function runBin(
         /* noop */
       }
     } else {
-      try { child.stdin.end(); } catch { /* noop */ }
+      try {
+        child.stdin.end();
+      } catch {
+        /* noop */
+      }
     }
   });
 }
 
 function getClaudeCliProbePath() {
   const home = homedir();
-  const dirs = [process.env.PATH || ''];
+  const dirs = [process.env.PATH || ""];
 
-  if (detectPlatform() === 'windows') {
+  if (detectPlatform() === "windows") {
     dirs.push(
-      join(home, 'AppData', 'Roaming', 'npm'),
-      join(home, 'AppData', 'Local', 'Programs', 'nodejs'),
-      join(home, '.volta', 'bin'),
-      'C:\\Program Files\\nodejs',
-      'C:\\Program Files (x86)\\nodejs',
+      join(home, "AppData", "Roaming", "npm"),
+      join(home, "AppData", "Local", "Programs", "nodejs"),
+      join(home, ".volta", "bin"),
+      "C:\\Program Files\\nodejs",
+      "C:\\Program Files (x86)\\nodejs",
     );
   } else {
     dirs.push(
-      '/usr/local/bin',
-      '/opt/homebrew/bin',
-      join(home, '.local', 'bin'),
-      join(home, '.npm-global', 'bin'),
-      join(home, '.volta', 'bin'),
-      join(home, 'code', 'node', 'npm_global', 'bin'),
+      "/usr/local/bin",
+      "/opt/homebrew/bin",
+      join(home, ".local", "bin"),
+      join(home, ".npm-global", "bin"),
+      join(home, ".volta", "bin"),
+      join(home, "code", "node", "npm_global", "bin"),
     );
   }
 
@@ -535,50 +592,59 @@ function resolveClaudeCliPath() {
     if (isExecutable(explicit)) {
       return {
         path: normPath(explicit),
-        source: 'CLAUDE_CODE_PATH',
-        reason: 'CLAUDE_CLI_FOUND',
+        source: "CLAUDE_CODE_PATH",
+        reason: "CLAUDE_CLI_FOUND",
       };
     }
     return {
       path: null,
-      source: 'CLAUDE_CODE_PATH',
-      reason: 'CLAUDE_CODE_PATH_INVALID',
+      source: "CLAUDE_CODE_PATH",
+      reason: "CLAUDE_CODE_PATH_INVALID",
     };
   }
 
   const pathEnv = getClaudeCliProbePath();
-  const found = lookupOnPath('claude', pathEnv);
+  const found = lookupOnPath("claude", pathEnv);
   if (found) {
     return {
       path: normPath(found),
-      source: 'PATH',
-      reason: 'CLAUDE_CLI_FOUND',
+      source: "PATH",
+      reason: "CLAUDE_CLI_FOUND",
     };
   }
 
   return {
     path: null,
     source: null,
-    reason: 'CLAUDE_CLI_UNAVAILABLE',
+    reason: "CLAUDE_CLI_UNAVAILABLE",
   };
 }
 
-async function runClaudeCli(claudePath, args, { timeoutMs = CLAUDE_CLI_PROBE_TIMEOUT_MS } = {}) {
-  if (detectPlatform() === 'windows' && /\.ps1$/i.test(claudePath)) {
-    return await runBin('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      claudePath,
-      ...args,
-    ], {
-      timeoutMs,
-      env: { ...process.env, PATH: getClaudeCliProbePath() },
-    });
+async function runClaudeCli(
+  claudePath,
+  args,
+  { timeoutMs = CLAUDE_CLI_PROBE_TIMEOUT_MS } = {},
+) {
+  if (detectPlatform() === "windows" && /\.ps1$/i.test(claudePath)) {
+    return await runBin(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        claudePath,
+        ...args,
+      ],
+      {
+        timeoutMs,
+        env: { ...process.env, PATH: getClaudeCliProbePath() },
+      },
+    );
   }
 
-  const shell = detectPlatform() === 'windows' && /\.(cmd|bat)$/i.test(claudePath);
+  const shell =
+    detectPlatform() === "windows" && /\.(cmd|bat)$/i.test(claudePath);
   return await runBin(claudePath, args, {
     timeoutMs,
     shell,
@@ -596,33 +662,40 @@ function summarizeCliProbeResult(result) {
 }
 
 function classifyClaudeAuthFailure(result) {
-  if (result?.error?.code === 'timeout') return 'CLAUDE_CLI_AUTH_STATUS_TIMEOUT';
+  if (result?.error?.code === "timeout")
+    return "CLAUDE_CLI_AUTH_STATUS_TIMEOUT";
 
-  const output = `${result?.stdout || ''}\n${result?.stderr || ''}`.toLowerCase();
+  const output =
+    `${result?.stdout || ""}\n${result?.stderr || ""}`.toLowerCase();
   if (
-    output.includes('not authenticated') ||
-    output.includes('not logged') ||
-    output.includes('not signed') ||
-    output.includes('please login') ||
-    output.includes('please log in') ||
-    output.includes('sign in') ||
-    output.includes('/login')
+    output.includes("not authenticated") ||
+    output.includes("not logged") ||
+    output.includes("not signed") ||
+    output.includes("please login") ||
+    output.includes("please log in") ||
+    output.includes("sign in") ||
+    output.includes("/login")
   ) {
-    return 'CLAUDE_CLI_AUTH_REQUIRED';
+    return "CLAUDE_CLI_AUTH_REQUIRED";
   }
 
-  if (output.includes('unknown command') || output.includes('invalid command')) {
-    return 'CLAUDE_CLI_AUTH_STATUS_UNAVAILABLE';
+  if (
+    output.includes("unknown command") ||
+    output.includes("invalid command")
+  ) {
+    return "CLAUDE_CLI_AUTH_STATUS_UNAVAILABLE";
   }
 
   // `claude auth status` is a status command; a non-zero exit usually means
   // there is no usable local Claude Code authentication.
-  return 'CLAUDE_CLI_AUTH_REQUIRED';
+  return "CLAUDE_CLI_AUTH_REQUIRED";
 }
 
 async function probeClaudeNativeRuntime(aiProvider) {
   const defaultAgent =
-    typeof aiProvider?.defaultAgent === 'string' ? aiProvider.defaultAgent : null;
+    typeof aiProvider?.defaultAgent === "string"
+      ? aiProvider.defaultAgent
+      : null;
   const active = defaultAgent === CLAUDE_NATIVE_PROVIDER;
 
   if (!active) {
@@ -632,7 +705,9 @@ async function probeClaudeNativeRuntime(aiProvider) {
       authenticated: false,
       active: false,
       ready: false,
-      reason: defaultAgent ? 'CLAUDE_RUNTIME_INACTIVE' : 'DEFAULT_AGENT_UNAVAILABLE',
+      reason: defaultAgent
+        ? "CLAUDE_RUNTIME_INACTIVE"
+        : "DEFAULT_AGENT_UNAVAILABLE",
       defaultAgent,
       cliPathPresent: false,
       cliPathSource: null,
@@ -655,13 +730,14 @@ async function probeClaudeNativeRuntime(aiProvider) {
       cliPathSource: resolved.source,
       versionPresent: false,
       probes: {},
-      nextAction: resolved.reason === 'CLAUDE_CODE_PATH_INVALID'
-        ? 'inspect_claude_cli'
-        : 'install_claude_cli',
+      nextAction:
+        resolved.reason === "CLAUDE_CODE_PATH_INVALID"
+          ? "inspect_claude_cli"
+          : "install_claude_cli",
     };
   }
 
-  const versionProbe = await runClaudeCli(resolved.path, ['--version']);
+  const versionProbe = await runClaudeCli(resolved.path, ["--version"]);
   if (!versionProbe.ok) {
     return {
       checked: true,
@@ -669,9 +745,10 @@ async function probeClaudeNativeRuntime(aiProvider) {
       authenticated: false,
       active: true,
       ready: false,
-      reason: versionProbe?.error?.code === 'timeout'
-        ? 'CLAUDE_CLI_VERSION_TIMEOUT'
-        : 'CLAUDE_CLI_VERSION_FAILED',
+      reason:
+        versionProbe?.error?.code === "timeout"
+          ? "CLAUDE_CLI_VERSION_TIMEOUT"
+          : "CLAUDE_CLI_VERSION_FAILED",
       defaultAgent,
       cliPathPresent: true,
       cliPathSource: resolved.source,
@@ -679,11 +756,15 @@ async function probeClaudeNativeRuntime(aiProvider) {
       probes: {
         version: summarizeCliProbeResult(versionProbe),
       },
-      nextAction: 'inspect_claude_cli',
+      nextAction: "inspect_claude_cli",
     };
   }
 
-  const authProbe = await runClaudeCli(resolved.path, ['auth', 'status', '--json']);
+  const authProbe = await runClaudeCli(resolved.path, [
+    "auth",
+    "status",
+    "--json",
+  ]);
   if (authProbe.ok) {
     return {
       checked: true,
@@ -691,16 +772,16 @@ async function probeClaudeNativeRuntime(aiProvider) {
       authenticated: true,
       active: true,
       ready: true,
-      reason: 'CLAUDE_CLI_AUTHENTICATED',
+      reason: "CLAUDE_CLI_AUTHENTICATED",
       defaultAgent,
       cliPathPresent: true,
       cliPathSource: resolved.source,
-      versionPresent: !!(versionProbe.stdout || '').trim(),
+      versionPresent: !!(versionProbe.stdout || "").trim(),
       probes: {
         version: summarizeCliProbeResult(versionProbe),
         auth: summarizeCliProbeResult(authProbe),
       },
-      nextAction: 'run',
+      nextAction: "run",
     };
   }
 
@@ -715,14 +796,15 @@ async function probeClaudeNativeRuntime(aiProvider) {
     defaultAgent,
     cliPathPresent: true,
     cliPathSource: resolved.source,
-    versionPresent: !!(versionProbe.stdout || '').trim(),
+    versionPresent: !!(versionProbe.stdout || "").trim(),
     probes: {
       version: summarizeCliProbeResult(versionProbe),
       auth: summarizeCliProbeResult(authProbe),
     },
-    nextAction: reason === 'CLAUDE_CLI_AUTH_REQUIRED'
-      ? 'login_claude_cli'
-      : 'inspect_claude_cli',
+    nextAction:
+      reason === "CLAUDE_CLI_AUTH_REQUIRED"
+        ? "login_claude_cli"
+        : "inspect_claude_cli",
   };
 }
 
@@ -730,14 +812,14 @@ function getExecutionProviderStatus(aiProvider, nativeRuntime) {
   if (aiProvider?.configured) {
     return {
       ready: true,
-      source: 'ai_provider',
+      source: "ai_provider",
     };
   }
 
   if (nativeRuntime?.ready) {
     return {
       ready: true,
-      source: 'native_claude_runtime',
+      source: "native_claude_runtime",
     };
   }
 
@@ -748,10 +830,15 @@ function getExecutionProviderStatus(aiProvider, nativeRuntime) {
 }
 
 function providerStatusFields(aiProvider, nativeRuntime) {
-  const executionProvider = getExecutionProviderStatus(aiProvider, nativeRuntime);
+  const executionProvider = getExecutionProviderStatus(
+    aiProvider,
+    nativeRuntime,
+  );
   return {
     aiProviderConfigured: !!aiProvider?.configured,
-    aiProviderStatus: aiProvider?.status || (aiProvider?.ok ? 'unknown' : aiProvider?.reason || 'unknown'),
+    aiProviderStatus:
+      aiProvider?.status ||
+      (aiProvider?.ok ? "unknown" : aiProvider?.reason || "unknown"),
     executionProviderReady: executionProvider.ready,
     executionProviderSource: executionProvider.source,
     nativeRuntimeActive: !!nativeRuntime?.active,
@@ -778,7 +865,7 @@ function providerStatusFields(aiProvider, nativeRuntime) {
 // ---------------------------------------------------------------------------
 
 function readOpenloomiTokenPath() {
-  const p = join(homedir(), '.openloomi', 'token');
+  const p = join(homedir(), ".openloomi", "token");
   return existsSync(p) ? p : null;
 }
 
@@ -792,22 +879,26 @@ function tokenPresent() {
 // to `~/.openloomi/token` with 0o600 perms. The directory is created if
 // missing. Returns the on-disk path.
 function saveOpenloomiToken(token) {
-  if (typeof token !== 'string' || !token.trim()) {
-    return { ok: false, code: 'EMPTY_TOKEN' };
+  if (typeof token !== "string" || !token.trim()) {
+    return { ok: false, code: "EMPTY_TOKEN" };
   }
-  const p = join(homedir(), '.openloomi', 'token');
+  const p = join(homedir(), ".openloomi", "token");
   try {
     const dir = dirname(p);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    const encoded = Buffer.from(token, 'utf8').toString('base64');
+    const encoded = Buffer.from(token, "utf8").toString("base64");
     writeFileSync(p, encoded, { mode: 0o600 });
     // Belt-and-braces: chmod after the fact too, since some platforms
     // ignore the mode arg on writeFileSync (e.g. when the file already
     // exists with looser perms).
-    try { chmodSync(p, 0o600); } catch { /* noop on platforms without chmod */ }
+    try {
+      chmodSync(p, 0o600);
+    } catch {
+      /* noop on platforms without chmod */
+    }
     return { ok: true, path: p };
   } catch (e) {
-    return { ok: false, code: 'WRITE_FAILED', error: String(e?.message || e) };
+    return { ok: false, code: "WRITE_FAILED", error: String(e?.message || e) };
   }
 }
 
@@ -822,17 +913,17 @@ function loadBearerToken() {
   const p = readOpenloomiTokenPath();
   if (!p) return null;
   try {
-    const raw = readFileSync(p, 'utf8').trim();
+    const raw = readFileSync(p, "utf8").trim();
     if (!raw) return null;
     // Strict path: token files are always base64(STANDARD). If decode
     // fails, fall back to the raw text — covers any hand-rolled token
     // file a power user might have dropped in before this fix.
     try {
-      const decoded = Buffer.from(raw, 'base64').toString('utf8').trim();
+      const decoded = Buffer.from(raw, "base64").toString("utf8").trim();
       // A successful decode of a JWT payload.sig yields the two segments
       // joined with a `.`; if we don't see that, the file was probably
       // not base64-encoded and the raw text is the actual token.
-      if (decoded && decoded.includes('.')) return decoded;
+      if (decoded && decoded.includes(".")) return decoded;
       return raw;
     } catch {
       return raw;
@@ -847,7 +938,8 @@ function loadBearerToken() {
 // ---------------------------------------------------------------------------
 
 function openloomiBaseUrl() {
-  if (process.env.OPENLOOMI_BASE_URL) return process.env.OPENLOOMI_BASE_URL.replace(/\/+$/, '');
+  if (process.env.OPENLOOMI_BASE_URL)
+    return process.env.OPENLOOMI_BASE_URL.replace(/\/+$/, "");
   return `http://127.0.0.1:${_resolvedPort}`;
 }
 
@@ -861,7 +953,10 @@ async function probeOpenLoomiBaseUrl() {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 1500);
     try {
-      const res = await fetch(`${url}/api/remote-auth/user`, { method: 'GET', signal: ctrl.signal });
+      const res = await fetch(`${url}/api/remote-auth/user`, {
+        method: "GET",
+        signal: ctrl.signal,
+      });
       if (res.status > 0) {
         _resolvedPort = port;
         return url;
@@ -877,18 +972,30 @@ async function probeOpenLoomiBaseUrl() {
 
 async function apiGET(path, { timeoutMs = 5000 } = {}) {
   const bearer = loadBearerToken();
-  const headers = { Accept: 'application/json' };
+  const headers = { Accept: "application/json" };
   if (bearer) headers.Authorization = `Bearer ${bearer}`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(openloomiBaseUrl() + path, { method: 'GET', headers, signal: ctrl.signal });
-    const text = await res.text().catch(() => '');
+    const res = await fetch(openloomiBaseUrl() + path, {
+      method: "GET",
+      headers,
+      signal: ctrl.signal,
+    });
+    const text = await res.text().catch(() => "");
     let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
+    }
     return { ok: res.ok, status: res.status, json };
   } catch (e) {
-    return { ok: false, status: 0, error: { code: 'network', message: String(e?.message || e) } };
+    return {
+      ok: false,
+      status: 0,
+      error: { code: "network", message: String(e?.message || e) },
+    };
   } finally {
     clearTimeout(t);
   }
@@ -896,23 +1003,34 @@ async function apiGET(path, { timeoutMs = 5000 } = {}) {
 
 async function apiPOST(path, body, { timeoutMs = 10_000 } = {}) {
   const bearer = loadBearerToken();
-  const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
   if (bearer) headers.Authorization = `Bearer ${bearer}`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(openloomiBaseUrl() + path, {
-      method: 'POST',
+      method: "POST",
       headers,
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
-    const text = await res.text().catch(() => '');
+    const text = await res.text().catch(() => "");
     let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
+    }
     return { ok: res.ok, status: res.status, json };
   } catch (e) {
-    return { ok: false, status: 0, error: { code: 'network', message: String(e?.message || e) } };
+    return {
+      ok: false,
+      status: 0,
+      error: { code: "network", message: String(e?.message || e) },
+    };
   } finally {
     clearTimeout(t);
   }
@@ -923,23 +1041,34 @@ async function apiPUT(path, body, { timeoutMs = 10_000 } = {}) {
   // /api/preferences/ai upsert, which is the runtime's source of truth
   // for AI provider config (see apps/web/app/(chat)/api/preferences/ai/route.ts).
   const bearer = loadBearerToken();
-  const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
   if (bearer) headers.Authorization = `Bearer ${bearer}`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(openloomiBaseUrl() + path, {
-      method: 'PUT',
+      method: "PUT",
       headers,
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
-    const text = await res.text().catch(() => '');
+    const text = await res.text().catch(() => "");
     let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
+    }
     return { ok: res.ok, status: res.status, json };
   } catch (e) {
-    return { ok: false, status: 0, error: { code: 'network', message: String(e?.message || e) } };
+    return {
+      ok: false,
+      status: 0,
+      error: { code: "network", message: String(e?.message || e) },
+    };
   } finally {
     clearTimeout(t);
   }
@@ -956,8 +1085,12 @@ async function apiPUT(path, body, { timeoutMs = 10_000 } = {}) {
 // GitHub API and without calling --version on the inner Tauri binary
 // (which flashes a GUI window).
 let _installInfo = null;
-function getInstallInfo() { return _installInfo; }
-function setInstallInfo(info) { _installInfo = info; }
+function getInstallInfo() {
+  return _installInfo;
+}
+function setInstallInfo(info) {
+  _installInfo = info;
+}
 
 // Reads CFBundleShortVersionString from an .app bundle's Info.plist.
 // We deliberately avoid calling --version on the main Tauri binary
@@ -968,15 +1101,17 @@ function setInstallInfo(info) { _installInfo = info; }
 async function readBundleVersion(appPath) {
   if (!appPath) return null;
   const platformName = detectPlatform();
-  if (platformName !== 'macos') return null;
-  const infoPlist = join(appPath, 'Contents', 'Info.plist');
+  if (platformName !== "macos") return null;
+  const infoPlist = join(appPath, "Contents", "Info.plist");
   if (!existsSync(infoPlist)) return null;
   // Try plutil first — it prints a stable `key: "value"` text format.
-  const r = await runBin('plutil', ['-p', infoPlist], { timeoutMs: 3000 });
+  const r = await runBin("plutil", ["-p", infoPlist], { timeoutMs: 3000 });
   if (r.ok && r.stdout) {
     // plutil output is like:  "CFBundleShortVersionString" => "0.7.6"
     // or (older):            CFBundleShortVersionString = "0.7.6"
-    const m = r.stdout.match(/["']?CFBundleShortVersionString["']?\s*(?:=>|=)\s*["']([^"']+)["']/);
+    const m = r.stdout.match(
+      /["']?CFBundleShortVersionString["']?\s*(?:=>|=)\s*["']([^"']+)["']/,
+    );
     if (m) return m[1].trim();
   }
   // Binary plist fallback: scan for the ASCII run "CFBundleShortVersionString"
@@ -984,17 +1119,19 @@ async function readBundleVersion(appPath) {
   // installs plutil will always succeed.
   try {
     const raw = readFileSync(infoPlist);
-    const ascii = raw.toString('binary');
-    const idx = ascii.indexOf('CFBundleShortVersionString');
+    const ascii = raw.toString("binary");
+    const idx = ascii.indexOf("CFBundleShortVersionString");
     if (idx >= 0) {
       // After the key, look for a UTF-16BE string value. Format in binary
       // plist: ...<len-byte><UTF-16BE bytes>. We just grab the next chunk
       // of printable UTF-16.
       const slice = ascii.slice(idx, idx + 256);
       const m2 = slice.match(/[A-Za-z0-9.\-+]+\x00/);
-      if (m2) return m2[0].replace(/\x00+$/g, '').trim();
+      if (m2) return m2[0].replace(/\x00+$/g, "").trim();
     }
-  } catch { /* fallthrough */ }
+  } catch {
+    /* fallthrough */
+  }
   return null;
 }
 
@@ -1004,24 +1141,23 @@ async function readBinVersion(binPath) {
   // invocation, so calling --version would flash a window. For that case,
   // we resolve the version from the .app bundle's Info.plist instead.
   const base = basename(binPath).toLowerCase();
-  const isMainTauriBinary =
-    (base === 'openloomi' || base === 'openloomi.exe');
+  const isMainTauriBinary = base === "openloomi" || base === "openloomi.exe";
   if (isMainTauriBinary) {
     // Walk up from .../<App>.app/Contents/MacOS/openloomi to .../<App>.app
     const parent = dirname(binPath); // Contents/MacOS
-    const grand = dirname(parent);   // Contents
-    const great = dirname(grand);    // <App>.app
+    const grand = dirname(parent); // Contents
+    const great = dirname(grand); // <App>.app
     return await readBundleVersion(great);
   }
   // For non-main binaries (e.g. an OPENLOOMI_BIN pointing at a CLI helper),
   // --version is safe and doesn't flash a GUI.
-  const r = await runBin(binPath, ['--version'], { timeoutMs: 5000 });
+  const r = await runBin(binPath, ["--version"], { timeoutMs: 5000 });
   if (!r.ok) return null;
   // Match a semver-ish version (e.g. "0.7.6", "1.2.3-rc.1") anywhere in
   // the --version output. Real binaries print "<name> 0.7.6"; tests
   // just print "9.9.9" — both should parse.
-  const m = (r.stdout || '').match(/(\d+\.\d+\.\d+(?:[-+][\w.\-]+)?)/);
-  return m ? m[1].trim() : (r.stdout || '').trim();
+  const m = (r.stdout || "").match(/(\d+\.\d+\.\d+(?:[-+][\w.\-]+)?)/);
+  return m ? m[1].trim() : (r.stdout || "").trim();
 }
 
 async function probeAiProvider() {
@@ -1030,26 +1166,25 @@ async function probeAiProvider() {
   // "configured" when either the system defaults — which read from the
   // ANTHROPIC_* env vars in Tauri mode — carry a key, or the user has
   // saved an explicit anthropic_compatible row with a key.
-  const r = await apiGET('/api/preferences/ai', { timeoutMs: 3000 });
+  const r = await apiGET("/api/preferences/ai", { timeoutMs: 3000 });
   if (r.ok && r.json) {
     const sys = r.json?.systemDefaults?.anthropic_compatible;
     const fromSys = !!(sys && sys.hasApiKey);
     const defaultAgent =
-      typeof r.json?.defaultAgent === 'string' ? r.json.defaultAgent : null;
+      typeof r.json?.defaultAgent === "string" ? r.json.defaultAgent : null;
     const fromUser =
       Array.isArray(r.json?.settings) &&
       r.json.settings.some(
-        (s) => (
-          s?.providerType === 'anthropic_compatible' &&
+        (s) =>
+          s?.providerType === "anthropic_compatible" &&
           s?.enabled !== false &&
-          s?.hasApiKey
-        ),
+          s?.hasApiKey,
       );
     const configured = fromSys || fromUser;
     return {
       ok: true,
       configured,
-      status: configured ? 'direct_api_configured' : 'direct_api_missing',
+      status: configured ? "direct_api_configured" : "direct_api_missing",
       defaultAgent,
       directApi: {
         systemDefaultConfigured: fromSys,
@@ -1061,16 +1196,16 @@ async function probeAiProvider() {
     return {
       ok: true,
       configured: false,
-      status: 'auth_required',
-      reason: 'auth_required',
+      status: "auth_required",
+      reason: "auth_required",
       defaultAgent: null,
     };
   }
   return {
     ok: false,
     configured: false,
-    status: 'runtime_status_unavailable',
-    reason: r.error?.code || 'unknown',
+    status: "runtime_status_unavailable",
+    reason: r.error?.code || "unknown",
     defaultAgent: null,
   };
 }
@@ -1088,17 +1223,17 @@ async function buildStatus({ json = true, explicit = null } = {}) {
   );
   const claudeEnvSyncable = !!(
     (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) &&
-    (process.env.ANTHROPIC_BASE_URL || 'default') &&
-    (process.env.ANTHROPIC_MODEL || 'default')
+    (process.env.ANTHROPIC_BASE_URL || "default") &&
+    (process.env.ANTHROPIC_MODEL || "default")
   );
 
   const disc = discovery({ explicit });
 
   // Source checkout detected but CLI not yet built: report that BEFORE
   // the generic "!binPath → OPENLOOMI_NOT_INSTALLED" branch.
-  if (disc.mode === 'source' && disc.hint) {
+  if (disc.mode === "source" && disc.hint) {
     return {
-      mode: 'source',
+      mode: "source",
       installed: false,
       binPath: null,
       version: null,
@@ -1108,8 +1243,8 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       apiReachable: false,
       hooksInstalled: detectHooksInstalled(),
       ready: false,
-      nextAction: 'build_or_stage_openloomi',
-      reason: 'SOURCE_FOUND_CLI_NOT_BUILT',
+      nextAction: "build_or_stage_openloomi",
+      reason: "SOURCE_FOUND_CLI_NOT_BUILT",
       source: disc.source,
       hint: disc.hint,
     };
@@ -1134,15 +1269,18 @@ async function buildStatus({ json = true, explicit = null } = {}) {
         canGuestLogin: apiReachable,
         hooksInstalled: detectHooksInstalled(),
         ready: false,
-        nextAction: 'launch_openloomi_to_finalize',
-        reason: 'OPENLOOMI_NOT_FINALIZED',
+        nextAction: "launch_openloomi_to_finalize",
+        reason: "OPENLOOMI_NOT_FINALIZED",
         source: disc.source,
         desktopMarker: disc.desktopMarker,
         hint: {
           message:
-            'OpenLoomi is installed but the local helper is not yet laid down. Launch the OpenLoomi desktop app once so it can finalize the install, then re-run /openloomi:setup.',
+            "OpenLoomi is installed but the local helper is not yet laid down. Launch the OpenLoomi desktop app once so it can finalize the install, then re-run /openloomi:setup.",
           actions: {
-            macos: 'open -a "' + (disc.desktopMarker || '/Applications/OpenLoomi.app') + '"',
+            macos:
+              'open -a "' +
+              (disc.desktopMarker || "/Applications/OpenLoomi.app") +
+              '"',
           },
         },
       };
@@ -1159,8 +1297,8 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       canGuestLogin: false,
       hooksInstalled: detectHooksInstalled(),
       ready: false,
-      nextAction: 'install_openloomi',
-      reason: 'OPENLOOMI_NOT_INSTALLED',
+      nextAction: "install_openloomi",
+      reason: "OPENLOOMI_NOT_INSTALLED",
       source: disc.source,
       hint: disc.hint || null,
     };
@@ -1171,7 +1309,7 @@ async function buildStatus({ json = true, explicit = null } = {}) {
   // want to call --version on the main Tauri binary (it flashes a GUI
   // window) and Info.plist is sometimes stripped from dev builds, so the
   // install-time tag is the most reliable source when both are missing.
-  const resolvedVersion = version || (getInstallInfo()?.version || null);
+  const resolvedVersion = version || getInstallInfo()?.version || null;
 
   const aiProvider = await probeAiProvider();
   const nativeRuntime = await probeClaudeNativeRuntime(aiProvider);
@@ -1191,8 +1329,8 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       canGuestLogin: apiReachable,
       hooksInstalled: detectHooksInstalled(),
       ready: false,
-      nextAction: 'login_openloomi',
-      reason: 'LOGIN_REQUIRED',
+      nextAction: "login_openloomi",
+      reason: "LOGIN_REQUIRED",
       source: disc.source,
       desktopMarker: disc.desktopMarker,
     };
@@ -1211,17 +1349,22 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       canGuestLogin: apiReachable,
       hooksInstalled: detectHooksInstalled(),
       ready: true,
-      nextAction: 'run',
-      reason: 'READY',
-      readinessSource: 'native_claude_runtime',
+      nextAction: "run",
+      reason: "READY",
+      readinessSource: "native_claude_runtime",
       message:
-        'OpenLoomi is ready through the authenticated native Claude Code runtime. A separate Anthropic-compatible API key is not required for native Claude execution.',
+        "OpenLoomi is ready through the authenticated native Claude Code runtime. A separate Anthropic-compatible API key is not required for native Claude execution.",
       source: disc.source,
       desktopMarker: disc.desktopMarker,
     };
   }
 
-  if (!aiProvider.configured && nativeRuntime.active && nativeRuntime.checked && !nativeRuntime.ready) {
+  if (
+    !aiProvider.configured &&
+    nativeRuntime.active &&
+    nativeRuntime.checked &&
+    !nativeRuntime.ready
+  ) {
     return {
       mode: disc.mode,
       installed: true,
@@ -1234,12 +1377,12 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       canGuestLogin: apiReachable,
       hooksInstalled: detectHooksInstalled(),
       ready: false,
-      nextAction: nativeRuntime.nextAction || 'inspect_claude_cli',
+      nextAction: nativeRuntime.nextAction || "inspect_claude_cli",
       reason: nativeRuntime.reason,
       message:
-        nativeRuntime.reason === 'CLAUDE_CLI_AUTH_REQUIRED'
-          ? 'The native Claude runtime is selected, but Claude Code CLI is not authenticated. Run `claude auth login` or configure a direct Anthropic-compatible provider.'
-          : 'The native Claude runtime is selected, but Claude Code CLI readiness could not be confirmed. Install or repair Claude Code CLI, or configure a direct Anthropic-compatible provider.',
+        nativeRuntime.reason === "CLAUDE_CLI_AUTH_REQUIRED"
+          ? "The native Claude runtime is selected, but Claude Code CLI is not authenticated. Run `claude auth login` or configure a direct Anthropic-compatible provider."
+          : "The native Claude runtime is selected, but Claude Code CLI readiness could not be confirmed. Install or repair Claude Code CLI, or configure a direct Anthropic-compatible provider.",
       source: disc.source,
       desktopMarker: disc.desktopMarker,
       claudeEnvHint: {
@@ -1263,11 +1406,15 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       canGuestLogin: apiReachable,
       hooksInstalled: detectHooksInstalled(),
       ready: false,
-      nextAction: 'configure_ai_provider',
-      reason: 'AI_PROVIDER_REQUIRED',
+      nextAction: "configure_ai_provider",
+      reason: "AI_PROVIDER_REQUIRED",
       source: disc.source,
       desktopMarker: disc.desktopMarker,
-      claudeEnvHint: { hasKey: true, hasBase: !!process.env.ANTHROPIC_BASE_URL, hasModel: !!process.env.ANTHROPIC_MODEL },
+      claudeEnvHint: {
+        hasKey: true,
+        hasBase: !!process.env.ANTHROPIC_BASE_URL,
+        hasModel: !!process.env.ANTHROPIC_MODEL,
+      },
     };
   }
 
@@ -1284,8 +1431,8 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       canGuestLogin: apiReachable,
       hooksInstalled: detectHooksInstalled(),
       ready: false,
-      nextAction: 'configure_ai_provider',
-      reason: 'AI_PROVIDER_REQUIRED',
+      nextAction: "configure_ai_provider",
+      reason: "AI_PROVIDER_REQUIRED",
       source: disc.source,
       desktopMarker: disc.desktopMarker,
       claudeEnvHint: {
@@ -1308,8 +1455,8 @@ async function buildStatus({ json = true, explicit = null } = {}) {
     canGuestLogin: apiReachable,
     hooksInstalled: detectHooksInstalled(),
     ready: true,
-    nextAction: 'run',
-    reason: 'READY',
+    nextAction: "run",
+    reason: "READY",
     source: disc.source,
     desktopMarker: disc.desktopMarker,
   };
@@ -1320,18 +1467,18 @@ async function buildStatus({ json = true, explicit = null } = {}) {
 // ---------------------------------------------------------------------------
 
 function settingsPath() {
-  return join(homedir(), '.claude', 'settings.json');
+  return join(homedir(), ".claude", "settings.json");
 }
 
 function readSettings() {
   const p = settingsPath();
-  if (!existsSync(p)) return { raw: '{}', json: {}, path: p };
+  if (!existsSync(p)) return { raw: "{}", json: {}, path: p };
   try {
-    const raw = readFileSync(p, 'utf8');
+    const raw = readFileSync(p, "utf8");
     const json = JSON.parse(raw);
     return { raw, json, path: p };
   } catch {
-    return { raw: '{}', json: {}, path: p };
+    return { raw: "{}", json: {}, path: p };
   }
 }
 
@@ -1345,7 +1492,7 @@ function atomicWriteJson(filePath, jsonObj) {
 
 function loadHooksTemplate() {
   try {
-    const raw = readFileSync(HOOKS_FILE, 'utf8');
+    const raw = readFileSync(HOOKS_FILE, "utf8");
     return JSON.parse(raw);
   } catch {
     return { hooks: {} };
@@ -1354,7 +1501,7 @@ function loadHooksTemplate() {
 
 function detectHooksInstalled() {
   const s = readSettings();
-  if (!s.json || typeof s.json !== 'object') return false;
+  if (!s.json || typeof s.json !== "object") return false;
   const hooks = s.json.hooks || {};
   // Legacy nested block from older broken versions.
   if (hooks[PLUGIN_BLOCK_KEY]) return true;
@@ -1367,7 +1514,12 @@ function detectHooksInstalled() {
       if (entry?.[MARKER]) return true;
       if (entry?.hooks) {
         for (const h of entry.hooks) {
-          if (h && typeof h.command === 'string' && h.command.includes('loomi-bridge.mjs')) return true;
+          if (
+            h &&
+            typeof h.command === "string" &&
+            h.command.includes("loomi-bridge.mjs")
+          )
+            return true;
         }
       }
     }
@@ -1378,7 +1530,7 @@ function detectHooksInstalled() {
 function installHooks({ yes = false } = {}) {
   const settings = readSettings();
   const j = settings.json || {};
-  if (!j.hooks || typeof j.hooks !== 'object') j.hooks = {};
+  if (!j.hooks || typeof j.hooks !== "object") j.hooks = {};
 
   // Legacy cleanup: drop the old nested block from previous broken versions.
   // Safe to run unconditionally — if absent, this is a no-op.
@@ -1389,7 +1541,11 @@ function installHooks({ yes = false } = {}) {
   const template = loadHooksTemplate();
   const templateHooks = template?.hooks || {};
   if (Object.keys(templateHooks).length === 0) {
-    return { ok: false, error: 'No hooks loaded from template', path: settings.path };
+    return {
+      ok: false,
+      error: "No hooks loaded from template",
+      path: settings.path,
+    };
   }
 
   // Merge per-event into settings.hooks (Claude Code's actual schema is
@@ -1402,9 +1558,10 @@ function installHooks({ yes = false } = {}) {
     const entries = Array.isArray(rawEntries) ? rawEntries : [rawEntries];
     if (!Array.isArray(j.hooks[event])) j.hooks[event] = [];
     for (const entry of entries) {
-      const cmd0 = entry?.hooks?.[0]?.command || '';
+      const cmd0 = entry?.hooks?.[0]?.command || "";
       const isDup = j.hooks[event].some(
-        (e) => e && e[MARKER] === true && e.hooks?.some((h) => h?.command === cmd0)
+        (e) =>
+          e && e[MARKER] === true && e.hooks?.some((h) => h?.command === cmd0),
       );
       if (isDup) {
         already++;
@@ -1419,18 +1576,23 @@ function installHooks({ yes = false } = {}) {
     events: Object.keys(templateHooks),
     added,
     alreadyInstalled: already,
-    note: 'Per-event merge into settings.hooks (Claude Code schema-compliant). Other plugins untouched.',
+    note: "Per-event merge into settings.hooks (Claude Code schema-compliant). Other plugins untouched.",
   };
 
   atomicWriteJson(settings.path, j);
-  return { ok: true, alreadyInstalled: added === 0, path: settings.path, summary };
+  return {
+    ok: true,
+    alreadyInstalled: added === 0,
+    path: settings.path,
+    summary,
+  };
 }
 
 function uninstallHooks() {
   const settings = readSettings();
   const j = settings.json || {};
   let removed = false;
-  if (!j.hooks || typeof j.hooks !== 'object') {
+  if (!j.hooks || typeof j.hooks !== "object") {
     atomicWriteJson(settings.path, j);
     return { ok: true, removed, path: settings.path };
   }
@@ -1454,7 +1616,14 @@ function uninstallHooks() {
       if (!entry) return false;
       if (entry[MARKER]) return false;
       if (entry.hooks && Array.isArray(entry.hooks)) {
-        const inner = entry.hooks.filter((h) => !(h && typeof h.command === 'string' && h.command.includes('loomi-bridge.mjs')));
+        const inner = entry.hooks.filter(
+          (h) =>
+            !(
+              h &&
+              typeof h.command === "string" &&
+              h.command.includes("loomi-bridge.mjs")
+            ),
+        );
         if (inner.length === 0) return false;
         entry.hooks = inner;
         return true;
@@ -1485,35 +1654,52 @@ function uninstallHooks() {
 
 async function syncClaudeEnv() {
   // Read env ONCE, locally. Never persist. Never log. Never echo.
-  const apiKey = (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || '').trim();
-  const baseUrl = (process.env.ANTHROPIC_BASE_URL || DEFAULT_PROVIDER_BASE).trim();
+  const apiKey = (
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.ANTHROPIC_AUTH_TOKEN ||
+    ""
+  ).trim();
+  const baseUrl = (
+    process.env.ANTHROPIC_BASE_URL || DEFAULT_PROVIDER_BASE
+  ).trim();
   const model = (process.env.ANTHROPIC_MODEL || DEFAULT_PROVIDER_MODEL).trim();
 
   const checked = {
-    ANTHROPIC_API_KEY: { present: !!process.env.ANTHROPIC_API_KEY, source: 'env' },
-    ANTHROPIC_AUTH_TOKEN: { present: !!process.env.ANTHROPIC_AUTH_TOKEN, source: 'env' },
-    ANTHROPIC_BASE_URL: { present: !!process.env.ANTHROPIC_BASE_URL, source: 'env' },
-    ANTHROPIC_MODEL: { present: !!process.env.ANTHROPIC_MODEL, source: 'env' },
+    ANTHROPIC_API_KEY: {
+      present: !!process.env.ANTHROPIC_API_KEY,
+      source: "env",
+    },
+    ANTHROPIC_AUTH_TOKEN: {
+      present: !!process.env.ANTHROPIC_AUTH_TOKEN,
+      source: "env",
+    },
+    ANTHROPIC_BASE_URL: {
+      present: !!process.env.ANTHROPIC_BASE_URL,
+      source: "env",
+    },
+    ANTHROPIC_MODEL: { present: !!process.env.ANTHROPIC_MODEL, source: "env" },
   };
 
   if (!apiKey) {
     return {
       ok: false,
-      code: 'CLAUDE_ENV_NOT_SET',
-      message: 'No ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN in environment',
+      code: "CLAUDE_ENV_NOT_SET",
+      message: "No ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN in environment",
       checked,
     };
   }
 
   const payload = {
-    providerType: 'anthropic_compatible',
+    providerType: "anthropic_compatible",
     apiKey,
     baseUrl,
     model,
     enabled: true,
   };
 
-  const res = await apiPUT('/api/preferences/ai', payload, { timeoutMs: 10_000 });
+  const res = await apiPUT("/api/preferences/ai", payload, {
+    timeoutMs: 10_000,
+  });
   // We explicitly drop the apiKey from our local variable.
   // eslint-disable-next-line no-unused-vars
   const _drop = apiKey; // marker for review
@@ -1521,15 +1707,15 @@ async function syncClaudeEnv() {
   if (!res.ok) {
     return {
       ok: false,
-      code: 'SYNC_FAILED',
+      code: "SYNC_FAILED",
       status: res.status,
-      message: res.json?.error || res.error?.message || 'Provider sync failed',
+      message: res.json?.error || res.error?.message || "Provider sync failed",
       checked,
     };
   }
   return {
     ok: true,
-    provider: 'anthropic_compatible',
+    provider: "anthropic_compatible",
     model,
     baseUrl, // baseUrl is not secret; the apiKey was never included in the body
     response: res.json,
@@ -1543,13 +1729,21 @@ async function syncClaudeEnv() {
 
 async function cmdPet(state) {
   if (!state || !CAPYBARA_STATES.has(state)) {
-    return { ok: false, code: 'INVALID_STATE', validStates: [...CAPYBARA_STATES] };
+    return {
+      ok: false,
+      code: "INVALID_STATE",
+      validStates: [...CAPYBARA_STATES],
+    };
   }
-  const res = await apiPOST('/api/pet/state', { state, source: 'claude-code-plugin' }, { timeoutMs: STATE_HTTP_TIMEOUT_MS });
+  const res = await apiPOST(
+    "/api/pet/state",
+    { state, source: "claude-code-plugin" },
+    { timeoutMs: STATE_HTTP_TIMEOUT_MS },
+  );
   if (res.status === 404) {
     return {
       ok: false,
-      code: 'ENDPOINT_MISSING',
+      code: "ENDPOINT_MISSING",
       message:
         'OpenLoomi runtime does not yet expose POST /api/pet/state. Pending endpoint — would have set state to "' +
         state +
@@ -1558,7 +1752,12 @@ async function cmdPet(state) {
     };
   }
   if (!res.ok) {
-    return { ok: false, code: 'PET_FAILED', status: res.status, error: res.json || res.error };
+    return {
+      ok: false,
+      code: "PET_FAILED",
+      status: res.status,
+      error: res.json || res.error,
+    };
   }
   return { ok: true, state, response: res.json };
 }
@@ -1572,34 +1771,45 @@ async function cmdGuestLogin({ baseUrl = null } = {}) {
   // The /api/remote-auth/guest endpoint does NOT require an existing
   // token, so we deliberately bypass the `Authorization: Bearer` header
   // path here by calling the server directly without a bearer.
-  const target = (baseUrl || openloomiBaseUrl()) + '/api/remote-auth/guest';
+  const target = (baseUrl || openloomiBaseUrl()) + "/api/remote-auth/guest";
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 10_000);
   try {
     const res = await fetch(target, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
       body: JSON.stringify({}),
       signal: ctrl.signal,
     });
-    const text = await res.text().catch(() => '');
+    const text = await res.text().catch(() => "");
     let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
+    }
     if (!res.ok) {
       return {
         ok: false,
-        code: res.status === 404 ? 'ENDPOINT_MISSING' : `http_${res.status}`,
+        code: res.status === 404 ? "ENDPOINT_MISSING" : `http_${res.status}`,
         status: res.status,
         error: json,
       };
     }
     const token = json?.token;
-    if (typeof token !== 'string' || !token.trim()) {
-      return { ok: false, code: 'NO_TOKEN_IN_RESPONSE', response: json };
+    if (typeof token !== "string" || !token.trim()) {
+      return { ok: false, code: "NO_TOKEN_IN_RESPONSE", response: json };
     }
     const saved = saveOpenloomiToken(token);
     if (!saved.ok) {
-      return { ok: false, code: saved.code || 'TOKEN_WRITE_FAILED', error: saved.error || null };
+      return {
+        ok: false,
+        code: saved.code || "TOKEN_WRITE_FAILED",
+        error: saved.error || null,
+      };
     }
     return {
       ok: true,
@@ -1607,7 +1817,7 @@ async function cmdGuestLogin({ baseUrl = null } = {}) {
       tokenPath: saved.path,
     };
   } catch (e) {
-    return { ok: false, code: 'NETWORK', error: String(e?.message || e) };
+    return { ok: false, code: "NETWORK", error: String(e?.message || e) };
   } finally {
     clearTimeout(t);
   }
@@ -1616,23 +1826,38 @@ async function cmdGuestLogin({ baseUrl = null } = {}) {
 async function cmdState(name, { event } = {}) {
   if (!CAPYBARA_STATES.has(name)) {
     // Hooks should never reach this with an invalid name, but be safe.
-    return { ok: false, archive: 'skipped', reason: 'invalid_state', state: name };
+    return {
+      ok: false,
+      archive: "skipped",
+      reason: "invalid_state",
+      state: name,
+    };
   }
   try {
     const res = await apiPOST(
-      '/api/pet/state',
-      { state: name, source: 'claude-code-plugin', event: event || null },
-      { timeoutMs: STATE_HTTP_TIMEOUT_MS }
+      "/api/pet/state",
+      { state: name, source: "claude-code-plugin", event: event || null },
+      { timeoutMs: STATE_HTTP_TIMEOUT_MS },
     );
     if (res.status === 404) {
-      return { ok: false, archive: 'skipped', reason: 'endpoint_missing', state: name };
+      return {
+        ok: false,
+        archive: "skipped",
+        reason: "endpoint_missing",
+        state: name,
+      };
     }
     if (!res.ok) {
-      return { ok: false, archive: 'skipped', reason: `http_${res.status}`, state: name };
+      return {
+        ok: false,
+        archive: "skipped",
+        reason: `http_${res.status}`,
+        state: name,
+      };
     }
     return { ok: true, state: name };
   } catch {
-    return { ok: false, archive: 'skipped', reason: 'exception', state: name };
+    return { ok: false, archive: "skipped", reason: "exception", state: name };
   }
 }
 
@@ -1643,14 +1868,14 @@ async function cmdState(name, { event } = {}) {
 async function readStdinJson({ maxBytes = 64 * 1024 } = {}) {
   return await new Promise((resolve) => {
     let total = 0;
-    let buf = '';
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (chunk) => {
-      total += Buffer.byteLength(chunk, 'utf8');
+    let buf = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      total += Buffer.byteLength(chunk, "utf8");
       if (total <= maxBytes) buf += chunk;
     });
-    process.stdin.on('end', () => resolve(buf));
-    process.stdin.on('error', () => resolve(''));
+    process.stdin.on("end", () => resolve(buf));
+    process.stdin.on("error", () => resolve(""));
     // If nothing arrives, resolve after 200ms with empty.
     setTimeout(() => resolve(buf), 200);
   });
@@ -1662,18 +1887,35 @@ async function cmdArchive() {
   try {
     const stdinRaw = await readStdinJson({ maxBytes: 32 * 1024 });
     if (stdinRaw) {
-      try { payload = JSON.parse(stdinRaw); } catch { payload = {}; }
+      try {
+        payload = JSON.parse(stdinRaw);
+      } catch {
+        payload = {};
+      }
     }
-  } catch { payload = {}; }
-
-  const eventName = payload.hook_event_name || payload.event || '';
-  if (eventName !== 'Stop') {
-    return { continue: true, _openloomi: { archive: 'skipped', reason: 'not_stop_event', event: eventName } };
+  } catch {
+    payload = {};
   }
 
-  const transcriptPath = payload.transcript_path || payload.transcriptPath || null;
+  const eventName = payload.hook_event_name || payload.event || "";
+  if (eventName !== "Stop") {
+    return {
+      continue: true,
+      _openloomi: {
+        archive: "skipped",
+        reason: "not_stop_event",
+        event: eventName,
+      },
+    };
+  }
+
+  const transcriptPath =
+    payload.transcript_path || payload.transcriptPath || null;
   if (!transcriptPath || !existsSync(transcriptPath)) {
-    return { continue: true, _openloomi: { archive: 'skipped', reason: 'transcript_missing' } };
+    return {
+      continue: true,
+      _openloomi: { archive: "skipped", reason: "transcript_missing" },
+    };
   }
 
   let raw;
@@ -1681,21 +1923,24 @@ async function cmdArchive() {
     const st = statSync(transcriptPath);
     if (st.size > ARCHIVE_MAX_BYTES) {
       // Truncate by reading last ~ARCHIVE_MAX_BYTES bytes.
-      const fd = await import('node:fs/promises');
-      const fh = await fd.open(transcriptPath, 'r');
+      const fd = await import("node:fs/promises");
+      const fh = await fd.open(transcriptPath, "r");
       try {
         const start = Math.max(0, st.size - ARCHIVE_MAX_BYTES);
         const buf = Buffer.alloc(st.size - start);
         await fh.read(buf, 0, buf.length, start);
-        raw = buf.toString('utf8');
+        raw = buf.toString("utf8");
       } finally {
         await fh.close();
       }
     } else {
-      raw = await readFile(transcriptPath, 'utf8');
+      raw = await readFile(transcriptPath, "utf8");
     }
   } catch {
-    return { continue: true, _openloomi: { archive: 'skipped', reason: 'transcript_unreadable' } };
+    return {
+      continue: true,
+      _openloomi: { archive: "skipped", reason: "transcript_unreadable" },
+    };
   }
 
   const lines = raw.split(/\r?\n/).filter(Boolean);
@@ -1703,51 +1948,72 @@ async function cmdArchive() {
   for (const line of lines) {
     try {
       const o = JSON.parse(line);
-      if (o && (o.type === 'user' || o.type === 'human' || o.type === 'assistant')) {
+      if (
+        o &&
+        (o.type === "user" || o.type === "human" || o.type === "assistant")
+      ) {
         parsed.push(o);
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
   if (parsed.length === 0) {
-    return { continue: true, _openloomi: { archive: 'skipped', reason: 'no_messages' } };
+    return {
+      continue: true,
+      _openloomi: { archive: "skipped", reason: "no_messages" },
+    };
   }
   const tail = parsed.slice(-ARCHIVE_MAX_TURNS);
   const summaryText = buildArchiveSummary(tail, payload.session_id || null);
   if (!summaryText) {
-    return { continue: true, _openloomi: { archive: 'skipped', reason: 'empty_summary' } };
+    return {
+      continue: true,
+      _openloomi: { archive: "skipped", reason: "empty_summary" },
+    };
   }
 
   const bearer = loadBearerToken();
   if (!bearer) {
-    return { continue: true, _openloomi: { archive: 'skipped', reason: 'auth_missing' } };
+    return {
+      continue: true,
+      _openloomi: { archive: "skipped", reason: "auth_missing" },
+    };
   }
 
   const res = await apiPOST(
-    '/api/insights',
+    "/api/insights",
     {
-      type: 'note',
-      title: `Claude Code session${payload.session_id ? ' ' + String(payload.session_id).slice(0, 8) : ''} (${new Date().toISOString().slice(0, 10)})`,
+      type: "note",
+      title: `Claude Code session${payload.session_id ? " " + String(payload.session_id).slice(0, 8) : ""} (${new Date().toISOString().slice(0, 10)})`,
       description: summaryText,
-      platform: 'claude-code',
-      groups: ['claude-code'],
+      platform: "claude-code",
+      groups: ["claude-code"],
       sessionId: payload.session_id || null,
-      source: 'claude-code-plugin-stop-hook',
+      source: "claude-code-plugin-stop-hook",
       capturedAt: new Date().toISOString(),
     },
-    { timeoutMs: ARCHIVE_HTTP_TIMEOUT_MS }
+    { timeoutMs: ARCHIVE_HTTP_TIMEOUT_MS },
   );
 
   if (!res.ok) {
     return {
       continue: true,
       _openloomi: {
-        archive: 'skipped',
-        reason: res.status === 404 ? 'endpoint_missing' : `http_${res.status}`,
+        archive: "skipped",
+        reason: res.status === 404 ? "endpoint_missing" : `http_${res.status}`,
         details: res.json || res.error || null,
       },
     };
   }
-  return { continue: true, _openloomi: { archive: 'ok', session: payload.session_id || null, insightId: res.json?.id || null } };
+  return {
+    continue: true,
+    _openloomi: {
+      archive: "ok",
+      session: payload.session_id || null,
+      insightId: res.json?.id || null,
+    },
+  };
 }
 
 function buildArchiveSummary(turns, sessionId) {
@@ -1756,38 +2022,44 @@ function buildArchiveSummary(turns, sessionId) {
   for (const t of turns) {
     const content = extractMessageText(t);
     if (!content) continue;
-    const role = t.role || t.type || 'message';
-    const tag = role === 'user' || role === 'human' ? 'user' : role === 'assistant' ? 'assistant' : role;
+    const role = t.role || t.type || "message";
+    const tag =
+      role === "user" || role === "human"
+        ? "user"
+        : role === "assistant"
+          ? "assistant"
+          : role;
     const slice = `${tag}: ${content}`.slice(0, 1500);
     parts.push(slice);
     total += slice.length;
     if (total > ARCHIVE_MAX_CONTENT_CHARS) break;
   }
   if (parts.length === 0) return null;
-  const header = `[claude-code session${sessionId ? ' ' + sessionId : ''}]`;
-  const joined = parts.join('\n');
-  const capped = joined.length > ARCHIVE_MAX_CONTENT_CHARS
-    ? joined.slice(0, ARCHIVE_MAX_CONTENT_CHARS) + '…'
-    : joined;
+  const header = `[claude-code session${sessionId ? " " + sessionId : ""}]`;
+  const joined = parts.join("\n");
+  const capped =
+    joined.length > ARCHIVE_MAX_CONTENT_CHARS
+      ? joined.slice(0, ARCHIVE_MAX_CONTENT_CHARS) + "…"
+      : joined;
   return `${header}\n${capped}`;
 }
 
 function extractMessageText(obj) {
   const msg = obj?.message || obj;
   const c = msg?.content;
-  if (typeof c === 'string') return c;
+  if (typeof c === "string") return c;
   if (Array.isArray(c)) {
     return c
       .map((p) => {
-        if (!p) return '';
-        if (typeof p === 'string') return p;
-        if (p.type === 'text' && typeof p.text === 'string') return p.text;
-        return '';
+        if (!p) return "";
+        if (typeof p === "string") return p;
+        if (p.type === "text" && typeof p.text === "string") return p.text;
+        return "";
       })
       .filter(Boolean)
-      .join('\n');
+      .join("\n");
   }
-  return '';
+  return "";
 }
 
 // ---------------------------------------------------------------------------
@@ -1795,9 +2067,9 @@ function extractMessageText(obj) {
 // ---------------------------------------------------------------------------
 
 async function cmdUsage() {
-  const r = await apiGET('/api/llm/usage/summary', { timeoutMs: 5000 });
+  const r = await apiGET("/api/llm/usage/summary", { timeoutMs: 5000 });
   if (!r.ok && r.status === 0) {
-    return { ok: false, code: 'API_UNREACHABLE', error: r.error };
+    return { ok: false, code: "API_UNREACHABLE", error: r.error };
   }
   return { ok: r.ok, status: r.status, usage: r.json };
 }
@@ -1810,39 +2082,42 @@ async function promptYesNo(question) {
   if (!isTTY) return false;
   process.stdout.write(`${question} [y/N] `);
   return await new Promise((resolve) => {
-    let buf = '';
+    let buf = "";
     const onData = (b) => {
-      buf += b.toString('utf8');
-      if (buf.includes('\n')) {
-        process.stdin.removeListener('data', onData);
+      buf += b.toString("utf8");
+      if (buf.includes("\n")) {
+        process.stdin.removeListener("data", onData);
         const answer = buf.trim().toLowerCase();
-        resolve(answer === 'y' || answer === 'yes');
+        resolve(answer === "y" || answer === "yes");
       }
     };
-    process.stdin.on('data', onData);
+    process.stdin.on("data", onData);
     process.stdin.resume();
   });
 }
 
 async function runInstallScript({ platformName, yes }) {
   const filename =
-    platformName === 'macos'
-      ? 'setup.macos.sh'
-      : platformName === 'windows'
-      ? 'setup.windows.ps1'
-      : 'setup.linux.sh';
+    platformName === "macos"
+      ? "setup.macos.sh"
+      : platformName === "windows"
+        ? "setup.windows.ps1"
+        : "setup.linux.sh";
   const candidates = [
-    join(PLUGIN_DIR, 'scripts', 'install-assets', filename),
-    join(PLUGIN_DIR, 'install-assets', filename),
+    join(PLUGIN_DIR, "scripts", "install-assets", filename),
+    join(PLUGIN_DIR, "install-assets", filename),
   ];
   let scriptPath = null;
   for (const c of candidates) {
-    if (existsSync(c)) { scriptPath = c; break; }
+    if (existsSync(c)) {
+      scriptPath = c;
+      break;
+    }
   }
   if (!scriptPath) {
     return {
       ok: false,
-      code: 'INSTALL_SCRIPT_MISSING',
+      code: "INSTALL_SCRIPT_MISSING",
       message: `No install script shipped for ${platformName}. Open https://openloomi.ai/docs/install and follow the manual steps.`,
     };
   }
@@ -1850,32 +2125,43 @@ async function runInstallScript({ platformName, yes }) {
     if (!isTTY) {
       return {
         ok: false,
-        code: 'NON_INTERACTIVE_REQUIRES_YES',
+        code: "NON_INTERACTIVE_REQUIRES_YES",
         message:
-          'Install invoked without --yes from a non-interactive shell (no TTY). Re-run with --yes to confirm consent, or run directly in a terminal so the y/N prompt can be answered.',
+          "Install invoked without --yes from a non-interactive shell (no TTY). Re-run with --yes to confirm consent, or run directly in a terminal so the y/N prompt can be answered.",
       };
     }
     const proceed = await promptYesNo(
-      `This will execute ${filename} from the OpenLoomi plugin to install OpenLoomi locally. Proceed?`
+      `This will execute ${filename} from the OpenLoomi plugin to install OpenLoomi locally. Proceed?`,
     );
-    if (!proceed) return { ok: false, code: 'CANCELLED', message: 'User cancelled installation.' };
+    if (!proceed)
+      return {
+        ok: false,
+        code: "CANCELLED",
+        message: "User cancelled installation.",
+      };
   }
   let cmd, args;
-  if (platformName === 'windows') {
-    cmd = 'powershell';
-    args = ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', scriptPath];
+  if (platformName === "windows") {
+    cmd = "powershell";
+    args = ["-ExecutionPolicy", "Bypass", "-NoProfile", "-File", scriptPath];
   } else {
-    cmd = 'bash';
+    cmd = "bash";
     args = [scriptPath];
   }
   return await new Promise((resolve) => {
-    let stdout = '';
-    let stderr = '';
-    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    child.stdout.on('data', (b) => (stdout += b.toString('utf8')));
-    child.stderr.on('data', (b) => (stderr += b.toString('utf8')));
-    child.on('error', (e) => resolve({ ok: false, code: 'SPAWN_FAILED', message: String(e?.message || e) }));
-    child.on('exit', (code) => {
+    let stdout = "";
+    let stderr = "";
+    const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+    child.stdout.on("data", (b) => (stdout += b.toString("utf8")));
+    child.stderr.on("data", (b) => (stderr += b.toString("utf8")));
+    child.on("error", (e) =>
+      resolve({
+        ok: false,
+        code: "SPAWN_FAILED",
+        message: String(e?.message || e),
+      }),
+    );
+    child.on("exit", (code) => {
       // Parse the install script's structured stdout line (if any). The
       // script emits a single JSON object describing what it installed.
       // We extract it from the captured stdout so we don't have to re-curl
@@ -1886,9 +2172,16 @@ async function runInstallScript({ platformName, yes }) {
         try {
           const parsed = JSON.parse(infoLineMatch[0]);
           setInstallInfo(parsed);
-        } catch { /* ignore malformed */ }
+        } catch {
+          /* ignore malformed */
+        }
       }
-      resolve({ ok: code === 0, code: code === 0 ? 'OK' : `EXIT_${code}`, stdout, stderr });
+      resolve({
+        ok: code === 0,
+        code: code === 0 ? "OK" : `EXIT_${code}`,
+        stdout,
+        stderr,
+      });
     });
   });
 }
@@ -1916,48 +2209,65 @@ async function launchDesktopApp({ desktopMarker, binPath } = {}) {
   // We need either the .app bundle (macOS) or a runnable exe (Win/Linux).
   const target = desktopMarker || binPath || null;
   if (!target) {
-    return { ok: false, code: 'NO_LAUNCH_TARGET', message: 'No OpenLoomi app path or binary to launch.' };
+    return {
+      ok: false,
+      code: "NO_LAUNCH_TARGET",
+      message: "No OpenLoomi app path or binary to launch.",
+    };
   }
   let cmd;
   let args;
-  if (platformName === 'macos') {
-    cmd = 'open';
-    args = ['-a', desktopMarker || target];
-  } else if (platformName === 'windows') {
-    cmd = 'cmd';
-    args = ['/c', 'start', '""', target];
+  if (platformName === "macos") {
+    cmd = "open";
+    args = ["-a", desktopMarker || target];
+  } else if (platformName === "windows") {
+    cmd = "cmd";
+    args = ["/c", "start", '""', target];
   } else {
     // Linux: try gtk-launch with a guessed desktopId; fall back to executing the
     // binary directly if that fails. We don't ship a .desktop file from the
     // plugin, so gtk-launch is best-effort.
-    cmd = 'gtk-launch';
-    args = ['openloomi'];
+    cmd = "gtk-launch";
+    args = ["openloomi"];
   }
   return await new Promise((resolve) => {
-    let stderr = '';
-    let stdout = '';
+    let stderr = "";
+    let stdout = "";
     let child;
     try {
-      child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+      child = spawn(cmd, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: true,
+      });
     } catch (e) {
-      resolve({ ok: false, code: 'SPAWN_FAILED', message: String(e?.message || e) });
+      resolve({
+        ok: false,
+        code: "SPAWN_FAILED",
+        message: String(e?.message || e),
+      });
       return;
     }
-    child.stdout?.on('data', (b) => (stdout += b.toString('utf8')));
-    child.stderr?.on('data', (b) => (stderr += b.toString('utf8')));
-    child.on('error', (e) => resolve({ ok: false, code: 'SPAWN_FAILED', message: String(e?.message || e) }));
+    child.stdout?.on("data", (b) => (stdout += b.toString("utf8")));
+    child.stderr?.on("data", (b) => (stderr += b.toString("utf8")));
+    child.on("error", (e) =>
+      resolve({
+        ok: false,
+        code: "SPAWN_FAILED",
+        message: String(e?.message || e),
+      }),
+    );
     // `open -a` and `start ""` return immediately; gtk-launch returns after
     // the app is forked. Treat any non-error exit (or no exit within the
     // short window) as success — what we really care about is whether the
     // API comes up, which we verify in waitForApi().
-    child.on('exit', (code) => {
+    child.on("exit", (code) => {
       if (code === 0 || code === null) {
-        resolve({ ok: true, code: 'OK', stdout, stderr, via: cmd });
+        resolve({ ok: true, code: "OK", stdout, stderr, via: cmd });
       } else {
         // Try the binary directly as a Linux fallback before giving up.
-        if (platformName === 'linux' && binPath) {
-          spawn(binPath, [], { stdio: 'ignore', detached: true }).unref();
-          resolve({ ok: true, code: 'OK_FALLBACK_DIRECT', via: binPath });
+        if (platformName === "linux" && binPath) {
+          spawn(binPath, [], { stdio: "ignore", detached: true }).unref();
+          resolve({ ok: true, code: "OK_FALLBACK_DIRECT", via: binPath });
           return;
         }
         resolve({ ok: false, code: `EXIT_${code}`, stdout, stderr, via: cmd });
@@ -1965,7 +2275,10 @@ async function launchDesktopApp({ desktopMarker, binPath } = {}) {
     });
     // Hard cap so we don't block forever on platforms where the launcher
     // doesn't exit (some `open -a` invocations under launchd behave that way).
-    setTimeout(() => resolve({ ok: true, code: 'OK_TIMEOUT', via: cmd, stdout, stderr }), 2000).unref();
+    setTimeout(
+      () => resolve({ ok: true, code: "OK_TIMEOUT", via: cmd, stdout, stderr }),
+      2000,
+    ).unref();
   });
 }
 
@@ -1986,9 +2299,9 @@ async function waitForApi({ timeoutMs = 30_000, intervalMs = 500 } = {}) {
   }
   return {
     ok: false,
-    code: 'TIMEOUT',
+    code: "TIMEOUT",
     elapsedMs: Date.now() - start,
-    message: `OpenLoomi local API did not respond within ${timeoutMs}ms.${lastError ? ' last error: ' + String(lastError?.message || lastError) : ''}`,
+    message: `OpenLoomi local API did not respond within ${timeoutMs}ms.${lastError ? " last error: " + String(lastError?.message || lastError) : ""}`,
   };
 }
 
@@ -2002,25 +2315,28 @@ async function main() {
   const sub = args._[0];
 
   switch (sub) {
-    case 'version': {
-      out({ ok: true, plugin: 'openloomi', version: PLUGIN_VERSION });
+    case "version": {
+      out({ ok: true, plugin: "openloomi", version: PLUGIN_VERSION });
       return;
     }
-    case 'setup-status': {
-      const status = await buildStatus({ json: true, explicit: args['bin-path'] || null });
+    case "setup-status": {
+      const status = await buildStatus({
+        json: true,
+        explicit: args["bin-path"] || null,
+      });
       out(status);
       return;
     }
-    case 'setup': {
+    case "setup": {
       // End-to-end wizard. Walks the full state machine in one invocation:
       //   install → launch app → wait API → guest login → sync env → READY.
       // Every transition is automatic — we never ask the user to click
       // anything. If a step can't be auto-resolved (e.g. AI provider needed
       // but no env key, or login failed), we return `awaiting_user_action`
       // with a clear `nextAction` and stop.
-      const explicit = args['bin-path'] || null;
+      const explicit = args["bin-path"] || null;
       const yesFlag = !!args.yes;
-      const maxWaitMs = Number(args['max-wait'] || 30_000);
+      const maxWaitMs = Number(args["max-wait"] || 30_000);
       const maxSteps = 8; // hard ceiling on chained transitions
       const steps = [];
 
@@ -2031,17 +2347,23 @@ async function main() {
       for (let i = 0; i < maxSteps; i++) {
         const status = await buildStatus({ json: true, explicit });
 
-        if (status.reason === 'READY') {
-          out({ ok: true, setup: 'ready', steps, status });
+        if (status.reason === "READY") {
+          out({ ok: true, setup: "ready", steps, status });
           return;
         }
 
         // 1. Install.
-        if (!status.installed && status.nextAction === 'install_openloomi') {
+        if (!status.installed && status.nextAction === "install_openloomi") {
           const r = await cmdInstall({ yes: yesFlag });
-          record('install', !!r.install?.ok, { code: r.install?.code });
+          record("install", !!r.install?.ok, { code: r.install?.code });
           if (!r.install?.ok) {
-            out({ ok: false, setup: 'install_failed', steps, install: r.install, status: r.status });
+            out({
+              ok: false,
+              setup: "install_failed",
+              steps,
+              install: r.install,
+              status: r.status,
+            });
             return;
           }
           continue;
@@ -2050,20 +2372,23 @@ async function main() {
         // 2. .app installed but helper binary / local API not yet on disk.
         //    Auto-launch the desktop app (signed bundle, safe to do) and
         //    poll for the API to come up.
-        if (status.installed && status.reason === 'OPENLOOMI_NOT_FINALIZED') {
+        if (status.installed && status.reason === "OPENLOOMI_NOT_FINALIZED") {
           const launch = await launchDesktopApp({
             desktopMarker: status.desktopMarker,
             binPath: status.binPath,
           });
-          record('launch', launch.ok, { code: launch.code, via: launch.via });
+          record("launch", launch.ok, { code: launch.code, via: launch.via });
           if (!launch.ok) {
-            out({ ok: false, setup: 'launch_failed', steps, launch, status });
+            out({ ok: false, setup: "launch_failed", steps, launch, status });
             return;
           }
           const wait = await waitForApi({ timeoutMs: maxWaitMs });
-          record('wait_api', wait.ok, { elapsedMs: wait.elapsedMs, url: wait.url });
+          record("wait_api", wait.ok, {
+            elapsedMs: wait.elapsedMs,
+            url: wait.url,
+          });
           if (!wait.ok) {
-            out({ ok: false, setup: 'api_not_ready', steps, wait, status });
+            out({ ok: false, setup: "api_not_ready", steps, wait, status });
             return;
           }
           continue;
@@ -2079,30 +2404,34 @@ async function main() {
             desktopMarker: status.desktopMarker,
             binPath: status.binPath,
           });
-          record('launch', launch.ok, { code: launch.code, via: launch.via });
+          record("launch", launch.ok, { code: launch.code, via: launch.via });
           if (!launch.ok) {
-            out({ ok: false, setup: 'launch_failed', steps, launch, status });
+            out({ ok: false, setup: "launch_failed", steps, launch, status });
             return;
           }
           const wait = await waitForApi({ timeoutMs: maxWaitMs });
-          record('wait_api', wait.ok, { elapsedMs: wait.elapsedMs, url: wait.url });
+          record("wait_api", wait.ok, {
+            elapsedMs: wait.elapsedMs,
+            url: wait.url,
+          });
           if (!wait.ok) {
-            out({ ok: false, setup: 'api_not_ready', steps, wait, status });
+            out({ ok: false, setup: "api_not_ready", steps, wait, status });
             return;
           }
           continue;
         }
 
         // 3. Login needed and API reachable → mint a one-tap guest bearer.
-        if (status.reason === 'LOGIN_REQUIRED' && status.canGuestLogin) {
+        if (status.reason === "LOGIN_REQUIRED" && status.canGuestLogin) {
           const g = await cmdGuestLogin();
-          record('guest_login', !!g.ok, { code: g.code, user: g.user });
+          record("guest_login", !!g.ok, { code: g.code, user: g.user });
           if (!g.ok) {
             out({
               ok: false,
-              setup: 'guest_login_failed',
+              setup: "guest_login_failed",
               code: g.code,
-              message: 'Guest login failed. Open OpenLoomi Desktop and sign in with an existing account, then re-run /openloomi:setup.',
+              message:
+                "Guest login failed. Open OpenLoomi Desktop and sign in with an existing account, then re-run /openloomi:setup.",
               guest: g,
               steps,
               status,
@@ -2114,9 +2443,13 @@ async function main() {
 
         // 4. Logged in, no AI provider, and we have a Claude env key in
         //    the shell that spawned Claude Code → POST it to the runtime.
-        if (status.tokenPresent && status.claudeEnvSyncable && !status.aiProviderConfigured) {
+        if (
+          status.tokenPresent &&
+          status.claudeEnvSyncable &&
+          !status.aiProviderConfigured
+        ) {
           const syncRes = await syncClaudeEnv();
-          record('sync_claude_env', !!syncRes.ok, {
+          record("sync_claude_env", !!syncRes.ok, {
             code: syncRes.code,
             provider: syncRes.provider,
             model: syncRes.model,
@@ -2126,14 +2459,18 @@ async function main() {
           // missing / bad request / server error). Only retry transient
           // failures; permanent ones we surface to the user instead of
           // hammering the runtime.
-          const TRANSIENT = new Set(['NETWORK', 'TIMEOUT']);
+          const TRANSIENT = new Set(["NETWORK", "TIMEOUT"]);
           if (!TRANSIENT.has(syncRes.code)) {
             out({
               ok: false,
-              setup: 'sync_failed',
+              setup: "sync_failed",
               code: syncRes.code,
               message: `sync-claude-env failed: ${syncRes.code}`,
-              sync: { code: syncRes.code, provider: syncRes.provider, model: syncRes.model },
+              sync: {
+                code: syncRes.code,
+                provider: syncRes.provider,
+                model: syncRes.model,
+              },
               steps,
               status,
             });
@@ -2152,7 +2489,7 @@ async function main() {
         //        OpenLoomi Desktop → API Settings.
         out({
           ok: true,
-          setup: 'awaiting_user_action',
+          setup: "awaiting_user_action",
           steps,
           status,
         });
@@ -2161,15 +2498,15 @@ async function main() {
 
       // Hit the step ceiling without reaching READY — return current state.
       const final = await buildStatus({ json: true, explicit });
-      out({ ok: false, setup: 'step_limit_reached', steps, status: final });
+      out({ ok: false, setup: "step_limit_reached", steps, status: final });
       return;
     }
-    case 'install': {
+    case "install": {
       const r = await cmdInstall({ yes: !!args.yes });
       out(r);
       return;
     }
-    case 'login': {
+    case "login": {
       // We deliberately do not spawn a browser here — the user can open
       // OpenLoomi Desktop themselves. We just report token presence.
       const status = await buildStatus({ json: true });
@@ -2177,24 +2514,34 @@ async function main() {
         ok: true,
         loginRequired: !status.tokenPresent,
         instructions: status.tokenPresent
-          ? 'Already authenticated. No action required.'
-          : 'Open OpenLoomi Desktop and complete sign-in. The plugin will detect the token automatically. Alternatively, run `guest-login` for a one-tap guest account.',
+          ? "Already authenticated. No action required."
+          : "Open OpenLoomi Desktop and complete sign-in. The plugin will detect the token automatically. Alternatively, run `guest-login` for a one-tap guest account.",
         status,
       });
       return;
     }
-    case 'guest-login': {
-      const r = await cmdGuestLogin({ baseUrl: process.env.OPENLOOMI_BASE_URL || null });
+    case "guest-login": {
+      const r = await cmdGuestLogin({
+        baseUrl: process.env.OPENLOOMI_BASE_URL || null,
+      });
       // Sanitize: never echo the raw token; report the path on success so
       // the caller can confirm the file landed.
       if (r.ok) {
-        out({ ok: true, guest: 'ok', user: r.user, tokenPath: r.tokenPath });
+        out({ ok: true, guest: "ok", user: r.user, tokenPath: r.tokenPath });
       } else {
-        out({ ok: false, guest: r.code || 'failed', error: r.error || null, status: r.status || null }, 1);
+        out(
+          {
+            ok: false,
+            guest: r.code || "failed",
+            error: r.error || null,
+            status: r.status || null,
+          },
+          1,
+        );
       }
       return;
     }
-    case 'sync-claude-env': {
+    case "sync-claude-env": {
       const syncRes = await syncClaudeEnv();
       // Ensure no key content slips into the response by accident.
       const sanitized = { ...syncRes };
@@ -2203,47 +2550,52 @@ async function main() {
       out(sanitized, syncRes.ok ? 0 : 1);
       return;
     }
-    case 'pet': {
+    case "pet": {
       const state = args._[1];
       const r = await cmdPet(state);
       out(r, r.ok ? 0 : 1);
       return;
     }
-    case 'state': {
+    case "state": {
       const name = args._[1];
       const event = args.event || null;
       const r = await cmdState(name, { event });
       out(r);
       return;
     }
-    case 'archive': {
+    case "archive": {
       // Hooks must always exit 0. We capture the result and print, but
       // never set a non-zero exit code from this path.
       try {
         const r = await cmdArchive();
         process.stdout.write(JSON.stringify(r) + EOL);
       } catch {
-        process.stdout.write(JSON.stringify({ continue: true, _openloomi: { archive: 'skipped', reason: 'exception' } }) + EOL);
+        process.stdout.write(
+          JSON.stringify({
+            continue: true,
+            _openloomi: { archive: "skipped", reason: "exception" },
+          }) + EOL,
+        );
       }
       process.exit(0);
       return;
     }
-    case 'usage': {
+    case "usage": {
       const r = await cmdUsage();
       out(r, r.ok ? 0 : 0);
       return;
     }
-    case 'install-hooks': {
+    case "install-hooks": {
       const r = installHooks({ yes: !!args.yes });
       out(r, r.ok ? 0 : 1);
       return;
     }
-    case 'uninstall-hooks': {
+    case "uninstall-hooks": {
       const r = uninstallHooks();
       out(r, r.ok ? 0 : 1);
       return;
     }
-    case 'hooks-status': {
+    case "hooks-status": {
       const installed = detectHooksInstalled();
       const settings = readSettings();
       out({
@@ -2252,42 +2604,56 @@ async function main() {
         settingsPath: settings.path,
         marker: MARKER,
         legacyBlockKey: PLUGIN_BLOCK_KEY,
-        schema: 'per-event',
+        schema: "per-event",
       });
       return;
     }
-    case 'help': {
+    case "help": {
       process.stdout.write(
         [
-          'loomi-bridge.mjs <subcommand> [...flags]',
-          '',
-          'Subcommands:',
-          '  version                          print plugin version',
-          '  setup                            full setup wizard',
-          '  setup-status [--json]            stable JSON status',
-          '  install [--yes]                  user-approved install',
-          '  login                            check token presence',
-          '  guest-login                      one-tap guest bearer (writes ~/.openloomi/token)',
-          '  sync-claude-env                  read Claude env → OpenLoomi provider',
-          '  pet <state>                      set OpenLoomi Pet state',
-          '  state <name> [--event E]         fire-and-forget state (hook)',
-          '  archive                          archive last Stop transcript (hook)',
-          '  usage                            GET /api/llm/usage/summary',
-          '  install-hooks                    merge into ~/.claude/settings.json',
-          '  uninstall-hooks                  strip plugin hook block',
-          '  hooks-status                     report merge state',
-          '  help                             this help',
-          '',
-        ].join('\n')
+          "loomi-bridge.mjs <subcommand> [...flags]",
+          "",
+          "Subcommands:",
+          "  version                          print plugin version",
+          "  setup                            full setup wizard",
+          "  setup-status [--json]            stable JSON status",
+          "  install [--yes]                  user-approved install",
+          "  login                            check token presence",
+          "  guest-login                      one-tap guest bearer (writes ~/.openloomi/token)",
+          "  sync-claude-env                  read Claude env → OpenLoomi provider",
+          "  pet <state>                      set OpenLoomi Pet state",
+          "  state <name> [--event E]         fire-and-forget state (hook)",
+          "  archive                          archive last Stop transcript (hook)",
+          "  usage                            GET /api/llm/usage/summary",
+          "  install-hooks                    merge into ~/.claude/settings.json",
+          "  uninstall-hooks                  strip plugin hook block",
+          "  hooks-status                     report merge state",
+          "  help                             this help",
+          "",
+        ].join("\n"),
       );
       return;
     }
     default: {
-      err('UNKNOWN_SUBCOMMAND', `Unknown subcommand: ${sub || '(none)'}`, { valid: [
-        'version', 'setup', 'setup-status', 'install', 'login', 'guest-login', 'sync-claude-env',
-        'pet', 'state', 'archive', 'usage',
-        'install-hooks', 'uninstall-hooks', 'hooks-status', 'help',
-      ] });
+      err("UNKNOWN_SUBCOMMAND", `Unknown subcommand: ${sub || "(none)"}`, {
+        valid: [
+          "version",
+          "setup",
+          "setup-status",
+          "install",
+          "login",
+          "guest-login",
+          "sync-claude-env",
+          "pet",
+          "state",
+          "archive",
+          "usage",
+          "install-hooks",
+          "uninstall-hooks",
+          "hooks-status",
+          "help",
+        ],
+      });
       return;
     }
   }
@@ -2296,7 +2662,11 @@ async function main() {
 main().catch((e) => {
   // Top-level catch: print JSON, exit 1.
   process.stdout.write(
-    JSON.stringify({ ok: false, code: 'UNEXPECTED', error: String(e?.stack || e?.message || e) }) + EOL
+    JSON.stringify({
+      ok: false,
+      code: "UNEXPECTED",
+      error: String(e?.stack || e?.message || e),
+    }) + EOL,
   );
   process.exit(1);
 });
