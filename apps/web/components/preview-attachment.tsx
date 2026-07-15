@@ -146,31 +146,32 @@ export const PreviewAttachment = ({
         </div>
       )}
       {imagePreview && enableImageLightbox && isPreviewOpen ? (
-        <div
-          className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 p-4"
-          role="dialog"
+        <dialog
+          open
+          className="fixed inset-0 z-[1000] m-0 flex size-full max-h-none max-w-none items-center justify-center border-0 bg-transparent p-4"
           aria-modal="true"
           aria-label={name ?? t("common.imagePreview", "Image preview")}
-          onClick={() => setIsPreviewOpen(false)}
         >
           <button
             type="button"
-            className="absolute right-4 top-4 z-10 flex size-9 items-center justify-center rounded-full bg-white/95 text-slate-900 shadow-md hover:bg-white"
+            className="absolute inset-0 bg-black/80"
             aria-label={t("common.close", "Close")}
-            onClick={(event) => {
-              event.stopPropagation();
-              setIsPreviewOpen(false);
-            }}
+            onClick={() => setIsPreviewOpen(false)}
+          />
+          <button
+            type="button"
+            className="absolute right-4 top-4 z-20 flex size-9 items-center justify-center rounded-full bg-white/95 text-slate-900 shadow-md hover:bg-white"
+            aria-label={t("common.close", "Close")}
+            onClick={() => setIsPreviewOpen(false)}
           >
             <RemixIcon name="close" size="size-5" />
           </button>
           <img
             src={displayUrl}
             alt={name ?? "Attachment"}
-            className="max-h-full max-w-full rounded-[8px] object-contain shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
+            className="relative z-10 max-h-full max-w-full rounded-[8px] object-contain shadow-2xl"
           />
-        </div>
+        </dialog>
       ) : null}
     </div>
   );

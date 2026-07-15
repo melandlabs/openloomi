@@ -687,16 +687,28 @@ const PurePreviewMessage = ({
             )}
           >
             {(() => {
+              type LifestyleImageMetadata = {
+                lifestyleImage?: unknown;
+              };
+              type ImageFilePart = {
+                mediaType?: string;
+                name?: string;
+                source?: string;
+                url?: string;
+                blobPath?: string;
+              };
+
               const isLifestyleImageMessage = Boolean(
-                (message.metadata as any)?.lifestyleImage,
+                (message.metadata as LifestyleImageMetadata | undefined)
+                  ?.lifestyleImage,
               );
-              const isLifestyleImagePart = (part: any) =>
+              const isLifestyleImagePart = (part: ImageFilePart) =>
                 part.source === "lifestyle-image-generation" ||
                 isLifestyleImageMessage;
 
               // Collect image parts for separate rendering
               const imageParts: Array<{
-                part: any;
+                part: ImageFilePart;
                 index: number;
                 key: string;
               }> = [];
@@ -704,7 +716,7 @@ const PurePreviewMessage = ({
               filteredParts?.forEach((part, index) => {
                 const { type } = part;
                 if (type === "file") {
-                  const filePart = part as any;
+                  const filePart = part as ImageFilePart;
                   const { mediaType } = filePart;
                   if (mediaType?.startsWith("image/")) {
                     const key = `message-${message.id}-part-${index}`;
@@ -968,7 +980,7 @@ const PurePreviewMessage = ({
 
                     // Handle file type (images rendered uniformly in imageParts later, skip here)
                     if (type === "file") {
-                      const filePart = part as any;
+                      const filePart = part as ImageFilePart;
                       const { mediaType, name, url, blobPath } = filePart;
 
                       if (mediaType?.startsWith("image/")) {
