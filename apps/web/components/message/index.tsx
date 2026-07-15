@@ -687,6 +687,13 @@ const PurePreviewMessage = ({
             )}
           >
             {(() => {
+              const isLifestyleImageMessage = Boolean(
+                (message.metadata as any)?.lifestyleImage,
+              );
+              const isLifestyleImagePart = (part: any) =>
+                part.source === "lifestyle-image-generation" ||
+                isLifestyleImageMessage;
+
               // Collect image parts for separate rendering
               const imageParts: Array<{
                 part: any;
@@ -965,6 +972,13 @@ const PurePreviewMessage = ({
                       const { mediaType, name, url, blobPath } = filePart;
 
                       if (mediaType?.startsWith("image/")) {
+                        if (
+                          message.role === "assistant" &&
+                          isLifestyleImagePart(filePart)
+                        ) {
+                          return null;
+                        }
+
                         // Image rendering - convert mediaType to contentType
                         const attachment = {
                           ...filePart,
@@ -1298,11 +1312,19 @@ const PurePreviewMessage = ({
                   {message.role === "assistant" && imageParts.length > 0 && (
                     <div className="flex flex-wrap gap-2 items-center">
                       {imageParts.map(({ part, key }) => {
-                        const { url, name, mediaType } = part;
+                        const { url, name, mediaType, source } = part;
+                        const shouldEnableImageLightbox =
+                          isLifestyleImagePart(part);
                         return (
                           <PreviewAttachment
                             key={key}
-                            attachment={{ url, name, contentType: mediaType }}
+                            attachment={{
+                              url,
+                              name,
+                              contentType: mediaType,
+                              source,
+                            }}
+                            enableImageLightbox={shouldEnableImageLightbox}
                           />
                         );
                       })}

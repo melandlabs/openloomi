@@ -379,7 +379,10 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
   const saveUserMessageAndUpdateHistory = useCallback(
     async (message: ChatMessage, chatId: string) => {
-      const result = await saveMessagesToDatabase([message], chatId);
+      const result = await saveMessagesToDatabase([message], chatId, {
+        immediate: true,
+        skipSync: false,
+      });
       if (!result?.chat) return;
 
       const chat = result.chat;
@@ -432,11 +435,13 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       sourceUserMessageId?: string;
     }) => {
       const replyId = assistantMessageId || generateUUID();
+      const replyCreatedAt = new Date();
       const loadingText = "Creating your lifestyle image...";
       const loadingMessage = {
         role: "assistant" as const,
         content: loadingText,
         id: replyId,
+        createdAt: replyCreatedAt,
         parts: [
           { type: "text" as const, text: loadingText },
           {
@@ -448,6 +453,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           },
         ],
         metadata: {
+          createdAt: replyCreatedAt.toISOString(),
           lifestyleImage: {
             status: "loading",
             sourceUserMessageId,
@@ -519,6 +525,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           role: "assistant" as const,
           content: successText,
           id: replyId,
+          createdAt: replyCreatedAt,
           parts: [
             { type: "text" as const, text: successText },
             {
@@ -526,6 +533,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               url: image.url,
               name: "lifestyle-image.png",
               mediaType: image.mediaType,
+              source: "lifestyle-image-generation",
             },
             {
               type: "data-lifestyleImageStatus" as const,
@@ -540,6 +548,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             },
           ],
           metadata: {
+            createdAt: replyCreatedAt.toISOString(),
             lifestyleImage: {
               status: "success",
               provider,
@@ -573,6 +582,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           role: "assistant" as const,
           content: errorMessage,
           id: replyId,
+          createdAt: replyCreatedAt,
           parts: [
             {
               type: "error" as const,
@@ -588,6 +598,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             },
           ],
           metadata: {
+            createdAt: replyCreatedAt.toISOString(),
             lifestyleImage: {
               status: "error",
               error: errorMessage,
@@ -640,12 +651,15 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
   >(
     ({ chatId, assistantMessageId }) => {
       const declinedText = "Lifestyle image generation canceled.";
+      const declinedCreatedAt = new Date();
       const declinedMessage = {
         role: "assistant" as const,
         content: declinedText,
         id: assistantMessageId,
+        createdAt: declinedCreatedAt,
         parts: [{ type: "text" as const, text: declinedText }],
         metadata: {
+          createdAt: declinedCreatedAt.toISOString(),
           lifestyleImage: {
             status: "declined",
           },
@@ -756,14 +770,17 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         lifestyleTrigger.confidence === "high" &&
         triggerMessageObject?.metadata?.skipLifestyleImageTrigger !== true
       ) {
+        const userMessageCreatedAt = new Date();
         const userMessage = {
           role: "user" as const,
           content: messageContent,
+          createdAt: userMessageCreatedAt,
           parts: triggerMessageObject?.parts || [
             { type: "text" as const, text: messageContent },
           ],
           metadata: {
             ...triggerMessageObject?.metadata,
+            createdAt: userMessageCreatedAt.toISOString(),
             lifestyleImageTrigger: {
               kind: lifestyleTrigger.kind,
               reason: lifestyleTrigger.reason,
@@ -776,10 +793,12 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
         if (!hasAcceptedLifestyleImageConsent()) {
           const consentMessageId = generateUUID();
+          const consentCreatedAt = new Date(userMessageCreatedAt.getTime() + 1);
           const consentMessage = {
             role: "assistant" as const,
             content: "",
             id: consentMessageId,
+            createdAt: consentCreatedAt,
             parts: [
               {
                 type: "data-lifestyleImageConsent" as const,
@@ -792,6 +811,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               },
             ],
             metadata: {
+              createdAt: consentCreatedAt.toISOString(),
               lifestyleImage: {
                 status: "consent_required",
                 sourceUserMessageId: userMessage.id,

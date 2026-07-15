@@ -30,12 +30,14 @@ export const PreviewAttachment = ({
   isUploading = false,
   className,
   showMetadata = true,
+  enableImageLightbox = false,
   status,
 }: {
   attachment: Attachment;
   isUploading?: boolean;
   className?: string;
   showMetadata?: boolean;
+  enableImageLightbox?: boolean;
   status?: "expired";
 }) => {
   const { name, contentType, sizeBytes } = attachment;
@@ -44,6 +46,7 @@ export const PreviewAttachment = ({
   const iconName = getAttachmentIconName(contentType);
   const { t } = useTranslation();
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const fallbackSourceLabel = attachment.source
     ? SOURCE_LABEL[attachment.source]
     : undefined;
@@ -63,6 +66,20 @@ export const PreviewAttachment = ({
     status === "expired"
       ? t("chat.attachments.expiredOverlay", "Expired")
       : null;
+  const imagePreview =
+    isImage && displayUrl && !imageLoadError ? (
+      // NOTE: it is recommended to use next/image for images
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        key={displayUrl}
+        src={displayUrl}
+        alt={name ?? "Attachment"}
+        className="size-full object-cover"
+        onError={() => {
+          setImageLoadError(true);
+        }}
+      />
+    ) : null;
 
   return (
     <div
@@ -77,18 +94,17 @@ export const PreviewAttachment = ({
       )}
     >
       <div className="relative flex h-16 w-full items-center justify-center overflow-hidden bg-white">
-        {isImage && displayUrl && !imageLoadError ? (
-          // NOTE: it is recommended to use next/image for images
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={displayUrl}
-            src={displayUrl}
-            alt={name ?? "Attachment"}
-            className="size-full object-cover"
-            onError={() => {
-              setImageLoadError(true);
-            }}
-          />
+        {imagePreview && enableImageLightbox ? (
+          <button
+            type="button"
+            className="block size-full cursor-zoom-in"
+            title={t("common.open", "Open")}
+            onClick={() => setIsPreviewOpen(true)}
+          >
+            {imagePreview}
+          </button>
+        ) : imagePreview ? (
+          imagePreview
         ) : (
           <RemixIcon name={iconName} size="size-6" className="text-slate-500" />
         )}
@@ -129,6 +145,33 @@ export const PreviewAttachment = ({
           </div>
         </div>
       )}
+      {imagePreview && enableImageLightbox && isPreviewOpen ? (
+        <div
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={name ?? t("common.imagePreview", "Image preview")}
+          onClick={() => setIsPreviewOpen(false)}
+        >
+          <button
+            type="button"
+            className="absolute right-4 top-4 z-10 flex size-9 items-center justify-center rounded-full bg-white/95 text-slate-900 shadow-md hover:bg-white"
+            aria-label={t("common.close", "Close")}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsPreviewOpen(false);
+            }}
+          >
+            <RemixIcon name="close" size="size-5" />
+          </button>
+          <img
+            src={displayUrl}
+            alt={name ?? "Attachment"}
+            className="max-h-full max-w-full rounded-[8px] object-contain shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </div>
   );
 };
