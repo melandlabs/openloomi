@@ -12,13 +12,16 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { promisify } from 'node:util';
+import { chmodSync, mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import {
   createFakeOpenLoomiBin,
+  makeIsolatedEnv,
   makePath,
   mergeEnv,
   withIsolatedHome,
@@ -26,6 +29,7 @@ import {
 
 const PLUGIN_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const BRIDGE = join(PLUGIN_DIR, 'scripts', 'loomi-bridge.mjs');
+const execFileAsync = promisify(execFile);
 
 function run(args, options = {}) {
   const env = options && Object.prototype.hasOwnProperty.call(options, 'env')
@@ -73,8 +77,113 @@ function runJson(args, env) {
   return JSON.parse(run(args, env));
 }
 
+async function runAsync(args, env) {
+  try {
+    const result = await execFileAsync('node', [BRIDGE, ...args], {
+      encoding: 'utf8',
+      env: mergeEnv(process.env, env),
+    });
+    return { code: 0, stdout: result.stdout, stderr: result.stderr };
+  } catch (e) {
+    return {
+      code: e.code ?? e.status ?? 1,
+      stdout: String(e.stdout ?? ''),
+      stderr: String(e.stderr ?? ''),
+    };
+  }
+}
+
+async function runJsonAsync(args, env) {
+  const result = await runAsync(args, env);
+  if (result.code !== 0) {
+    throw new Error(`bridge exited with ${result.code}: ${result.stdout || result.stderr}`);
+  }
+  return JSON.parse(result.stdout);
+}
+
 function withClaHome(fn) {
   return withIsolatedHome(fn);
+}
+
+async function withClaHomeAsync(fn, options = {}) {
+  const home = mkdtempSync(join(tmpdir(), 'openloomi-test-'));
+  try {
+    const env = makeIsolatedEnv(home, options);
+    return await fn(env, { home });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+async function withPreferencesServer(payload, fn) {
+  const server = createServer((req, res) => {
+    if (req.url === '/api/preferences/ai') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(payload));
+      return;
+    }
+    if (req.url === '/api/remote-auth/user') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ user: { id: 'test-user' } }));
+      return;
+    }
+    res.writeHead(404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not found' }));
+  });
+
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  try {
+    return await fn(`http://127.0.0.1:${port}`);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+function createFakeClaudeCli(dir, { authenticated = true } = {}) {
+  mkdirSync(dir, { recursive: true });
+  const scriptPath = join(dir, 'fake-claude.mjs');
+  writeFileSync(scriptPath, `
+const args = process.argv.slice(2);
+if (args.includes('--version')) {
+  console.log('1.2.3');
+  process.exit(0);
+}
+if (args[0] === 'auth' && args[1] === 'status') {
+  if (${authenticated ? 'true' : 'false'}) {
+    console.log(JSON.stringify({ authenticated: true }));
+    process.exit(0);
+  }
+  console.error('Not authenticated. Please log in.');
+  process.exit(1);
+}
+console.error('unexpected fake claude args: ' + args.join(' '));
+process.exit(1);
+`);
+
+  if (process.platform === 'win32') {
+    const binPath = join(dir, 'claude.cmd');
+    writeFileSync(binPath, `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`);
+    return binPath;
+  }
+
+  const binPath = join(dir, 'claude');
+  writeFileSync(binPath, `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`, { mode: 0o755 });
+  chmodSync(binPath, 0o755);
+  return binPath;
+}
+
+function aiPreferencesPayload(overrides = {}) {
+  return {
+    settings: [],
+    systemDefaults: {
+      anthropic_compatible: {
+        hasApiKey: false,
+      },
+    },
+    defaultAgent: 'claude',
+    ...overrides,
+  };
 }
 
 test('version subcommand emits plugin metadata', () => {
@@ -479,6 +588,122 @@ test('guest-login against unreachable API exits non-zero with NETWORK or ENDPOIN
       `unexpected guest code: ${j.guest}`);
     // Must not include a token or any Authorization header in stdout.
     assert.ok(!/Bearer\s+[A-Za-z0-9._-]+/.test(r.stdout), 'stdout must not contain a Bearer token');
+  });
+});
+
+test('setup-status treats authenticated native Claude runtime as ready without API key', async () => {
+  await withClaHomeAsync(async (env) => {
+    const fakeOpenLoomi = createFakeOpenLoomiBin(join(env.HOME, 'fake-bin'), { name: 'openloomi' });
+    const fakeClaude = createFakeClaudeCli(join(env.HOME, 'fake-claude'), {
+      authenticated: true,
+    });
+
+    await withPreferencesServer(aiPreferencesPayload(), async (baseUrl) => {
+      const j = await runJsonAsync(['setup-status'], {
+        ...env,
+        OPENLOOMI_BIN: fakeOpenLoomi.binPath,
+        OPENLOOMI_AUTH_TOKEN: 'mock-bearer',
+        OPENLOOMI_BASE_URL: baseUrl,
+        CLAUDE_CODE_PATH: fakeClaude,
+      });
+
+      assert.equal(j.aiProviderConfigured, false);
+      assert.equal(j.executionProviderReady, true);
+      assert.equal(j.executionProviderSource, 'native_claude_runtime');
+      assert.equal(j.nativeRuntimeActive, true);
+      assert.equal(j.nativeRuntimeStatus, 'CLAUDE_CLI_AUTHENTICATED');
+      assert.equal(j.nativeRuntime.authenticated, true);
+      assert.equal(j.ready, true);
+      assert.equal(j.nextAction, 'run');
+      assert.equal(j.reason, 'READY');
+    });
+  });
+});
+
+test('setup-status reports Claude CLI auth requirement instead of AI_PROVIDER_REQUIRED', async () => {
+  await withClaHomeAsync(async (env) => {
+    const fakeOpenLoomi = createFakeOpenLoomiBin(join(env.HOME, 'fake-bin'), { name: 'openloomi' });
+    const fakeClaude = createFakeClaudeCli(join(env.HOME, 'fake-claude'), {
+      authenticated: false,
+    });
+
+    await withPreferencesServer(aiPreferencesPayload(), async (baseUrl) => {
+      const j = await runJsonAsync(['setup-status'], {
+        ...env,
+        OPENLOOMI_BIN: fakeOpenLoomi.binPath,
+        OPENLOOMI_AUTH_TOKEN: 'mock-bearer',
+        OPENLOOMI_BASE_URL: baseUrl,
+        CLAUDE_CODE_PATH: fakeClaude,
+      });
+
+      assert.equal(j.aiProviderConfigured, false);
+      assert.equal(j.executionProviderReady, false);
+      assert.equal(j.nativeRuntimeActive, true);
+      assert.equal(j.nativeRuntimeStatus, 'CLAUDE_CLI_AUTH_REQUIRED');
+      assert.equal(j.nativeRuntime.authenticated, false);
+      assert.equal(j.ready, false);
+      assert.equal(j.nextAction, 'login_claude_cli');
+      assert.equal(j.reason, 'CLAUDE_CLI_AUTH_REQUIRED');
+    });
+  });
+});
+
+test('setup-status reports missing Claude CLI instead of AI_PROVIDER_REQUIRED', async () => {
+  await withClaHomeAsync(async (env) => {
+    const fakeOpenLoomi = createFakeOpenLoomiBin(join(env.HOME, 'fake-bin'), { name: 'openloomi' });
+
+    await withPreferencesServer(aiPreferencesPayload(), async (baseUrl) => {
+      const j = await runJsonAsync(['setup-status'], {
+        ...env,
+        PATH: makePath(),
+        OPENLOOMI_BIN: fakeOpenLoomi.binPath,
+        OPENLOOMI_AUTH_TOKEN: 'mock-bearer',
+        OPENLOOMI_BASE_URL: baseUrl,
+        CLAUDE_CODE_PATH: '',
+      });
+
+      assert.equal(j.aiProviderConfigured, false);
+      assert.equal(j.executionProviderReady, false);
+      assert.equal(j.nativeRuntimeActive, true);
+      assert.equal(j.nativeRuntimeStatus, 'CLAUDE_CLI_UNAVAILABLE');
+      assert.equal(j.nativeRuntime.available, false);
+      assert.equal(j.ready, false);
+      assert.equal(j.nextAction, 'install_claude_cli');
+      assert.equal(j.reason, 'CLAUDE_CLI_UNAVAILABLE');
+    });
+  });
+});
+
+test('setup-status keeps direct Anthropic-compatible provider path ready', async () => {
+  await withClaHomeAsync(async (env) => {
+    const fakeOpenLoomi = createFakeOpenLoomiBin(join(env.HOME, 'fake-bin'), { name: 'openloomi' });
+
+    await withPreferencesServer(
+      aiPreferencesPayload({
+        systemDefaults: {
+          anthropic_compatible: {
+            hasApiKey: true,
+          },
+        },
+      }),
+      async (baseUrl) => {
+        const j = await runJsonAsync(['setup-status'], {
+          ...env,
+          PATH: makePath(),
+          OPENLOOMI_BIN: fakeOpenLoomi.binPath,
+          OPENLOOMI_AUTH_TOKEN: 'mock-bearer',
+          OPENLOOMI_BASE_URL: baseUrl,
+          CLAUDE_CODE_PATH: '',
+        });
+
+        assert.equal(j.aiProviderConfigured, true);
+        assert.equal(j.executionProviderReady, true);
+        assert.equal(j.executionProviderSource, 'ai_provider');
+        assert.equal(j.ready, true);
+        assert.equal(j.nextAction, 'run');
+        assert.equal(j.reason, 'READY');
+      },
+    );
   });
 });
 

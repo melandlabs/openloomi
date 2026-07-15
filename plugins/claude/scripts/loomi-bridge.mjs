@@ -52,6 +52,7 @@ import { fileURLToPath } from 'node:url';
 // ---------------------------------------------------------------------------
 
 const PLUGIN_VERSION = '0.1.0';
+const CLAUDE_NATIVE_PROVIDER = 'claude';
 const DEFAULT_PROVIDER_BASE = 'https://api.anthropic.com';
 const DEFAULT_PROVIDER_MODEL = 'claude-opus-4-6';
 // Matches the documented ports in skills/openloomi-api/SKILL.md; the
@@ -61,6 +62,7 @@ const OPENLOOMI_PORT_FALLBACK = 3515;
 let _resolvedPort = OPENLOOMI_PORT_DEFAULT;
 const STATE_HTTP_TIMEOUT_MS = 2000;
 const ARCHIVE_HTTP_TIMEOUT_MS = 15_000;
+const CLAUDE_CLI_PROBE_TIMEOUT_MS = 5000;
 const ARCHIVE_MAX_BYTES = 5 * 1024 * 1024;       // 5 MB cap on transcripts
 const ARCHIVE_MAX_TURNS = 6;                      // 6 user+assistant turns
 const ARCHIVE_MAX_CONTENT_CHARS = 6000;           // 6k char summary cap
@@ -99,6 +101,9 @@ const NEXT_ACTIONS = new Set([
   'build_or_stage_openloomi',
   'login_openloomi',
   'configure_ai_provider',
+  'install_claude_cli',
+  'login_claude_cli',
+  'inspect_claude_cli',
   'configure_connectors',
   'show_openloomi_skills',
   'run',
@@ -293,9 +298,8 @@ function expandHome(p) {
   return p;
 }
 
-function lookupOnPath(name) {
-  const pathEnv = process.env.PATH || '';
-  const exts = detectPlatform() === 'windows' ? ['.exe', '.cmd', ''] : [''];
+function lookupOnPath(name, pathEnv = process.env.PATH || '') {
+  const exts = detectPlatform() === 'windows' ? ['.exe', '.cmd', '.bat', ''] : [''];
   for (const dir of pathEnv.split(delimiter).filter(Boolean)) {
     for (const ext of exts) {
       const candidate = join(dir, name + ext);
@@ -447,12 +451,21 @@ if (desktop.installed) {
 return { binPath: null, mode: 'unconfigured', source: null, desktopInstalled: false, desktopMarker: null };
 }
 
-async function runBin(binPath, args, { stdin = null, timeoutMs = 120_000 } = {}) {
+async function runBin(
+  binPath,
+  args,
+  { stdin = null, timeoutMs = 120_000, env = process.env, shell = false } = {},
+) {
   return await new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
     let resolved = false;
-    const child = spawn(binPath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(binPath, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env,
+      shell,
+      windowsHide: true,
+    });
     const timer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
@@ -488,6 +501,276 @@ async function runBin(binPath, args, { stdin = null, timeoutMs = 120_000 } = {})
       try { child.stdin.end(); } catch { /* noop */ }
     }
   });
+}
+
+function getClaudeCliProbePath() {
+  const home = homedir();
+  const dirs = [process.env.PATH || ''];
+
+  if (detectPlatform() === 'windows') {
+    dirs.push(
+      join(home, 'AppData', 'Roaming', 'npm'),
+      join(home, 'AppData', 'Local', 'Programs', 'nodejs'),
+      join(home, '.volta', 'bin'),
+      'C:\\Program Files\\nodejs',
+      'C:\\Program Files (x86)\\nodejs',
+    );
+  } else {
+    dirs.push(
+      '/usr/local/bin',
+      '/opt/homebrew/bin',
+      join(home, '.local', 'bin'),
+      join(home, '.npm-global', 'bin'),
+      join(home, '.volta', 'bin'),
+      join(home, 'code', 'node', 'npm_global', 'bin'),
+    );
+  }
+
+  return Array.from(new Set(dirs.filter(Boolean))).join(delimiter);
+}
+
+function resolveClaudeCliPath() {
+  const explicit = expandHome(process.env.CLAUDE_CODE_PATH);
+  if (explicit) {
+    if (isExecutable(explicit)) {
+      return {
+        path: normPath(explicit),
+        source: 'CLAUDE_CODE_PATH',
+        reason: 'CLAUDE_CLI_FOUND',
+      };
+    }
+    return {
+      path: null,
+      source: 'CLAUDE_CODE_PATH',
+      reason: 'CLAUDE_CODE_PATH_INVALID',
+    };
+  }
+
+  const pathEnv = getClaudeCliProbePath();
+  const found = lookupOnPath('claude', pathEnv);
+  if (found) {
+    return {
+      path: normPath(found),
+      source: 'PATH',
+      reason: 'CLAUDE_CLI_FOUND',
+    };
+  }
+
+  return {
+    path: null,
+    source: null,
+    reason: 'CLAUDE_CLI_UNAVAILABLE',
+  };
+}
+
+async function runClaudeCli(claudePath, args, { timeoutMs = CLAUDE_CLI_PROBE_TIMEOUT_MS } = {}) {
+  if (detectPlatform() === 'windows' && /\.ps1$/i.test(claudePath)) {
+    return await runBin('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      claudePath,
+      ...args,
+    ], {
+      timeoutMs,
+      env: { ...process.env, PATH: getClaudeCliProbePath() },
+    });
+  }
+
+  const shell = detectPlatform() === 'windows' && /\.(cmd|bat)$/i.test(claudePath);
+  return await runBin(claudePath, args, {
+    timeoutMs,
+    shell,
+    env: { ...process.env, PATH: getClaudeCliProbePath() },
+  });
+}
+
+function summarizeCliProbeResult(result) {
+  return {
+    ok: !!result?.ok,
+    code: result?.error?.code || null,
+    stdoutPresent: !!result?.stdout,
+    stderrPresent: !!result?.stderr,
+  };
+}
+
+function classifyClaudeAuthFailure(result) {
+  if (result?.error?.code === 'timeout') return 'CLAUDE_CLI_AUTH_STATUS_TIMEOUT';
+
+  const output = `${result?.stdout || ''}\n${result?.stderr || ''}`.toLowerCase();
+  if (
+    output.includes('not authenticated') ||
+    output.includes('not logged') ||
+    output.includes('not signed') ||
+    output.includes('please login') ||
+    output.includes('please log in') ||
+    output.includes('sign in') ||
+    output.includes('/login')
+  ) {
+    return 'CLAUDE_CLI_AUTH_REQUIRED';
+  }
+
+  if (output.includes('unknown command') || output.includes('invalid command')) {
+    return 'CLAUDE_CLI_AUTH_STATUS_UNAVAILABLE';
+  }
+
+  // `claude auth status` is a status command; a non-zero exit usually means
+  // there is no usable local Claude Code authentication.
+  return 'CLAUDE_CLI_AUTH_REQUIRED';
+}
+
+async function probeClaudeNativeRuntime(aiProvider) {
+  const defaultAgent =
+    typeof aiProvider?.defaultAgent === 'string' ? aiProvider.defaultAgent : null;
+  const active = defaultAgent === CLAUDE_NATIVE_PROVIDER;
+
+  if (!active) {
+    return {
+      checked: false,
+      available: false,
+      authenticated: false,
+      active: false,
+      ready: false,
+      reason: defaultAgent ? 'CLAUDE_RUNTIME_INACTIVE' : 'DEFAULT_AGENT_UNAVAILABLE',
+      defaultAgent,
+      cliPathPresent: false,
+      cliPathSource: null,
+      versionPresent: false,
+      probes: {},
+    };
+  }
+
+  const resolved = resolveClaudeCliPath();
+  if (!resolved.path) {
+    return {
+      checked: true,
+      available: false,
+      authenticated: false,
+      active: true,
+      ready: false,
+      reason: resolved.reason,
+      defaultAgent,
+      cliPathPresent: false,
+      cliPathSource: resolved.source,
+      versionPresent: false,
+      probes: {},
+      nextAction: resolved.reason === 'CLAUDE_CODE_PATH_INVALID'
+        ? 'inspect_claude_cli'
+        : 'install_claude_cli',
+    };
+  }
+
+  const versionProbe = await runClaudeCli(resolved.path, ['--version']);
+  if (!versionProbe.ok) {
+    return {
+      checked: true,
+      available: false,
+      authenticated: false,
+      active: true,
+      ready: false,
+      reason: versionProbe?.error?.code === 'timeout'
+        ? 'CLAUDE_CLI_VERSION_TIMEOUT'
+        : 'CLAUDE_CLI_VERSION_FAILED',
+      defaultAgent,
+      cliPathPresent: true,
+      cliPathSource: resolved.source,
+      versionPresent: false,
+      probes: {
+        version: summarizeCliProbeResult(versionProbe),
+      },
+      nextAction: 'inspect_claude_cli',
+    };
+  }
+
+  const authProbe = await runClaudeCli(resolved.path, ['auth', 'status', '--json']);
+  if (authProbe.ok) {
+    return {
+      checked: true,
+      available: true,
+      authenticated: true,
+      active: true,
+      ready: true,
+      reason: 'CLAUDE_CLI_AUTHENTICATED',
+      defaultAgent,
+      cliPathPresent: true,
+      cliPathSource: resolved.source,
+      versionPresent: !!(versionProbe.stdout || '').trim(),
+      probes: {
+        version: summarizeCliProbeResult(versionProbe),
+        auth: summarizeCliProbeResult(authProbe),
+      },
+      nextAction: 'run',
+    };
+  }
+
+  const reason = classifyClaudeAuthFailure(authProbe);
+  return {
+    checked: true,
+    available: true,
+    authenticated: false,
+    active: true,
+    ready: false,
+    reason,
+    defaultAgent,
+    cliPathPresent: true,
+    cliPathSource: resolved.source,
+    versionPresent: !!(versionProbe.stdout || '').trim(),
+    probes: {
+      version: summarizeCliProbeResult(versionProbe),
+      auth: summarizeCliProbeResult(authProbe),
+    },
+    nextAction: reason === 'CLAUDE_CLI_AUTH_REQUIRED'
+      ? 'login_claude_cli'
+      : 'inspect_claude_cli',
+  };
+}
+
+function getExecutionProviderStatus(aiProvider, nativeRuntime) {
+  if (aiProvider?.configured) {
+    return {
+      ready: true,
+      source: 'ai_provider',
+    };
+  }
+
+  if (nativeRuntime?.ready) {
+    return {
+      ready: true,
+      source: 'native_claude_runtime',
+    };
+  }
+
+  return {
+    ready: false,
+    source: null,
+  };
+}
+
+function providerStatusFields(aiProvider, nativeRuntime) {
+  const executionProvider = getExecutionProviderStatus(aiProvider, nativeRuntime);
+  return {
+    aiProviderConfigured: !!aiProvider?.configured,
+    aiProviderStatus: aiProvider?.status || (aiProvider?.ok ? 'unknown' : aiProvider?.reason || 'unknown'),
+    executionProviderReady: executionProvider.ready,
+    executionProviderSource: executionProvider.source,
+    nativeRuntimeActive: !!nativeRuntime?.active,
+    nativeRuntimeProvider: nativeRuntime?.defaultAgent || null,
+    nativeRuntimeStatus: nativeRuntime?.reason || null,
+    nativeRuntime: {
+      checked: !!nativeRuntime?.checked,
+      available: !!nativeRuntime?.available,
+      authenticated: !!nativeRuntime?.authenticated,
+      active: !!nativeRuntime?.active,
+      ready: !!nativeRuntime?.ready,
+      reason: nativeRuntime?.reason || null,
+      defaultAgent: nativeRuntime?.defaultAgent || null,
+      cliPathPresent: !!nativeRuntime?.cliPathPresent,
+      cliPathSource: nativeRuntime?.cliPathSource || null,
+      versionPresent: !!nativeRuntime?.versionPresent,
+      probes: nativeRuntime?.probes || {},
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -751,15 +1034,45 @@ async function probeAiProvider() {
   if (r.ok && r.json) {
     const sys = r.json?.systemDefaults?.anthropic_compatible;
     const fromSys = !!(sys && sys.hasApiKey);
+    const defaultAgent =
+      typeof r.json?.defaultAgent === 'string' ? r.json.defaultAgent : null;
     const fromUser =
       Array.isArray(r.json?.settings) &&
       r.json.settings.some(
-        (s) => s?.providerType === 'anthropic_compatible' && s?.hasApiKey,
+        (s) => (
+          s?.providerType === 'anthropic_compatible' &&
+          s?.enabled !== false &&
+          s?.hasApiKey
+        ),
       );
-    return { ok: true, configured: fromSys || fromUser };
+    const configured = fromSys || fromUser;
+    return {
+      ok: true,
+      configured,
+      status: configured ? 'direct_api_configured' : 'direct_api_missing',
+      defaultAgent,
+      directApi: {
+        systemDefaultConfigured: fromSys,
+        userConfigured: fromUser,
+      },
+    };
   }
-  if (r.status === 401 || r.status === 403) return { ok: true, configured: false, reason: 'auth_required' };
-  return { ok: false, configured: false, reason: r.error?.code || 'unknown' };
+  if (r.status === 401 || r.status === 403) {
+    return {
+      ok: true,
+      configured: false,
+      status: 'auth_required',
+      reason: 'auth_required',
+      defaultAgent: null,
+    };
+  }
+  return {
+    ok: false,
+    configured: false,
+    status: 'runtime_status_unavailable',
+    reason: r.error?.code || 'unknown',
+    defaultAgent: null,
+  };
 }
 
 async function probeApiReachable() {
@@ -861,6 +1174,8 @@ async function buildStatus({ json = true, explicit = null } = {}) {
   const resolvedVersion = version || (getInstallInfo()?.version || null);
 
   const aiProvider = await probeAiProvider();
+  const nativeRuntime = await probeClaudeNativeRuntime(aiProvider);
+  const providerFields = providerStatusFields(aiProvider, nativeRuntime);
   const apiReachable = await probeApiReachable();
 
   if (!tokenPresent()) {
@@ -870,7 +1185,7 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       binPath: disc.binPath,
       version: resolvedVersion,
       tokenPresent: false,
-      aiProviderConfigured: aiProvider.configured,
+      ...providerFields,
       claudeEnvSyncable,
       apiReachable,
       canGuestLogin: apiReachable,
@@ -883,6 +1198,58 @@ async function buildStatus({ json = true, explicit = null } = {}) {
     };
   }
 
+  if (!aiProvider.configured && nativeRuntime.ready) {
+    return {
+      mode: disc.mode,
+      installed: true,
+      binPath: disc.binPath,
+      version: resolvedVersion,
+      tokenPresent: true,
+      ...providerFields,
+      claudeEnvSyncable,
+      apiReachable,
+      canGuestLogin: apiReachable,
+      hooksInstalled: detectHooksInstalled(),
+      ready: true,
+      nextAction: 'run',
+      reason: 'READY',
+      readinessSource: 'native_claude_runtime',
+      message:
+        'OpenLoomi is ready through the authenticated native Claude Code runtime. A separate Anthropic-compatible API key is not required for native Claude execution.',
+      source: disc.source,
+      desktopMarker: disc.desktopMarker,
+    };
+  }
+
+  if (!aiProvider.configured && nativeRuntime.active && nativeRuntime.checked && !nativeRuntime.ready) {
+    return {
+      mode: disc.mode,
+      installed: true,
+      binPath: disc.binPath,
+      version: resolvedVersion,
+      tokenPresent: true,
+      ...providerFields,
+      claudeEnvSyncable,
+      apiReachable,
+      canGuestLogin: apiReachable,
+      hooksInstalled: detectHooksInstalled(),
+      ready: false,
+      nextAction: nativeRuntime.nextAction || 'inspect_claude_cli',
+      reason: nativeRuntime.reason,
+      message:
+        nativeRuntime.reason === 'CLAUDE_CLI_AUTH_REQUIRED'
+          ? 'The native Claude runtime is selected, but Claude Code CLI is not authenticated. Run `claude auth login` or configure a direct Anthropic-compatible provider.'
+          : 'The native Claude runtime is selected, but Claude Code CLI readiness could not be confirmed. Install or repair Claude Code CLI, or configure a direct Anthropic-compatible provider.',
+      source: disc.source,
+      desktopMarker: disc.desktopMarker,
+      claudeEnvHint: {
+        hasKey: claudeEnvPresent,
+        hasBase: !!process.env.ANTHROPIC_BASE_URL,
+        hasModel: !!process.env.ANTHROPIC_MODEL,
+      },
+    };
+  }
+
   if (!aiProvider.configured && claudeEnvPresent) {
     return {
       mode: disc.mode,
@@ -890,7 +1257,7 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       binPath: disc.binPath,
       version: resolvedVersion,
       tokenPresent: true,
-      aiProviderConfigured: false,
+      ...providerFields,
       claudeEnvSyncable,
       apiReachable,
       canGuestLogin: apiReachable,
@@ -911,7 +1278,7 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       binPath: disc.binPath,
       version: resolvedVersion,
       tokenPresent: true,
-      aiProviderConfigured: false,
+      ...providerFields,
       claudeEnvSyncable: false,
       apiReachable,
       canGuestLogin: apiReachable,
@@ -935,7 +1302,7 @@ async function buildStatus({ json = true, explicit = null } = {}) {
     binPath: disc.binPath,
     version: resolvedVersion,
     tokenPresent: true,
-    aiProviderConfigured: true,
+    ...providerFields,
     claudeEnvSyncable,
     apiReachable,
     canGuestLogin: apiReachable,
