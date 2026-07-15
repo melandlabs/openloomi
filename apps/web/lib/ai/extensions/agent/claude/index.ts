@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { arch, homedir, platform } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
   createSdkMcpServer,
   query,
@@ -249,9 +249,14 @@ function spawnClaudeCodeProcess(options: {
   }
 
   // Direct spawn for executables
+  const isBundledNativeClaude =
+    options.command.includes("cli-bundle") &&
+    ["claude", "claude.exe"].includes(basename(options.command).toLowerCase());
   const childProcess = spawn(options.command, options.args, {
     cwd: resolvedCwd,
-    env: asProcessEnv(options.env),
+    env: isBundledNativeClaude
+      ? { ...options.env, CLAUDECODE: "" }
+      : asProcessEnv(options.env),
     stdio: ["pipe", "pipe", "pipe"],
     signal: options.signal,
     windowsHide: true,
@@ -544,7 +549,19 @@ function getSidecarClaudeCodePath(): string | undefined {
   for (const bundleDir of bundleLocations) {
     if (!existsSync(bundleDir)) continue;
 
-    // New bundle structure: files are directly in bundle directory (cli.js, vendor/, node)
+    // Current bundle structure: a platform-native Claude Code executable.
+    const nativeClaudePath = join(
+      bundleDir,
+      os === "win32" ? "claude.exe" : "claude",
+    );
+    if (existsSync(nativeClaudePath)) {
+      console.log(
+        `[Claude] Using bundled native Claude Code: ${nativeClaudePath}`,
+      );
+      return nativeClaudePath;
+    }
+
+    // Legacy bundle structure: cli.js plus vendor assets and a wrapper.
     const claudeCliPath = join(bundleDir, "cli.js");
     const nodeBinPath = join(bundleDir, os === "win32" ? "node.exe" : "node");
     const vendorDir = join(bundleDir, "vendor");

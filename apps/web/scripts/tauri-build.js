@@ -70,7 +70,7 @@ fs.writeFileSync(".next/standalone/package.json", "{}");
 fs.writeFileSync(".next/standalone/apps/web/package.json", "{}");
 fs.writeFileSync(".next/standalone/node_modules/package.json", "{}");
 
-console.log("Bundling Claude and Node.js runtime...");
+console.log("Bundling native Claude Code runtime...");
 execSync("pnpm bundle:runtime", { stdio: "inherit" });
 
 console.log("Bundling native-agent CLI runner...");

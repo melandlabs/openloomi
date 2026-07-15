@@ -63,7 +63,7 @@
     "@openloomi/sqlite": "workspace:*",
     "@openloomi/voice-kokoro": "workspace:*",
     "@openloomi/voice-whisper": "workspace:*",
-    "@anthropic-ai/claude-agent-sdk": "^0.2.71",
+    "@anthropic-ai/claude-agent-sdk": "0.2.141",
     "@anthropic-ai/sandbox-runtime": "^0.0.32",
     "@anthropic-ai/sdk": "^0.72.1",
     "@aws-sdk/client-secrets-manager": "^3.901.0",
