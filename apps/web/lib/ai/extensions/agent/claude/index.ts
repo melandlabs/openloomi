@@ -255,7 +255,7 @@ function spawnClaudeCodeProcess(options: {
   const childProcess = spawn(options.command, options.args, {
     cwd: resolvedCwd,
     env: isBundledNativeClaude
-      ? { ...options.env, CLAUDECODE: "" }
+      ? asProcessEnv({ ...options.env, CLAUDECODE: "" })
       : asProcessEnv(options.env),
     stdio: ["pipe", "pipe", "pipe"],
     signal: options.signal,
