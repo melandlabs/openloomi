@@ -108,6 +108,21 @@ export type CustomUIDataTypes = {
     content: string;
     id: string;
   };
+  lifestyleImageConsent: {
+    id: string;
+    prompt: string;
+    reason?: string;
+    createdAt: string;
+  };
+  lifestyleImageStatus: {
+    id: string;
+    status: "loading" | "success" | "error";
+    provider?: string;
+    model?: string;
+    creditsUsed?: number;
+    imageCount?: number;
+    error?: string;
+  };
   hideLoadingText: {
     id: string;
   };

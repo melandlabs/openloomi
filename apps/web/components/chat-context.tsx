@@ -39,9 +39,56 @@ import {
   pickPreferredArtifactPath,
 } from "@/lib/files/extract-artifact-paths";
 import { formatAgentStreamErrorForUser } from "@/lib/ai/runtime/format-error";
+import { detectLifestyleImageTrigger } from "@/lib/ai/image-generation/lifestyle-trigger";
 
 // Max retry attempts for stream errors
 const MAX_STREAM_RETRY_ATTEMPTS = 3;
+const LIFESTYLE_IMAGE_CONSENT_STORAGE_KEY =
+  "openloomi:lifestyle-image-consent:v1";
+
+type LifestyleImageGenerationApiResponse = {
+  success: boolean;
+  prompt?: string;
+  sourceSummary?: unknown;
+  warnings?: unknown[];
+  usage?: {
+    provider?: string;
+    model?: string;
+    imageCount?: number;
+    creditsUsed?: number;
+    costMode?: string;
+    quotaMode?: string;
+  };
+  images?: Array<{
+    imageUrl?: string;
+    dataUrl?: string;
+    b64Json?: string;
+    mimeType?: string;
+    revisedPrompt?: string;
+  }>;
+  imageUrl?: string;
+  dataUrl?: string;
+  b64Json?: string;
+  mimeType?: string;
+  error?: string;
+  errorType?: string;
+  imageGeneration?: {
+    provider?: string;
+    model?: string;
+    imageCount?: number;
+    creditsUsed?: number;
+  };
+};
+
+type ChatHistoryCache = {
+  chats?: Array<{
+    id: string;
+    title?: string;
+    createdAt?: Date | string;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+};
 
 // Independent state per chat
 type ChatSessionState = {
@@ -63,6 +110,15 @@ export interface ChatContextValue {
   ) => void;
   sendMessage: (content: any, options?: any) => Promise<void>;
   setSendMessage: (fn: (content: any, options?: any) => Promise<void>) => void;
+  confirmLifestyleImageGeneration: (input: {
+    chatId: string;
+    assistantMessageId: string;
+    prompt: string;
+  }) => Promise<void>;
+  declineLifestyleImageGeneration: (input: {
+    chatId: string;
+    assistantMessageId: string;
+  }) => void;
   stop: () => void;
 
   // Per-chat session states
@@ -127,6 +183,35 @@ export function useChatContext() {
 export function useChatContextOptional(): ChatContextValue | null {
   const context = useContext(ChatContext);
   return context || null;
+}
+
+function hasAcceptedLifestyleImageConsent(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.localStorage.getItem(LIFESTYLE_IMAGE_CONSENT_STORAGE_KEY) ===
+    "accepted"
+  );
+}
+
+function acceptLifestyleImageConsent(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(LIFESTYLE_IMAGE_CONSENT_STORAGE_KEY, "accepted");
+}
+
+function getLifestyleImageUrl(
+  response: LifestyleImageGenerationApiResponse,
+): { url: string; mediaType: string } | null {
+  const image = response.images?.[0];
+  const mimeType = image?.mimeType || response.mimeType || "image/png";
+  const url =
+    image?.dataUrl ||
+    image?.imageUrl ||
+    response.dataUrl ||
+    response.imageUrl ||
+    (image?.b64Json ? `data:${mimeType};base64,${image.b64Json}` : null) ||
+    (response.b64Json ? `data:${mimeType};base64,${response.b64Json}` : null);
+
+  return url ? { url, mediaType: mimeType } : null;
 }
 
 export function ChatContextProvider({ children }: { children: ReactNode }) {
@@ -277,6 +362,310 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const saveChatMessageImmediately = useCallback(
+    (message: ChatMessage, chatId: string) => {
+      saveMessagesToDatabase([message], chatId, {
+        immediate: true,
+        skipSync: false,
+      });
+      mutate(
+        (key) => typeof key === "string" && key.startsWith("/api/history"),
+        undefined,
+        { revalidate: true },
+      );
+    },
+    [],
+  );
+
+  const saveUserMessageAndUpdateHistory = useCallback(
+    async (message: ChatMessage, chatId: string) => {
+      const result = await saveMessagesToDatabase([message], chatId);
+      if (!result?.chat) return;
+
+      const chat = result.chat;
+      mutate(
+        (key) => typeof key === "string" && key.startsWith("/api/history"),
+        (data: ChatHistoryCache | undefined) => {
+          if (!data || !data.chats) return data;
+          const existingIndex = data.chats.findIndex(
+            (item) => item.id === chat.id,
+          );
+          if (existingIndex >= 0) {
+            const newChats = [...data.chats];
+            newChats[existingIndex] = {
+              ...newChats[existingIndex],
+              title: chat.title,
+            };
+            return { ...data, chats: newChats };
+          }
+          return {
+            ...data,
+            chats: [
+              ...data.chats,
+              {
+                id: chat.id,
+                title: chat.title,
+                createdAt: chat.createdAt,
+                latestMessageContent: null,
+                latestMessageTime: chat.createdAt,
+                messageCount: 1,
+              },
+            ],
+          };
+        },
+        false,
+      );
+    },
+    [],
+  );
+
+  const generateLifestyleImageReply = useCallback(
+    async ({
+      chatId,
+      prompt,
+      assistantMessageId,
+      sourceUserMessageId,
+    }: {
+      chatId: string;
+      prompt: string;
+      assistantMessageId?: string;
+      sourceUserMessageId?: string;
+    }) => {
+      const replyId = assistantMessageId || generateUUID();
+      const loadingText = "Creating your lifestyle image...";
+      const loadingMessage = {
+        role: "assistant" as const,
+        content: loadingText,
+        id: replyId,
+        parts: [
+          { type: "text" as const, text: loadingText },
+          {
+            type: "data-lifestyleImageStatus" as const,
+            data: {
+              id: replyId,
+              status: "loading" as const,
+            },
+          },
+        ],
+        metadata: {
+          lifestyleImage: {
+            status: "loading",
+            sourceUserMessageId,
+          },
+        },
+      } as ChatMessage;
+
+      setIsSending(true);
+      setIsAgentRunningForChatFn(chatId, true);
+      setMessages((prev) => {
+        const index = prev.findIndex((message) => message.id === replyId);
+        if (index === -1) return [...prev, loadingMessage];
+        const next = [...prev];
+        next[index] = loadingMessage;
+        return next;
+      }, chatId);
+
+      try {
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+        };
+        let cloudAuthToken: string | null = null;
+        try {
+          cloudAuthToken = getAuthToken();
+        } catch (error) {
+          console.error("[LifestyleImage] Failed to read auth token:", error);
+        }
+        if (cloudAuthToken) {
+          headers.Authorization = `Bearer ${cloudAuthToken}`;
+        }
+
+        const response = await fetch("/api/ai/v1/images/lifestyle/generate", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            chatId,
+            triggerPrompt: prompt,
+            outputFormat: "png",
+            responseFormat: "data_url",
+            imageCount: 1,
+          }),
+        });
+        const data = (await response
+          .json()
+          .catch(() => null)) as LifestyleImageGenerationApiResponse | null;
+
+        if (!response.ok || !data?.success) {
+          throw new Error(
+            data?.error ||
+              `Lifestyle image generation failed (${response.status})`,
+          );
+        }
+
+        const image = getLifestyleImageUrl(data);
+        if (!image) {
+          throw new Error("Image provider returned no displayable image");
+        }
+
+        const successText = "Here is your lifestyle image.";
+        const provider =
+          data.usage?.provider || data.imageGeneration?.provider || "unknown";
+        const model =
+          data.usage?.model || data.imageGeneration?.model || "unknown";
+        const imageCount =
+          data.usage?.imageCount || data.imageGeneration?.imageCount || 1;
+        const creditsUsed =
+          data.usage?.creditsUsed ?? data.imageGeneration?.creditsUsed ?? 0;
+        const successMessage = {
+          role: "assistant" as const,
+          content: successText,
+          id: replyId,
+          parts: [
+            { type: "text" as const, text: successText },
+            {
+              type: "file" as const,
+              url: image.url,
+              name: "lifestyle-image.png",
+              mediaType: image.mediaType,
+            },
+            {
+              type: "data-lifestyleImageStatus" as const,
+              data: {
+                id: replyId,
+                status: "success" as const,
+                provider,
+                model,
+                imageCount,
+                creditsUsed,
+              },
+            },
+          ],
+          metadata: {
+            lifestyleImage: {
+              status: "success",
+              provider,
+              model,
+              imageCount,
+              creditsUsed,
+              costMode: data.usage?.costMode ?? "estimated",
+              quotaMode: data.usage?.quotaMode ?? "record_only",
+              prompt: data.prompt,
+              sourceSummary: data.sourceSummary,
+              warnings: data.warnings,
+              sourceUserMessageId,
+            },
+          },
+        } as ChatMessage;
+
+        setMessages((prev) => {
+          const index = prev.findIndex((message) => message.id === replyId);
+          if (index === -1) return [...prev, successMessage];
+          const next = [...prev];
+          next[index] = successMessage;
+          return next;
+        }, chatId);
+        saveChatMessageImmediately(successMessage, chatId);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Lifestyle image generation failed";
+        const failedMessage = {
+          role: "assistant" as const,
+          content: errorMessage,
+          id: replyId,
+          parts: [
+            {
+              type: "error" as const,
+              content: errorMessage,
+            },
+            {
+              type: "data-lifestyleImageStatus" as const,
+              data: {
+                id: replyId,
+                status: "error" as const,
+                error: errorMessage,
+              },
+            },
+          ],
+          metadata: {
+            lifestyleImage: {
+              status: "error",
+              error: errorMessage,
+              sourceUserMessageId,
+            },
+          },
+        } as ChatMessage;
+
+        setMessages((prev) => {
+          const index = prev.findIndex((message) => message.id === replyId);
+          if (index === -1) return [...prev, failedMessage];
+          const next = [...prev];
+          next[index] = failedMessage;
+          return next;
+        }, chatId);
+        saveChatMessageImmediately(failedMessage, chatId);
+        toast({
+          type: "error",
+          description: errorMessage,
+        });
+      } finally {
+        setIsSending(false);
+        setIsAgentRunningForChatFn(chatId, false);
+      }
+    },
+    [
+      saveChatMessageImmediately,
+      setIsAgentRunningForChatFn,
+      setMessages,
+      setIsSending,
+    ],
+  );
+
+  const confirmLifestyleImageGeneration = useCallback<
+    ChatContextValue["confirmLifestyleImageGeneration"]
+  >(
+    async ({ chatId, assistantMessageId, prompt }) => {
+      acceptLifestyleImageConsent();
+      await generateLifestyleImageReply({
+        chatId,
+        prompt,
+        assistantMessageId,
+      });
+    },
+    [generateLifestyleImageReply],
+  );
+
+  const declineLifestyleImageGeneration = useCallback<
+    ChatContextValue["declineLifestyleImageGeneration"]
+  >(
+    ({ chatId, assistantMessageId }) => {
+      const declinedText = "Lifestyle image generation canceled.";
+      const declinedMessage = {
+        role: "assistant" as const,
+        content: declinedText,
+        id: assistantMessageId,
+        parts: [{ type: "text" as const, text: declinedText }],
+        metadata: {
+          lifestyleImage: {
+            status: "declined",
+          },
+        },
+      } as ChatMessage;
+
+      setMessages((prev) => {
+        const index = prev.findIndex(
+          (message) => message.id === assistantMessageId,
+        );
+        if (index === -1) return prev;
+        const next = [...prev];
+        next[index] = declinedMessage;
+        return next;
+      }, chatId);
+      saveChatMessageImmediately(declinedMessage, chatId);
+    },
+    [saveChatMessageImmediately, setMessages],
+  );
+
   // Create safe sendMessage wrapper, integrating intelligent routing
   const sendMessage: ChatContextValue["sendMessage"] = useCallback(
     async (message, options) => {
@@ -352,6 +741,75 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       // Ensure messageContent is not empty
       if (!messageContent || messageContent.trim() === "") {
         messageContent = t("auth.errors.streamError.analyzeContent");
+      }
+
+      const triggerMessageObject =
+        message && typeof message === "object"
+          ? (message as {
+              parts?: ChatMessage["parts"];
+              metadata?: Record<string, unknown>;
+            })
+          : null;
+      const lifestyleTrigger = detectLifestyleImageTrigger(messageContent);
+      if (
+        lifestyleTrigger.matched &&
+        lifestyleTrigger.confidence === "high" &&
+        triggerMessageObject?.metadata?.skipLifestyleImageTrigger !== true
+      ) {
+        const userMessage = {
+          role: "user" as const,
+          content: messageContent,
+          parts: triggerMessageObject?.parts || [
+            { type: "text" as const, text: messageContent },
+          ],
+          metadata: {
+            ...triggerMessageObject?.metadata,
+            lifestyleImageTrigger: {
+              kind: lifestyleTrigger.kind,
+              reason: lifestyleTrigger.reason,
+            },
+          },
+          id: generateUUID(),
+        } as ChatMessage;
+        setMessages((prev) => [...prev, userMessage], chatIdForMessages);
+        await saveUserMessageAndUpdateHistory(userMessage, chatIdForMessages);
+
+        if (!hasAcceptedLifestyleImageConsent()) {
+          const consentMessageId = generateUUID();
+          const consentMessage = {
+            role: "assistant" as const,
+            content: "",
+            id: consentMessageId,
+            parts: [
+              {
+                type: "data-lifestyleImageConsent" as const,
+                data: {
+                  id: consentMessageId,
+                  prompt: messageContent,
+                  reason: lifestyleTrigger.reason,
+                  createdAt: new Date().toISOString(),
+                },
+              },
+            ],
+            metadata: {
+              lifestyleImage: {
+                status: "consent_required",
+                sourceUserMessageId: userMessage.id,
+              },
+            },
+          } as ChatMessage;
+          setMessages((prev) => [...prev, consentMessage], chatIdForMessages);
+          saveChatMessageImmediately(consentMessage, chatIdForMessages);
+          setIsSending(false);
+          return Promise.resolve();
+        }
+
+        await generateLifestyleImageReply({
+          chatId: chatIdForMessages,
+          prompt: messageContent,
+          sourceUserMessageId: userMessage.id,
+        });
+        return Promise.resolve();
       }
 
       // Extract image attachments, file attachments, RAG documents and focused insights from message
@@ -1655,7 +2113,16 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         return Promise.reject(error);
       }
     },
-    [activeChatId, messages, setMessages, t, setIsAgentRunningForChatFn],
+    [
+      activeChatId,
+      messages,
+      setMessages,
+      t,
+      setIsAgentRunningForChatFn,
+      saveUserMessageAndUpdateHistory,
+      saveChatMessageImmediately,
+      generateLifestyleImageReply,
+    ],
   );
 
   // setSendMessage - no longer needed because sendMessage is implemented in context
@@ -2080,6 +2547,8 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       setMessages,
       sendMessage,
       setSendMessage,
+      confirmLifestyleImageGeneration,
+      declineLifestyleImageGeneration,
       stop,
       // Per-chat states
       isAgentRunning: currentSessionState.isAgentRunning,
@@ -2132,6 +2601,8 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
     switchChatId,
     isSending,
     getIsAgentRunningByChatId,
+    confirmLifestyleImageGeneration,
+    declineLifestyleImageGeneration,
   ]);
 
   return (

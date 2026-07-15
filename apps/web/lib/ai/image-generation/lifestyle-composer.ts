@@ -75,6 +75,7 @@ export interface LifestylePromptSourceSummary {
 export interface ComposeLifestyleImagePromptInput {
   userId: string;
   chatId?: string;
+  triggerPrompt?: string;
   referenceImages?: LifestyleReferenceImageInput[];
   generation?: Partial<ImageGenerationRequest>;
   days?: number;
@@ -144,6 +145,7 @@ export async function composeLifestyleImagePrompt(
     topics: normalizeStringList(settings?.focusTopics, 8, 100),
   };
   const recentInterests = dedupeStrings([
+    ...normalizeOptionalListItem(input.triggerPrompt),
     ...extractMessageSnippets(chatContext.messages),
     ...extractInsightLabels(chatContext.insights),
   ]).slice(0, 8);
@@ -742,6 +744,12 @@ function dedupeInsights(insights: Insight[]): Insight[] {
     seen.add(item.id);
     return true;
   });
+}
+
+function normalizeOptionalListItem(value: unknown, itemLimit = 180): string[] {
+  if (typeof value !== "string") return [];
+  const clipped = clipText(value, itemLimit);
+  return clipped ? [clipped] : [];
 }
 
 function normalizeStringList(

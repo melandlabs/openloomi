@@ -42,6 +42,7 @@ import { InlineRefBadge } from "../inline-ref-badge";
 import { ErrorMessageDisplay } from "./error-message-display";
 import { NativeToolCall } from "./native-tool-call";
 import { RawMessagesResult } from "./raw-messages-result";
+import { LifestyleImageConsent } from "./lifestyle-image-consent";
 import { ToolCallAccordion, type ToolCallPart } from "./tool-call-accordion";
 import {
   LibraryItemRow,
@@ -133,6 +134,8 @@ const PurePreviewMessage = ({
     openFilePreviewPanel,
     messages: contextMessages,
     setMessages: contextSetMessages,
+    confirmLifestyleImageGeneration,
+    declineLifestyleImageGeneration,
   } = useChatContext();
   const [, copyToClipboard] = useCopyToClipboard();
 
@@ -1016,6 +1019,35 @@ const PurePreviewMessage = ({
                             maxHeight="400px"
                           />
                         </div>
+                      );
+                    }
+
+                    if (type === "data-lifestyleImageConsent") {
+                      const consentPart = part as {
+                        data?: {
+                          prompt?: string;
+                        };
+                      };
+                      const prompt = consentPart.data?.prompt?.trim();
+                      if (!prompt) return null;
+
+                      return (
+                        <LifestyleImageConsent
+                          key={key}
+                          onConfirm={() =>
+                            confirmLifestyleImageGeneration({
+                              chatId,
+                              assistantMessageId: message.id,
+                              prompt,
+                            })
+                          }
+                          onDecline={() =>
+                            declineLifestyleImageGeneration({
+                              chatId,
+                              assistantMessageId: message.id,
+                            })
+                          }
+                        />
                       );
                     }
 

@@ -2,7 +2,9 @@ export type ImageGenerationUsageStatus = "success" | "failed";
 
 export type ImageGenerationUsageRecord = {
   userId: string | null;
-  endpoint: "api/ai/v1/images/generations";
+  endpoint:
+    | "api/ai/v1/images/generations"
+    | "api/ai/v1/images/lifestyle/generate";
   provider: string;
   model: string;
   imageCount: number;
