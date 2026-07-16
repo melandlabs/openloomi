@@ -64,6 +64,17 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith("/api/ai")) return NextResponse.next();
   if (pathname.startsWith("/api/preferences")) return NextResponse.next();
   if (pathname.startsWith("/api/integrations")) return NextResponse.next();
+  // /api/loop/* and /api/llm/usage/* are guest-bootstrapping APIs: their
+  // route handlers fall back to `ensureGuestSession()` when the request
+  // has no session cookie, minting an anonymous guest and writing the
+  // NextAuth session cookie on the first response. Letting the request
+  // through here avoids the proxy redirecting the very first call to
+  // /guest-login (which spawns one browser page per parallel API request
+  // and races N concurrent `POST /api/auth/guest` calls into multiple
+  // orphan guest users). See `lib/auth/auto-guest.ts` for the mint path
+  // these routes share with the plugin-side `/api/remote-auth/guest`.
+  if (pathname.startsWith("/api/loop")) return NextResponse.next();
+  if (pathname.startsWith("/api/llm/usage")) return NextResponse.next();
   if (pathname.startsWith("/api/user") || pathname.startsWith("/api/quota"))
     return NextResponse.next();
   if (pathname.startsWith("/api/slack") || pathname.startsWith("/api/discord"))

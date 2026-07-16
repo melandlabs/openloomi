@@ -13,12 +13,17 @@
 import { NextResponse } from "next/server";
 import { readWrap } from "@/lib/loop/wrap";
 import { auth } from "@/app/(auth)/auth";
+import { withAutoGuest } from "@/lib/auth/with-auto-guest";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export const GET = withAutoGuest(async () => {
   try {
+    // Mirror /api/loop/brief/content: a fresh Tauri install has no
+    // session yet, so the wrapper auto-mints a guest on the first
+    // call instead of bouncing to /guest-login (which races one
+    // guest row per parallel API call).
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "auth required" }, { status: 401 });
@@ -31,4 +36,4 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});

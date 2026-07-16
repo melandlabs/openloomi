@@ -31,6 +31,7 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
 import { auth } from "@/app/(auth)/auth";
+import { withAutoGuest } from "@/lib/auth/with-auto-guest";
 import { db } from "@/lib/db";
 import { scheduledJobs } from "@/lib/db/schema";
 
@@ -41,7 +42,7 @@ interface RouteCtx {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_req: Request, ctx: RouteCtx) {
+export const GET = withAutoGuest<RouteCtx>(async (_req, ctx) => {
   try {
     const session = await auth();
     const userId = session?.user?.id;
@@ -117,7 +118,7 @@ export async function GET(_req: Request, ctx: RouteCtx) {
       { status: 500 },
     );
   }
-}
+});
 
 function safeJsonParse(text: string): unknown {
   try {

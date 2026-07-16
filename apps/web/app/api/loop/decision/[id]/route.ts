@@ -13,6 +13,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
+import { withAutoGuest } from "@/lib/auth/with-auto-guest";
 import { applyDecisionAction, decisions, getDecision, log } from "@/lib/loop";
 import type { DecisionActionInput } from "@/lib/loop";
 
@@ -65,7 +66,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
 const MAX_DRAFT_BODY = 50_000;
 const MAX_DRAFT_SUBJECT = 998;
 
-export async function PATCH(req: Request, ctx: RouteCtx) {
+export const PATCH = withAutoGuest<RouteCtx>(async (req, ctx) => {
   try {
     const session = await auth();
     const userId = session?.user?.id;
@@ -138,4 +139,4 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
       { status: 500 },
     );
   }
-}
+});

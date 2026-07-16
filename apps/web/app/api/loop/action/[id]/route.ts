@@ -18,6 +18,7 @@
 import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { auth } from "@/app/(auth)/auth";
+import { withAutoGuest } from "@/lib/auth/with-auto-guest";
 import { deleteJob, getJob } from "@/lib/loop";
 import { db } from "@/lib/db";
 import { scheduledJobs } from "@/lib/db/schema";
@@ -29,7 +30,7 @@ interface RouteCtx {
   params: Promise<{ id: string }>;
 }
 
-export async function DELETE(_req: Request, ctx: RouteCtx) {
+export const DELETE = withAutoGuest<RouteCtx>(async (_req, ctx) => {
   try {
     const session = await auth();
     const userId = session?.user?.id;
@@ -93,4 +94,4 @@ export async function DELETE(_req: Request, ctx: RouteCtx) {
       { status: 500 },
     );
   }
-}
+});

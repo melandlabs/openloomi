@@ -8,6 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
+import { withAutoGuest } from "@/lib/auth/with-auto-guest";
 import { getPreferences, setPreferencesForUser } from "@/lib/loop";
 import type { LoopPreferences } from "@/lib/loop";
 
@@ -47,7 +48,7 @@ const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
  */
 const TIMEZONE_RE = /^[A-Za-z_]+(?:\/[A-Za-z_+\-]+){0,3}$/;
 
-export async function GET() {
+export const GET = withAutoGuest(async () => {
   try {
     const prefs = getPreferences();
     // Self-heal: even if the user never clicks Save, opening the Loop
@@ -72,9 +73,9 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});
 
-export async function PUT(req: Request) {
+export const PUT = withAutoGuest(async (req: Request) => {
   try {
     let body: Partial<LoopPreferences> = {};
     try {
@@ -188,4 +189,4 @@ export async function PUT(req: Request) {
       { status: 500 },
     );
   }
-}
+});

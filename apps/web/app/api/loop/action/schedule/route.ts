@@ -36,6 +36,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
+import { withAutoGuest } from "@/lib/auth/with-auto-guest";
 import { createJob, decisions, registerLoopHandlers } from "@/lib/loop";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +53,7 @@ const ACTION_VERB: Record<string, string> = {
   promote: "Promote",
 };
 
-export async function POST(req: Request) {
+export const POST = withAutoGuest(async (req: Request) => {
   try {
     const session = await auth();
     const userId = session?.user?.id;
@@ -124,4 +125,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});

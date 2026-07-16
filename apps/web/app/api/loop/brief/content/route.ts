@@ -22,15 +22,19 @@
 import { NextResponse } from "next/server";
 import { readBrief } from "@/lib/loop/brief";
 import { auth } from "@/app/(auth)/auth";
+import { withAutoGuest } from "@/lib/auth/with-auto-guest";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export const GET = withAutoGuest(async () => {
   try {
     // Auth is required so a user can only read their own brief; on a
     // single-user local install the file is the only one present so
-    // this is largely a smoke check.
+    // this is largely a smoke check. withAutoGuest transparently
+    // mints a guest on first-hit so a fresh Tauri install doesn't
+    // bounce through /guest-login (which would race-create one
+    // guest row per parallel API call).
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "auth required" }, { status: 401 });
@@ -43,4 +47,4 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});
