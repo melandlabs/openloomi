@@ -31,7 +31,6 @@ export function TokenSync() {
 
     const userId = session.user.id;
     if (lastUserId.current === userId) return; // same user, skip
-    lastUserId.current = userId;
 
     (async () => {
       try {
@@ -44,9 +43,13 @@ export function TokenSync() {
         if (!token) return;
 
         const existing = await invoke<string | null>("load_token");
-        if (existing === token) return; // already in sync
+        if (existing === token) {
+          lastUserId.current = userId;
+          return; // already in sync
+        }
 
         await invoke("save_token", { token });
+        lastUserId.current = userId;
         console.log("[TokenSync] token synced to ~/.openloomi/token");
       } catch (err) {
         console.warn("[TokenSync] failed:", err);

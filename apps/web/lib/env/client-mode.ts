@@ -4,16 +4,22 @@
  * For client-side components only, use @/lib/env/constants for server-side
  */
 
-const DEPLOYMENT_MODE =
-  typeof process !== "undefined" &&
-  (process.env.TAURI_MODE === "tauri" || process.env.IS_TAURI === "true")
-    ? "tauri"
-    : "server";
+function hasTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI__" in window;
+}
+
+function hasTauriEnv(): boolean {
+  return (
+    typeof process !== "undefined" &&
+    (typeof process.env.TAURI_MODE === "string" ||
+      process.env.IS_TAURI === "true")
+  );
+}
 
 export function isTauriMode(): boolean {
-  return DEPLOYMENT_MODE === "tauri";
+  return hasTauriRuntime() || hasTauriEnv();
 }
 
 export function isServerMode(): boolean {
-  return DEPLOYMENT_MODE === "server";
+  return !isTauriMode();
 }
