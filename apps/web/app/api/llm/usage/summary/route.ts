@@ -84,9 +84,7 @@ async function renderSummaryResponse(userId: string): Promise<NextResponse> {
   // summary endpoint reports the same identity as the SSE caller.
   await auth().catch(() => null);
 
-  const providerContext = await getUserLlmProviderEarliestEnabledSince(
-    userId,
-  );
+  const providerContext = await getUserLlmProviderEarliestEnabledSince(userId);
 
   // Non-claude runtimes (codex/opencode/hermes/openclaw) ship their own
   // CLI auth and don't require a `user_llm_api_settings` row. When the

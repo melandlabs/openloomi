@@ -56,8 +56,7 @@ function newAnonId(): string {
   // and trivially distinguishable from any other `email-prefix` we
   // might use elsewhere. Prefixed with `anon-` so DB inspection can
   // tell guest emails apart from regular users at a glance.
-  const hex = (globalThis.crypto?.randomUUID?.() ?? "")
-    .replace(/-/g, "");
+  const hex = (globalThis.crypto?.randomUUID?.() ?? "").replace(/-/g, "");
   if (hex.length === 32) return `anon-${hex}`;
   // Fallback for runtimes without global crypto — extremely unlikely
   // in practice (Node 19+ and the Edge runtime both have it) but we
