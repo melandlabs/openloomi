@@ -124,6 +124,9 @@ export * from "./routing";
 // Runtime
 export * from "./runtime";
 
+// Runtime Goal and instruction protocol
+export * from "./runtime-instructions";
+
 // Native agent runner
 export * from "./native-runner";
 

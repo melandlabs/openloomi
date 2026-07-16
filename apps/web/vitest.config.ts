@@ -106,6 +106,12 @@ export default defineConfig({
         replacement: alias("../../packages/ai/src/agent/runtime/index.ts"),
       },
       {
+        find: "@openloomi/ai/agent/runtime-instructions",
+        replacement: alias(
+          "../../packages/ai/src/agent/runtime-instructions/index.ts",
+        ),
+      },
+      {
         find: "@openloomi/ai/agent/sandbox",
         replacement: alias("../../packages/ai/src/agent/sandbox"),
       },
