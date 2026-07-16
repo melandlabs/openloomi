@@ -28,6 +28,25 @@ vi.mock("@/lib/auth/dual-auth", () => ({
   },
 }));
 
+// Auto-guest bootstrap is the new first-hit fallback when getAuthUser
+// rejects. Mirrored as a hoisted mock so individual tests can flip the
+// outcome — without it, ensureGuestSession would try to hit the real DB
+// and FS during unit runs. `null` simulates a failed bootstrap (the
+// route should then 401).
+const autoGuestState = vi.hoisted(() => ({
+  session: null as { user: { id: string; email: string | null } } | null,
+  minted: false,
+}));
+
+vi.mock("@/lib/auth/auto-guest", () => ({
+  ensureGuestSession: async () => ({
+    session: autoGuestState.session,
+    attachSessionCookies: () => {},
+    minted: autoGuestState.minted,
+    guestEmail: autoGuestState.session?.user?.email ?? null,
+  }),
+}));
+
 const dbState = vi.hoisted(() => ({
   providerSince: null as Date | null,
   currentProvider: undefined as
@@ -120,17 +139,46 @@ describe("GET /api/llm/usage/summary", () => {
     summaryState.error = undefined;
     dualAuthState.reject = false;
     dualAuthState.user = { id: "user-llm-usage", type: "regular" };
+    // Default: auto-guest succeeds with the same dual-auth user so the
+    // existing positive-path tests keep working unchanged.
+    autoGuestState.session = dualAuthState.user
+      ? { user: { id: dualAuthState.user.id, email: null } }
+      : null;
+    autoGuestState.minted = false;
     agentProviderState.currentDefaultProvider = "claude";
   });
 
   test("returns 401 when unauthenticated", async () => {
+    // Simulate the dual-auth reject path AND a failed auto-guest
+    // bootstrap — the route should still 401 because no user identity
+    // is recoverable.
     dualAuthState.reject = true;
+    autoGuestState.session = null;
     const res = await GET(
       new Request("http://localhost/api/llm/usage/summary"),
     );
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.error).toBe("Unauthorized");
+  });
+
+  test("auto-mints guest and returns 200 when dual-auth rejects but bootstrap succeeds", async () => {
+    // This mirrors the fresh `pnpm tauri:dev` install path: the cookie
+    // jar is empty so `getAuthUser` rejects, but `ensureGuestSession`
+    // mints a stable anon-id and returns a session — the route must
+    // NOT bounce through /guest-login or 401 here.
+    dualAuthState.reject = true;
+    autoGuestState.session = {
+      user: { id: "guest-bootstrap-1", email: "anon-x@guest.local" },
+    };
+    autoGuestState.minted = true;
+    const res = await GET(
+      new Request("http://localhost/api/llm/usage/summary"),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // The minted guest identity must be the one used downstream.
+    expect(body.configured).toBe(false);
   });
 
   test("returns configured=false with zero totals when no provider", async () => {
