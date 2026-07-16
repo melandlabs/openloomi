@@ -18,7 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const BRIDGE_VERSION = "0.7.7";
+const BRIDGE_VERSION = "0.7.8";
 const PLUGIN_PHASE = "runtime-provider-readiness";
 const COMMAND_TIMEOUT_MS = 5000;
 const RUN_TIMEOUT_MS = 120000;
@@ -2553,7 +2553,7 @@ function summarizeRunLock(lock) {
 }
 
 function getOpenLoomiCtlChildEnv() {
-  // Do not synthesize OPENLOOMI_API_URL from the readiness probe. In v0.7.7,
+  // Do not synthesize OPENLOOMI_API_URL from the readiness probe. In v0.7.8,
   // setting it selects the legacy HTTP compatibility path and bypasses the
   // packaged CLI's direct native-agent runner.
   //

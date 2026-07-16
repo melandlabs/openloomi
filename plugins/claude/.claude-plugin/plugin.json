@@ -1,6 +1,6 @@
 {
   "name": "openloomi",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "description": "Connect Claude Code to your local OpenLoomi runtime. One-command install, sync ANTHROPIC_API_KEY/BASE_URL/MODEL into OpenLoomi's AI provider, mirror Claude's lifecycle onto the Loomi Pet, and auto-archive every Stop into your OpenLoomi memory. Talks to your local OpenLoomi over HTTP and the OpenLoomi helper CLI; no secret leaves the env.",
   "author": { "name": "OpenLoomi" },
   "homepage": "https://openloomi.ai",

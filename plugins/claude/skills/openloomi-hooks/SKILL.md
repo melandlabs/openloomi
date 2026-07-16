@@ -1,8 +1,6 @@
 ---
 name: openloomi-hooks
 description: "OpenLoomi × Claude Code hooks installer. Use when the user wants Claude Code's lifecycle (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SubagentStart, SubagentStop, Notification) to mirror onto the Loomi Pet, or wants to auto-archive every Stop into OpenLoomi memory. Triggers: install hooks, /openloomi:hooks, hooks install, hooks uninstall, hooks status, mirror claude on pet, auto-archive stop."
-metadata:
-  version: 0.7.7
 allowed-tools: Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/loomi-bridge.mjs *)
 ---
 

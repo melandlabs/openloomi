@@ -2,8 +2,6 @@
 name: openloomi-handoff
 description: "Use OpenLoomi handoff workflows from Codex to send current tasks to Loomi for follow-up, reminders, delegation, or later attention. Trigger when users ask to hand off, delegate, queue, remind, or follow up through Loomi."
 allowed-tools: "Bash(node $SKILL_DIR/../../scripts/loomi-bridge.mjs *)"
-metadata:
-  version: 0.7.7
 ---
 
 # OpenLoomi Handoff

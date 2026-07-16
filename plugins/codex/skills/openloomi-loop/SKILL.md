@@ -2,8 +2,6 @@
 name: openloomi-loop
 description: "Use OpenLoomi loop workflows from Codex for attention loops, prioritization, wrap-up, follow-up, and work-state routing. Trigger when users ask Loomi to plan, prioritize, monitor, loop, summarize, follow up on work, register a loop type / decision type, add a custom Composio-backed signal channel, register a deterministic classifier rule, or dry-run a loop rule."
 allowed-tools: "Bash(node $SKILL_DIR/../../scripts/loomi-bridge.mjs *)"
-metadata:
-  version: 0.7.7
 ---
 
 # OpenLoomi Loop

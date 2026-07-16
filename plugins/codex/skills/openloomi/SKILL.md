@@ -2,8 +2,6 @@
 name: openloomi
 description: "Use local OpenLoomi from Codex. Triggers: Loomi, OpenLoomi, personal assistant, memory, workspace context, setup."
 allowed-tools: "Bash(node $SKILL_DIR/../../scripts/loomi-bridge.mjs *)"
-metadata:
-  version: 0.7.7
 ---
 
 # OpenLoomi

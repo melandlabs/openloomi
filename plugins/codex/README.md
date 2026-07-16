@@ -132,7 +132,7 @@ node plugins/codex/scripts/loomi-bridge.mjs version
 ```json
 {
   "name": "openloomi-codex-bridge",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "pluginPhase": "runtime-provider-readiness",
   "commands": [
     "codex-runtime-info",
@@ -619,7 +619,7 @@ For source checkouts, check project markers and likely CLI locations:
   "mode": "packaged | source | unconfigured",
   "installed": true,
   "ctlPath": "<resolved openloomi-ctl path>",
-  "version": "openloomi-ctl 0.7.7",
+  "version": "openloomi-ctl 0.7.8",
   "tokenPresent": true,
   "session": {
     "tokenPresent": true,
