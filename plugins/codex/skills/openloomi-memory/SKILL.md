@@ -7,8 +7,9 @@ allowed-tools: "Bash(node $SKILL_DIR/../../scripts/loomi-bridge.mjs *)"
 # OpenLoomi Memory
 
 Use this skill as a thin wrapper for OpenLoomi memory workflows. Do not read or
-write OpenLoomi memory files directly from Codex, and do not copy memory
-implementation details into this plugin.
+write OpenLoomi memory files directly from Codex, do not search source code for
+memory implementation details, and do not fall back to unrelated OpenLoomi APIs
+such as RAG, messages, or chat-insights.
 
 First, load workflow guidance:
 
@@ -26,15 +27,16 @@ If `ready: false`, follow the reported `nextAction`. Connector setup and
 guest/session initialization must happen through OpenLoomi-owned surfaces, not
 Codex chat.
 
-When `ready: true`, wrap the user request with the `taskPromptPrefix` returned
-by `workflow-guidance`, then pass that runtime-safe prompt over stdin to the
-bridge:
+When `ready: true`, pass the original user memory request over stdin to the
+bridge-owned memory search command:
 
 ```bash
-printf "%s" "<taskPromptPrefix>\n\nOriginal user request: <user memory request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
+printf "%s" "<user memory request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" memory-search
 ```
 
-Do not send wording that asks the inner runtime to invoke Codex plugins,
-OpenLoomi plugins, skills, shell commands, or `loomi-bridge`. Only show memory
-content when OpenLoomi runtime returns it for the requested task. Keep secrets
-and connector credentials out of prompts, argv, stdout, and stderr.
+If `memory-search` returns `MEMORY_NOT_FOUND`, report that OpenLoomi did not
+return a matching memory result. Do not retry through `/api/rag/search`,
+`/api/messages`, `/api/chat-insights`, source-code search, direct file reads, or
+the generic `run` command unless the user explicitly asks to debug internals.
+Only show memory content when OpenLoomi returns it for the requested task. Keep
+secrets and connector credentials out of prompts, argv, stdout, and stderr.

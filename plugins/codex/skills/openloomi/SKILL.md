@@ -96,6 +96,29 @@ Use the thin wrapper skills when the user specifically asks for loop, memory,
 connector readiness, or handoff workflows. The plugin must not copy OpenLoomi
 connector, memory, loop, scheduling, or handoff persistence logic into Codex.
 
+When `setup-status` returns `ready: true`, run a one-shot non-memory task by
+passing the user task over stdin:
+
+```bash
+printf "%s" "<user task>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
+```
+
+For memory recall/search requests, use the dedicated memory command instead of
+the generic one-shot runner:
+
+```bash
+printf "%s" "<user memory request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" memory-search
+```
+
+The bridge invokes `openloomi-ctl --one-shot --stdin --json --permission-mode
+deny` by default. Only pass `--permission-mode ask` or `--permission-mode allow`
+when the user explicitly asks for a different permission mode.
+
+If no token exists yet, `run` first attempts to initialize an OpenLoomi guest
+session through the local OpenLoomi API. If that cannot complete, follow the
+reported `SESSION_INITIALIZATION_REQUIRED` next action instead of asking for a
+login token in Codex chat.
+
 ---
 
 ## Launching the desktop app with the Codex runtime

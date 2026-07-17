@@ -16,8 +16,10 @@ import { createHash } from "node:crypto";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
+const BRIDGE_SCRIPT_PATH = fileURLToPath(import.meta.url);
+const BRIDGE_DIR = path.dirname(BRIDGE_SCRIPT_PATH);
 const BRIDGE_VERSION = "0.7.10";
 const PLUGIN_PHASE = "runtime-provider-readiness";
 const COMMAND_TIMEOUT_MS = 5000;
@@ -30,7 +32,10 @@ const SESSION_BOOTSTRAP_POLL_MS = 2000;
 const SESSION_API_TIMEOUT_MS = 5000;
 const API_PROBE_TIMEOUT_MS = 1000;
 const CONNECTOR_STATUS_TIMEOUT_MS = 2500;
+const MEMORY_SEARCH_TIMEOUT_MS = 10000;
 const MAX_COMMAND_OUTPUT = 4096;
+const RUN_LOCK_TTL_MS = RUN_TIMEOUT_MS + 60_000;
+const MAX_MEMORY_CONTEXT_CHARS = 20000;
 const DEBUG_DISCOVERY = process.env.OPENLOOMI_DEBUG_DISCOVERY === "1";
 const MONITORING_CONNECTOR_IDS = new Set([
   "gmail",
@@ -88,6 +93,8 @@ const COMMANDS = new Set([
   "initialize-session",
   "install-openloomi",
   "install-instructions",
+  "memory-recall",
+  "memory-search",
   "pet",
   "set-codex-runtime-env",
   "setup",
@@ -145,8 +152,9 @@ const WORKFLOW_GUIDANCE = [
       "Guide memory search, recall, write, and context workflows through OpenLoomi-owned memory surfaces.",
     wrapperSkill: "openloomi-memory",
     readyRequired: true,
-    bridgeCommand: "run",
-    taskPromptPrefix: `${RUNTIME_SAFE_PROMPT_GUARD} Treat the user request as a memory/context request. Return only the runtime result; do not read or write memory files directly.`,
+    bridgeCommand: "memory-search",
+    taskPromptPrefix:
+      "Use the memory-search bridge command with the original user memory request as stdin. Do not call /api/rag/search, /api/messages, /api/chat-insights, source search, shell, skills, Codex plugins, OpenLoomi plugins, or loomi-bridge from the runtime.",
     nextActionsWhenBlocked: [
       "install_openloomi",
       "initialize_openloomi_session",
@@ -155,6 +163,7 @@ const WORKFLOW_GUIDANCE = [
     ],
     safety: [
       "Do not read or write OpenLoomi memory files directly from the Codex plugin.",
+      "Do not fall back to RAG, messages, chat-insights, source code search, or direct memory-file reads when memory-search returns no results.",
       "Do not expose memory contents unless OpenLoomi runtime returns them for the requested task.",
     ],
   },
@@ -1386,7 +1395,9 @@ function workflowGuidance(args) {
       runCommand:
         workflow.bridgeCommand === "run"
           ? 'printf "%s" "<task>" | loomi-bridge run'
-          : workflow.bridgeCommand,
+          : workflow.bridgeCommand === "memory-search"
+            ? 'printf "%s" "<query>" | loomi-bridge memory-search'
+            : workflow.bridgeCommand,
     },
   });
 }
@@ -1459,9 +1470,11 @@ function parseFlags(args) {
     confirm: false,
     downloadOnly: false,
     launch: false,
+    limit: null,
     model: null,
     provider: null,
     sha256: null,
+    sources: null,
     workflow: null,
   };
 
@@ -1516,6 +1529,38 @@ function parseFlags(args) {
       continue;
     }
 
+    if (arg === "--limit") {
+      flags.limit = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--limit=")) {
+      flags.limit = arg.slice("--limit=".length);
+      continue;
+    }
+
+    if (arg === "--sources") {
+      flags.sources = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--sources=")) {
+      flags.sources = arg.slice("--sources=".length);
+      continue;
+    }
+
+    if (arg === "--permission-mode") {
+      flags.permissionMode = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--permission-mode=")) {
+      flags.permissionMode = arg.slice("--permission-mode=".length);
+      continue;
+    }
     if (arg === "--artifact-url") {
       flags.artifactUrl = args[index + 1] || null;
       index += 1;
@@ -2377,6 +2422,262 @@ function getInstallerCommandLabel(filePath) {
   const extension = path.extname(filePath).toLowerCase();
 
   return extension ? `installer${extension}` : "installer";
+}
+
+// `openloomi-ctl` argv. Keeps `ask` and `deny` unchanged so the bridge's
+// public contract stays stable while the CLI's canonical contract remains
+// `bypass | ask | deny` (see apps/web/src-tauri/src/cli.rs). Unknown or
+// omitted values fall back to `deny` so the default cannot escalate.
+const BRIDGE_PERMISSION_MODES = new Set(["allow", "ask", "deny"]);
+const BRIDGE_TO_CLI_PERMISSION_MODE = Object.freeze({
+  allow: "bypass",
+  ask: "ask",
+  deny: "deny",
+});
+
+function getPermissionMode(value) {
+  if (BRIDGE_PERMISSION_MODES.has(value)) {
+    return BRIDGE_TO_CLI_PERMISSION_MODE[value];
+  }
+
+  return "deny";
+}
+
+function runOpenLoomiOneShot({ ctlPath, permissionMode, prompt }) {
+  return runCommandWithInput(
+    ctlPath,
+    ["--one-shot", "--stdin", "--json", "--permission-mode", permissionMode],
+    prompt,
+    RUN_TIMEOUT_MS,
+    {
+      env: getOpenLoomiCtlChildEnv(),
+    },
+  );
+}
+
+async function runBridgeMemorySearch(query, setup = {}) {
+  const { module, path: helperPath } =
+    await loadBridgeMemorySearchModule(setup);
+  const result = module.searchMemoryPath({
+    query,
+    searchInFiles: true,
+  });
+
+  return {
+    helperPath,
+    isError: result?.isError === true,
+    content:
+      typeof result?.content === "string"
+        ? result.content
+        : JSON.stringify(result ?? {}),
+  };
+}
+
+async function loadBridgeMemorySearchModule(setup = {}) {
+  const candidates = listBridgeMemorySearchCandidates(setup);
+  for (const candidate of candidates) {
+    if (!isFile(candidate)) {
+      continue;
+    }
+
+    const module = await import(pathToFileURL(candidate).href);
+    if (typeof module.searchMemoryPath === "function") {
+      return { module, path: candidate };
+    }
+  }
+
+  throw new Error(
+    `Unable to locate OpenLoomi memory-path-search helper. Checked: ${candidates.join(", ")}`,
+  );
+}
+
+function listBridgeMemorySearchCandidates(setup = {}) {
+  const candidates = [];
+  const addFile = (filePath) => {
+    if (filePath && !candidates.includes(filePath)) {
+      candidates.push(filePath);
+    }
+  };
+  const addWebDir = (webDir) => {
+    if (!webDir) return;
+    addFile(
+      path.join(webDir, "lib", "ai", "mcp", "tools", "memory-path-search.js"),
+    );
+    addFile(path.join(webDir, "scripts", "memory-path-search.js"));
+  };
+  const addRoot = (root) => {
+    if (!root) return;
+    addWebDir(path.join(root, "apps", "web"));
+    addWebDir(root);
+    addWebDir(path.join(root, ".next", "standalone", "apps", "web"));
+    addWebDir(path.join(root, "_up_", ".next", "standalone", "apps", "web"));
+  };
+
+  addFile(process.env.OPENLOOMI_MEMORY_PATH_SEARCH);
+
+  if (process.env.OPENLOOMI_CODEX_MEMORY_MCP) {
+    const mcpDir = path.dirname(
+      expandHome(process.env.OPENLOOMI_CODEX_MEMORY_MCP),
+    );
+    addFile(path.join(mcpDir, "memory-path-search.js"));
+    addFile(
+      path.join(
+        mcpDir,
+        "..",
+        "lib",
+        "ai",
+        "mcp",
+        "tools",
+        "memory-path-search.js",
+      ),
+    );
+  }
+
+  addRoot(expandHome(process.env.OPENLOOMI_REPO_DIR || ""));
+  addRoot(process.cwd());
+  addRoot(path.resolve(BRIDGE_DIR, "..", ".."));
+  addRoot(path.resolve(BRIDGE_DIR, "..", "..", ".."));
+
+  if (setup.ctlPath) {
+    let current = path.dirname(path.resolve(setup.ctlPath));
+    for (let index = 0; index < 8; index += 1) {
+      addRoot(current);
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+
+  return candidates;
+}
+
+function acquireRunLock() {
+  const lockPath = getRunLockPath();
+  const now = Date.now();
+  const lock = {
+    id: `${process.pid}-${now}-${Math.random().toString(36).slice(2)}`,
+    pid: process.pid,
+    startedAt: now,
+    command: "run",
+  };
+
+  mkdirSync(path.dirname(lockPath), { recursive: true });
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const existing = readRunLock(lockPath);
+
+    if (existing && !isRunLockStale(existing, now)) {
+      return {
+        acquired: false,
+        lockPath,
+        existing,
+      };
+    }
+
+    if (existing) {
+      removeRunLock(lockPath);
+    }
+
+    try {
+      writeFileSync(lockPath, JSON.stringify(lock), {
+        flag: "wx",
+        mode: 0o600,
+      });
+
+      return {
+        acquired: true,
+        lockPath,
+        lock,
+      };
+    } catch (error) {
+      if (error?.code !== "EEXIST") {
+        throw error;
+      }
+    }
+  }
+
+  return {
+    acquired: false,
+    lockPath,
+    existing: readRunLock(lockPath),
+  };
+}
+
+function releaseRunLock(acquiredLock) {
+  if (!acquiredLock?.acquired) {
+    return;
+  }
+
+  const current = readRunLock(acquiredLock.lockPath);
+  if (current?.id === acquiredLock.lock.id) {
+    removeRunLock(acquiredLock.lockPath);
+  }
+}
+
+function getRunLockPath() {
+  return path.join(os.homedir(), ".openloomi", "codex-plugin-run.lock");
+}
+
+function readRunLock(lockPath) {
+  if (!isFile(lockPath)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(readFileText(lockPath));
+  } catch {
+    return {
+      id: "unreadable",
+      startedAt: 0,
+      command: "run",
+    };
+  }
+}
+
+function isRunLockStale(lock, now = Date.now()) {
+  const startedAt = Number(lock?.startedAt || 0);
+  return !startedAt || now - startedAt > getRunLockTtlMs();
+}
+
+function getRunLockTtlMs() {
+  const configured = Number(process.env.OPENLOOMI_CODEX_BRIDGE_RUN_LOCK_TTL_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : RUN_LOCK_TTL_MS;
+}
+
+function removeRunLock(lockPath) {
+  try {
+    unlinkSync(lockPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+function summarizeRunLock(lock) {
+  if (!lock) {
+    return null;
+  }
+
+  const startedAt = Number(lock.startedAt || 0);
+  return {
+    pid: Number(lock.pid || 0) || null,
+    command: lock.command || "run",
+    ageMs: startedAt ? Math.max(0, Date.now() - startedAt) : null,
+    stale: isRunLockStale(lock),
+  };
+}
+
+function getOpenLoomiCtlChildEnv() {
+  // Do not synthesize OPENLOOMI_API_URL from the readiness probe. In v0.7.6,
+  // setting it selects the legacy HTTP compatibility path and bypasses the
+  // packaged CLI's direct native-agent runner.
+  //
+  // An explicit caller-provided OPENLOOMI_API_URL is already inherited by the
+  // child through process.env in runCommandWithInput.
+  return {};
 }
 
 async function initializeSession() {
@@ -4159,6 +4460,323 @@ async function setup(args) {
   });
 }
 
+async function run() {
+  const flags = parseFlags(process.argv.slice(3));
+  const prompt = await readStdin();
+
+  if (!hasValue(prompt)) {
+    writeJson(
+      {
+        ready: false,
+        nextAction: "provide_stdin_prompt",
+        reason: "PROMPT_REQUIRED",
+        message:
+          "Pass the task prompt over stdin. Do not place long prompts or secrets in command-line arguments.",
+      },
+      1,
+    );
+    return;
+  }
+
+  let setup = await buildSetupStatus();
+
+  if (!setup.ready) {
+    writeJson(
+      {
+        ...setup,
+        ran: false,
+        command: "run",
+        message:
+          "OpenLoomi is not ready for one-shot execution. Complete the reported nextAction first.",
+      },
+      1,
+    );
+    return;
+  }
+
+  const session = await ensureOpenLoomiSession();
+
+  if (!session.ready) {
+    writeJson(
+      {
+        ready: false,
+        ran: false,
+        command: "run",
+        nextAction: session.nextAction,
+        reason: session.reason,
+        message: session.message,
+        session: session.session,
+      },
+      1,
+    );
+    return;
+  }
+
+  if (setup.sessionInitializationRequired) {
+    setup = await buildSetupStatus();
+
+    if (!setup.ready) {
+      writeJson(
+        {
+          ...setup,
+          ran: false,
+          command: "run",
+          message:
+            "OpenLoomi session is initialized, but setup is still not ready for one-shot execution.",
+        },
+        1,
+      );
+      return;
+    }
+  }
+
+  const permissionMode = getPermissionMode(flags.permissionMode);
+  const runLock = acquireRunLock();
+
+  if (!runLock.acquired) {
+    writeJson(
+      {
+        ready: false,
+        ran: false,
+        command: "run",
+        nextAction: "return_without_bridge",
+        reason: "RECURSION_GUARD",
+        message:
+          "A loomi-bridge run is already active. Refusing nested OpenLoomi bridge invocation.",
+        lock: summarizeRunLock(runLock.existing),
+      },
+      1,
+    );
+    return;
+  }
+
+  let result;
+
+  try {
+    result = await runOpenLoomiOneShot({
+      ctlPath: setup.ctlPath,
+      permissionMode,
+      prompt,
+    });
+  } finally {
+    releaseRunLock(runLock);
+  }
+
+  if (result.exitCode !== 0) {
+    writeJson(
+      {
+        ready: false,
+        ran: true,
+        ...normalizeRunFailure(result),
+      },
+      1,
+    );
+    return;
+  }
+
+  writeJson({
+    ready: true,
+    ran: true,
+    nextAction: "done",
+    reason: "RUN_COMPLETE",
+    result: parseJsonOrText(result.stdout),
+    openloomi: {
+      exitCode: result.exitCode,
+      signal: result.signal,
+      stderrPresent: hasValue(result.stderr),
+    },
+  });
+}
+
+async function memorySearch(command = "memory-search") {
+  const flags = parseFlags(process.argv.slice(3));
+  const query = (await readStdin()).trim();
+
+  if (!hasValue(query)) {
+    writeJson(
+      {
+        ready: false,
+        ran: false,
+        command,
+        nextAction: "provide_memory_query",
+        reason: "QUERY_REQUIRED",
+        message:
+          "Pass the memory query over stdin. Do not place memory content or secrets in command-line arguments.",
+      },
+      1,
+    );
+    return;
+  }
+
+  let setup = await buildSetupStatus();
+
+  if (!setup.ready) {
+    writeJson(
+      {
+        ...setup,
+        ran: false,
+        command,
+        message:
+          "OpenLoomi is not ready for native memory execution. Complete the reported nextAction first.",
+      },
+      1,
+    );
+    return;
+  }
+
+  const session = await ensureOpenLoomiSession();
+
+  if (!session.ready) {
+    writeJson(
+      {
+        ready: false,
+        ran: false,
+        command,
+        nextAction: session.nextAction,
+        reason: session.reason,
+        message: session.message,
+        session: session.session,
+      },
+      1,
+    );
+    return;
+  }
+
+  if (setup.sessionInitializationRequired) {
+    setup = await buildSetupStatus();
+
+    if (!setup.ready) {
+      writeJson(
+        {
+          ...setup,
+          ran: false,
+          command,
+          message:
+            "OpenLoomi session is initialized, but setup is still not ready for native memory execution.",
+        },
+        1,
+      );
+      return;
+    }
+  }
+
+  const permissionMode = getPermissionMode(flags.permissionMode);
+  let memorySearchResult;
+
+  try {
+    memorySearchResult = await runBridgeMemorySearch(query, setup);
+  } catch (error) {
+    writeJson(
+      {
+        ready: false,
+        ran: false,
+        command,
+        query,
+        nextAction: "inspect_memory_helper",
+        reason: "MEMORY_HELPER_UNAVAILABLE",
+        message: error instanceof Error ? error.message : String(error),
+      },
+      1,
+    );
+    return;
+  }
+
+  const runLock = acquireRunLock();
+
+  if (!runLock.acquired) {
+    writeJson(
+      {
+        ready: false,
+        ran: false,
+        command,
+        nextAction: "return_without_bridge",
+        reason: "RECURSION_GUARD",
+        message:
+          "A loomi-bridge run is already active. Refusing nested OpenLoomi bridge invocation.",
+        lock: summarizeRunLock(runLock.existing),
+      },
+      1,
+    );
+    return;
+  }
+
+  let result;
+
+  try {
+    result = await runOpenLoomiOneShot({
+      ctlPath: setup.ctlPath,
+      permissionMode,
+      prompt: buildMemoryRuntimePrompt(query, memorySearchResult),
+    });
+  } finally {
+    releaseRunLock(runLock);
+  }
+
+  if (result.exitCode !== 0) {
+    writeJson(
+      {
+        ready: false,
+        ran: true,
+        command,
+        query,
+        ...normalizeRunFailure(result),
+      },
+      1,
+    );
+    return;
+  }
+
+  writeJson({
+    ready: true,
+    ran: true,
+    command,
+    nextAction: "done",
+    reason: "MEMORY_RUNTIME_COMPLETE",
+    query,
+    result: parseJsonOrText(result.stdout),
+    memorySearch: {
+      source: "bridge",
+      isError: memorySearchResult.isError,
+      contentLength: memorySearchResult.content.length,
+    },
+    openloomi: {
+      exitCode: result.exitCode,
+      signal: result.signal,
+      stderrPresent: hasValue(result.stderr),
+    },
+  });
+}
+
+function buildMemoryRuntimePrompt(query, memorySearchResult) {
+  const memoryContent = truncateMemoryContext(memorySearchResult.content);
+  return [
+    "You are inside the OpenLoomi native runtime for a memory recall/search request.",
+    "OpenLoomi bridge has already searched local memory using the read-only searchMemoryPath helper.",
+    "Answer only from the memory search result below and the user's request.",
+    "Do not call searchMemoryPath, /api/memory/search, /api/rag/search, /api/messages, /api/chat-insights, source-code search, shell commands, Codex plugins, OpenLoomi plugins, or loomi-bridge.",
+    "If the memory search result says there are no matches or the memory directory is missing, say that no relevant local memory was found.",
+    "Return only the final answer for the user request.",
+    "",
+    "<openloomi_memory_search_result>",
+    memoryContent,
+    "</openloomi_memory_search_result>",
+    "",
+    "User memory request:",
+    query,
+  ].join("\n");
+}
+
+function truncateMemoryContext(content) {
+  if (content.length <= MAX_MEMORY_CONTEXT_CHARS) {
+    return content;
+  }
+
+  return `${content.slice(
+    0,
+    MAX_MEMORY_CONTEXT_CHARS,
+  )}\n\n[OpenLoomi memory search result truncated to ${MAX_MEMORY_CONTEXT_CHARS} characters.]`;
+}
+
 function help() {
   writeJson({
     usage: "node scripts/loomi-bridge.mjs <command>",
@@ -5297,6 +5915,10 @@ async function main() {
       break;
     case "install-instructions":
       installInstructions();
+      break;
+    case "memory-recall":
+    case "memory-search":
+      await memorySearch(command);
       break;
     case "pet":
       await petCommand(process.argv.slice(3));

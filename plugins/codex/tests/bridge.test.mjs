@@ -12,7 +12,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFile, execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { join, dirname, delimiter } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,25 +79,32 @@ function runOutcomeWithInput(args, env, input) {
   }
 }
 
-// Async counterpart: do NOT use this when an in-process server is
-// listening for the bridge to call into — execFileSync blocks the
-// Node event loop and starves the server.
-async function runOutcomeWithInputAsync(args, env, input) {
-  try {
-    const { stdout } = await execFileAsync("node", [BRIDGE, ...args], {
-      encoding: "utf8",
+function runOutcomeWithInputAsync(args, env = {}, input = "") {
+  return new Promise((resolve) => {
+    const child = spawn("node", [BRIDGE, ...args], {
       env: { ...process.env, ...env },
-      input,
       cwd: env.BRIDGE_TEST_CWD || process.cwd(),
+      stdio: ["pipe", "pipe", "pipe"],
     });
-    return { code: 0, stdout, stderr: "" };
-  } catch (e) {
-    return {
-      code: e.status ?? 1,
-      stdout: String(e.stdout ?? ""),
-      stderr: String(e.stderr ?? ""),
-    };
-  }
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("close", (code) => {
+      resolve({ code: code ?? 1, stdout, stderr });
+    });
+    child.on("error", (error) => {
+      resolve({ code: 1, stdout, stderr: String(error) });
+    });
+    child.stdin.end(input);
+  });
 }
 
 function runJson(args, env) {
@@ -232,6 +239,7 @@ async function withLocalApiServer(handler, fn) {
         method: req.method,
         url: req.url,
         authorization: req.headers.authorization || null,
+        cookie: req.headers.cookie || null,
         json,
       };
       requests.push(request);
@@ -379,6 +387,8 @@ test("version returns bridge identity and command list", () => {
     "install-instructions",
     "initialize-session",
     "configure-ai-provider",
+    "memory-recall",
+    "memory-search",
     "workflow-guidance",
     "version",
     "help",
@@ -837,11 +847,7 @@ test("workflow-guidance lists the four openloomi workflows", () => {
 // -----------------------------------------------------------------------------
 
 test("workflow-guidance uses runtime-safe run prompts for agent workflows", () => {
-  for (const workflow of [
-    "openloomi-loop",
-    "openloomi-memory",
-    "openloomi-handoff",
-  ]) {
+  for (const workflow of ["openloomi-loop", "openloomi-handoff"]) {
     const j = runJson(["workflow-guidance", "--workflow", workflow]);
     const prefix = j.workflow?.taskPromptPrefix || "";
     assert.match(prefix, /already inside the OpenLoomi runtime/);
@@ -849,6 +855,194 @@ test("workflow-guidance uses runtime-safe run prompts for agent workflows", () =
     assert.match(prefix, /loomi-bridge/);
     assert.doesNotMatch(prefix, /^Use OpenLoomi .* workflow/);
   }
+});
+
+test("workflow-guidance routes memory workflow through memory-search", () => {
+  const j = runJson(["workflow-guidance", "--workflow", "openloomi-memory"]);
+  assert.equal(j.workflow?.bridgeCommand, "memory-search");
+  assert.match(j.workflow?.runCommand || "", /loomi-bridge memory-search/);
+  assert.match(
+    j.workflow?.taskPromptPrefix || "",
+    /memory-search bridge command/,
+  );
+  assert.match(j.workflow?.taskPromptPrefix || "", /\/api\/rag\/search/);
+  assert.ok(
+    j.workflow?.safety?.some((item) =>
+      item.includes("Do not fall back to RAG"),
+    ),
+    "memory workflow should forbid fallback API/source-search paths",
+  );
+});
+
+test("memory-search requires a stdin query", () => {
+  withFakeHome((env) => {
+    const r = runOutcomeWithInput(["memory-search"], env, "");
+    assert.equal(r.code, 1);
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.ready, false);
+    assert.equal(j.ran, false);
+    assert.equal(j.reason, "QUERY_REQUIRED");
+    assert.equal(j.nextAction, "provide_memory_query");
+  });
+});
+
+test("memory-search posts to OpenLoomi memory API with local session cookie", async () => {
+  await withFakeHomeAsync(async (env) => {
+    const token = "fake-openloomi-memory-token";
+
+    await withLocalApiServer(
+      (req, res, request) => {
+        const url = req.url || "/";
+
+        if (url === "/" || url === "") {
+          writeJsonResponse(res, 200, { ok: true });
+          return;
+        }
+
+        if (url.startsWith("/api/native/providers")) {
+          writeJsonResponse(res, 200, {
+            defaultAgent: "codex",
+            agents: [{ type: "codex", name: "Codex CLI" }],
+          });
+          return;
+        }
+
+        if (url.startsWith("/api/auth/set-token")) {
+          assert.match(url, /token=fake-openloomi-memory-token/);
+          writeJsonResponse(
+            res,
+            200,
+            { ok: true },
+            {
+              "Set-Cookie": "authjs.session-token=fake-memory-session; Path=/",
+            },
+          );
+          return;
+        }
+
+        if (url.startsWith("/api/memory/search")) {
+          assert.equal(req.method, "POST");
+          assert.equal(
+            request.cookie,
+            "authjs.session-token=fake-memory-session",
+          );
+          assert.equal(request.json.query, "red hat test marker");
+          assert.deepEqual(request.json.sources, ["memory", "insights"]);
+          assert.equal(request.json.limit, 10);
+          writeJsonResponse(res, 200, {
+            query: request.json.query,
+            sources: request.json.sources,
+            count: 1,
+            warnings: [],
+            results: [
+              {
+                type: "memory",
+                id: "memory-1",
+                content: "red hat test marker result",
+                similarity: 1,
+                metadata: {},
+              },
+            ],
+          });
+          return;
+        }
+
+        writeJsonResponse(res, 404, { error: "not found" });
+      },
+      async ({ baseUrl, requests }) => {
+        const r = await runOutcomeWithInputAsync(
+          ["memory-search"],
+          {
+            ...env,
+            OPENLOOMI_BASE_URL: baseUrl,
+            OPENLOOMI_AUTH_TOKEN: token,
+          },
+          "red hat test marker",
+        );
+        assert.equal(r.code, 0);
+        const j = JSON.parse(r.stdout);
+        assert.equal(j.ready, true);
+        assert.equal(j.ran, true);
+        assert.equal(j.reason, "MEMORY_SEARCH_COMPLETE");
+        assert.equal(j.nextAction, "done");
+        assert.equal(j.result.count, 1);
+        assert.ok(
+          requests.some((request) =>
+            request.url.startsWith("/api/memory/search"),
+          ),
+          "memory-search should call /api/memory/search",
+        );
+      },
+    );
+  });
+});
+
+test("memory-search supports explicit source and limit options", async () => {
+  await withFakeHomeAsync(async (env) => {
+    await withLocalApiServer(
+      (req, res, request) => {
+        const url = req.url || "/";
+
+        if (url === "/" || url === "") {
+          writeJsonResponse(res, 200, { ok: true });
+          return;
+        }
+
+        if (url.startsWith("/api/native/providers")) {
+          writeJsonResponse(res, 200, {
+            defaultAgent: "codex",
+            agents: [{ type: "codex", name: "Codex CLI" }],
+          });
+          return;
+        }
+
+        if (url.startsWith("/api/auth/set-token")) {
+          writeJsonResponse(
+            res,
+            200,
+            { ok: true },
+            {
+              "Set-Cookie": "authjs.session-token=fake-memory-session; Path=/",
+            },
+          );
+          return;
+        }
+
+        if (url.startsWith("/api/memory/search")) {
+          assert.deepEqual(request.json.sources, ["memory"]);
+          assert.equal(request.json.limit, 3);
+          writeJsonResponse(res, 200, {
+            query: request.json.query,
+            sources: request.json.sources,
+            count: 0,
+            warnings: [],
+            results: [],
+          });
+          return;
+        }
+
+        writeJsonResponse(res, 404, { error: "not found" });
+      },
+      async ({ baseUrl }) => {
+        const r = await runOutcomeWithInputAsync(
+          ["memory-recall", "--sources", "memory,unknown", "--limit", "3"],
+          {
+            ...env,
+            OPENLOOMI_BASE_URL: baseUrl,
+            OPENLOOMI_AUTH_TOKEN: "fake-openloomi-memory-token",
+          },
+          "missing marker",
+        );
+        assert.equal(r.code, 0);
+        const j = JSON.parse(r.stdout);
+        assert.equal(j.command, "memory-recall");
+        assert.equal(j.reason, "MEMORY_NOT_FOUND");
+        assert.equal(j.nextAction, "memory_not_found");
+        assert.deepEqual(j.sources, ["memory"]);
+        assert.equal(j.limit, 3);
+      },
+    );
+  });
 });
 
 test("secrets contract: fake key value never appears in any subcommand output", () => {
@@ -870,6 +1064,8 @@ test("secrets contract: fake key value never appears in any subcommand output", 
       ["install-instructions"],
       ["workflow-guidance"],
       ["configure-ai-provider"],
+      ["memory-search"],
+      ["memory-recall"],
       ["help"],
     ]) {
       const r = runOutcome(sub, inputs);
