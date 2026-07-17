@@ -2,7 +2,7 @@
 name: openloomi-connectors
 description: "openloomi Connectors tools - manage platform integrations (OAuth connections, list accounts, check status). Triggers: connect platform, integration status, list accounts, disconnect. Pair with the composio skill to also list composio-linked accounts."
 metadata:
-  version: 0.7.10
+  version: 0.8.0
 allowed-tools: Bash(node $SKILL_DIR/scripts/openloomi-connectors.cjs *)
 ---
 
