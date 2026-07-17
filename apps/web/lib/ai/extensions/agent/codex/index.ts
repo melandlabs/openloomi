@@ -292,6 +292,7 @@ export class CodexAgent extends BaseAgent {
     for await (const event of runCodexCli(command.command, command.args, {
       cwd,
       env: providerConfig.env,
+      stdin: command.stdin,
       signal: signal ?? options?.abortController?.signal,
       timeoutMs: providerConfig.timeoutMs,
     })) {

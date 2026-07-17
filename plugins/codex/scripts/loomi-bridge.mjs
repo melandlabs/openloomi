@@ -23,6 +23,7 @@ const BRIDGE_DIR = path.dirname(BRIDGE_SCRIPT_PATH);
 const BRIDGE_VERSION = "0.7.10";
 const PLUGIN_PHASE = "runtime-provider-readiness";
 const COMMAND_TIMEOUT_MS = 5000;
+const RUN_TIMEOUT_MS = 120000;
 const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 const RELEASE_LOOKUP_TIMEOUT_MS = 30000;
 const INSTALL_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
@@ -153,7 +154,7 @@ const WORKFLOW_GUIDANCE = [
     readyRequired: true,
     bridgeCommand: "memory-search",
     taskPromptPrefix:
-      "Use the memory-search bridge command with the original user memory request as stdin. The OpenLoomi runtime must use its native searchMemoryPath memory tool when available. Do not call /api/memory/search, /api/rag/search, /api/messages, /api/chat-insights, source search, shell, skills, Codex plugins, OpenLoomi plugins, or loomi-bridge from the runtime.",
+      "Use the memory-search bridge command with the original user memory request as stdin. The bridge performs the read-only local memory search before handing results to the OpenLoomi runtime. Do not call /api/memory/search, /api/rag/search, /api/messages, /api/chat-insights, source search, shell, skills, Codex plugins, OpenLoomi plugins, or loomi-bridge from the runtime.",
     nextActionsWhenBlocked: [
       "install_openloomi",
       "initialize_openloomi_session",
@@ -161,7 +162,7 @@ const WORKFLOW_GUIDANCE = [
       "configure_connectors",
     ],
     safety: [
-      "Do not read or write OpenLoomi memory files directly from the Codex plugin.",
+      "Use the bridge-owned searchMemoryPath helper for local memory lookup; do not implement ad hoc file search in the Codex plugin.",
       "Do not fall back to RAG, messages, chat-insights, source code search, or direct memory-file reads when the native memory runtime returns no results.",
       "Do not expose memory contents unless OpenLoomi runtime returns them for the requested task.",
     ],
@@ -326,6 +327,7 @@ async function buildSetupStatus() {
     mode: discovery.mode,
     installed: discovery.installed,
     appPath: discovery.appPath,
+    ctlPath: discovery.ctlPath || normalizePath(process.env.OPENLOOMI_CTL),
     version: discovery.version,
     tokenPresent: token.present,
     aiProviderConfigured: aiProvider.configured,
@@ -2443,8 +2445,20 @@ function getPermissionMode(value) {
 }
 
 function runOpenLoomiOneShot({ ctlPath, permissionMode, prompt }) {
+  const resolvedCtlPath = resolveOpenLoomiCtlPath(ctlPath);
+
+  if (!resolvedCtlPath) {
+    return Promise.resolve({
+      exitCode: 1,
+      signal: null,
+      stdout: "",
+      stderr:
+        "OpenLoomi CLI path is unavailable. Set OPENLOOMI_CTL or use a setup mode that exposes openloomi-ctl.",
+    });
+  }
+
   return runCommandWithInput(
-    ctlPath,
+    resolvedCtlPath,
     ["--one-shot", "--stdin", "--json", "--permission-mode", permissionMode],
     prompt,
     RUN_TIMEOUT_MS,
@@ -2452,6 +2466,15 @@ function runOpenLoomiOneShot({ ctlPath, permissionMode, prompt }) {
       env: getOpenLoomiCtlChildEnv(),
     },
   );
+}
+
+function resolveOpenLoomiCtlPath(ctlPath) {
+  const explicitCtl = normalizePath(process.env.OPENLOOMI_CTL);
+  if (explicitCtl && isFile(explicitCtl)) {
+    return explicitCtl;
+  }
+
+  return normalizePath(ctlPath);
 }
 
 async function runBridgeMemorySearch(query, setup = {}) {
@@ -4039,8 +4062,14 @@ function planRuntimeEnvChange({ platform, key, value, flags }) {
           command: "launchctl",
           args: ["bootout", guiTarget, plistPath],
         });
-        actions.push({ label: "rm plist", command: "rm", args: ["-f", plistPath] });
-        commands.push(`launchctl bootout ${guiTarget} ${plistPath}  # best-effort`);
+        actions.push({
+          label: "rm plist",
+          command: "rm",
+          args: ["-f", plistPath],
+        });
+        commands.push(
+          `launchctl bootout ${guiTarget} ${plistPath}  # best-effort`,
+        );
         commands.push(`rm -f ${plistPath}`);
         notes.push(
           `Removed LaunchAgent ${plistPath}. ${key} will no longer be re-applied on login.`,
@@ -4825,10 +4854,7 @@ async function discoverOpenLoomi() {
       checked,
     });
 
-    if (
-      result.status === "found" ||
-      result.status === "source-missing-app"
-    ) {
+    if (result.status === "found" || result.status === "source-missing-app") {
       return result;
     }
   }
@@ -5093,6 +5119,17 @@ function getReadinessDecision(
       ready: false,
       nextAction: "provide_install_or_repo_path",
       reason: "OPENLOOMI_APP_INVALID",
+    };
+  }
+
+  if (nativeCodexRuntimeReady && token.present && apiProbe?.reachableUrl) {
+    return {
+      ready: true,
+      nextAction: "run",
+      reason: "READY",
+      readinessSource: "native_codex_runtime",
+      message:
+        "OpenLoomi is ready through the native Codex runtime. A separate OpenLoomi AI provider is not required for native Codex execution.",
     };
   }
 

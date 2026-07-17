@@ -52,8 +52,9 @@ describe("Codex command builder", () => {
       "--sandbox",
       "workspace-write",
       "--skip-git-repo-check",
-      "fix the failing tests",
+      "-",
     ]);
+    expect(command.stdin).toBe("fix the failing tests");
     expect(command.args).not.toContain("--full-auto");
   });
 
@@ -81,7 +82,8 @@ describe("Codex command builder", () => {
     });
 
     expect(command.args).toContain("--full-auto");
-    expect(command.args.at(-1)).toBe("ship it");
+    expect(command.args.at(-1)).toBe("-");
+    expect(command.stdin).toBe("ship it");
   });
 
   it("does not pass --full-auto for bypassPermissions without explicit opt-in", () => {
@@ -118,9 +120,11 @@ describe("Codex command builder", () => {
     const guardIndex = command.args.indexOf("--");
     expect(guardIndex).toBeGreaterThan(-1);
     expect(command.args[guardIndex + 1]).toBe("safe-arg");
-    // And the smuggled --full-auto only lands after the guard, so Codex will
-    // treat it as the prompt position, not as a flag.
+    // The filtered extra arg stays after the guard, while the real prompt is
+    // delivered through stdin for cross-platform multiline safety.
     expect(command.args).toContain("safe-arg");
+    expect(command.args.at(-1)).toBe("-");
+    expect(command.stdin).toBe("validate input");
   });
 
   it("normalizes timeoutMs from provider config", () => {
@@ -194,7 +198,8 @@ describe("CodexAgent", () => {
     expect(argv).toContain(
       "mcp_servers.openloomi_memory.env.OPENLOOMI_MEMORY_PATH=",
     );
-    expect(command.args.at(-1)).toBe("recall my memory");
+    expect(command.args.at(-1)).toBe("-");
+    expect(command.stdin).toBe("recall my memory");
   });
 
   it("does not inject OpenLoomi memory MCP during planning or when excluded", () => {
@@ -508,7 +513,10 @@ describe("CodexAgent", () => {
     // carries an approval flag.
     expect(args).not.toContain("--ask-for-approval");
     expect(args).toContain("--skip-git-repo-check");
-    expect(args.at(-1)).toBe("hello codex");
+    expect(args.at(-1)).toBe("-");
+    expect(await readFile(join(workDir, "stdin.txt"), "utf8")).toBe(
+      "hello codex",
+    );
   });
 
   it("embeds conversation context into the Codex prompt", async () => {
@@ -531,7 +539,8 @@ describe("CodexAgent", () => {
     const args = JSON.parse(
       await readFile(join(workDir, "args.json"), "utf8"),
     ) as string[];
-    const prompt = args.at(-1) ?? "";
+    expect(args.at(-1)).toBe("-");
+    const prompt = await readFile(join(workDir, "stdin.txt"), "utf8");
     expect(prompt).toEqual(expect.stringContaining("earlier question"));
     expect(prompt).toEqual(expect.stringContaining("current question"));
   });
@@ -733,9 +742,12 @@ setInterval(() => {}, 1000);
     );
     expect(error).toBeDefined();
     expect(error?.message).toContain("__CODEX_INTERRUPTED__");
-    expect(error?.message).toContain(workDir);
-    expect(error?.message).toContain("report.md");
-    expect(error?.message).toMatch(/"canResume":\s*true/);
+    const interruptionPayload = JSON.parse(
+      (error?.message ?? "").replace(/^__CODEX_INTERRUPTED__\s*/, ""),
+    );
+    expect(interruptionPayload.workspacePath).toBe(workDir);
+    expect(interruptionPayload.completedArtifacts).toContain("report.md");
+    expect(interruptionPayload.canResume).toBe(true);
 
     // The agent still closes with `done` so the SSE stream terminates cleanly
     // and the chat UI does not loop waiting for a result.
@@ -826,23 +838,29 @@ function defaultFakeCodexScript() {
   return `
 const args = process.argv.slice(2);
 require("node:fs").writeFileSync("args.json", JSON.stringify(args));
-console.log(JSON.stringify({ type: "thread.started", thread_id: "thread-1" }));
-console.log(JSON.stringify({
-  type: "item.started",
-  item: { type: "command_execution", id: "cmd-1", command: "pwd" }
-}));
-console.log(JSON.stringify({
-  type: "item.completed",
-  item: { type: "command_execution", id: "cmd-1", command: "pwd", aggregated_output: "/workspace\\n", exit_code: 0, status: "completed" }
-}));
-console.log(JSON.stringify({
-  type: "item.completed",
-  item: { type: "agent_message", id: "msg-1", text: "hello" }
-}));
-console.log(JSON.stringify({
-  type: "turn.completed",
-  usage: { input_tokens: 9, cached_input_tokens: 4, output_tokens: 4 }
-}));
+let stdin = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => { stdin += chunk; });
+process.stdin.on("end", () => {
+  require("node:fs").writeFileSync("stdin.txt", stdin);
+  console.log(JSON.stringify({ type: "thread.started", thread_id: "thread-1" }));
+  console.log(JSON.stringify({
+    type: "item.started",
+    item: { type: "command_execution", id: "cmd-1", command: "pwd" }
+  }));
+  console.log(JSON.stringify({
+    type: "item.completed",
+    item: { type: "command_execution", id: "cmd-1", command: "pwd", aggregated_output: "/workspace\\n", exit_code: 0, status: "completed" }
+  }));
+  console.log(JSON.stringify({
+    type: "item.completed",
+    item: { type: "agent_message", id: "msg-1", text: "hello" }
+  }));
+  console.log(JSON.stringify({
+    type: "turn.completed",
+    usage: { input_tokens: 9, cached_input_tokens: 4, output_tokens: 4 }
+  }));
+});
 `;
 }
 

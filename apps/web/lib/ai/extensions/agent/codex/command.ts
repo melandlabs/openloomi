@@ -64,6 +64,7 @@ export interface CodexRunCommandOptions {
 export interface CodexRunCommand {
   command: string;
   args: string[];
+  stdin?: string;
 }
 
 export type CodexCliEvent =
@@ -207,11 +208,12 @@ export function buildCodexRunCommand(
     args.push("--", ...providerConfig.extraArgs);
   }
 
-  args.push(options.prompt);
+  args.push("-");
 
   return {
     command: providerConfig.codexPath || "codex",
     args,
+    stdin: options.prompt,
   };
 }
 
@@ -221,6 +223,7 @@ export async function* runCodexCli(
   options: {
     cwd: string;
     env?: Record<string, string>;
+    stdin?: string;
     signal?: AbortSignal;
     timeoutMs?: number;
   },
@@ -257,14 +260,13 @@ export async function* runCodexCli(
       detached: shouldDetachCliProcess(),
       windowsHide: true,
     }) as ChildProcessWithoutNullStreams;
-    // Codex CLI 0.144+ reads the prompt from argv but ALSO blocks waiting
-    // for stdin to reach EOF whenever stdin is a piped stream (e.g.
-    // `node`'s default `pipe` stdio). Without this explicit close the
-    // child process hangs in "Reading additional input from stdin..."
-    // forever and the SSE stream never receives any events. We never write
-    // to stdin ourselves (the prompt is passed positionally), so closing
-    // it immediately is safe and signals EOF to the CLI.
-    proc.stdin.end();
+    // Pass the prompt through stdin instead of argv. Windows npm/PowerShell
+    // shims can truncate multiline positional args before the real Codex CLI
+    // sees them; `codex exec -` preserves the prompt byte-for-byte.
+    proc.stdin.on("error", () => {
+      // The child may exit before consuming stdin in tests or error paths.
+    });
+    proc.stdin.end(options.stdin ?? "");
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     if (isCommandNotFoundError(err)) {

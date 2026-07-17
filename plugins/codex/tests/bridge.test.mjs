@@ -220,6 +220,48 @@ function writeFakeToken(home) {
   );
 }
 
+function writeFakeCtl(home) {
+  const nodeScript = join(home, "fake-openloomi-ctl.mjs");
+  writeFileSync(
+    nodeScript,
+    [
+      "if (process.argv.includes('--version')) {",
+      "  console.log('openloomi-ctl 9.9.9');",
+      "  process.exit(0);",
+      "}",
+      "let input = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (chunk) => { input += chunk; });",
+      "process.stdin.on('end', () => {",
+      "  console.log(JSON.stringify({",
+      "    ok: true,",
+      "    env: { OPENLOOMI_API_URL: process.env.OPENLOOMI_API_URL || null },",
+      "    argv: process.argv.slice(2),",
+      "    prompt: input,",
+      "  }));",
+      "});",
+    ].join("\n"),
+  );
+
+  if (process.platform === "win32") {
+    const cmd = join(home, "openloomi-ctl.cmd");
+    writeFileSync(
+      cmd,
+      `@"${process.execPath}" "%~dp0fake-openloomi-ctl.mjs" %*\r\n`,
+    );
+    return cmd;
+  }
+
+  const shim = join(home, "openloomi-ctl");
+  const nodePath = process.execPath.replace(/'/g, "'\\''");
+  writeFileSync(
+    shim,
+    `#!/bin/sh\nexec '${nodePath}' "$(dirname "$0")/fake-openloomi-ctl.mjs" "$@"\n`,
+  );
+  chmodSync(shim, 0o755);
+  return shim;
+}
+
 async function withLocalApiServer(handler, fn) {
   const requests = [];
   const server = createServer((req, res) => {
@@ -781,13 +823,7 @@ test("setup-status aiProvider runtime check never reports key values", () => {
     // contract — anything that could carry an apiKey / token / secret
     // value is forbidden here.
     for (const provider of j.checks.aiProviderRuntime?.providers || []) {
-      for (const field of [
-        "value",
-        "apiKey",
-        "authToken",
-        "token",
-        "secret",
-      ]) {
+      for (const field of ["value", "apiKey", "authToken", "token", "secret"]) {
         assert.ok(
           !(field in provider) || provider[field] === "",
           `aiProviderRuntime.providers leaked a value via ${field}`,
@@ -890,6 +926,13 @@ test("memory-search runs native runtime and avoids the memory HTTP API", async (
   await withFakeHomeAsync(async (env) => {
     const ctl = writeFakeCtl(env.HOME);
     writeFakeToken(env.HOME);
+    const memoryDir = join(env.HOME, ".openloomi", "data", "memory", "notes");
+    mkdirSync(memoryDir, { recursive: true });
+    writeFileSync(
+      join(memoryDir, "red-hat.md"),
+      "The red hat test marker resolves to RED_HAT_FROM_LOCAL_MEMORY.\n",
+      "utf8",
+    );
 
     await withLocalApiServer(
       createReadySetupApiHandler({
@@ -913,15 +956,31 @@ test("memory-search runs native runtime and avoids the memory HTTP API", async (
           },
           "red hat test marker",
         );
-        assert.equal(r.code, 0);
+        assert.equal(r.code, 0, r.stderr || r.stdout);
         const j = JSON.parse(r.stdout);
         assert.equal(j.ready, true);
         assert.equal(j.ran, true);
         assert.equal(j.reason, "MEMORY_RUNTIME_COMPLETE");
         assert.equal(j.nextAction, "done");
-        assert.equal(j.result.prompt.includes("searchMemoryPath"), true);
+        assert.equal(j.memorySearch?.source, "bridge");
+        assert.equal(j.memorySearch?.isError, false);
+        assert.equal(
+          j.result.prompt.includes("OpenLoomi bridge has already searched"),
+          true,
+        );
+        assert.equal(j.result.prompt.includes("red-hat.md"), true);
+        assert.equal(
+          j.result.prompt.includes("RED_HAT_FROM_LOCAL_MEMORY"),
+          true,
+        );
         assert.equal(j.result.prompt.includes("red hat test marker"), true);
         assert.equal(j.result.prompt.includes("/api/memory/search"), true);
+        assert.equal(
+          j.result.prompt.includes(
+            "Use the OpenLoomi native memory tool searchMemoryPath",
+          ),
+          false,
+        );
         assert.ok(Array.isArray(j.result.argv), "fake ctl must expose argv");
         assert.deepEqual(j.result.argv.slice(0, 4), [
           "--one-shot",
@@ -967,12 +1026,17 @@ test("memory-recall alias uses native runtime instead of source/limit API option
           },
           "missing marker",
         );
-        assert.equal(r.code, 0);
+        assert.equal(r.code, 0, r.stderr || r.stdout);
         const j = JSON.parse(r.stdout);
         assert.equal(j.command, "memory-recall");
         assert.equal(j.reason, "MEMORY_RUNTIME_COMPLETE");
         assert.equal(j.nextAction, "done");
+        assert.equal(j.memorySearch?.source, "bridge");
         assert.equal(j.result.prompt.includes("missing marker"), true);
+        assert.equal(
+          j.result.prompt.includes("Memory directory does not exist"),
+          true,
+        );
         assert.ok(
           !requests.some((request) =>
             request.url.startsWith("/api/memory/search"),
@@ -1457,10 +1521,7 @@ test("set-codex-runtime-env --dry-run --persist plans the LaunchAgent install on
   assert.match(script, /<key>RunAtLoad<\/key>/);
   assert.match(script, /<true\/>/);
   assert.match(script, /<key>Label<\/key>/);
-  assert.match(
-    script,
-    /<string>com\.openloomi\.codex-runtime-env<\/string>/,
-  );
+  assert.match(script, /<string>com\.openloomi\.codex-runtime-env<\/string>/);
   assert.match(script, /<string>\/bin\/launchctl<\/string>/);
   assert.match(script, /<string>setenv<\/string>/);
   assert.match(script, /<string>OPENLOOMI_AGENT_PROVIDER<\/string>/);
@@ -1516,12 +1577,7 @@ test("set-codex-runtime-env escapes XML metacharacters in plist value", () => {
   // even though they would otherwise produce invalid XML.
   const j = withFakeHome((env) =>
     runJson(
-      [
-        "set-codex-runtime-env",
-        "codex&<weird>",
-        "--dry-run",
-        "--persist",
-      ],
+      ["set-codex-runtime-env", "codex&<weird>", "--dry-run", "--persist"],
       env,
     ),
   );
@@ -1534,9 +1590,7 @@ test("set-codex-runtime-env escapes XML metacharacters in plist value", () => {
 });
 
 test("codex-runtime-info reports persistence state for the host platform", () => {
-  const j = withFakeHome((env) =>
-    runJson(["codex-runtime-info"], env),
-  );
+  const j = withFakeHome((env) => runJson(["codex-runtime-info"], env));
   assert.ok(j.persistence, "expected persistence field on codex-runtime-info");
   // All three platform buckets should be present so callers can render a
   // cross-platform table without branching.
