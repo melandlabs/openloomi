@@ -103,7 +103,11 @@ const scriptsSrc = path.join(webDir, "scripts");
 // existed at runtime and silently failed to persist decisions when
 // it didn't. `init-db.cjs` predates the bug; `loop-cli.mjs` is the
 // fix. Both shims are tiny (~3 KB each) so the size cost is trivial.
-const STANDALONE_SHIM_FILES = ["init-db.cjs", "loop-cli.mjs"];
+const STANDALONE_SHIM_FILES = [
+  "init-db.cjs",
+  "loop-cli.mjs",
+  "openloomi-memory-mcp.mjs",
+];
 if (fs.existsSync(scriptsSrc)) {
   fs.mkdirSync(scriptsDest, { recursive: true });
   for (const fileName of STANDALONE_SHIM_FILES) {
@@ -115,7 +119,23 @@ if (fs.existsSync(scriptsSrc)) {
       console.log(`  scripts/${fileName} not in source — skipping`);
     }
   }
-  console.log("  scripts shims copied (init-db.cjs, loop-cli.mjs)");
+  const memoryPathSearchSrc = path.join(
+    webDir,
+    "lib",
+    "ai",
+    "mcp",
+    "tools",
+    "memory-path-search.js",
+  );
+  const memoryPathSearchDest = path.join(scriptsDest, "memory-path-search.js");
+  if (fs.existsSync(memoryPathSearchSrc)) {
+    copyFile(memoryPathSearchSrc, memoryPathSearchDest);
+  } else {
+    console.log("  memory-path-search.js helper not in source - skipping");
+  }
+  console.log(
+    "  scripts shims copied (init-db.cjs, loop-cli.mjs, openloomi-memory-mcp.mjs)",
+  );
 } else {
   console.log("  no scripts source dir, skipping shim copy");
 }

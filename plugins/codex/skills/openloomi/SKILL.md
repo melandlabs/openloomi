@@ -103,12 +103,16 @@ passing the user task over stdin:
 printf "%s" "<user task>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" run
 ```
 
-For memory recall/search requests, use the dedicated memory command instead of
-the generic one-shot runner:
+For memory recall/search requests, use the dedicated native memory runtime
+command instead of the generic one-shot runner:
 
 ```bash
 printf "%s" "<user memory request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" memory-search
 ```
+
+The memory command still runs through OpenLoomi-owned native runtime surfaces;
+it must rely on the runtime's native `searchMemoryPath` memory tool when
+available and must not call `/api/memory/search` or embedding/RAG routes.
 
 The bridge invokes `openloomi-ctl --one-shot --stdin --json --permission-mode
 deny` by default. Only pass `--permission-mode ask` or `--permission-mode allow`

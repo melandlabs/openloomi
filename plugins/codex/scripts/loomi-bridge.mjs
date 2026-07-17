@@ -32,7 +32,6 @@ const SESSION_BOOTSTRAP_POLL_MS = 2000;
 const SESSION_API_TIMEOUT_MS = 5000;
 const API_PROBE_TIMEOUT_MS = 1000;
 const CONNECTOR_STATUS_TIMEOUT_MS = 2500;
-const MEMORY_SEARCH_TIMEOUT_MS = 10000;
 const MAX_COMMAND_OUTPUT = 4096;
 const RUN_LOCK_TTL_MS = RUN_TIMEOUT_MS + 60_000;
 const MAX_MEMORY_CONTEXT_CHARS = 20000;
@@ -154,7 +153,7 @@ const WORKFLOW_GUIDANCE = [
     readyRequired: true,
     bridgeCommand: "memory-search",
     taskPromptPrefix:
-      "Use the memory-search bridge command with the original user memory request as stdin. Do not call /api/rag/search, /api/messages, /api/chat-insights, source search, shell, skills, Codex plugins, OpenLoomi plugins, or loomi-bridge from the runtime.",
+      "Use the memory-search bridge command with the original user memory request as stdin. The OpenLoomi runtime must use its native searchMemoryPath memory tool when available. Do not call /api/memory/search, /api/rag/search, /api/messages, /api/chat-insights, source search, shell, skills, Codex plugins, OpenLoomi plugins, or loomi-bridge from the runtime.",
     nextActionsWhenBlocked: [
       "install_openloomi",
       "initialize_openloomi_session",
@@ -163,7 +162,7 @@ const WORKFLOW_GUIDANCE = [
     ],
     safety: [
       "Do not read or write OpenLoomi memory files directly from the Codex plugin.",
-      "Do not fall back to RAG, messages, chat-insights, source code search, or direct memory-file reads when memory-search returns no results.",
+      "Do not fall back to RAG, messages, chat-insights, source code search, or direct memory-file reads when the native memory runtime returns no results.",
       "Do not expose memory contents unless OpenLoomi runtime returns them for the requested task.",
     ],
   },

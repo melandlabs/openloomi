@@ -4,6 +4,8 @@ import { StringDecoder } from "node:string_decoder";
 import spawn from "cross-spawn";
 
 import type { AgentOptions } from "@openloomi/ai/agent/types";
+
+import { buildCodexMemoryMcpConfig } from "./memory-mcp";
 import {
   appendCapturedCliOutput,
   buildCliEnvironment,
@@ -52,6 +54,11 @@ export interface CodexRunCommandOptions {
    */
   mode?: "run" | "plan" | "execute";
   providerConfig?: Record<string, unknown>;
+  openLoomiMemoryMcp?: {
+    session?: AgentOptions["session"];
+    excludeTools?: string[];
+    disallowedTools?: string[];
+  };
 }
 
 export interface CodexRunCommand {
@@ -172,6 +179,28 @@ export function buildCodexRunCommand(
     providerConfig.fullAuto
   ) {
     args.push("--full-auto");
+  }
+
+  const memoryMcp = buildCodexMemoryMcpConfig({
+    mode,
+    session: options.openLoomiMemoryMcp?.session,
+    excludeTools: options.openLoomiMemoryMcp?.excludeTools,
+    disallowedTools: options.openLoomiMemoryMcp?.disallowedTools,
+  });
+
+  if (memoryMcp) {
+    const prefix = `mcp_servers.${memoryMcp.serverName}`;
+    args.push(
+      "-c",
+      `${prefix}.command=${toTomlString(memoryMcp.command)}`,
+      "-c",
+      `${prefix}.args=${toTomlStringArray(memoryMcp.args)}`,
+      "-c",
+      `${prefix}.startup_timeout_sec=30`,
+    );
+    for (const [key, value] of Object.entries(memoryMcp.env)) {
+      args.push("-c", `${prefix}.env.${key}=${toTomlString(value)}`);
+    }
   }
 
   if (providerConfig.extraArgs && providerConfig.extraArgs.length > 0) {
@@ -363,6 +392,14 @@ export async function* runCodexCli(
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function toTomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function toTomlStringArray(values: string[]): string {
+  return `[${values.map(toTomlString).join(", ")}]`;
 }
 
 function isCommandNotFoundError(error: Error & { code?: string }) {

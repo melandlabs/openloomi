@@ -886,76 +886,30 @@ test("memory-search requires a stdin query", () => {
   });
 });
 
-test("memory-search posts to OpenLoomi memory API with local session cookie", async () => {
+test("memory-search runs native runtime and avoids the memory HTTP API", async () => {
   await withFakeHomeAsync(async (env) => {
-    const token = "fake-openloomi-memory-token";
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
 
     await withLocalApiServer(
-      (req, res, request) => {
-        const url = req.url || "/";
-
-        if (url === "/" || url === "") {
-          writeJsonResponse(res, 200, { ok: true });
-          return;
-        }
-
-        if (url.startsWith("/api/native/providers")) {
-          writeJsonResponse(res, 200, {
-            defaultAgent: "codex",
-            agents: [{ type: "codex", name: "Codex CLI" }],
-          });
-          return;
-        }
-
-        if (url.startsWith("/api/auth/set-token")) {
-          assert.match(url, /token=fake-openloomi-memory-token/);
-          writeJsonResponse(
-            res,
-            200,
-            { ok: true },
-            {
-              "Set-Cookie": "authjs.session-token=fake-memory-session; Path=/",
-            },
-          );
-          return;
-        }
-
-        if (url.startsWith("/api/memory/search")) {
-          assert.equal(req.method, "POST");
-          assert.equal(
-            request.cookie,
-            "authjs.session-token=fake-memory-session",
-          );
-          assert.equal(request.json.query, "red hat test marker");
-          assert.deepEqual(request.json.sources, ["memory", "insights"]);
-          assert.equal(request.json.limit, 10);
-          writeJsonResponse(res, 200, {
-            query: request.json.query,
-            sources: request.json.sources,
-            count: 1,
-            warnings: [],
-            results: [
-              {
-                type: "memory",
-                id: "memory-1",
-                content: "red hat test marker result",
-                similarity: 1,
-                metadata: {},
-              },
-            ],
-          });
-          return;
-        }
-
-        writeJsonResponse(res, 404, { error: "not found" });
-      },
+      createReadySetupApiHandler({
+        aiPreferencePayload: {
+          settings: [],
+          systemDefaults: {},
+        },
+        nativeProviderPayload: {
+          defaultAgent: "codex",
+          agents: [{ type: "codex", name: "Codex CLI" }],
+        },
+      }),
       async ({ baseUrl, requests }) => {
         const r = await runOutcomeWithInputAsync(
           ["memory-search"],
           {
             ...env,
+            OPENLOOMI_CTL: ctl,
             OPENLOOMI_BASE_URL: baseUrl,
-            OPENLOOMI_AUTH_TOKEN: token,
+            OPENLOOMI_AGENT_PROVIDER: "codex",
           },
           "red hat test marker",
         );
@@ -963,83 +917,68 @@ test("memory-search posts to OpenLoomi memory API with local session cookie", as
         const j = JSON.parse(r.stdout);
         assert.equal(j.ready, true);
         assert.equal(j.ran, true);
-        assert.equal(j.reason, "MEMORY_SEARCH_COMPLETE");
+        assert.equal(j.reason, "MEMORY_RUNTIME_COMPLETE");
         assert.equal(j.nextAction, "done");
-        assert.equal(j.result.count, 1);
+        assert.equal(j.result.prompt.includes("searchMemoryPath"), true);
+        assert.equal(j.result.prompt.includes("red hat test marker"), true);
+        assert.equal(j.result.prompt.includes("/api/memory/search"), true);
+        assert.ok(Array.isArray(j.result.argv), "fake ctl must expose argv");
+        assert.deepEqual(j.result.argv.slice(0, 4), [
+          "--one-shot",
+          "--stdin",
+          "--json",
+          "--permission-mode",
+        ]);
         assert.ok(
-          requests.some((request) =>
+          !requests.some((request) =>
             request.url.startsWith("/api/memory/search"),
           ),
-          "memory-search should call /api/memory/search",
+          "memory-search must not call /api/memory/search",
         );
       },
     );
   });
 });
 
-test("memory-search supports explicit source and limit options", async () => {
+test("memory-recall alias uses native runtime instead of source/limit API options", async () => {
   await withFakeHomeAsync(async (env) => {
+    const ctl = writeFakeCtl(env.HOME);
+    writeFakeToken(env.HOME);
+
     await withLocalApiServer(
-      (req, res, request) => {
-        const url = req.url || "/";
-
-        if (url === "/" || url === "") {
-          writeJsonResponse(res, 200, { ok: true });
-          return;
-        }
-
-        if (url.startsWith("/api/native/providers")) {
-          writeJsonResponse(res, 200, {
-            defaultAgent: "codex",
-            agents: [{ type: "codex", name: "Codex CLI" }],
-          });
-          return;
-        }
-
-        if (url.startsWith("/api/auth/set-token")) {
-          writeJsonResponse(
-            res,
-            200,
-            { ok: true },
-            {
-              "Set-Cookie": "authjs.session-token=fake-memory-session; Path=/",
-            },
-          );
-          return;
-        }
-
-        if (url.startsWith("/api/memory/search")) {
-          assert.deepEqual(request.json.sources, ["memory"]);
-          assert.equal(request.json.limit, 3);
-          writeJsonResponse(res, 200, {
-            query: request.json.query,
-            sources: request.json.sources,
-            count: 0,
-            warnings: [],
-            results: [],
-          });
-          return;
-        }
-
-        writeJsonResponse(res, 404, { error: "not found" });
-      },
-      async ({ baseUrl }) => {
+      createReadySetupApiHandler({
+        aiPreferencePayload: {
+          settings: [],
+          systemDefaults: {},
+        },
+        nativeProviderPayload: {
+          defaultAgent: "codex",
+          agents: [{ type: "codex", name: "Codex CLI" }],
+        },
+      }),
+      async ({ baseUrl, requests }) => {
         const r = await runOutcomeWithInputAsync(
           ["memory-recall", "--sources", "memory,unknown", "--limit", "3"],
           {
             ...env,
+            OPENLOOMI_CTL: ctl,
             OPENLOOMI_BASE_URL: baseUrl,
-            OPENLOOMI_AUTH_TOKEN: "fake-openloomi-memory-token",
+            OPENLOOMI_AGENT_PROVIDER: "codex",
           },
           "missing marker",
         );
         assert.equal(r.code, 0);
         const j = JSON.parse(r.stdout);
         assert.equal(j.command, "memory-recall");
-        assert.equal(j.reason, "MEMORY_NOT_FOUND");
-        assert.equal(j.nextAction, "memory_not_found");
-        assert.deepEqual(j.sources, ["memory"]);
-        assert.equal(j.limit, 3);
+        assert.equal(j.reason, "MEMORY_RUNTIME_COMPLETE");
+        assert.equal(j.nextAction, "done");
+        assert.equal(j.result.prompt.includes("missing marker"), true);
+        assert.ok(
+          !requests.some((request) =>
+            request.url.startsWith("/api/memory/search"),
+          ),
+          "memory-recall must not call /api/memory/search",
+        );
       },
     );
   });

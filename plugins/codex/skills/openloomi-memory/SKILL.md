@@ -28,15 +28,16 @@ guest/session initialization must happen through OpenLoomi-owned surfaces, not
 Codex chat.
 
 When `ready: true`, pass the original user memory request over stdin to the
-bridge-owned memory search command:
+bridge-owned native memory runtime command:
 
 ```bash
 printf "%s" "<user memory request>" | node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" memory-search
 ```
 
-If `memory-search` returns `MEMORY_NOT_FOUND`, report that OpenLoomi did not
-return a matching memory result. Do not retry through `/api/rag/search`,
-`/api/messages`, `/api/chat-insights`, source-code search, direct file reads, or
-the generic `run` command unless the user explicitly asks to debug internals.
-Only show memory content when OpenLoomi returns it for the requested task. Keep
-secrets and connector credentials out of prompts, argv, stdout, and stderr.
+The `memory-search` bridge command runs OpenLoomi's native runtime and requires
+the runtime to use its native `searchMemoryPath` memory tool when available. Do
+not retry through `/api/memory/search`, `/api/rag/search`, `/api/messages`,
+`/api/chat-insights`, source-code search, direct file reads, or the generic
+`run` command unless the user explicitly asks to debug internals. Only show
+memory content when OpenLoomi returns it for the requested task. Keep secrets
+and connector credentials out of prompts, argv, stdout, and stderr.

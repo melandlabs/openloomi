@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,6 +15,7 @@ import {
   CodexCommandNotFoundError,
   normalizeCodexProviderConfig,
 } from "@/lib/ai/extensions/agent/codex/command";
+import { searchMemoryPath } from "@/lib/ai/mcp/tools/memory-path-search";
 import { parseCodexJsonLine } from "@/lib/ai/extensions/agent/codex/parser";
 
 const tempDirs: string[] = [];
@@ -172,6 +173,92 @@ describe("CodexAgent", () => {
       normalizeCodexProviderConfig({ skipGitRepoCheck: false })
         .skipGitRepoCheck,
     ).toBe(false);
+  });
+
+  it("injects OpenLoomi memory MCP config when a user session is available", () => {
+    const command = buildCodexRunCommand({
+      prompt: "recall my memory",
+      cwd: "/workspace/project",
+      openLoomiMemoryMcp: {
+        session: { user: { id: "user-123" } },
+      },
+    });
+
+    const argv = command.args.join("\n");
+    expect(argv).toContain("mcp_servers.openloomi_memory.command=");
+    expect(argv).toContain("mcp_servers.openloomi_memory.args=");
+    expect(argv).toContain("openloomi-memory-mcp.mjs");
+    expect(argv).toContain(
+      'mcp_servers.openloomi_memory.env.OPENLOOMI_MCP_USER_ID="user-123"',
+    );
+    expect(argv).toContain(
+      "mcp_servers.openloomi_memory.env.OPENLOOMI_MEMORY_PATH=",
+    );
+    expect(command.args.at(-1)).toBe("recall my memory");
+  });
+
+  it("does not inject OpenLoomi memory MCP during planning or when excluded", () => {
+    const planCommand = buildCodexRunCommand({
+      prompt: "plan memory work",
+      cwd: "/workspace/project",
+      mode: "plan",
+      openLoomiMemoryMcp: {
+        session: { user: { id: "user-123" } },
+      },
+    });
+    expect(planCommand.args.join("\n")).not.toContain(
+      "mcp_servers.openloomi_memory",
+    );
+
+    const excludedCommand = buildCodexRunCommand({
+      prompt: "recall my memory",
+      cwd: "/workspace/project",
+      openLoomiMemoryMcp: {
+        session: { user: { id: "user-123" } },
+        excludeTools: ["searchMemoryPath"],
+      },
+    });
+    expect(excludedCommand.args.join("\n")).not.toContain(
+      "mcp_servers.openloomi_memory",
+    );
+  });
+});
+
+describe("OpenLoomi memory path search", () => {
+  it("searches local memory files without using embedding-backed APIs", async () => {
+    const memoryDir = await mkdtemp(join(tmpdir(), "openloomi-memory-test-"));
+    tempDirs.push(memoryDir);
+    await mkdir(join(memoryDir, "projects"), { recursive: true });
+    await writeFile(
+      join(memoryDir, "projects", "red-hat.md"),
+      "The red hat marker belongs to source-free recall.\n",
+      "utf8",
+    );
+
+    const result = searchMemoryPath({
+      query: "red hat marker",
+      directory: "projects",
+      memoryPath: memoryDir,
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(result.content).toContain("projects");
+    expect(result.content).toContain("red-hat.md");
+    expect(result.content).toContain("source-free recall");
+  });
+
+  it("keeps directory searches inside the memory root", async () => {
+    const memoryDir = await mkdtemp(join(tmpdir(), "openloomi-memory-test-"));
+    tempDirs.push(memoryDir);
+
+    const result = searchMemoryPath({
+      query: "anything",
+      directory: "..",
+      memoryPath: memoryDir,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("inside the OpenLoomi memory directory");
   });
 });
 

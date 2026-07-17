@@ -269,6 +269,11 @@ export class CodexAgent extends BaseAgent {
       permissionMode: options?.permissionMode,
       mode,
       providerConfig: this.config.providerConfig,
+      openLoomiMemoryMcp: {
+        session: options?.session,
+        excludeTools: options?.excludeTools,
+        disallowedTools: options?.disallowedTools,
+      },
     });
 
     let closeEvent: Extract<CodexCliEvent, { type: "close" }> | undefined;
