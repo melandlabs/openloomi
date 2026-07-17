@@ -1496,11 +1496,11 @@ test("codex-runtime-info returns the desktop-app Codex runtime switch plan", () 
   assert.equal(typeof j.switch.perPlatform.oneOff, "object");
   assert.match(
     j.switch.perPlatform.oneOff.darwin,
-    /OPENLOOMI_AGENT_PROVIDER codex/,
+    /OPENLOOMI_AGENT_PROVIDER=codex/,
   );
   assert.match(
     j.switch.perPlatform.oneOff.darwin,
-    /\/Applications\/openloomi\.app/,
+    /Quit \+ reopen OpenLoomi\.app/,
   );
   assert.match(
     j.switch.perPlatform.oneOff.linux,
@@ -1550,4 +1550,167 @@ test("codex-runtime-info defaults to claude when env is unset", () => {
   );
   // Empty string should fall back to claude (resolver treats empty as unset).
   assert.equal(j.defaults.currentDefaultProvider, "claude");
+});
+
+// -----------------------------------------------------------------------------
+// set-codex-runtime-env persistence
+//
+// These tests exercise the new --persist flag and the codex-runtime-info
+// `persistence` field. The bridge accepts the flag on every platform but only
+// the darwin branch materializes a LaunchAgent plist. Tests rely on the
+// host's actual platform: on macOS the dry-run JSON surfaces a "write plist"
+// action with the embedded XML, and on other platforms the persistence flag is
+// accepted but a no-op for the actions list. The escape behavior is verified
+// by parsing the embedded XML out of the write action's `-c` script.
+// -----------------------------------------------------------------------------
+
+test("set-codex-runtime-env --dry-run --persist plans the LaunchAgent install on darwin", () => {
+  if (process.platform !== "darwin") return;
+  const j = withFakeHome((env) =>
+    runJson(["set-codex-runtime-env", "codex", "--dry-run", "--persist"], env),
+  );
+  assert.equal(j.ok, true);
+  assert.equal(j.dryRun, true);
+  const labels = j.actions.map((a) => a.label);
+  assert.ok(
+    labels.includes("launchctl setenv"),
+    `expected launchctl setenv in ${JSON.stringify(labels)}`,
+  );
+  assert.ok(
+    labels.includes("mkdir LaunchAgents"),
+    `expected mkdir LaunchAgents in ${JSON.stringify(labels)}`,
+  );
+  assert.ok(
+    labels.includes("write plist"),
+    `expected write plist in ${JSON.stringify(labels)}`,
+  );
+  assert.ok(
+    labels.includes("launchctl bootstrap"),
+    `expected launchctl bootstrap in ${JSON.stringify(labels)}`,
+  );
+  // Plist content is embedded in the heredoc action. Pull it out and verify
+  // the essential fields.
+  const write = j.actions.find((a) => a.label === "write plist");
+  assert.equal(write.command, "/bin/sh");
+  const script = write.args[write.args.length - 1];
+  assert.match(script, /<key>RunAtLoad<\/key>/);
+  assert.match(script, /<true\/>/);
+  assert.match(script, /<key>Label<\/key>/);
+  assert.match(
+    script,
+    /<string>com\.openloomi\.codex-runtime-env<\/string>/,
+  );
+  assert.match(script, /<string>\/bin\/launchctl<\/string>/);
+  assert.match(script, /<string>setenv<\/string>/);
+  assert.match(script, /<string>OPENLOOMI_AGENT_PROVIDER<\/string>/);
+  assert.match(script, /<string>codex<\/string>/);
+});
+
+test("set-codex-runtime-env --dry-run without --persist only plans the launchctl write", () => {
+  const j = runJson(["set-codex-runtime-env", "codex", "--dry-run"]);
+  assert.equal(j.ok, true);
+  assert.equal(j.dryRun, true);
+  const labels = j.actions.map((a) => a.label);
+  // --persist is a no-op on non-darwin platforms; on darwin we must NOT see
+  // any of the LaunchAgent-specific steps when --persist is omitted.
+  for (const persistLabel of [
+    "mkdir LaunchAgents",
+    "write plist",
+    "launchctl bootstrap",
+    "launchctl bootout (best-effort)",
+    "rm plist",
+  ]) {
+    assert.ok(
+      !labels.includes(persistLabel),
+      `unexpected ${persistLabel} in ${JSON.stringify(labels)} without --persist`,
+    );
+  }
+});
+
+test("set-codex-runtime-env --unset --dry-run --persist plans bootout + rm on darwin", () => {
+  if (process.platform !== "darwin") return;
+  const j = withFakeHome((env) =>
+    runJson(
+      ["set-codex-runtime-env", "--unset", "--dry-run", "--persist"],
+      env,
+    ),
+  );
+  assert.equal(j.ok, true);
+  assert.equal(j.dryRun, true);
+  assert.equal(j.value, null);
+  const labels = j.actions.map((a) => a.label);
+  assert.ok(labels.includes("launchctl unsetenv"));
+  assert.ok(labels.includes("launchctl bootout (best-effort)"));
+  assert.ok(labels.includes("rm plist"));
+  // Notes should mention persistence is being removed.
+  assert.ok(
+    j.notes.some((n) => /no longer be re-applied on login/.test(n)),
+    `expected unset-persistence note, got ${JSON.stringify(j.notes)}`,
+  );
+});
+
+test("set-codex-runtime-env escapes XML metacharacters in plist value", () => {
+  if (process.platform !== "darwin") return;
+  // Values containing <, >, & must be encoded inside the <string> elements
+  // even though they would otherwise produce invalid XML.
+  const j = withFakeHome((env) =>
+    runJson(
+      [
+        "set-codex-runtime-env",
+        "codex&<weird>",
+        "--dry-run",
+        "--persist",
+      ],
+      env,
+    ),
+  );
+  const write = j.actions.find((a) => a.label === "write plist");
+  assert.ok(write, "expected a write plist action");
+  const script = write.args[write.args.length - 1];
+  // Encoded form should appear; the raw "<weird>" should not appear inside a
+  // <string>...</string> token after escaping.
+  assert.match(script, /codex&amp;&lt;weird&gt;/);
+});
+
+test("codex-runtime-info reports persistence state for the host platform", () => {
+  const j = withFakeHome((env) =>
+    runJson(["codex-runtime-info"], env),
+  );
+  assert.ok(j.persistence, "expected persistence field on codex-runtime-info");
+  // All three platform buckets should be present so callers can render a
+  // cross-platform table without branching.
+  assert.ok(j.persistence.darwin);
+  assert.ok(j.persistence.linux);
+  assert.ok(j.persistence.win32);
+  if (process.platform === "darwin") {
+    assert.equal(typeof j.persistence.darwin.launchAgentInstalled, "boolean");
+    assert.match(
+      j.persistence.darwin.launchAgentPath,
+      /Library\/LaunchAgents\/com\.openloomi\.codex-runtime-env\.plist$/,
+    );
+    // Fresh tmp home has no plist installed.
+    assert.equal(j.persistence.darwin.launchAgentInstalled, false);
+    assert.equal(j.persistence.linux.envFileInstalled, null);
+    assert.equal(j.persistence.win32.manualStepsRequired, true);
+  }
+});
+
+test("codex-runtime-info persistence.darwin.launchAgentInstalled flips true when plist exists", () => {
+  if (process.platform !== "darwin") return;
+  withFakeHome((env) => {
+    const plistPath = join(
+      env.HOME,
+      "Library",
+      "LaunchAgents",
+      "com.openloomi.codex-runtime-env.plist",
+    );
+    mkdirSync(dirname(plistPath), { recursive: true });
+    writeFileSync(
+      plistPath,
+      '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict></dict></plist>\n',
+    );
+    const j = runJson(["codex-runtime-info"], env);
+    assert.equal(j.persistence.darwin.launchAgentInstalled, true);
+    assert.equal(j.persistence.darwin.launchAgentPath, plistPath);
+  });
 });

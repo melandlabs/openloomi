@@ -237,6 +237,7 @@ async function getCodexRuntimeEnvStatus() {
     source: probe.source,
     key: RUNTIME_ENV_KEY,
     requiresRestart: !set && value !== null, // changed away from codex - must restart GUI to clear
+    persistenceProbe: probePersistenceState(),
   };
 }
 
@@ -369,6 +370,7 @@ async function buildSetupStatus() {
       value: codexRuntimeEnv.value,
       source: codexRuntimeEnv.source,
       requiresRestart: codexRuntimeEnv.requiresRestart,
+      persistenceProbe: codexRuntimeEnv.persistenceProbe,
     },
     session: {
       tokenPresent: token.present,
@@ -3561,8 +3563,8 @@ function codexRuntimeInfo() {
       // so callers can grep for `OPENLOOMI_AGENT_PROVIDER=codex` to
       // confirm the env name + value pair is documented.
       "export OPENLOOMI_AGENT_PROVIDER=codex",
-      "launchctl setenv OPENLOOMI_AGENT_PROVIDER codex",
-      "open /Applications/openloomi.app",
+      "node plugins/codex/scripts/loomi-bridge.mjs set-codex-runtime-env codex --persist",
+      "# then Quit + reopen OpenLoomi.app",
     ].join("\n"),
     linux: [
       "export OPENLOOMI_AGENT_PROVIDER=codex",
@@ -3574,8 +3576,8 @@ function codexRuntimeInfo() {
   const permanentByPlatform = {
     darwin: [
       "echo 'export OPENLOOMI_AGENT_PROVIDER=codex' >> ~/.zshrc",
-      "add a LaunchAgent plist that re-applies launchctl setenv on every",
-      "login, or run set-codex-runtime-env after each login",
+      "node plugins/codex/scripts/loomi-bridge.mjs set-codex-runtime-env codex --persist",
+      "# (or) install a LaunchAgent plist manually that re-applies launchctl setenv on every login",
     ].join("\n"),
     linux: [
       "echo 'OPENLOOMI_AGENT_PROVIDER=codex' >> ~/.config/environment.d/openloomi-codex.conf",
@@ -3589,6 +3591,7 @@ function codexRuntimeInfo() {
       "Switch the OpenLoomi desktop app agent runtime from the built-in Claude runtime to the Codex CLI.",
     envProviderKey: CODEX_RUNTIME_INFO_KEY,
     platform,
+    persistence: probePersistenceState(),
     switch: {
       // Current-platform snippets are kept as strings so most callers
       // can copy-paste directly. Field name is unchanged; type just
@@ -3661,12 +3664,63 @@ function codexRuntimeInfo() {
 const RUNTIME_ENV_KEY = "OPENLOOMI_AGENT_PROVIDER";
 const LINUX_ENV_DIR = ".config/environment.d";
 const LINUX_ENV_FILE = "openloomi-codex.conf";
+const DARWIN_LAUNCH_AGENT_LABEL = "com.openloomi.codex-runtime-env";
+
+// ~/Library/LaunchAgents/com.openloomi.codex-runtime-env.plist
+function darwinLaunchAgentPath() {
+  return path.join(
+    expandHome("~"),
+    "Library",
+    "LaunchAgents",
+    `${DARWIN_LAUNCH_AGENT_LABEL}.plist`,
+  );
+}
+
+// Escape XML special chars. Plist values flow verbatim into <string> elements,
+// so `&`, `<`, `>` must be encoded. Label is a constant; key/value are user-
+// supplied so they go through escapePlistString.
+function escapePlistString(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Pure function: build a hardened LaunchAgent plist XML body. RunAtLoad re-
+// applies `launchctl setenv KEY VALUE` at every login so OPENLOOMI_AGENT_PROVIDER
+// survives logout/reboot. LimitLoadToSessionType=Aqua keeps it in the GUI
+// session. ProcessType=Background avoids foreground scheduling.
+function buildLaunchAgentPlist({ label, key, value }) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${escapePlistString(label)}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/launchctl</string>
+    <string>setenv</string>
+    <string>${escapePlistString(key)}</string>
+    <string>${escapePlistString(value)}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LimitLoadToSessionType</key>
+  <string>Aqua</string>
+</dict>
+</plist>
+`;
+}
 
 function parseSetRuntimeEnvFlags(args) {
-  const out = { value: "codex", unset: false, dryRun: false };
+  const out = { value: "codex", unset: false, dryRun: false, persist: false };
   for (const arg of args) {
     if (arg === "--unset") out.unset = true;
     else if (arg === "--dry-run") out.dryRun = true;
+    else if (arg === "--persist") out.persist = true;
     else if (!arg.startsWith("--") && out.value === "codex") out.value = arg;
   }
   return out;
@@ -3790,6 +3844,43 @@ async function setCodexRuntimeEnv(args) {
   });
 }
 
+// Lightweight probe of the persistence mechanism for the current platform.
+// Used by `codex-runtime-info` and `getCodexRuntimeEnvStatus` so callers can
+// see whether OPENLOOMI_AGENT_PROVIDER will survive a logout/reboot even when
+// the in-memory launchd value already matches.
+//
+// Returns a discriminated shape keyed by platform. Each platform reports:
+//   - darwin: { launchAgentInstalled: boolean, launchAgentPath: string }
+//   - linux:  { envFileInstalled: boolean, envFilePath: string }
+//   - win32:  { manualStepsRequired: true }
+//
+// Platforms other than the host report `null` for installed flags to make
+// "not applicable" distinguishable from "false" in downstream tests.
+function probePersistenceState() {
+  if (process.platform === "darwin") {
+    const plistPath = darwinLaunchAgentPath();
+    const installed = isFile(plistPath);
+    return {
+      darwin: { launchAgentInstalled: installed, launchAgentPath: plistPath },
+      linux: { envFileInstalled: null, envFilePath: null },
+      win32: { manualStepsRequired: true },
+    };
+  }
+  if (process.platform === "linux") {
+    const file = path.join(expandHome(`~/${LINUX_ENV_DIR}`), LINUX_ENV_FILE);
+    return {
+      darwin: { launchAgentInstalled: null, launchAgentPath: null },
+      linux: { envFileInstalled: isFile(file), envFilePath: file },
+      win32: { manualStepsRequired: true },
+    };
+  }
+  return {
+    darwin: { launchAgentInstalled: null, launchAgentPath: null },
+    linux: { envFileInstalled: null, envFilePath: null },
+    win32: { manualStepsRequired: true },
+  };
+}
+
 async function probeRuntimeEnvValue(key) {
   if (process.platform === "darwin") {
     const r = await runCapture("launchctl", ["getenv", key]);
@@ -3838,11 +3929,65 @@ function planRuntimeEnvChange({ platform, key, value, flags }) {
     commands.push(
       `launchctl ${flags.unset ? "unsetenv" : "setenv"} ${key}${value ? " " + value : ""}`,
     );
-    notes.push(
-      flags.unset
-        ? "Cleared OPENLOOMI_AGENT_PROVIDER from the GUI launchd domain."
-        : "Set OPENLOOMI_AGENT_PROVIDER in the GUI launchd domain.",
-    );
+
+    if (flags.persist) {
+      const plistPath = darwinLaunchAgentPath();
+      const plistDir = path.dirname(plistPath);
+      const uid =
+        typeof process.getuid === "function" ? process.getuid() : null;
+      const guiTarget = uid != null ? `gui/${uid}` : "gui/$UID";
+
+      if (flags.unset) {
+        // Best-effort bootout: agent may not be loaded, exit code != 0 is OK.
+        actions.push({
+          label: "launchctl bootout (best-effort)",
+          command: "launchctl",
+          args: ["bootout", guiTarget, plistPath],
+        });
+        actions.push({ label: "rm plist", command: "rm", args: ["-f", plistPath] });
+        commands.push(`launchctl bootout ${guiTarget} ${plistPath}  # best-effort`);
+        commands.push(`rm -f ${plistPath}`);
+        notes.push(
+          `Removed LaunchAgent ${plistPath}. ${key} will no longer be re-applied on login.`,
+        );
+      } else {
+        actions.push({
+          label: "mkdir LaunchAgents",
+          command: "/bin/mkdir",
+          args: ["-p", plistDir],
+        });
+        actions.push({
+          label: "write plist",
+          command: "/bin/sh",
+          args: [
+            "-c",
+            `cat > '${plistPath}' <<'__OPENLOOMI_CODEX_PLIST_EOF__'\n${buildLaunchAgentPlist({ label: DARWIN_LAUNCH_AGENT_LABEL, key, value })}__OPENLOOMI_CODEX_PLIST_EOF__`,
+          ],
+        });
+        if (uid != null) {
+          actions.push({
+            label: "launchctl bootstrap",
+            command: "launchctl",
+            args: ["bootstrap", guiTarget, plistPath],
+          });
+          commands.push(`launchctl bootstrap ${guiTarget} ${plistPath}`);
+        }
+        commands.push(`mkdir -p ${plistDir}`);
+        commands.push(
+          `write ${plistPath} (RunAtLoad launchctl setenv ${key} ${value})`,
+        );
+        notes.push(
+          `Installed LaunchAgent ${plistPath} so ${key}=${value} survives logout/reboot. Quit and reopen OpenLoomi.app for the new env to take effect in the running web server.`,
+        );
+      }
+    } else {
+      notes.push(
+        flags.unset
+          ? "Cleared OPENLOOMI_AGENT_PROVIDER from the GUI launchd domain (transient — lost on logout/reboot)."
+          : "Set OPENLOOMI_AGENT_PROVIDER in the GUI launchd domain (transient — lost on logout/reboot; pass --persist to install a LaunchAgent plist).",
+      );
+    }
+
     return {
       actions,
       commands,
@@ -4073,9 +4218,10 @@ async function setup(args) {
         reason: status.reason,
         codexRuntimeEnvSet: false,
       });
-      const r = await runBridgeSubcommand(["set-codex-runtime-env", "codex"], {
-        timeoutMs: 10_000,
-      });
+      const r = await runBridgeSubcommand(
+        ["set-codex-runtime-env", "codex", "--persist"],
+        { timeoutMs: 10_000 },
+      );
       const ok = r.ok && r.parsed && r.parsed.ok === true;
       record("runtime_env", ok, {
         code: r.code,
@@ -4106,7 +4252,7 @@ async function setup(args) {
         status,
         runtimeEnv: r.parsed,
         message:
-          "OPENLOOMI_AGENT_PROVIDER=codex is now set in the host environment, but the running OpenLoomi Desktop app must be Quit and reopened for the change to take effect.",
+          "OPENLOOMI_AGENT_PROVIDER=codex is now set in the host environment and a LaunchAgent has been installed so the change survives logout/reboot. Quit and reopen OpenLoomi Desktop for the change to take effect in the running web server.",
       });
       return;
     }

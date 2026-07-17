@@ -467,17 +467,41 @@ Claude provider. To run the same desktop binary against the local Codex CLI
 instead, set `OPENLOOMI_AGENT_PROVIDER=codex` in the environment the desktop app
 actually inherits.
 
+#### How `OPENLOOMI_AGENT_PROVIDER` reaches OpenLoomi
+
+Three tiers, each more durable than the last:
+
+1. **In-process only** — `export OPENLOOMI_AGENT_PROVIDER=codex` in a terminal.
+   Reaches the shell and any process the shell forks, but **not** the OpenLoomi
+   web server (it runs in the GUI launchd session on macOS / a separate systemd
+   user session on Linux).
+2. **This session only (transient)** —
+   `node plugins/codex/scripts/loomi-bridge.mjs set-codex-runtime-env codex`.
+   Writes `launchctl setenv OPENLOOMI_AGENT_PROVIDER codex` in the GUI launchd
+   domain on macOS, or `~/.config/environment.d/openloomi-codex.conf` on Linux.
+   The running OpenLoomi Desktop app does **not** see the change until you Quit
+   and reopen it, and the value is lost on the next logout/reboot.
+3. **Persistent (recommended)** —
+   `node plugins/codex/scripts/loomi-bridge.mjs set-codex-runtime-env codex --persist`.
+   Does everything tier 2 does **plus** installs
+   `~/Library/LaunchAgents/com.openloomi.codex-runtime-env.plist` (a
+   `RunAtLoad` LaunchAgent that re-applies `launchctl setenv` on every login),
+   so the value survives logout/reboot. The `setup` wizard installs this tier
+   by default. On Linux the environment.d file already persists, so no extra
+   flag is needed. On Windows the bridge intentionally does not write to the
+   registry — follow the printed manual steps.
+
 > **macOS caveat:** the desktop app's web server runs inside the GUI launchd
-> session, not your terminal. `export FOO=bar` in a terminal does **not** reach
-> the running web server. After setting the variable you must Quit and reopen
+> session, not your terminal. After tier 2 or tier 3 you must Quit and reopen
 > `OpenLoomi.app` so the new env is inherited by the freshly forked web process.
 > On Linux a per-user env file works after the next login, and on Windows you
 > edit the user environment via System Settings.
 
 ```bash
-node plugins/codex/scripts/loomi-bridge.mjs set-codex-runtime-env codex
-# macOS: writes via launchctl setenv.
-# Linux: writes ~/.config/environment.d/openloomi-codex.conf.
+# Tier 3 — persistent across logouts/reboots (recommended):
+node plugins/codex/scripts/loomi-bridge.mjs set-codex-runtime-env codex --persist
+# macOS: writes via launchctl setenv AND installs ~/Library/LaunchAgents/com.openloomi.codex-runtime-env.plist.
+# Linux: writes ~/.config/environment.d/openloomi-codex.conf (already persistent).
 # Windows: prints manual steps (System Settings -> Environment Variables).
 
 # Then quit and reopen OpenLoomi so the new env reaches the web server.
@@ -489,6 +513,9 @@ Flags accepted by `set-codex-runtime-env`:
   `opencode`, `hermes`, `openclaw`).
 - `--unset` - clear `OPENLOOMI_AGENT_PROVIDER` from the host environment.
 - `--dry-run` - describe what would happen without performing the write.
+- `--persist` - on macOS, install a `RunAtLoad` LaunchAgent plist that
+  re-applies the value on every login so the switch survives logout/reboot.
+  Combine with `--unset` to also remove the plist.
 
 For a permanent shell-side switch on macOS or Linux, you can additionally append
 the export to your shell rc so future shells remember it:
@@ -543,6 +570,10 @@ The bridge returns:
 
 - `envProviderKey` (`OPENLOOMI_AGENT_PROVIDER`)
 - `switch.oneOff` and `switch.permanent` platform guidance
+- `persistence` - `darwin.launchAgentInstalled` / `launchAgentPath`,
+  `linux.envFileInstalled` / `envFilePath`, `win32.manualStepsRequired`.
+  Use this to audit whether the persistence tier is actually in place without
+  re-running `set-codex-runtime-env`.
 - `prerequisites` - Codex CLI binary, `~/.codex/config.toml`, `OPENAI_API_KEY`
 - `companionEnvVars[]` - `OPENLOOMI_AGENT_CODEX_*` variables with their
   defaults
@@ -556,11 +587,11 @@ The companion command that performs the GUI-session env write is
 `set-codex-runtime-env`:
 
 ```bash
-node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" set-codex-runtime-env codex
-# Clear it later:
-node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" set-codex-runtime-env --unset
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" set-codex-runtime-env codex --persist
+# Clear it later (also tears down the LaunchAgent plist on macOS):
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" set-codex-runtime-env --unset --persist
 # Plan only, do not write:
-node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" set-codex-runtime-env --dry-run
+node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" set-codex-runtime-env --dry-run --persist
 ```
 
 After running `set-codex-runtime-env`, Quit and reopen `OpenLoomi.app` so the
