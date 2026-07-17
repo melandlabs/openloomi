@@ -20,11 +20,12 @@ import {
   type ScoredMemoryRecord,
   deprecateMemoryRecords,
 } from "../../ai/src/memory";
-import type { IndexedDBManager, RawMessage } from "./manager";
+import type { RawMessage } from "./manager";
 import {
   createRawMessageMemoryGraphStore,
   ownerScopeFromMessage,
 } from "./memory-graph-evolution";
+import type { RawMessageStorage } from "./storage";
 
 export interface RawMessageGraphLifecycleOptions extends MemoryGraphLifecyclePolicyOptions {
   enabled?: boolean;
@@ -70,7 +71,7 @@ export interface MemoryGraphLifecycleRuntimeResult {
 }
 
 export interface RunMemoryGraphLifecycleCycleInput {
-  manager: IndexedDBManager;
+  manager: RawMessageStorage;
   storage: MemoryStorageAdapter;
   userId: string;
   options: RawMessageGraphLifecycleOptions;
@@ -172,7 +173,7 @@ function graphPolicy(
 }
 
 async function loadScopedMessages(input: {
-  manager: IndexedDBManager;
+  manager: RawMessageStorage;
   ownerScope: OwnerScope;
   ids: string[];
 }): Promise<RawMessage[]> {
@@ -326,7 +327,9 @@ export async function runMemoryGraphLifecycleCycle(
       },
       policy: graphPolicy(input.options),
     });
-    lifecycle.reasonCodes.forEach((reasonCode) => reasonCodes.add(reasonCode));
+    for (const reasonCode of lifecycle.reasonCodes) {
+      reasonCodes.add(reasonCode);
+    }
     transitionedClusters = lifecycle.transitions.length;
     stableClusters = lifecycle.consolidationCandidates.length;
     decayingClusters = lifecycle.decayingClusterIds.length;
@@ -361,9 +364,9 @@ export async function runMemoryGraphLifecycleCycle(
     }
 
     const lifecyclePersistence = await graphStore.persistPlan(lifecycle.plan);
-    lifecyclePersistence.diagnostics.forEach((reasonCode) =>
-      reasonCodes.add(reasonCode),
-    );
+    for (const reasonCode of lifecyclePersistence.diagnostics) {
+      reasonCodes.add(reasonCode);
+    }
     if (lifecyclePersistence.conflict) {
       return {
         status: "conflict",
@@ -444,9 +447,9 @@ export async function runMemoryGraphLifecycleCycle(
         }
         const representativePersistence =
           await graphStore.persistPlan(representativePlan);
-        representativePersistence.diagnostics.forEach((reasonCode) =>
-          reasonCodes.add(reasonCode),
-        );
+        for (const reasonCode of representativePersistence.diagnostics) {
+          reasonCodes.add(reasonCode);
+        }
         if (representativePersistence.conflict) {
           partialFailure = true;
           candidateResults.push({
@@ -549,9 +552,9 @@ export async function runMemoryGraphLifecycleCycle(
           store: input.storage,
           now,
         });
-        deprecation.reasonCodes.forEach((reasonCode) =>
-          reasonCodes.add(reasonCode),
-        );
+        for (const reasonCode of deprecation.reasonCodes) {
+          reasonCodes.add(reasonCode);
+        }
         deprecatedRecords += deprecation.persistedCount;
         const coveredSourceIds = unique(
           deprecationCandidates.flatMap((item) => item.recordIds),
@@ -567,9 +570,9 @@ export async function runMemoryGraphLifecycleCycle(
           });
           const visibilityPersistence =
             await graphStore.persistPlan(visibilityPlan);
-          visibilityPersistence.diagnostics.forEach((reasonCode) =>
-            reasonCodes.add(reasonCode),
-          );
+          for (const reasonCode of visibilityPersistence.diagnostics) {
+            reasonCodes.add(reasonCode);
+          }
           if (visibilityPersistence.conflict) {
             partialFailure = true;
             reasonCodes.add("memory_graph_visibility_version_conflict");

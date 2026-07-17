@@ -9,6 +9,7 @@ import type {
 } from "./forgetting";
 import type {
   GroupByType,
+  IndexedDBManager,
   MemorySummaryRecord,
   RawMessage,
   RawMessageQuery,
@@ -68,7 +69,7 @@ export interface RunMemoryForgettingCycleForUserResult {
   error?: string;
 }
 
-let managerInstance: any = null;
+let managerInstance: IndexedDBManager | null = null;
 
 /**
  * Initialize IndexedDB manager (client-side only)
@@ -140,7 +141,7 @@ export async function storeRawMessagesFromInsight(
     embeddingContentHash?: string;
     embeddingDimensions?: number;
     embeddingUpdatedAt?: number;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }>,
   graphEvolution?: RawMessageGraphEvolutionOptions,
 ): Promise<{
@@ -334,7 +335,7 @@ export async function queryRawMessagesWithFallback(
         embeddingDimensions: item.record.embeddingDimensions,
         embeddingUpdatedAt: item.record.embeddingUpdatedAt,
         metadata:
-          (item.record.metadata as Record<string, any> | undefined) ??
+          (item.record.metadata as Record<string, unknown> | undefined) ??
           undefined,
         createdAt: item.record.timestamp,
         memoryStage: item.record.tier,

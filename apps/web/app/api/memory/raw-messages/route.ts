@@ -162,7 +162,7 @@ async function queryRawMessagesWithFallback(
   const minRaw =
     query.minRawResultsWithoutFallback ?? query.pageSize ?? query.limit ?? 50;
 
-  const result = await queryMemoryWithFallback(manager as any, {
+  const result = await queryMemoryWithFallback(manager, {
     userId,
     keywords: query.keywords,
     startTime: normalizeTimestampToMs(query.startTime),
@@ -240,7 +240,7 @@ async function queryRawMessagesWithFallback(
         embeddingDimensions: item.record.embeddingDimensions,
         embeddingUpdatedAt: item.record.embeddingUpdatedAt,
         metadata:
-          (item.record.metadata as Record<string, any> | undefined) ??
+          (item.record.metadata as Record<string, unknown> | undefined) ??
           undefined,
         createdAt: item.record.timestamp,
         memoryStage: item.record.tier,
@@ -421,7 +421,7 @@ export async function POST(request: NextRequest) {
 
       case "forgettingCycle": {
         const result = await runMemoryForgettingCycle(
-          manager as any,
+          manager,
           userId,
           parseForgettingCycleOptions(body.options),
         );

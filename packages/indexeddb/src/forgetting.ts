@@ -22,17 +22,13 @@ import {
   createMemoryQueryApi,
 } from "../../ai/src/memory";
 import { cosineSimilarity } from "./embedding";
-import type {
-  IndexedDBManager,
-  MemoryStage,
-  MemorySummaryRecord,
-  RawMessage,
-} from "./manager";
+import type { MemoryStage, MemorySummaryRecord, RawMessage } from "./manager";
 import {
   type MemoryGraphLifecycleRuntimeResult,
   type RawMessageGraphLifecycleOptions,
   runMemoryGraphLifecycleCycle,
 } from "./memory-graph-lifecycle";
+import type { RawMessageStorage } from "./storage";
 
 /**
  * Bridge layer between IndexedDB manager and the shared memory engine APIs.
@@ -208,7 +204,7 @@ type NativeRawSemanticSearchResult = {
   similarity: number;
 };
 
-type NativeSemanticSearchManager = IndexedDBManager & {
+type NativeSemanticSearchManager = RawMessageStorage & {
   searchMessagesSemantically?: (input: {
     userId: string;
     queryEmbedding: number[];
@@ -237,19 +233,9 @@ function hasMoreByLength<T>(items: T[], pageSize: number): MemoryPageResult<T> {
 }
 
 export function createIndexedDBMemoryStorageAdapter(
-  manager: IndexedDBManager,
+  manager: RawMessageStorage,
 ): MemoryStorageAdapter {
-  const deprecationManager = manager as IndexedDBManager & {
-    deprecateMessages?: (
-      messageIds: string[],
-      input?: {
-        userId?: string;
-        deprecatedAt?: number;
-        reason?: string;
-        supersededBySummaryId?: string;
-      },
-    ) => Promise<number>;
-  };
+  const deprecationManager = manager;
   return {
     async acquireLock(input) {
       // Process-local lock for re-entrancy control.
@@ -597,7 +583,7 @@ export interface RunMemoryForgettingCycleResult {
 }
 
 export async function runMemoryForgettingCycle(
-  manager: IndexedDBManager,
+  manager: RawMessageStorage,
   userId: string,
   options?: RunMemoryForgettingCycleOptions,
 ): Promise<RunMemoryForgettingCycleResult> {
@@ -715,7 +701,7 @@ export async function runMemoryForgettingCycle(
 }
 
 export async function queryMemoryWithFallback(
-  manager: IndexedDBManager,
+  manager: RawMessageStorage,
   query: MemorySearchQuery & {
     minRawResultsWithoutFallback?: number;
   },
