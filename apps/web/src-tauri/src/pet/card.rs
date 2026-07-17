@@ -12,6 +12,7 @@
 
 use std::sync::{Mutex, OnceLock};
 
+use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use super::PET_CARD_LABEL;
@@ -27,6 +28,66 @@ static CARD_APP_HANDLE: OnceLock<Mutex<Option<AppHandle>>> = OnceLock::new();
 
 fn card_handle_slot() -> &'static Mutex<Option<AppHandle>> {
     CARD_APP_HANDLE.get_or_init(|| Mutex::new(None))
+}
+
+// ---------------------------------------------------------------------------
+// Cached connector snapshot — kept in sync with `lib/loop/connectors.ts`
+// ---------------------------------------------------------------------------
+
+/// Mirrors the shape persisted by `writeConnectorSnapshot` in
+/// `apps/web/lib/loop/connectors.ts`. Two top-level shapes are tolerated:
+///
+///   * `{ fetchedAt, connectors: [...] }`  — current `writeConnectorSnapshot`.
+///   * `{ updatedAt, connectors: [...] }`  — older / external writers.
+///
+/// We only need `connectors` for the card emit (the renderer derives the
+/// pill row + "Last checked" stamp itself), so we keep the struct minimal.
+#[derive(Debug, Deserialize)]
+struct ConnectorSnapshot {
+    #[serde(default)]
+    connectors: Option<serde_json::Value>,
+}
+
+/// Read the cached connector snapshot the watcher / connector probe wrote
+/// to `~/.openloomi/loop/connectors.json`. Returns `None` if the file is
+/// missing, unreadable, or carries no `connectors` array.
+///
+/// Best-effort by design: the watcher is the source of truth, but the
+/// card window needs something to render even before the first probe
+/// completes. A failure here just means we emit no `loop:connectors`
+/// payload — the card's own `refreshConnectors()` listener kicks in and
+/// pulls `/api/loop/connectors` over HTTP, so the user never sees a
+/// permanently-stale card just because the snapshot read failed.
+fn read_connector_snapshot() -> Option<serde_json::Value> {
+    use std::fs;
+    let home = std::env::var_os("HOME")?;
+    let path = std::path::PathBuf::from(home)
+        .join(".openloomi")
+        .join("loop")
+        .join("connectors.json");
+    let raw = fs::read_to_string(&path).ok()?;
+    let parsed: ConnectorSnapshot = serde_json::from_str(&raw).ok()?;
+    parsed.connectors
+}
+
+/// Emit the cached connector snapshot to the card window.
+///
+/// #376 — the card webview is built once and reused (hidden → shown).
+/// Before this fix the snapshot only reached the card via the initial
+/// `refreshConnectors()` call at page-load time, which meant a card
+/// opened *before* the first probe completed would render "No sources
+/// connected" forever — even after the watcher wrote healthy entries.
+/// Re-emitting the cached snapshot on every card open gives the listener
+/// a starting point even when the webview's in-memory `connectors` is
+/// still empty. The listener falls through to its own fetch when it
+/// receives a fresh payload, so a missing snapshot file just means the
+/// listener fires its HTTP path on the next compact open.
+fn emit_connector_snapshot_to_card(app: &AppHandle) {
+    let Some(connectors) = read_connector_snapshot() else {
+        return;
+    };
+    let payload = serde_json::json!({ "items": connectors });
+    let _ = app.emit_to(PET_CARD_LABEL, "loop:connectors", payload);
 }
 
 /// Build the card window if it doesn't exist yet. Idempotent.
@@ -121,6 +182,13 @@ fn show_card_window_with(app: &AppHandle, compact: bool) {
         "loop:card-mode",
         serde_json::json!({ "compact": compact }),
     );
+    // #376 — push the cached connector snapshot to the card so its
+    // `loop:connectors` listener can populate `connectors` immediately,
+    // even when the card webview was hidden and reused since the last
+    // probe. The listener still falls through to its own HTTP refresh
+    // on the `loop:card-mode` emit above, so this is a fast-path fill,
+    // not a replacement for the network fetch.
+    emit_connector_snapshot_to_card(app);
     if let Some(w) = app.get_webview_window(PET_CARD_LABEL) {
         let _ = w.set_ignore_cursor_events(false);
         let _ = w.show();

@@ -5757,7 +5757,32 @@
         }, 1000);
 
         // ---------- Connector refresh ----------
+        // #376 — the card webview is built once and reused. A stale
+        // `connectors = []` from an early empty response (or a probe that
+        // hadn't completed by the time the card first mounted) used to
+        // persist for the lifetime of the window — the next compact open
+        // re-shown the existing webview with its old `connectors` array
+        // and rendered "No sources connected" even after the watcher
+        // wrote healthy entries to `~/.openloomi/loop/connectors.json`.
+        //
+        // Fix:
+        //   1. The `loop:card-mode` listener below triggers a refresh on
+        //      every compact / full open so the card always reflects the
+        //      latest snapshot the moment it appears.
+        //   2. `connectorsRefreshToken` lets overlapping requests tell
+        //      which response is freshest: a slow earlier request that
+        //      resolves AFTER a newer one must NOT clobber the newer
+        //      state. The token increments per fetch and a response only
+        //      wins if it still matches.
+        //   3. The function only overwrites `connectors` when the payload
+        //      actually carries an `items` array — a missing or malformed
+        //      response keeps the previously-known list visible. A slow
+        //      or failed refresh therefore never erases the last good
+        //      connector state, which is one of the #376 acceptance
+        //      criteria.
+        let connectorsRefreshInflight = 0;
         async function refreshConnectors() {
+          const token = ++connectorsRefreshInflight;
           try {
             const res = await fetch(
               `${window.__OPENLOOMI_API__ || ""}/api/loop/connectors`,
@@ -5765,11 +5790,34 @@
                 credentials: "include",
               },
             );
-            if (!res.ok) return;
-            const data = await res.json().catch(() => ({}));
-            connectors = Array.isArray(data?.items) ? data.items : [];
+            if (token !== connectorsRefreshInflight) return;
+            if (!res.ok) {
+              // Keep previous list visible — see #376 acceptance
+              // criterion: "A slow or failed refresh does not erase the
+              // last known good connector list."
+              apply();
+              return;
+            }
+            const data = await res.json().catch(() => null);
+            if (token !== connectorsRefreshInflight) return;
+            const items = data && data.items;
+            // Only overwrite `connectors` when the server actually
+            // returned a list shape. A `null` / `undefined` payload
+            // (e.g. an in-flight silent probe that hasn't produced
+            // anything yet) must NOT blank out the previously-known
+            // healthy state.
+            if (Array.isArray(items)) {
+              connectors = items;
+            }
             apply();
-          } catch (_) {}
+          } catch (_) {
+            // Network / CORS failure — same policy as `!res.ok`. Keep
+            // the previous known-good list; let `apply()` repaint the
+            // existing data so the empty-state copy ("No sources
+            // connected") stays hidden until the server explicitly
+            // confirms no sources are connected.
+            if (token === connectorsRefreshInflight) apply();
+          }
         }
 
         // ---------- AI config refresh ----------
@@ -6055,10 +6103,27 @@
           // flips the flag back so subsequent renders pick the right
           // layout. The renderer's `chooseLayout()` short-circuits
           // to `compact` while the flag is set.
+          //
+          // #376 — every card open now triggers a connector refresh.
+          // The Tauri card webview is built once and reused (hidden →
+          // shown), so the initial `refreshConnectors()` call at the
+          // bottom of this script only fires on the first mount and
+          // misses snapshot updates that landed while the window was
+          // hidden. Without this re-fetch, a user who opens the card
+          // before the first probe completes would see "No sources
+          // connected" forever — even after the watcher wrote healthy
+          // entries to `~/.openloomi/loop/connectors.json` — until they
+          // restarted OpenLoomi. We fire the refresh for both compact
+          // and full opens so a full-mode decision card also reflects
+          // the latest connector state when it appears.
           tauri.event.listen("loop:card-mode", (e) => {
             const p = (e && e.payload) || {};
             compactMode = !!p.compact;
             apply();
+            // `void` so the listener returns immediately; the fetch
+            // runs in the background and updates `connectors` via the
+            // in-flight token inside `refreshConnectors()`.
+            void refreshConnectors();
           });
           // #365 — capture the enriched `loop:state` payload is
           // folded into the existing listener above (see the
