@@ -14,7 +14,6 @@
 //   setup-status [--json]            stable JSON
 //   install [--yes]                  user-approved install
 //   login                            open OpenLoomi login surface
-//   sync-claude-env                  read Claude env → PUT /api/preferences/ai
 //   pet <state>                      set OpenLoomi Pet state
 //   state <name> [--event <e>]       fire-and-forget state (hook internal)
 //   archive                          archive last Stop transcript (hook internal)
@@ -24,8 +23,11 @@
 //   hooks-status                     report merge state
 //
 // IMPORTANT (secrets contract):
-//   - ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are read once locally
-//     inside `sync-claude-env` and immediately dropped after use.
+//   - This bridge never reads AI-provider env vars. AI provider
+//     configuration lives entirely inside the OpenLoomi runtime,
+//     which detects the user's `claude` CLI auth on its own. The
+//     plugin's job is "Claude Code ↔ OpenLoomi Pet/state/usage";
+//     AI config is the runtime's.
 //   - ~/.openloomi/token is read at most for base64-decode to obtain
 //     the bearer; its contents are never printed.
 //   - All status checks report presence/absence only.
@@ -1161,15 +1163,19 @@ async function readBinVersion(binPath) {
 }
 
 async function probeAiProvider() {
-  // The runtime exposes per-user AI settings at /api/preferences/ai
-  // (apps/web/app/(chat)/api/preferences/ai/route.ts). A provider is
-  // "configured" when either the system defaults — which read from the
-  // ANTHROPIC_* env vars in Tauri mode — carry a key, or the user has
-  // saved an explicit anthropic_compatible row with a key.
+  // The runtime exposes per-user AI settings and the native Claude CLI
+  // probe at /api/preferences/ai (apps/web/app/(chat)/api/preferences/ai/
+  // route.ts). A provider is "configured" when EITHER:
+  //   - the runtime reports the user's local `claude` CLI as authenticated
+  //     (`nativeRuntime.authenticated`), so the runtime can talk to Claude
+  //     without any per-user key, OR
+  //   - the user has saved an explicit `anthropic_compatible` row with a key.
+  // We never read the AI provider env vars the runtime may have inherited;
+  // the runtime's own `nativeRuntime` probe is the source of truth.
   const r = await apiGET("/api/preferences/ai", { timeoutMs: 3000 });
   if (r.ok && r.json) {
-    const sys = r.json?.systemDefaults?.anthropic_compatible;
-    const fromSys = !!(sys && sys.hasApiKey);
+    const native = r.json?.nativeRuntime;
+    const fromNative = !!(native && native.authenticated);
     const defaultAgent =
       typeof r.json?.defaultAgent === "string" ? r.json.defaultAgent : null;
     const fromUser =
@@ -1180,14 +1186,14 @@ async function probeAiProvider() {
           s?.enabled !== false &&
           s?.hasApiKey,
       );
-    const configured = fromSys || fromUser;
+    const configured = fromNative || fromUser;
     return {
       ok: true,
       configured,
       status: configured ? "direct_api_configured" : "direct_api_missing",
       defaultAgent,
       directApi: {
-        systemDefaultConfigured: fromSys,
+        nativeRuntimeAuthenticated: fromNative,
         userConfigured: fromUser,
       },
     };
@@ -1218,15 +1224,10 @@ async function probeApiReachable() {
 }
 
 async function buildStatus({ json = true, explicit = null } = {}) {
-  const claudeEnvPresent = !!(
-    process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
-  );
-  const claudeEnvSyncable = !!(
-    (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) &&
-    (process.env.ANTHROPIC_BASE_URL || "default") &&
-    (process.env.ANTHROPIC_MODEL || "default")
-  );
-
+  // AI provider readiness is the runtime's job — the bridge never reads
+  // AI provider env vars. The runtime's `/api/preferences/ai` endpoint
+  // surfaces `nativeRuntime` (Claude CLI auth probe) and
+  // `aiProviderConfigured`, and those are the only signals we trust.
   const disc = discovery({ explicit });
 
   // Source checkout detected but CLI not yet built: report that BEFORE
@@ -1239,7 +1240,6 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       version: null,
       tokenPresent: tokenPresent(),
       aiProviderConfigured: false,
-      claudeEnvSyncable,
       apiReachable: false,
       hooksInstalled: detectHooksInstalled(),
       ready: false,
@@ -1264,8 +1264,7 @@ async function buildStatus({ json = true, explicit = null } = {}) {
         version: null,
         tokenPresent: tokenPresent(),
         aiProviderConfigured: (await probeAiProvider()).configured,
-        claudeEnvSyncable,
-        apiReachable,
+          apiReachable,
         canGuestLogin: apiReachable,
         hooksInstalled: detectHooksInstalled(),
         ready: false,
@@ -1292,7 +1291,6 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       version: null,
       tokenPresent: tokenPresent(),
       aiProviderConfigured: false,
-      claudeEnvSyncable,
       apiReachable: false,
       canGuestLogin: false,
       hooksInstalled: detectHooksInstalled(),
@@ -1324,7 +1322,6 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       version: resolvedVersion,
       tokenPresent: false,
       ...providerFields,
-      claudeEnvSyncable,
       apiReachable,
       canGuestLogin: apiReachable,
       hooksInstalled: detectHooksInstalled(),
@@ -1344,7 +1341,6 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       version: resolvedVersion,
       tokenPresent: true,
       ...providerFields,
-      claudeEnvSyncable,
       apiReachable,
       canGuestLogin: apiReachable,
       hooksInstalled: detectHooksInstalled(),
@@ -1372,7 +1368,6 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       version: resolvedVersion,
       tokenPresent: true,
       ...providerFields,
-      claudeEnvSyncable,
       apiReachable,
       canGuestLogin: apiReachable,
       hooksInstalled: detectHooksInstalled(),
@@ -1385,36 +1380,6 @@ async function buildStatus({ json = true, explicit = null } = {}) {
           : "The native Claude runtime is selected, but Claude Code CLI readiness could not be confirmed. Install or repair Claude Code CLI, or configure a direct Anthropic-compatible provider.",
       source: disc.source,
       desktopMarker: disc.desktopMarker,
-      claudeEnvHint: {
-        hasKey: claudeEnvPresent,
-        hasBase: !!process.env.ANTHROPIC_BASE_URL,
-        hasModel: !!process.env.ANTHROPIC_MODEL,
-      },
-    };
-  }
-
-  if (!aiProvider.configured && claudeEnvPresent) {
-    return {
-      mode: disc.mode,
-      installed: true,
-      binPath: disc.binPath,
-      version: resolvedVersion,
-      tokenPresent: true,
-      ...providerFields,
-      claudeEnvSyncable,
-      apiReachable,
-      canGuestLogin: apiReachable,
-      hooksInstalled: detectHooksInstalled(),
-      ready: false,
-      nextAction: "configure_ai_provider",
-      reason: "AI_PROVIDER_REQUIRED",
-      source: disc.source,
-      desktopMarker: disc.desktopMarker,
-      claudeEnvHint: {
-        hasKey: true,
-        hasBase: !!process.env.ANTHROPIC_BASE_URL,
-        hasModel: !!process.env.ANTHROPIC_MODEL,
-      },
     };
   }
 
@@ -1426,7 +1391,6 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       version: resolvedVersion,
       tokenPresent: true,
       ...providerFields,
-      claudeEnvSyncable: false,
       apiReachable,
       canGuestLogin: apiReachable,
       hooksInstalled: detectHooksInstalled(),
@@ -1435,11 +1399,6 @@ async function buildStatus({ json = true, explicit = null } = {}) {
       reason: "AI_PROVIDER_REQUIRED",
       source: disc.source,
       desktopMarker: disc.desktopMarker,
-      claudeEnvHint: {
-        hasKey: false,
-        hasBase: !!process.env.ANTHROPIC_BASE_URL,
-        hasModel: !!process.env.ANTHROPIC_MODEL,
-      },
     };
   }
 
@@ -1450,7 +1409,6 @@ async function buildStatus({ json = true, explicit = null } = {}) {
     version: resolvedVersion,
     tokenPresent: true,
     ...providerFields,
-    claudeEnvSyncable,
     apiReachable,
     canGuestLogin: apiReachable,
     hooksInstalled: detectHooksInstalled(),
@@ -1673,91 +1631,6 @@ function uninstallHooks() {
 
   atomicWriteJson(settings.path, j);
   return { ok: true, removed, path: settings.path };
-}
-
-// ---------------------------------------------------------------------------
-// sync-claude-env (secrets-sensitive path)
-// ---------------------------------------------------------------------------
-//
-// NOTE on env-source contract:
-// process.env is populated by Claude Code's runtime from
-// `~/.claude/settings.json` (the `env:` block) BEFORE this bridge is
-// spawned. We do NOT re-parse settings.json here, on purpose: that would
-// re-do work the framework already does, and would diverge from any
-// future Claude Code env merge semantics. The visible failure mode if
-// the framework ever stops honoring settings.json env is a clean
-// `claudeEnvSyncable: false` in `setup-status` JSON, never silent
-// data loss.
-
-async function syncClaudeEnv() {
-  // Read env ONCE, locally. Never persist. Never log. Never echo.
-  const apiKey = (
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.ANTHROPIC_AUTH_TOKEN ||
-    ""
-  ).trim();
-  const baseUrl = (
-    process.env.ANTHROPIC_BASE_URL || DEFAULT_PROVIDER_BASE
-  ).trim();
-  const model = (process.env.ANTHROPIC_MODEL || DEFAULT_PROVIDER_MODEL).trim();
-
-  const checked = {
-    ANTHROPIC_API_KEY: {
-      present: !!process.env.ANTHROPIC_API_KEY,
-      source: "env",
-    },
-    ANTHROPIC_AUTH_TOKEN: {
-      present: !!process.env.ANTHROPIC_AUTH_TOKEN,
-      source: "env",
-    },
-    ANTHROPIC_BASE_URL: {
-      present: !!process.env.ANTHROPIC_BASE_URL,
-      source: "env",
-    },
-    ANTHROPIC_MODEL: { present: !!process.env.ANTHROPIC_MODEL, source: "env" },
-  };
-
-  if (!apiKey) {
-    return {
-      ok: false,
-      code: "CLAUDE_ENV_NOT_SET",
-      message: "No ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN in environment",
-      checked,
-    };
-  }
-
-  const payload = {
-    providerType: "anthropic_compatible",
-    apiKey,
-    baseUrl,
-    model,
-    enabled: true,
-  };
-
-  const res = await apiPUT("/api/preferences/ai", payload, {
-    timeoutMs: 10_000,
-  });
-  // We explicitly drop the apiKey from our local variable.
-  // eslint-disable-next-line no-unused-vars
-  const _drop = apiKey; // marker for review
-
-  if (!res.ok) {
-    return {
-      ok: false,
-      code: "SYNC_FAILED",
-      status: res.status,
-      message: res.json?.error || res.error?.message || "Provider sync failed",
-      checked,
-    };
-  }
-  return {
-    ok: true,
-    provider: "anthropic_compatible",
-    model,
-    baseUrl, // baseUrl is not secret; the apiKey was never included in the body
-    response: res.json,
-    checked,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -2478,45 +2351,6 @@ async function main() {
           continue;
         }
 
-        // 4. Logged in, no AI provider, and we have a Claude env key in
-        //    the shell that spawned Claude Code → POST it to the runtime.
-        if (
-          status.tokenPresent &&
-          status.claudeEnvSyncable &&
-          !status.aiProviderConfigured
-        ) {
-          const syncRes = await syncClaudeEnv();
-          record("sync_claude_env", !!syncRes.ok, {
-            code: syncRes.code,
-            provider: syncRes.provider,
-            model: syncRes.model,
-          });
-          if (syncRes.ok) continue;
-          // Distinguish transient (network) from permanent (endpoint
-          // missing / bad request / server error). Only retry transient
-          // failures; permanent ones we surface to the user instead of
-          // hammering the runtime.
-          const TRANSIENT = new Set(["NETWORK", "TIMEOUT"]);
-          if (!TRANSIENT.has(syncRes.code)) {
-            out({
-              ok: false,
-              setup: "sync_failed",
-              code: syncRes.code,
-              message: `sync-claude-env failed: ${syncRes.code}`,
-              sync: {
-                code: syncRes.code,
-                provider: syncRes.provider,
-                model: syncRes.model,
-              },
-              steps,
-              status,
-            });
-            return;
-          }
-          // Transient: continue the loop so we re-probe and retry.
-          continue;
-        }
-
         // 5. No automatic transition matches. Surface a clear next step.
         //    The two realistic stops here are:
         //      - LOGIN_REQUIRED but canGuestLogin=false → API is down
@@ -2576,15 +2410,6 @@ async function main() {
           1,
         );
       }
-      return;
-    }
-    case "sync-claude-env": {
-      const syncRes = await syncClaudeEnv();
-      // Ensure no key content slips into the response by accident.
-      const sanitized = { ...syncRes };
-      delete sanitized.apiKey;
-      delete sanitized.key;
-      out(sanitized, syncRes.ok ? 0 : 1);
       return;
     }
     case "pet": {
@@ -2657,7 +2482,6 @@ async function main() {
           "  install [--yes]                  user-approved install",
           "  login                            check token presence",
           "  guest-login                      one-tap guest bearer (writes ~/.openloomi/token)",
-          "  sync-claude-env                  read Claude env → OpenLoomi provider",
           "  pet <state>                      set OpenLoomi Pet state",
           "  state <name> [--event E]         fire-and-forget state (hook)",
           "  archive                          archive last Stop transcript (hook)",
@@ -2680,7 +2504,6 @@ async function main() {
           "install",
           "login",
           "guest-login",
-          "sync-claude-env",
           "pet",
           "state",
           "archive",

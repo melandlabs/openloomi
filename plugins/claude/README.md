@@ -36,20 +36,21 @@ Inside the running session `/openloomi:help` lists all 8 commands.
 /openloomi:setup
 ```
 
-A fully automated wizard: **install → launch → wait API → guest login → sync Claude env → ready**.
+A fully automated wizard: **install → launch → wait API → guest login → ready**.
 Nothing GUI is required from you. The bridge:
 
 - downloads & installs OpenLoomi.app if missing,
 - launches the desktop app via `open -a`,
 - polls the local HTTP API until it answers,
-- calls `POST /api/remote-auth/guest` to register a guest user in the runtime's local DB and mint a bearer token (saved to `~/.openloomi/token`),
-- PUTs your shell's `ANTHROPIC_API_KEY` to `/api/preferences/ai` (the runtime's per-user AI settings — source of truth since the LLM\_\* env-var fallback refactor).
+- calls `POST /api/remote-auth/guest` to register a guest user in the runtime's local DB and mint a bearer token (saved to `~/.openloomi/token`).
 
 The only thing it ever prompts for is the install y/N — and only if the
 shell has a TTY. From Claude Code's Bash tool you pass `--yes`.
 
-Your `ANTHROPIC_API_KEY` is read locally and never printed (see
-[§5.2](#52-where-does-the-api-key-come-from)).
+This plugin does **not** touch AI provider configuration. The OpenLoomi
+runtime self-closes that loop itself — it detects your local `claude` CLI
+auth and uses it as the default provider, with no key-sharing between
+Claude Code and OpenLoomi.
 
 A successful run prints `{setup: "ready", steps: [...]}` — you're done.
 
@@ -111,29 +112,8 @@ When `/openloomi:status` says `ready: false`, look at `reason`:
 | `OPENLOOMI_NOT_FINALIZED`    | OpenLoomi Desktop is installed, but the local helper binary isn't on disk yet (the first launch of the app lays it down). | `/openloomi:setup` auto-launches the app and waits for the API — no manual launch needed. **Don't re-run the installer** — it will just fail again at the same step. |
 | `SOURCE_FOUND_CLI_NOT_BUILT` | `OPENLOOMI_REPO_DIR` is set but the Rust crate isn't built yet.                                                           | `cd $OPENLOOMI_REPO_DIR/apps/web/src-tauri && cargo build --release`                                                                                                 |
 | `LOGIN_REQUIRED`             | OpenLoomi is installed but you haven't signed in.                                                                         | `/openloomi:setup` auto-mints a guest bearer. For a real account, sign in via the desktop app and re-run setup.                                                      |
-| `AI_PROVIDER_REQUIRED`       | Signed in, but no provider set.                                                                                           | `/openloomi:setup` auto-syncs `ANTHROPIC_API_KEY` from the env. If no key is set, walk through OpenLoomi Desktop → API Settings.                                     |
-| `CLAUDE_ENV_NOT_SET`         | `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` isn't in your shell.                                                         | `export ANTHROPIC_API_KEY=…` and retry                                                                                                                               |
+| `AI_PROVIDER_REQUIRED`       | Signed in, but no provider set.                                                                                           | Run `claude auth login` on the host (or configure a custom Anthropic-compatible endpoint in OpenLoomi Desktop → API Settings).                                        |
 | `READY`                      | All good.                                                                                                                 | Use any other command                                                                                                                                                |
-
-### 5.2 Where does the API key come from?
-
-The bridge reads `ANTHROPIC_API_KEY` (or `ANTHROPIC_AUTH_TOKEN`) from
-`process.env`. The variable reaches it one of two ways:
-
-| You set the key in                     | How it reaches the bridge                                                                   |
-| -------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Shell rc (`.zshrc` / `.bashrc`)        | Claude Code inherits the shell env on launch → bridge sees it                               |
-| `~/.claude/settings.json` under `env:` | Claude Code merges that block into `process.env` at startup → bridge inherits it on `spawn` |
-
-The plugin **does not** re-parse `~/.claude/settings.json` itself — that would
-duplicate the framework's work and silently drift if Claude Code's env-merge
-semantics ever change.
-
-If `/openloomi:status` reports `claudeEnvSyncable: false` after configuring the key:
-
-1. Restart Claude Code (settings changes are read on launch).
-2. Confirm the key is in the `env:` block, not `permissions:` or elsewhere.
-3. Run `echo $ANTHROPIC_API_KEY` in a fresh terminal to verify the shell sees it.
 
 ### 5.3 Pet not switching?
 
@@ -144,8 +124,8 @@ If `/openloomi:status` reports `claudeEnvSyncable: false` after configuring the 
 
 ### 5.4 Status says `unconfigured`
 
-The plugin needs the OpenLoomi helper CLI only for `:ask`. Pet / usage / sync
-/ hooks still work without it. If discovery is failing, point `OPENLOOMI_BIN`
+The plugin needs the OpenLoomi helper CLI only for `:ask`. Pet / usage / hooks
+still work without it. If discovery is failing, point `OPENLOOMI_BIN`
 at the helper binary directly (advanced override).
 
 ### 5.5 Stop-hook archives
@@ -159,7 +139,7 @@ One note per session, ~6 KB tail-of-conversation summary, deduplicated by
 ## 6. Quick reference
 
 ```
-/openloomi:setup                 discover → install → sync → status
+/openloomi:setup                 discover → install → ready
 /openloomi:status                stable JSON status
 /openloomi:pet <state>           set Loomi Pet sprite (9 universal states)
 /openloomi:usage                 today's LLM cost summary
@@ -185,7 +165,6 @@ Claude Code
        └── skills/openloomi/SKILL.md        (auto-loaded entrypoint)
             └── scripts/loomi-bridge.mjs    (zero-dep Node 18+ ESM)
                  ├── discovery (8-step chain)
-                 ├── sync-claude-env (secrets-sensitive; never logs key)
                  ├── ask (one-shot task, prompt via stdin)
                  ├── pet / hook state (fire-and-forget, 2s timeout)
                  ├── archive (Stop hook; always exit 0)
@@ -224,18 +203,17 @@ plugins/claude/
 ## Readiness JSON
 
 `setup-status` returns stable JSON: `mode`, `installed`, `version`, `tokenPresent`,
-`aiProviderConfigured`, `claudeEnvSyncable`, `apiReachable`, `hooksInstalled`,
-`ready`, `nextAction`, `reason`, `source`. See `loomi-bridge.mjs → buildStatus()`
-for the exact shape. `claudeEnvSyncable` is `true` only if the env contains
-`ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`; the key value is never read into
-stdout or logs.
+`aiProviderConfigured`, `defaultAgent`, `nativeRuntime`, `apiReachable`,
+`hooksInstalled`, `ready`, `nextAction`, `reason`, `source`. See
+`loomi-bridge.mjs → buildStatus()` for the exact shape. AI provider
+readiness comes entirely from the runtime's `/api/preferences/ai`
+response — the plugin never inspects AI provider env vars.
 
 ## Change-map (edit X, also touch Y)
 
 | You changed…                     | …also update                                                                                                                              |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | New bridge subcommand            | `commands/<x>.md` + subcommand table in `skills/openloomi/SKILL.md`                                                                       |
-| New env var                      | Secrets contract section below                                                                                                            |
 | New Pet state                    | `CAPYBARA_STATES` constant in `loomi-bridge.mjs`; confirm sprite exists in both `apps/web/public/loomi-pet/assets/fox/` and `…/capybara/` |
 | New lifecycle hook               | `hooks/hooks.json` + the hook→state table above                                                                                           |
 | `nextAction` enum value          | `NEXT_ACTIONS` set in `loomi-bridge.mjs` + reason table                                                                                   |
@@ -244,9 +222,10 @@ stdout or logs.
 
 ## Where each concern lives in code
 
-- **Secrets contract** (`sync-claude-env`): `loomi-bridge.mjs → syncClaudeEnv()`.
-  Reads `process.env.ANTHROPIC_API_KEY || ANTHROPIC_AUTH_TOKEN` once, POSTs, drops
-  the local var. Verify with `ANTHROPIC_API_KEY=sk-leaktest-… node loomi-bridge.mjs sync-claude-env` and `grep sk-leaktest` over captured output.
+- **AI provider readiness**: `loomi-bridge.mjs → probeAiProvider()` calls
+  `/api/preferences/ai` and reads its `nativeRuntime` + per-user
+  `settings` arrays. The plugin never reads API key env vars; the
+  runtime is the sole owner of that signal.
 - **Pet state validation**: `loomi-bridge.mjs → CAPYBARA_STATES`; both
   `cmdPet()` and `cmdState()` gate on it before any HTTP call.
 - **Hooks settings.json merge**: `loomi-bridge.mjs → installHooks() / uninstallHooks()`

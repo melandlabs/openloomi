@@ -222,7 +222,6 @@ test("help subcommand lists all advertised subcommands", () => {
     "install",
     "login",
     "guest-login",
-    "sync-claude-env",
     "pet",
     "state",
     "archive",
@@ -285,11 +284,7 @@ test("discovery: respects OPENLOOMI_BIN env when binary present", () => {
       OPENLOOMI_BIN: fake.binPath,
     };
 
-    assert.equal(
-      envPass.ANTHROPIC_AUTH_TOKEN,
-      "",
-      "test must clear ANTHROPIC_AUTH_TOKEN",
-    );
+    assert.equal(envPass.HOME, env.HOME, "HOME should round-trip");
 
     let out;
     try {
@@ -334,10 +329,6 @@ test("discovery: SOURCE_FOUND_CLI_NOT_BUILT when repo dir set without built ctl"
           OPENLOOMI_AUTH_TOKEN: "",
           OPENLOOMI_BASE_URL: "",
           CLAUDE_PLUGIN_DATA: "",
-          ANTHROPIC_API_KEY: "",
-          ANTHROPIC_AUTH_TOKEN: "",
-          ANTHROPIC_BASE_URL: "",
-          ANTHROPIC_MODEL: "",
         },
       });
     } catch (e) {
@@ -349,75 +340,6 @@ test("discovery: SOURCE_FOUND_CLI_NOT_BUILT when repo dir set without built ctl"
     assert.equal(j.reason, "SOURCE_FOUND_CLI_NOT_BUILT");
     assert.equal(j.nextAction, "build_or_stage_openloomi");
     assert.ok(j.hint?.needed);
-  });
-});
-
-test("claudeEnvSyncable reflects env presence without printing values", () => {
-  // Skip on hosts where OpenLoomi is already installed — its presence
-  // changes the discovery outcome regardless of OPENLOOMI_BIN.
-  if (
-    existsSync("/Applications/OpenLoomi.app") ||
-    existsSync("/opt/openloomi")
-  ) {
-    return;
-  }
-  withClaHome((env) => {
-    let out;
-    try {
-      out = execFileSync("node", [BRIDGE, "setup-status"], {
-        encoding: "utf8",
-        env: {
-          ...env,
-          PATH: makePath(),
-          OPENLOOMI_BIN: "/nonexistent-ctl",
-          OPENLOOMI_HOME: "",
-          OPENLOOMI_REPO_DIR: "",
-          OPENLOOMI_AUTH_TOKEN: "",
-          OPENLOOMI_BASE_URL: "",
-          CLAUDE_PLUGIN_DATA: "",
-          ANTHROPIC_API_KEY: "sk-test-redacted-12345",
-          ANTHROPIC_AUTH_TOKEN: "",
-          ANTHROPIC_BASE_URL: "https://api.example.com",
-          ANTHROPIC_MODEL: "claude-opus-4-6",
-        },
-      });
-    } catch (e) {
-      throw new Error(`bridge exec failed: ${String(e.stdout ?? "")}`);
-    }
-
-    assert.ok(
-      !out.includes("sk-test-redacted-12345"),
-      "stdout must not echo ANTHROPIC_API_KEY",
-    );
-    const j = JSON.parse(out);
-    assert.equal(j.claudeEnvSyncable, true);
-    assert.equal(j.installed, false);
-    assert.equal(j.nextAction, "install_openloomi");
-  });
-});
-
-test("sync-claude-env refuses to run without env vars", () => {
-  withClaHome((env) => {
-    const r = runOutcome(["sync-claude-env"], {
-      ...env,
-      OPENLOOMI_BASE_URL: "http://127.0.0.1:1",
-    });
-    assert.notEqual(
-      r.code,
-      0,
-      "sync-claude-env must exit non-zero when env missing",
-    );
-    const j = JSON.parse(r.stdout);
-    assert.equal(j.ok, false);
-    assert.equal(j.code, "CLAUDE_ENV_NOT_SET");
-    assert.deepEqual(j.checked.ANTHROPIC_API_KEY, {
-      present: false,
-      source: "env",
-    });
-    assert.deepEqual(j.checked.ANTHROPIC_AUTH_TOKEN, {
-      present: false,
-      source: "env",
-    });
   });
 });
 
@@ -618,34 +540,6 @@ test("hooks-merge.cjs install merges per-event into settings.hooks; uninstall re
   });
 });
 
-test("secrets contract: sync-claude-env never echoes key value", () => {
-  // Run a deliberate negative test: set a recognisable fake key, run
-  // sync-claude-env with a guaranteed-unreachable API, and grep stdout
-  // for the fake key's substring. It MUST NOT appear.
-  withClaHome((env) => {
-    const r = runOutcome(["sync-claude-env"], {
-      ...env,
-      ANTHROPIC_API_KEY: "sk-leaktest-ThisShouldNeverAppear-12345",
-      ANTHROPIC_BASE_URL: "http://127.0.0.1:1",
-      ANTHROPIC_MODEL: "claude-opus-4-6",
-      OPENLOOMI_BASE_URL: "http://127.0.0.1:1",
-      OPENLOOMI_AUTH_TOKEN: "mock-bearer",
-    });
-    assert.ok(
-      !r.stdout.includes("sk-leaktest"),
-      "stdout must not echo ANTHROPIC_API_KEY value",
-    );
-    assert.ok(
-      !r.stdout.includes("ThisShouldNeverAppear"),
-      "stdout must not echo key substring",
-    );
-    assert.ok(
-      !r.stderr.includes("sk-leaktest"),
-      "stderr must not echo key value either",
-    );
-  });
-});
-
 test("guest-login against unreachable API exits non-zero with NETWORK or ENDPOINT_MISSING", () => {
   // The guest endpoint lives on the local OpenLoomi runtime. With a
   // guaranteed-unreachable base URL, the call must surface a structured
@@ -765,7 +659,11 @@ test("setup-status reports missing Claude CLI instead of AI_PROVIDER_REQUIRED", 
   });
 });
 
-test("setup-status keeps direct Anthropic-compatible provider path ready", async () => {
+test("setup-status treats a user-saved anthropic_compatible row as the AI provider", async () => {
+  // Even when the `claude` CLI on the host is not authenticated, the
+  // user has saved an explicit `anthropic_compatible` provider row in
+  // the runtime's `/api/preferences/ai`. The plugin trusts the runtime
+  // for that signal — never reads shell env vars.
   await withClaHomeAsync(async (env) => {
     const fakeOpenLoomi = createFakeOpenLoomiBin(join(env.HOME, "fake-bin"), {
       name: "openloomi",
@@ -773,11 +671,15 @@ test("setup-status keeps direct Anthropic-compatible provider path ready", async
 
     await withPreferencesServer(
       aiPreferencesPayload({
-        systemDefaults: {
-          anthropic_compatible: {
+        settings: [
+          {
+            providerType: "anthropic_compatible",
+            baseUrl: "https://example.com",
+            model: "claude-sonnet-5",
+            enabled: true,
             hasApiKey: true,
           },
-        },
+        ],
       }),
       async (baseUrl) => {
         const j = await runJsonAsync(["setup-status"], {

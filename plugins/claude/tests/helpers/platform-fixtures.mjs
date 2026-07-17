@@ -65,10 +65,6 @@ export function makeIsolatedEnv(home, { pathDirs = [], overrides = {} } = {}) {
     OPENLOOMI_AUTH_TOKEN: '',
     OPENLOOMI_BASE_URL: '',
     CLAUDE_PLUGIN_DATA: join(home, '.claude', 'plugins', 'openloomi'),
-    ANTHROPIC_API_KEY: '',
-    ANTHROPIC_AUTH_TOKEN: '',
-    ANTHROPIC_BASE_URL: '',
-    ANTHROPIC_MODEL: '',
     ...overrides,
   };
 }

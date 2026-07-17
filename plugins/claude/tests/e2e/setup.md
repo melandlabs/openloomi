@@ -35,15 +35,14 @@ paths; this file covers the surface area that needs Claude Code itself
 - [ ] `/openloomi:setup` reports `OPENLOOMI_NOT_INSTALLED` and prompts y/N.
 - [ ] Accepting y launches the appropriate platform install script
       (`setup.macos.sh`, `setup.linux.sh`, or `setup.windows.ps1`).
-- [ ] After install completes, `/openloomi:setup` proceeds to login
-      and `sync-claude-env`.
-- [ ] With `ANTHROPIC_API_KEY` set, `sync-claude-env` reports
-      `{ok: true, provider: "anthropic_compatible", model: "<name>"}` —
-      the key value never appears in the response.
-- [ ] If the OpenLoomi runtime does not yet expose the provider config
-      endpoint, the bridge reports `code: "ENDPOINT_MISSING"` with the
-      OpenLoomi Desktop Preferences deep link — and the plugin remains
-      usable for the other commands.
+- [ ] After install completes, `/openloomi:setup` reaches
+      `setup: ready` without prompting the user for an API key (the
+      runtime self-closes AI provider config via the local `claude`
+      CLI auth probe — no shell key-sync step exists any more).
+- [ ] If no native Claude runtime is authenticated and no per-user
+      provider row exists, `setup-status` reports
+      `reason: "AI_PROVIDER_REQUIRED"` and `nextAction: "configure_ai_provider"`
+      — the user is pointed at the OpenLoomi Desktop Preferences page.
 
 ## C. Already-installed detection
 
@@ -108,13 +107,12 @@ With hooks installed:
 
 ## I. Secrets contract
 
-- [ ] With `ANTHROPIC_API_KEY=sk-leaktest-xxxxx`, run
-      `/openloomi:setup`. Capture bridge stdout to a file.
-- [ ] `grep "sk-leaktest"` on the captured file MUST return zero
-      matches.
-- [ ] Confirm the unit test
-      `tests/bridge.test.mjs > "secrets contract: sync-claude-env never echoes key value"`
-      passes.
+- [ ] The bridge never reads AI provider API keys from the environment.
+- [ ] The bridge's stdout contains no AI provider key names or values
+      even when the user has them in their shell.
+- [ ] `/openloomi:setup` reaches `ready` purely on runtime-detected
+      `claude` CLI auth; the plugin does not POST env-var values to any
+      `/api/preferences/ai` endpoint.
 
 ## J. Plugin validation
 

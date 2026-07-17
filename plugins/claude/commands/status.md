@@ -18,7 +18,8 @@ Print the JSON to the user verbatim. Highlight:
 - `ready`
 - `nextAction` (when `ready` is false)
 - `reason` (debug-friendly code)
-- `claudeEnvSyncable` (whether Claude's env can already be pushed to OpenLoomi)
+- `nativeRuntime` (the runtime's `claude` CLI auth probe result — the
+  plugin never inspects AI provider env vars)
 - `hooksInstalled` (whether `/openloomi:hooks install` has been run)
 
 Do not change anything; this command is read-only.
