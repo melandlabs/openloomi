@@ -25,6 +25,13 @@ export type ConversationApiSettingsResponse = {
    * anthropic-key gate entirely when this is set to anything else.
    */
   defaultAgent?: string;
+  /**
+   * Probe of the user's local Claude CLI, surfaced by
+   * `/api/preferences/ai`. `authenticated: true` means `claude auth
+   * login` succeeded and the runtime can talk to Anthropic without
+   * any per-user key.
+   */
+  nativeRuntime?: { ready?: boolean; authenticated?: boolean } | null;
 };
 
 function hasText(value: string | null) {
@@ -53,6 +60,16 @@ export function hasUsableConversationApiConfiguration(
     return true;
   }
 
+  // Built-in Claude agent: if the user's local `claude` CLI is
+  // authenticated (probed server-side), no per-user key is needed.
+  // `systemDefaults.anthropic_compatible.hasApiKey` is intentionally
+  // NOT consulted here — it was a stale env-var mirror and would
+  // falsely mark the user as configured in Tauri builds launched
+  // with an Anthropic key in their env.
+  if (response.nativeRuntime?.authenticated) {
+    return true;
+  }
+
   const userSetting = response.settings.find(
     (setting) => setting.providerType === "anthropic_compatible",
   );
@@ -63,8 +80,5 @@ export function hasUsableConversationApiConfiguration(
     hasText(userSetting.model),
   );
 
-  return (
-    hasUserConfiguration ||
-    response.systemDefaults.anthropic_compatible.hasApiKey
-  );
+  return hasUserConfiguration;
 }

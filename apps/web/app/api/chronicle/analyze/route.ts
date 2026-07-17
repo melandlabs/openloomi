@@ -290,13 +290,13 @@ async function analyzeScreenshotWithMessagesAPI(params: {
   if (!provider) {
     throw classifyUpstreamError(
       400,
-      "Anthropic-compatible provider is not configured and no agent runtime is available. Save one in Preferences → API Settings, set ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN/ANTHROPIC_MODEL, or set OPENLOOMI_AGENT_PROVIDER.",
+      "Anthropic-compatible provider is not configured and no agent runtime is available. Save one in Preferences → API Settings, or set OPENLOOMI_AGENT_PROVIDER.",
       undefined,
     );
   }
 
-  // The Anthropic-style model name (ANTHROPIC_MODEL) only makes sense for the
-  // HTTP path. For the agent runtime, let the runtime pick its own model
+  // The Anthropic-style model name only makes sense for the HTTP path.
+  // For the agent runtime, let the runtime pick its own model
   // (typically `OPENLOOMI_AGENT_<RUNTIME>_MODEL`, or the runtime's default).
   // Codex would reject `claude-sonnet-5` outright; OpenCode / Hermes /
   // Openclaw have their own model ecosystems.

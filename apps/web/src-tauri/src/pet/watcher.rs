@@ -15,6 +15,8 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use std::fs;
+
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 
@@ -169,7 +171,7 @@ fn watch_loop(app: &AppHandle, setup_emitted: std::sync::Arc<std::sync::Mutex<bo
     // resets it to `false` after the user saves a key, so a later
     // reset (or a future watcher restart) can re-trigger the hint.
     std::thread::sleep(Duration::from_millis(FIRST_RUN_SETUP_DELAY_MS));
-    if !*setup_emitted.lock().unwrap() && !path.exists() && !has_anthropic_env_key() {
+    if !*setup_emitted.lock().unwrap() && !path.exists() && !is_runtime_ready() {
         publish_baseline_state(
             app,
             "needs-setup",
@@ -1074,33 +1076,66 @@ fn current_hour_local() -> u32 {
 }
 
 /// Whether the runtime already has a usable conversation-model
-/// configuration from the watcher's point of view. Mirrors the
-/// combined `defaultAgent` + `systemDefaults.anthropic_compatible.hasApiKey`
-/// gate on the JS side (see `apps/web/app/(chat)/api/preferences/ai/route.ts`
-/// and `apps/web/lib/ai/conversation-api-configuration.ts`). Used to decide
-/// whether the watcher should emit the `needs-setup` hint — if either an
-/// env key is set or the active agent runtime ships its own auth, the user
-/// is already configured and we stay silent. User-set DB keys aren't
-/// visible to the watcher; the pet card surfaces those via its own
-/// `apply()` flow.
-fn has_anthropic_env_key() -> bool {
-    // Non-claude runtimes (codex/opencode/hermes/openclaw) bring their own
-    // CLI auth, so an anthropic key is irrelevant. We still read the env
-    // var ourselves instead of shelling out because the watcher runs
-    // before the web server is reachable on first launch.
+/// configuration from the watcher's point of view.
+///
+/// Reads `~/.openloomi/loop/activation_state.json` (the JS-side
+/// `lib/loop/activation.ts` writes this on every refresh of
+/// `coreReady`). The watcher polls decisions/decisions-side files via
+/// mtime already, so adding JSON parsing here costs nothing and keeps
+/// the pet card / `needs-setup` hint in lockstep with the actual
+/// runtime.
+///
+/// `OPENLOOMI_AGENT_PROVIDER` is still consulted as a synchronous
+/// fallback: a non-Claude runtime (codex/opencode/hermes/openclaw) brings
+/// its own CLI auth and the activation_state file may not have been
+/// written yet on first launch (the watcher fires before the web
+/// server becomes reachable). All other readiness — including the
+/// AI-provider env-var shortcut a previous revision leaned on — is
+/// now the JS runtime's responsibility, never the watcher's.
+fn is_runtime_ready() -> bool {
     if let Ok(value) = std::env::var("OPENLOOMI_AGENT_PROVIDER") {
         let trimmed = value.trim();
         if !trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("claude") {
             return true;
         }
     }
-    let set = |name: &str| {
-        std::env::var(name)
-            .ok()
-            .map(|v| !v.trim().is_empty())
-            .unwrap_or(false)
+    let home = match dirs_home() {
+        Some(h) => h,
+        None => return false,
     };
-    set("ANTHROPIC_API_KEY") || set("ANTHROPIC_AUTH_TOKEN")
+    let path = home
+        .join(".openloomi")
+        .join("loop")
+        .join("activation_state.json");
+    let bytes = match fs::read(&path) {
+        Ok(b) => b,
+        Err(_) => return false,
+    };
+    let parsed: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    parsed
+        .get("coreReady")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+fn dirs_home() -> Option<PathBuf> {
+    // `dirs` is intentionally NOT a dep — we only need HOME / USERPROFILE
+    // for one file path, and the `home` crate would add a transitive
+    // dep for nothing else.
+    if let Ok(value) = std::env::var("HOME") {
+        if !value.trim().is_empty() {
+            return Some(PathBuf::from(value));
+        }
+    }
+    if let Ok(value) = std::env::var("USERPROFILE") {
+        if !value.trim().is_empty() {
+            return Some(PathBuf::from(value));
+        }
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------

@@ -287,7 +287,7 @@ export async function POST(request: Request) {
   if (!provider) {
     return new AppError(
       "bad_request:api",
-      "Anthropic-compatible provider is not configured and no agent runtime is available. Save one in Preferences → API Settings, set ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN/ANTHROPIC_MODEL, or set OPENLOOMI_AGENT_PROVIDER.",
+      "Anthropic-compatible provider is not configured and no agent runtime is available. Save one in Preferences → API Settings, or set OPENLOOMI_AGENT_PROVIDER.",
     ).toResponse();
   }
 

@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/queries";
 import { isTauriMode } from "@/lib/env/constants";
 import { getConfiguredDefaultAgentProvider } from "@/lib/ai/native-agent/provider-env";
+import { probeNativeClaudeRuntime } from "@/lib/ai/native-agent/runtime-probe";
 import { AppError } from "@openloomi/shared/errors";
 
 const providerTypeSchema = z.enum([
@@ -32,6 +33,13 @@ const llmApiTestSchema = llmApiSettingSchema.pick({
   model: true,
 });
 
+// `systemDefaults` is no longer read from `process.env.ANTHROPIC_*`. Whether
+// the user has a usable Anthropic-compatible provider is now derived from the
+// native Claude runtime probe (`nativeRuntime` in the GET response, see
+// below) and the per-user `settings` array. Keeping a static stub here
+// preserves the response shape for older clients that still gate on
+// `systemDefaults.anthropic_compatible.hasApiKey` — the new
+// `nativeRuntime.ready` flag is the authoritative signal.
 const systemDefaults = {
   openai_compatible: {
     baseUrl: null,
@@ -39,11 +47,9 @@ const systemDefaults = {
     hasApiKey: false,
   },
   anthropic_compatible: {
-    baseUrl: process.env.ANTHROPIC_BASE_URL ?? null,
-    model: process.env.ANTHROPIC_MODEL ?? null,
-    hasApiKey: Boolean(
-      process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY,
-    ),
+    baseUrl: null,
+    model: null,
+    hasApiKey: false,
   },
 } as const;
 
@@ -150,20 +156,26 @@ export async function GET() {
     return new AppError("unauthorized:chat").toResponse();
   }
 
+  // `nativeRuntime` is the runtime's source of truth for "can the user talk
+  // to Claude right now" — derived from a server-side probe of the user's
+  // local `claude` CLI auth, not from `process.env.ANTHROPIC_*`. The plugin
+  // and the GUI use this field to decide whether the user needs to run
+  // `claude auth login` or configure a custom endpoint.
+  const nativeRuntime = await probeNativeClaudeRuntime();
+  const defaultAgent = getConfiguredDefaultAgentProvider();
+
   // Tauri mode may reach this handler before the user has finished guest
   // login (the pet card webview is a separate origin from the main webview
-  // and shares no cookie jar). System defaults aren't user-specific, so
-  // it's safe to return them without auth — the client uses
-  // `systemDefaults.anthropic_compatible.hasApiKey` to decide whether to
-  // surface the missing-key CTA on the pet card. `defaultAgent` is the
-  // server's resolved agent runtime (e.g. `claude`, `codex`); clients
-  // skip the anthropic-key gate entirely when it isn't `claude`, since
-  // providers like codex/opencode/hermes/openclaw bring their own auth.
+  // and shares no cookie jar). `defaultAgent` is the server's resolved agent
+  // runtime (e.g. `claude`, `codex`); clients skip the anthropic-key gate
+  // entirely when it isn't `claude`, since providers like codex/opencode/
+  // hermes/openclaw bring their own auth.
   if (!session?.user?.id) {
     return NextResponse.json({
       settings: [],
       systemDefaults,
-      defaultAgent: getConfiguredDefaultAgentProvider(),
+      defaultAgent,
+      nativeRuntime,
     });
   }
 
@@ -172,7 +184,8 @@ export async function GET() {
     return NextResponse.json({
       settings,
       systemDefaults,
-      defaultAgent: getConfiguredDefaultAgentProvider(),
+      defaultAgent,
+      nativeRuntime,
     });
   } catch (error) {
     console.error("[AI Preferences] Failed to load settings", error);

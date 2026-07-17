@@ -1,8 +1,6 @@
 import {
   describe,
-  beforeAll,
   beforeEach,
-  afterAll,
   afterEach,
   test,
   expect,
@@ -15,10 +13,8 @@ import { join } from "node:path";
 vi.mock("server-only", () => ({}));
 
 // `lib/db/queries.ts` and its transitive `helpers.ts` both call
-// `dotenv.config({ path: ".env" })` at module-init time, which would
-// re-populate `process.env.ANTHROPIC_AUTH_TOKEN` and friends from the
-// project's `.env` file even when the test cleared them in `beforeAll`.
-// Stub dotenv's `config` to a no-op so test env isolation actually wins.
+// `dotenv.config({ path: ".env" })` at module-init time. Stub it out so
+// test-time env isolation isn't reset by the host project's `.env`.
 vi.mock("dotenv", () => ({
   config: () => ({ parsed: {} }),
   parse: () => ({}),
@@ -34,6 +30,32 @@ vi.mock("@/lib/env/constants", () => ({
 
 vi.mock("@/lib/ai/native-agent/provider-env", () => ({
   getConfiguredDefaultAgentProvider: () => "claude",
+}));
+
+// The runtime probe is the single source of truth for "is the user's
+// local `claude` CLI authenticated". Each test mutates the flags
+// below to flip between the fresh-install and authenticated branches.
+const nativeProbe = vi.hoisted(() => ({
+  authenticated: false,
+  available: true,
+  reason: "CLAUDE_CLI_AUTH_REQUIRED" as
+    | "CLAUDE_CLI_AUTHENTICATED"
+    | "CLAUDE_CLI_AUTH_REQUIRED",
+}));
+vi.mock("@/lib/ai/native-agent/runtime-probe", () => ({
+  probeNativeClaudeRuntime: vi.fn(async () => ({
+    checked: true as const,
+    available: nativeProbe.available,
+    authenticated: nativeProbe.authenticated,
+    active: nativeProbe.authenticated,
+    ready: nativeProbe.authenticated,
+    reason: nativeProbe.reason,
+    defaultAgent: "claude" as const,
+    cliPathPresent: nativeProbe.available,
+    cliPathSource: nativeProbe.available ? ("PATH" as const) : null,
+    versionPresent: nativeProbe.available,
+    probes: {},
+  })),
 }));
 
 const userLlmSettings = vi.hoisted(() => ({ rows: [] as unknown[] }));
@@ -109,44 +131,17 @@ const { GET, POST } = await import("@/app/api/loop/activation/route");
 
 let tmp: string;
 
-// Save any Anthropic env vars so we can clear them for the
-// "fresh install" assertions below. When ANTHROPIC_AUTH_TOKEN /
-// ANTHROPIC_API_KEY are set in the host environment, the route's
-// `resolveCoreReady` correctly returns `true` (env-backed system default),
-// which is a production-realistic path — but it makes the
-// "no AI provider configured" assertions unreachable. We strip them
-// here so the test exercises the empty-install code path.
-const savedEnv: { ANTHROPIC_AUTH_TOKEN?: string; ANTHROPIC_API_KEY?: string } =
-  {};
-
-beforeAll(() => {
-  if (process.env.ANTHROPIC_AUTH_TOKEN) {
-    savedEnv.ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN;
-    // biome-ignore lint/performance/noDelete: tests need real delete, not assignment
-    delete process.env.ANTHROPIC_AUTH_TOKEN;
-  }
-  if (process.env.ANTHROPIC_API_KEY) {
-    savedEnv.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-    // biome-ignore lint/performance/noDelete: tests need real delete, not assignment
-    delete process.env.ANTHROPIC_API_KEY;
-  }
-});
-
-afterAll(() => {
-  if (savedEnv.ANTHROPIC_AUTH_TOKEN !== undefined) {
-    process.env.ANTHROPIC_AUTH_TOKEN = savedEnv.ANTHROPIC_AUTH_TOKEN;
-  }
-  if (savedEnv.ANTHROPIC_API_KEY !== undefined) {
-    process.env.ANTHROPIC_API_KEY = savedEnv.ANTHROPIC_API_KEY;
-  }
-});
-
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), "loomi-act-route-"));
   LOOP_HOME = join(tmp, ".openloomi", "loop");
   mkdirSync(LOOP_HOME, { recursive: true });
   userLlmSettings.rows = [];
   triggerTickResult.fail = false;
+  // Default to the "fresh install" probe result. Tests that want the
+  // "user has authenticated claude CLI" path set this to true.
+  nativeProbe.authenticated = false;
+  nativeProbe.available = true;
+  nativeProbe.reason = "CLAUDE_CLI_AUTH_REQUIRED";
 });
 
 afterEach(() => {
@@ -186,6 +181,17 @@ describe("GET /api/loop/activation", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.state.setupUrl).toBe("http://127.0.0.1:3414/connectors");
+  });
+
+  test("treats an authenticated `claude` CLI as coreReady regardless of user rows", async () => {
+    // The user's host-side `claude auth login` succeeded — the
+    // runtime probe says so. No per-user key, no env var mirroring.
+    nativeProbe.authenticated = true;
+    nativeProbe.reason = "CLAUDE_CLI_AUTHENTICATED";
+    const res = await GET(makeRequest("http://localhost/api/loop/activation"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.state.coreReady).toBe(true);
   });
 });
 

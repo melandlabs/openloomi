@@ -18,10 +18,10 @@
  *
  * Auth model mirrors the AI preferences route: the Tauri pet / dev
  * shell may hit this without a session, in which case we still try
- * to derive `coreReady` from `systemDefaults.anthropic_compatible`
- * (env-backed) so the pet's first-load CTAs don't get stuck on a
- * guest bootstrap window. Authenticated web sessions additionally
- * consult the user's saved AI provider rows.
+ * to derive `coreReady` from the native runtime probe so the pet's
+ * first-load CTAs don't get stuck on a guest bootstrap window.
+ * Authenticated web sessions additionally consult the user's saved
+ * AI provider rows.
  */
 
 import { type NextRequest, NextResponse } from "next/server";
@@ -29,6 +29,7 @@ import { auth } from "@/app/(auth)/auth";
 import { getUserLlmApiSettings } from "@/lib/db/queries";
 import { isTauriMode } from "@/lib/env/constants";
 import { getConfiguredDefaultAgentProvider } from "@/lib/ai/native-agent/provider-env";
+import { probeNativeClaudeRuntime } from "@/lib/ai/native-agent/runtime-probe";
 import {
   computeActivationState,
   readActivationState,
@@ -44,16 +45,17 @@ export const runtime = "nodejs";
  * `coreReady` mirrors the bridge's `ready: true` derivation:
  *   - Authenticated session OR Tauri shell (the pet webview is a
  *     separate origin and shares no cookie jar with main webview).
- *   - An AI provider is configured either via env-backed system
- *     defaults (ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY) or a
- *     user-saved `userLlmApiSettings` row.
+ *   - The configured native runtime is ready — either a non-Claude
+ *     provider (codex/opencode/hermes/openclaw) which carries its own
+ *     auth, OR the user's local `claude` CLI is authenticated (probed
+ *     via {@link probeNativeClaudeRuntime}).
+ *   - Otherwise a user-saved `userLlmApiSettings` row counts as a
+ *     manually configured provider.
  *
- * We intentionally do NOT block on "native CLI logged in" here — the
- * web route can't observe that cheaply, and treating the activation
- * stage as a function of web-side signals is the contract the bridge
- * reads back via `/api/loop/activation`. If the bridge disagrees, the
- * `recommendedNextAction`/`connectorSetupRecommended` it shows will
- * be its own decision.
+ * The previous env-var check was retired: it conflated "the OpenLoomi
+ * process was launched with an Anthropic key in its env" with "the
+ * user has a working AI provider", and forced the plugin to push
+ * shell env into per-user settings to keep them in sync.
  */
 async function resolveCoreReady(): Promise<boolean> {
   const session = await auth().catch(() => null);
@@ -65,10 +67,12 @@ async function resolveCoreReady(): Promise<boolean> {
   // own auth — `coreReady` doesn't need an anthropic key for them.
   if (defaultAgent !== "claude") return true;
 
-  const systemAnthropicHasKey = Boolean(
-    process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY,
-  );
-  if (systemAnthropicHasKey) return true;
+  // For the built-in Claude agent, the runtime's source of truth is the
+  // user's local `claude auth status`. The probe result is cached for
+  // ~30s by `probeNativeClaudeRuntime`, so this stays cheap across the
+  // burst of consecutive requests the watcher fires.
+  const native = await probeNativeClaudeRuntime();
+  if (native?.authenticated) return true;
 
   if (!session?.user?.id) return false;
   try {
