@@ -4811,37 +4811,22 @@ function readOpenLoomiAuthToken(tokenStatus = getTokenStatus()) {
 }
 
 async function getAiProviderStatus(tokenStatus = getTokenStatus()) {
-  const providerKeys = [
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "OPENROUTER_API_KEY",
-    "OPENLOOMI_AI_API_KEY",
-  ];
-  const optionalKeys = [
-    "OPENAI_BASE_URL",
-    "ANTHROPIC_BASE_URL",
-    "OPENROUTER_BASE_URL",
-    "OPENLOOMI_AI_BASE_URL",
-    "OPENLOOMI_AI_MODEL",
-  ];
-  const checked = [...providerKeys, ...optionalKeys].map((key) => ({
-    key,
-    present: hasValue(process.env[key]),
-    source: "env",
-  }));
-  const envConfigured = providerKeys.some((key) => hasValue(process.env[key]));
+  // AI provider readiness is the runtime's job — the bridge never reads
+  // provider env vars as a source of truth. The runtime's
+  // `/api/preferences/ai` is the sole signal (it owns user-saved
+  // settings, the native CLI auth probe where applicable, and the
+  // system defaults).
   const runtime = await getRuntimeAiProviderStatus(tokenStatus);
-  const configured = envConfigured || runtime.configured;
 
   return {
-    configured,
-    status: configured
-      ? runtime.configured
-        ? "runtime_configured"
-        : "env_configured"
-      : runtime.status,
-    checked,
+    configured: runtime.configured,
+    status: runtime.configured ? "runtime_configured" : runtime.status,
     runtime,
+    // `checked` is intentionally empty: the bridge previously surfaced
+    // env-var names + presence here, but the bridge no longer reads
+    // provider env vars at all. The empty array keeps the JSON shape
+    // stable for any tooling that introspects the field.
+    checked: [],
   };
 }
 

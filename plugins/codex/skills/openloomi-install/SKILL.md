@@ -36,7 +36,7 @@ node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" codex-runtime-info
 
 ## Reminder: secrets contract
 
-- The bridge reads `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` / `OPENLOOMI_AUTH_TOKEN` etc. only as presence flags; values are never printed.
+- The bridge never reads AI provider env vars. Provider readiness comes from the OpenLoomi runtime's `/api/preferences/ai`. The bridge only sees presence booleans (configured / not configured), never key values.
 - If the user pastes a key into chat, redact it: do NOT echo it back, and tell them to remove it from chat history.
 - Never pass `--api-key` as an argv flag. The bridge has no such flag, by design.
 - The bridge does not auto-install. Always require an explicit user confirmation before calling `install-openloomi --confirm`.

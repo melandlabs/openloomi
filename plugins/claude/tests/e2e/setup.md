@@ -10,7 +10,7 @@ paths; this file covers the surface area that needs Claude Code itself
 1. Node 18+ is on `PATH` (`node --version`).
 2. Claude Code is installed. The e2e checklist is load-channel-agnostic;
    pick whichever matches your situation:
-   - **GitHub install (recommended, works today)** — two-step inside any session:
+   - **GitHub install** — two-step inside any session:
      ```text
      /plugin marketplace add melandlabs/openloomi
      /plugin install openloomi

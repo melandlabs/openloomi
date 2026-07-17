@@ -1,6 +1,6 @@
 [package]
 name = "openloomi"
-version = "0.7.9"
+version = "0.7.10"
 description = "openloomi AI Assistant - Your Personal Productivity Tool"
 authors = ["OpenLoomi Team"]
 edition = "2021"

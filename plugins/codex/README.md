@@ -926,7 +926,7 @@ OPENLOOMI_AUTH_TOKEN present/missing
 guest/session initialization available/unavailable
 AI provider configured/missing
 AI provider runtime status available/unavailable
-AI provider hasApiKey/baseUrl/model presence
+AI provider hasApiKey/baseUrl/model presence (per-provider)
 connector configured/missing
 local API reachable/unreachable
 ```
@@ -935,23 +935,34 @@ Example safe output:
 
 ```json
 {
-  "aiProviderConfigured": false,
-  "checked": [
-    {
-      "key": "OPENAI_API_KEY",
-      "present": false,
-      "source": "env"
-    },
-    {
-      "key": "ANTHROPIC_API_KEY",
-      "present": true,
-      "source": ".env.local"
-    }
-  ]
+  "aiProviderConfigured": true,
+  "aiProviderStatus": "runtime_configured",
+  "runtime": {
+    "source": "openloomi-runtime",
+    "checked": true,
+    "providers": [
+      {
+        "providerType": "openai_compatible",
+        "configured": true,
+        "source": "openloomi-ui",
+        "enabled": true,
+        "hasApiKey": true,
+        "baseUrlPresent": true,
+        "modelPresent": true
+      },
+      {
+        "providerType": "anthropic_compatible",
+        "configured": false,
+        "source": "openloomi-runtime",
+        "enabled": false,
+        "hasApiKey": false
+      }
+    ]
+  }
 }
 ```
 
-The bridge may report key names and presence. It must not print values.
+The bridge may report key presence and provider configuration. It must not print values.
 
 The bridge may receive a guest/session token from the local OpenLoomi API only
 to write the standard `~/.openloomi/token` file. It must keep the token out of

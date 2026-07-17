@@ -2,7 +2,7 @@
 name: openloomi-memory
 description: "openloomi Memory tools - search memory files, knowledge base, and chat insights. Triggers: memory search, knowledge base, documents, insights"
 metadata:
-  version: 0.7.9
+  version: 0.7.10
 allowed-tools: Bash(node $SKILL_DIR/scripts/openloomi-memory.cjs *)
 ---
 

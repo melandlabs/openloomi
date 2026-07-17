@@ -162,7 +162,7 @@ node plugins/codex/scripts/loomi-bridge.mjs help
 ```json
 {
   "name": "openloomi-codex-bridge",
-  "version": "0.7.9",
+  "version": "0.7.10",
   "pluginPhase": "runtime-provider-readiness",
   "commands": [
     "codex-runtime-info",
@@ -414,7 +414,7 @@ Example safe output:
   "aiProviderConfigured": false,
   "checked": [
     { "key": "OPENAI_API_KEY", "present": false, "source": "env" },
-    { "key": "ANTHROPIC_API_KEY", "present": true, "source": ".env.local" }
+    { "key": "OPENAI_BASE_URL", "present": true, "source": ".env.local" }
   ]
 }
 ```

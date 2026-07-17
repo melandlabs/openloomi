@@ -19,7 +19,7 @@ fallback `127.0.0.1:3515`, or its bundled helper CLI under the hood).
 Pick the channel that matches your situation:
 
 ```text
-# Recommended (works today, before marketplace publish)
+# From GitHub
 /plugin marketplace add melandlabs/openloomi
 /plugin install openloomi
 
@@ -112,7 +112,7 @@ When `/openloomi:status` says `ready: false`, look at `reason`:
 | `OPENLOOMI_NOT_FINALIZED`    | OpenLoomi Desktop is installed, but the local helper binary isn't on disk yet (the first launch of the app lays it down). | `/openloomi:setup` auto-launches the app and waits for the API — no manual launch needed. **Don't re-run the installer** — it will just fail again at the same step. |
 | `SOURCE_FOUND_CLI_NOT_BUILT` | `OPENLOOMI_REPO_DIR` is set but the Rust crate isn't built yet.                                                           | `cd $OPENLOOMI_REPO_DIR/apps/web/src-tauri && cargo build --release`                                                                                                 |
 | `LOGIN_REQUIRED`             | OpenLoomi is installed but you haven't signed in.                                                                         | `/openloomi:setup` auto-mints a guest bearer. For a real account, sign in via the desktop app and re-run setup.                                                      |
-| `AI_PROVIDER_REQUIRED`       | Signed in, but no provider set.                                                                                           | Run `claude auth login` on the host (or configure a custom Anthropic-compatible endpoint in OpenLoomi Desktop → API Settings).                                        |
+| `AI_PROVIDER_REQUIRED`       | Signed in, but no provider set.                                                                                           | Run `claude auth login` on the host (or configure a custom Anthropic-compatible endpoint in OpenLoomi Desktop → API Settings).                                       |
 | `READY`                      | All good.                                                                                                                 | Use any other command                                                                                                                                                |
 
 ### 5.3 Pet not switching?

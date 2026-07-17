@@ -14,7 +14,7 @@ The Claude Code plugin bridges **Claude Code** and your local **OpenLoomi** runt
 
 ## Overview
 
-The plugin is a thin bridge. It never reimplements OpenLoomi business logic — every side effect lands on the local runtime over HTTP (`127.0.0.1:3414`, falling back to `127.0.0.1:3515`). Commands are dependency-free Node wrappers around `scripts/loomi-bridge.mjs`, and no command ever prints or forwards your `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`.
+The plugin is a thin bridge. It never reimplements OpenLoomi business logic — every side effect lands on the local runtime over HTTP (`127.0.0.1:3414`, falling back to `127.0.0.1:3515`). Commands are dependency-free Node wrappers around `scripts/loomi-bridge.mjs`. AI provider configuration is owned by the OpenLoomi runtime itself: the runtime probes the user's local `claude auth status` and surfaces that through `/api/preferences/ai`, so the plugin never reads or pushes AI provider env vars into per-user settings.
 
 ---
 
@@ -22,7 +22,7 @@ The plugin is a thin bridge. It never reimplements OpenLoomi business logic — 
 
 Three paths:
 
-- **Marketplace** (once published):
+- **Marketplace**:
   ```
   /plugin marketplace add melandlabs/openloomi
   /plugin install openloomi
@@ -44,9 +44,12 @@ install OpenLoomi.app
    → launch the desktop app
    → wait for the local HTTP API
    → mint a guest bearer token (→ ~/.openloomi/token)
-   → sync ANTHROPIC_API_KEY into OpenLoomi's AI provider
    → { setup: "ready" }
 ```
+
+A user who has already run `claude auth login` on the host lands in the
+ready state with no per-user key and no env-var step — the runtime
+detects the host `claude` CLI on its own.
 
 The `setup` result reports one of: `ready`, `install_attempted`, `install_failed`, `launch_failed`, `api_not_ready`, `guest_login_failed`, `awaiting_user_action`, or `step_limit_reached`. Default API wait is 30 s (`--max-wait`).
 
@@ -93,22 +96,26 @@ The **Stop** hook also archives context: it reads the session transcript, keeps 
 
 `/openloomi:status` (bridge `setup-status --json`) returns a stable shape:
 
-| Field                  | Meaning                                           |
-| ---------------------- | ------------------------------------------------- |
-| `mode`                 | `env` \| `packaged` \| `source` \| `unconfigured` |
-| `installed`            | desktop app found                                 |
-| `version`              | detected OpenLoomi version                        |
-| `tokenPresent`         | a local auth token exists                         |
-| `aiProviderConfigured` | a conversation provider is configured             |
-| `claudeEnvSyncable`    | `ANTHROPIC_API_KEY`/`AUTH_TOKEN` present to sync  |
-| `apiReachable`         | local HTTP API responded                          |
-| `hooksInstalled`       | Pet/archive hooks present                         |
-| `ready`                | everything needed is in place                     |
-| `nextAction`           | what to do next (see reasons below)               |
-| `reason`               | machine-readable status code                      |
-| `source`               | how the install was discovered                    |
+| Field                  | Meaning                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| `mode`                 | `env` \| `packaged` \| `source` \| `unconfigured`                                   |
+| `installed`            | desktop app found                                                                   |
+| `version`              | detected OpenLoomi version                                                          |
+| `tokenPresent`         | a local auth token exists                                                           |
+| `aiProviderConfigured` | a conversation provider is configured (runtime-sourced signal, see `nativeRuntime`) |
+| `nativeRuntime`        | probe of the host's `claude` CLI: `available`, `authenticated`, `reason`            |
+| `apiReachable`         | local HTTP API responded                                                            |
+| `hooksInstalled`       | Pet/archive hooks present                                                           |
+| `ready`                | everything needed is in place                                                       |
+| `nextAction`           | what to do next (see reasons below)                                                 |
+| `reason`               | machine-readable status code                                                        |
+| `source`               | how the install was discovered                                                      |
 
-The key value behind `claudeEnvSyncable` is never read into stdout or logs — only its presence is reported.
+`aiProviderConfigured` is derived from the runtime's `nativeRuntime`
+probe (`authenticated = true` means the host's `claude` CLI is signed
+in), with user-saved `anthropic_compatible` rows as a fallback. The
+plugin never reads AI provider env vars and never publishes their
+values.
 
 ---
 
@@ -116,15 +123,14 @@ The key value behind `claudeEnvSyncable` is never read into stdout or logs — o
 
 **Reason codes → next action:**
 
-| `reason`                     | `nextAction`                   | Fix                                                                   |
-| ---------------------------- | ------------------------------ | --------------------------------------------------------------------- |
-| `READY`                      | `run`                          | All good.                                                             |
-| `OPENLOOMI_NOT_INSTALLED`    | `install_openloomi`            | Install the desktop app.                                              |
-| `OPENLOOMI_NOT_FINALIZED`    | `launch_openloomi_to_finalize` | Launch the app once so the helper binary is written.                  |
-| `SOURCE_FOUND_CLI_NOT_BUILT` | `build_or_stage_openloomi`     | `cd $OPENLOOMI_REPO_DIR/apps/web/src-tauri && cargo build --release`. |
-| `LOGIN_REQUIRED`             | `login_openloomi`              | `/openloomi:setup` mints a guest bearer.                              |
-| `AI_PROVIDER_REQUIRED`       | `configure_ai_provider`        | `/openloomi:setup` syncs `ANTHROPIC_API_KEY`.                         |
-| `CLAUDE_ENV_NOT_SET`         | (sync error)                   | `export ANTHROPIC_API_KEY=…` and retry.                               |
+| `reason`                     | `nextAction`                   | Fix                                                                                                                             |
+| ---------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `READY`                      | `run`                          | All good.                                                                                                                       |
+| `OPENLOOMI_NOT_INSTALLED`    | `install_openloomi`            | Install the desktop app.                                                                                                        |
+| `OPENLOOMI_NOT_FINALIZED`    | `launch_openloomi_to_finalize` | Launch the app once so the helper binary is written.                                                                            |
+| `SOURCE_FOUND_CLI_NOT_BUILT` | `build_or_stage_openloomi`     | `cd $OPENLOOMI_REPO_DIR/apps/web/src-tauri && cargo build --release`.                                                           |
+| `LOGIN_REQUIRED`             | `login_openloomi`              | `/openloomi:setup` mints a guest bearer.                                                                                        |
+| `AI_PROVIDER_REQUIRED`       | `configure_ai_provider`        | Sign in to the host `claude` CLI (`claude auth login`), or save an Anthropic-compatible endpoint in Preferences → API Settings. |
 
 - **Pet doesn't switch states.** Confirm hooks are installed (`/openloomi:hooks status`) and the app is running (`/openloomi:status` → `apiReachable`). `ENDPOINT_MISSING` is non-blocking.
 - **Where do Stop archives go?** They're posted to `/api/insights` under the `claude-code` group and surface in your Insight Box.

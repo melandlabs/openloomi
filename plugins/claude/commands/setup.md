@@ -38,8 +38,8 @@ native `claude` CLI isn't authenticated — point the user at
    needs the user (e.g. `nextAction: login_openloomi` but `canGuestLogin:
 false` because the local runtime didn't come up, or `nextAction:
 configure_ai_provider` because the runtime reports no authenticated
-native Claude runtime AND no per-user provider row). Explain what the
-user needs to do and stop.
+   native Claude runtime AND no per-user provider row). Explain what the
+   user needs to do and stop.
 
 ## Flags
 
@@ -51,16 +51,16 @@ user needs to do and stop.
 
 ## Stop conditions and what they mean
 
-| `setup`                | When it fires                                                                                                                                                                                                                                                             |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ready`                | All transitions completed. Show `mode` and `version`.                                                                                                                                                                                                                     |
-| `install_attempted`    | First invocation: install ran. The user pre-approved; this is just informational.                                                                                                                                                                                         |
-| `install_failed`       | The platform install script exited non-zero. Show `install.code` / `install.stderr`.                                                                                                                                                                                      |
-| `launch_failed`        | `open -a <desktopMarker>` returned a non-zero exit. On macOS this almost never happens for a signed .app; if it does, fall back to manual launch instructions.                                                                                                            |
-| `api_not_ready`        | The desktop app was launched but the local HTTP API didn't respond within `--max-wait`. Tell the user to look for the OpenLoomi.app window (any TCC prompts?). Re-run `/openloomi:setup` once they're past the prompts.                                                   |
-| `guest_login_failed`   | API is up but the one-tap guest login was rejected. Show `guest.code` / `guest.error`. The user can sign in via the GUI and re-run setup.                                                                                                                                 |
+| `setup`                | When it fires                                                                                                                                                                                                                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ready`                | All transitions completed. Show `mode` and `version`.                                                                                                                                                                                                                                    |
+| `install_attempted`    | First invocation: install ran. The user pre-approved; this is just informational.                                                                                                                                                                                                        |
+| `install_failed`       | The platform install script exited non-zero. Show `install.code` / `install.stderr`.                                                                                                                                                                                                     |
+| `launch_failed`        | `open -a <desktopMarker>` returned a non-zero exit. On macOS this almost never happens for a signed .app; if it does, fall back to manual launch instructions.                                                                                                                           |
+| `api_not_ready`        | The desktop app was launched but the local HTTP API didn't respond within `--max-wait`. Tell the user to look for the OpenLoomi.app window (any TCC prompts?). Re-run `/openloomi:setup` once they're past the prompts.                                                                  |
+| `guest_login_failed`   | API is up but the one-tap guest login was rejected. Show `guest.code` / `guest.error`. The user can sign in via the GUI and re-run setup.                                                                                                                                                |
 | `awaiting_user_action` | A transition that needs the user ran without a programmatic path. Most commonly: `configure_ai_provider` when neither the native Claude CLI is authenticated nor a per-user provider is configured — walk them through running `claude auth login`, or OpenLoomi Desktop → API Settings. |
-| `step_limit_reached`   | Hit the internal step ceiling without reaching READY (default 8 transitions). Almost certainly means a state-machine bug; show `steps[]`.                                                                                                                                 |
+| `step_limit_reached`   | Hit the internal step ceiling without reaching READY (default 8 transitions). Almost certainly means a state-machine bug; show `steps[]`.                                                                                                                                                |
 
 The bridge's stdout output is authoritative. Never invoke the platform
 install script (`setup.{macos,linux,windows}.*`) directly — only the

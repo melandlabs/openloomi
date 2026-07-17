@@ -1,6 +1,6 @@
 {
   "name": "@openloomi/rag",
-  "version": "0.7.9",
+  "version": "0.7.10",
   "private": false,
   "type": "module",
   "exports": {

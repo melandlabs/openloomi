@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "OpenLoomi local-first runtime plugins for Claude",
-    "version": "0.7.9",
+    "version": "0.7.10",
     "homepage": "https://openloomi.ai",
     "repository": "https://github.com/melandlabs/openloomi",
     "license": "Apache-2.0"
@@ -16,7 +16,7 @@
       "name": "openloomi",
       "source": "./plugins/claude",
       "description": "Connect Claude Code to your local OpenLoomi runtime. Sync ANTHROPIC_API_KEY, mirror lifecycle onto the Loomi Pet, auto-archive Stop events into OpenLoomi memory.",
-      "version": "0.7.9",
+      "version": "0.7.10",
       "author": {
         "name": "OpenLoomi"
       },
