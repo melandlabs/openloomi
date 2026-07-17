@@ -135,6 +135,16 @@ export interface NativeAgentFocusedInsightData {
 
 export interface NativeAgentHost {
   registry?: AgentRegistry;
+  /**
+   * Register the provider selected after request normalization. Hosts should
+   * prefer this hook so optional provider SDKs can remain unloaded until they
+   * are actually requested.
+   */
+  registerProvider?: (provider: AgentProvider) => void | Promise<void>;
+  /**
+   * Legacy all-provider registration hook. Used only when registerProvider is
+   * not implemented by the host.
+   */
   registerProviders?: () => void | Promise<void>;
   prepareRequest?: (
     body: NativeAgentRequest,
@@ -173,8 +183,14 @@ export async function runNativeAgentRequest(
   context: NativeAgentRunnerContext,
   host: NativeAgentHost = {},
 ): Promise<NativeAgentRun> {
-  await host.registerProviders?.();
   const preparedBody = (await host.prepareRequest?.(body, context)) ?? body;
+  const provider = preparedBody.provider ?? "claude";
+
+  if (host.registerProvider) {
+    await host.registerProvider(provider);
+  } else {
+    await host.registerProviders?.();
+  }
 
   const finalPrompt = await buildNativeAgentPrompt(
     preparedBody,

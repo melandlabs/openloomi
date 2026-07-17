@@ -29,7 +29,6 @@ const DEFAULT_UPDATE_SPACE_BYTES: u64 = 512 * 1024 * 1024;
 const DEFAULT_ONE_SHOT_PLATFORM: &str = "cli";
 // One-shot agent runs can legitimately take a long time when tools/skills are involved.
 const ONE_SHOT_TIMEOUT_SECS: u64 = 1800;
-const ONE_SHOT_API_HEALTH_TIMEOUT_SECS: u64 = 2;
 // Test and CI callers can point the CLI at a non-default local API server.
 const OPENLOOMI_API_URL_ENV: &str = "OPENLOOMI_API_URL";
 // CI can provide auth without relying on the desktop token file.
@@ -846,9 +845,19 @@ async fn execute_one_shot_via_http(
     auth_token: &str,
 ) -> Result<OneShotStreamResult, CliError> {
     let base_url = one_shot_base_url();
-    // HTTP mode is now only a compatibility path for an already-running API.
-    // The CLI's primary path is the direct native-agent runner above.
-    ensure_one_shot_api_ready(&base_url).await?;
+    execute_one_shot_via_http_at(request_body, auth_token, &base_url).await
+}
+
+async fn execute_one_shot_via_http_at(
+    request_body: &OneShotAgentRequest<'_>,
+    auth_token: &str,
+    base_url: &str,
+) -> Result<OneShotStreamResult, CliError> {
+    // HTTP mode is only a compatibility path for an already-running API. Send
+    // the authenticated request directly instead of gating it on a separate
+    // unauthenticated GET probe: the probe can be redirected or rejected by
+    // middleware even when the real POST is healthy, and introduces a TOCTOU
+    // race between readiness and execution.
     let endpoint = format!("{}/api/native/agent", base_url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
         .user_agent("openloomi-ctl")
@@ -1774,37 +1783,6 @@ fn one_shot_base_url() -> String {
         .unwrap_or_else(crate::constants::nextjs_url)
 }
 
-async fn ensure_one_shot_api_ready(base_url: &str) -> Result<(), CliError> {
-    if is_one_shot_api_ready(base_url).await {
-        return Ok(());
-    }
-
-    Err(CliError::new(
-        "service_unavailable",
-        format!(
-            "OpenLoomi agent API is not reachable at {}. Start OpenLoomi, set {} to a reachable API, or use the direct native-agent runner.",
-            base_url, OPENLOOMI_API_URL_ENV
-        ),
-    ))
-}
-
-async fn is_one_shot_api_ready(base_url: &str) -> bool {
-    let health_url = format!("{}/api/native/agent", base_url.trim_end_matches('/'));
-    let client = match reqwest::Client::builder()
-        .user_agent("openloomi-ctl")
-        .timeout(Duration::from_secs(ONE_SHOT_API_HEALTH_TIMEOUT_SECS))
-        .build()
-    {
-        Ok(client) => client,
-        Err(_) => return false,
-    };
-
-    match client.get(&health_url).send().await {
-        Ok(response) => matches!(response.status().as_u16(), 200 | 401 | 403 | 405),
-        Err(_) => false,
-    }
-}
-
 #[cfg(debug_assertions)]
 fn find_web_dir() -> Result<PathBuf, CliError> {
     // openloomi-ctl may be launched from the repo root, apps/web, or
@@ -2715,6 +2693,7 @@ Packaged desktop builds include openloomi-ctl in the app bundle resources.
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::TcpListener;
 
     fn args(values: &[&str]) -> Vec<String> {
         std::iter::once("openloomi-ctl".to_string())
@@ -2871,6 +2850,68 @@ mod tests {
         assert!(!should_try_direct_one_shot_runner_for_env(None, Some("0")));
     }
 
+    #[tokio::test]
+    async fn http_fallback_posts_directly_with_saved_bearer_token() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (request_tx, request_rx) = mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_test_http_request(&mut stream);
+            request_tx.send(request).unwrap();
+
+            let body = concat!(
+                "data: {\"type\":\"session\",\"sessionId\":\"fallback-session\"}\n\n",
+                "data: {\"type\":\"text\",\"content\":\"HTTP_FALLBACK_OK\"}\n\n",
+                "data: {\"type\":\"done\"}\n\n",
+            );
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+            stream.flush().unwrap();
+        });
+
+        let options = OneShotArgs {
+            prompt: Some("fallback test".to_string()),
+            read_stdin: false,
+            json: true,
+            model: None,
+            provider: None,
+            platform: Some("cli-test".to_string()),
+            permission_mode: Some(OneShotPermissionMode::Deny),
+        };
+        let request_body = build_one_shot_agent_request(
+            "fallback test",
+            &options,
+            "cli-test",
+            "saved-token",
+            OneShotPermissionMode::Deny,
+        );
+
+        let result = execute_one_shot_via_http_at(
+            &request_body,
+            "saved-token",
+            &format!("http://{}", address),
+        )
+        .await
+        .unwrap();
+
+        server.join().unwrap();
+        let raw_request = request_rx.recv().unwrap();
+        let lowercase_request = raw_request.to_ascii_lowercase();
+        assert!(raw_request.starts_with("POST /api/native/agent HTTP/1.1"));
+        assert!(lowercase_request.contains("authorization: bearer saved-token"));
+        assert!(lowercase_request.contains("accept: text/event-stream"));
+        assert!(raw_request.contains("\"authToken\":\"saved-token\""));
+        assert_eq!(result.response, "HTTP_FALLBACK_OK");
+        assert_eq!(result.session_id.as_deref(), Some("fallback-session"));
+        assert_eq!(result.error, None);
+    }
+
     #[test]
     fn parses_dotenv_lines_without_losing_secret_padding() {
         assert_eq!(
@@ -2941,5 +2982,40 @@ mod tests {
         let result = parse_agent_sse(raw).unwrap();
         assert_eq!(result.event_count, 1);
         assert_eq!(result.error.as_deref(), Some("boom"));
+    }
+
+    fn read_test_http_request(stream: &mut std::net::TcpStream) -> String {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut bytes = Vec::new();
+        let mut chunk = [0_u8; 4096];
+
+        loop {
+            let read = stream.read(&mut chunk).unwrap();
+            if read == 0 {
+                break;
+            }
+            bytes.extend_from_slice(&chunk[..read]);
+
+            let Some(header_end) = bytes.windows(4).position(|part| part == b"\r\n\r\n") else {
+                continue;
+            };
+            let headers = String::from_utf8_lossy(&bytes[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok())
+                        .flatten()
+                })
+                .unwrap_or(0);
+            if bytes.len() >= header_end + 4 + content_length {
+                break;
+            }
+        }
+
+        String::from_utf8(bytes).unwrap()
     }
 }

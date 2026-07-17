@@ -9,9 +9,13 @@ vi.mock("@/lib/ai/user-llm-api-settings", () => ({
 }));
 
 const registerProvidersMock = vi.fn();
+const registerProviderMock = vi.fn();
 
 vi.mock("@/lib/ai/native-agent/host", () => ({
-  nativeAgentHost: { registerProviders: registerProvidersMock },
+  nativeAgentHost: {
+    registerProvider: registerProviderMock,
+    registerProviders: registerProvidersMock,
+  },
 }));
 
 const resolveNativeAgentProviderRequestMock = vi.fn();
@@ -36,6 +40,8 @@ async function loadResolver() {
 describe("resolveLlmProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resolveNativeAgentProviderRequestMock.mockReset();
+    createAgentMock.mockReset();
     process.env = { ...ORIGINAL_ENV };
     process.env.OPENLOOMI_AGENT_PROVIDER = undefined;
   });
@@ -83,10 +89,15 @@ describe("resolveLlmProvider", () => {
   it("falls back to the agent runtime when no HTTP provider is configured", async () => {
     getUserLlmProviderConfigMock.mockResolvedValueOnce(undefined);
     process.env.OPENLOOMI_AGENT_PROVIDER = "codex";
-    resolveNativeAgentProviderRequestMock.mockReturnValueOnce({
+    resolveNativeAgentProviderRequestMock.mockReturnValue({
       provider: "codex",
       providerConfig: { codexPath: "codex" },
       modelConfig: { model: "gpt-5-codex" },
+    });
+    createAgentMock.mockReturnValue({
+      async *run() {
+        yield { type: "text", content: "CODEX_RUNTIME_OK" };
+      },
     });
     const resolve = await loadResolver();
     const provider = await resolve({
@@ -95,6 +106,23 @@ describe("resolveLlmProvider", () => {
     });
     expect(provider).toBeDefined();
     expect(provider?.flavor).toBe("agent_runtime");
+
+    const result = await provider?.complete({ userContent: "run codex" });
+
+    expect(registerProviderMock).toHaveBeenCalledOnce();
+    expect(registerProviderMock).toHaveBeenCalledWith("codex");
+    expect(registerProvidersMock).not.toHaveBeenCalled();
+    expect(createAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "codex",
+        model: "gpt-5-codex",
+        providerConfig: { codexPath: "codex" },
+      }),
+    );
+    expect(result).toMatchObject({
+      text: "CODEX_RUNTIME_OK",
+      model: "gpt-5-codex",
+    });
   });
 
   it("returns undefined when neither HTTP nor a non-claude agent runtime is configured", async () => {

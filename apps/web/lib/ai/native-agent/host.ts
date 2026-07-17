@@ -1,13 +1,5 @@
 import { getAgentRegistry } from "@openloomi/ai/agent/registry";
 import type { NativeAgentHost } from "@openloomi/ai/agent/native-runner";
-
-import {
-  claudePlugin,
-  codexPlugin,
-  hermesPlugin,
-  openclawPlugin,
-  opencodePlugin,
-} from "@/lib/ai/extensions";
 import { getDocument, getDocumentChunks } from "@/lib/ai/rag/langchain-service";
 import { getUserLlmProviderConfig } from "@/lib/ai/user-llm-api-settings";
 import {
@@ -17,22 +9,7 @@ import {
 import { readFile } from "@/lib/storage";
 import { detectSudoPasswordPrompt } from "./sudo";
 import { resolveNativeAgentProviderRequest } from "./provider-env";
-
-let providersRegistered = false;
-
-function registerNativeAgentProviders() {
-  if (providersRegistered) {
-    return;
-  }
-
-  const registry = getAgentRegistry();
-  registry.register(claudePlugin);
-  registry.register(codexPlugin);
-  registry.register(opencodePlugin);
-  registry.register(hermesPlugin);
-  registry.register(openclawPlugin);
-  providersRegistered = true;
-}
+import { registerNativeAgentProvider } from "./register-provider";
 
 /**
  * App-owned adapters for the package-level native agent runner.
@@ -43,7 +20,7 @@ function registerNativeAgentProviders() {
  */
 export const nativeAgentHost: NativeAgentHost = {
   registry: getAgentRegistry(),
-  registerProviders: registerNativeAgentProviders,
+  registerProvider: registerNativeAgentProvider,
   prepareRequest: (body) => resolveNativeAgentProviderRequest(body),
   getUserInsightSettings,
   getUserLlmProviderConfig,

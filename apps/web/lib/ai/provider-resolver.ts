@@ -281,9 +281,6 @@ class AgentRuntimeProvider implements LlmProvider {
   }
 
   async complete(request: LlmCompleteRequest): Promise<LlmCompleteResponse> {
-    // Ensure all runtimes are registered.
-    await nativeAgentHost.registerProviders?.();
-
     // Resolve the runtime's providerConfig + model from env (same source the
     // Loop tick uses, via `resolveNativeAgentProviderRequest`).
     const stub: NativeAgentRequest = {
@@ -291,9 +288,17 @@ class AgentRuntimeProvider implements LlmProvider {
       provider: this.options.runtime as AgentProvider,
     };
     const resolved = resolveNativeAgentProviderRequest(stub);
+    const provider = (resolved.provider ??
+      this.options.runtime) as AgentProvider;
+
+    if (nativeAgentHost.registerProvider) {
+      await nativeAgentHost.registerProvider(provider);
+    } else {
+      await nativeAgentHost.registerProviders?.();
+    }
 
     const config: AgentConfig = {
-      provider: (resolved.provider ?? this.options.runtime) as AgentProvider,
+      provider,
       model: request.model ?? resolved.modelConfig?.model,
       providerConfig: resolved.providerConfig,
       workDir: tmpdir(),

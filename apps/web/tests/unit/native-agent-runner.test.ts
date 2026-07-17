@@ -37,6 +37,37 @@ afterEach(async () => {
 });
 
 describe("native agent runner", () => {
+  it("normalizes the request before registering the selected provider", async () => {
+    const agent = new CapturingAgent();
+    const calls: string[] = [];
+    const host: NativeAgentHost = {
+      registry: createRegistry(agent),
+      prepareRequest: (body) => {
+        calls.push("prepare");
+        return { ...body, provider: "codex" };
+      },
+      registerProvider: (provider) => {
+        calls.push(`register:${provider}`);
+      },
+      getUserInsightSettings: async () => null,
+      logger: silentLogger,
+    };
+
+    const run = await runNativeAgentRequest(
+      { prompt: "use the configured runtime", provider: "claude" },
+      {
+        session: { user: { id: "user-1", type: "regular" } },
+        userId: "user-1",
+        abortController: new AbortController(),
+      },
+      host,
+    );
+    await collectMessages(run.generator);
+
+    expect(calls).toEqual(["prepare", "register:codex"]);
+    expect(agent.config).toMatchObject({ provider: "codex" });
+  });
+
   it("defaults to Claude when no env or request provider is configured", async () => {
     const agent = new CapturingAgent();
     const getUserLlmProviderConfig = vi.fn(async () => ({
@@ -214,7 +245,7 @@ describe("native agent runner", () => {
     tempDirs.push(workDir);
 
     const agent = new CapturingAgent();
-    const registerProviders = vi.fn();
+    const registerProvider = vi.fn();
     const getUserLlmProviderConfig = vi.fn(async () => ({
       apiKey: "saved-key",
       baseUrl: "https://llm.example.test",
@@ -222,7 +253,7 @@ describe("native agent runner", () => {
     }));
     const host: NativeAgentHost = {
       registry: createRegistry(agent),
-      registerProviders,
+      registerProvider,
       getUserInsightSettings: async () => ({
         aiSoulPrompt: "answer as the user's operator",
         language: "zh-CN",
@@ -262,7 +293,8 @@ describe("native agent runner", () => {
 
     const messages = await collectMessages(run.generator);
 
-    expect(registerProviders).toHaveBeenCalledTimes(1);
+    expect(registerProvider).toHaveBeenCalledOnce();
+    expect(registerProvider).toHaveBeenCalledWith("claude");
     expect(getUserLlmProviderConfig).toHaveBeenCalledWith({
       userId: "user-1",
       providerType: "anthropic_compatible",
