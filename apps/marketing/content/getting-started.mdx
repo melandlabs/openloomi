@@ -24,11 +24,11 @@ icon: "FaRocket"
 
 **macOS**
 
-| Option                                                                                                                                          | Notes                                                      |
-| ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [Download .dmg installer (Apple Silicon)](https://github.com/melandlabs/openloomi/releases/download/v0.7.10/openloomi_0.7.10_macOS_aarch64.dmg) | Recommended for M1/M2/M3/M4 Macs — double-click to install |
-| [Download .dmg installer (Intel)](https://github.com/melandlabs/openloomi/releases/download/v0.7.10/openloomi_0.7.10_macOS_amd64.dmg)           | For Intel Macs                                             |
-| Homebrew                                                                                                                                        | For developers — see command below                         |
+| Option                                                                                                                                        | Notes                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [Download .dmg installer (Apple Silicon)](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_macOS_aarch64.dmg) | Recommended for M1/M2/M3/M4 Macs — double-click to install |
+| [Download .dmg installer (Intel)](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_macOS_amd64.dmg)           | For Intel Macs                                             |
+| Homebrew                                                                                                                                      | For developers — see command below                         |
 
 ```bash
 # If you have a manual installation, remove it first:
@@ -49,16 +49,16 @@ brew upgrade --cask openloomi
 
 **Linux (Ubuntu/Debian)**
 
-| Option                                                                                                                                | Notes                                               |
-| ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| [Download .deb package (x86_64)](https://github.com/melandlabs/openloomi/releases/download/v0.7.10/openloomi_0.7.10_linux_amd64.deb)  | For x86_64 / AMD64 systems                          |
-| [Download .deb package (ARM64)](https://github.com/melandlabs/openloomi/releases/download/v0.7.10/openloomi_0.7.10_linux_aarch64.deb) | For ARM64 systems (e.g., Raspberry Pi, ARM servers) |
+| Option                                                                                                                              | Notes                                               |
+| ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| [Download .deb package (x86_64)](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_linux_amd64.deb)  | For x86_64 / AMD64 systems                          |
+| [Download .deb package (ARM64)](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_linux_aarch64.deb) | For ARM64 systems (e.g., Raspberry Pi, ARM servers) |
 
 ```bash
-sudo dpkg -i openloomi_0.7.10_linux_amd64.deb
+sudo dpkg -i openloomi_0.8.0_linux_amd64.deb
 sudo apt-get install -f
 
-# Fix resource path (required for v0.7.10 and earlier)
+# Fix resource path (required for v0.8.0 and earlier)
 sudo ln -sf /usr/lib/openloomi/_up_ /usr/bin/_up_
 
 # Start the application
@@ -83,10 +83,10 @@ openloomi
 
 **Windows**
 
-| Option                                                                                                                          | Notes                                               |
-| ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| [Download .exe installer](https://github.com/melandlabs/openloomi/releases/download/v0.7.10/openloomi_0.7.10_windows_amd64.exe) | Recommended — run the installer to set up OpenLoomi |
-| Winget                                                                                                                          | Coming Soon                                         |
+| Option                                                                                                                        | Notes                                               |
+| ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| [Download .exe installer](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_windows_amd64.exe) | Recommended — run the installer to set up OpenLoomi |
+| Winget                                                                                                                        | Coming Soon                                         |
 
 > **Windows SmartScreen:** If Windows shows a warning when running the installer, click **"More info"** then **"Run anyway"**. This is normal — OpenLoomi is open-source and the code is publicly verifiable. You only need to do this once per machine.
 >

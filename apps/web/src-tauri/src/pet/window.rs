@@ -94,7 +94,7 @@ pub fn build_pet_window(app: &AppHandle) -> tauri::Result<()> {
     // `tauri-plugin-window-state` persistence file
     // (`~/Library/Application Support/com.openloomi.app/.window-state.json`),
     // and an upgrade can leave the persisted size out of sync with the
-    // current widget sprite (issue #341 — a v0.7.10 upgrade restored
+    // current widget sprite (issue #341 — a v0.8.0 upgrade restored
     // `loomi-pet=84x84`, clipping the fox). The position side of the
     // saved state is still honoured so the user's drag position is
     // remembered; only the size is normalised back to PET_W × PET_H.

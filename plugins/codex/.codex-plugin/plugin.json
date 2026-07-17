@@ -1,6 +1,6 @@
 {
   "name": "openloomi",
-  "version": "0.7.10",
+  "version": "0.8.0",
   "description": "Use local OpenLoomi from Codex as a personal assistant and memory layer.",
   "author": {
     "name": "OpenLoomi"

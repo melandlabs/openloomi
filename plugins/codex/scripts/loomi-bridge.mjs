@@ -18,7 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const BRIDGE_VERSION = "0.7.10";
+const BRIDGE_VERSION = "0.8.0";
 const PLUGIN_PHASE = "runtime-provider-readiness";
 const COMMAND_TIMEOUT_MS = 5000;
 const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;

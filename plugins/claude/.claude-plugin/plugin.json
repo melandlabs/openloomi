@@ -1,6 +1,6 @@
 {
   "name": "openloomi",
-  "version": "0.7.10",
+  "version": "0.8.0",
   "description": "Connect Claude Code to your local OpenLoomi runtime. One-command install, mirror Claude's lifecycle onto the Loomi Pet, and auto-archive every Stop into your OpenLoomi memory. Talks to your local OpenLoomi over HTTP and the OpenLoomi helper CLI. AI provider config is owned by OpenLoomi itself — this plugin never reads or pushes API keys.",
   "author": { "name": "OpenLoomi" },
   "homepage": "https://openloomi.ai",
