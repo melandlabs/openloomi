@@ -288,10 +288,21 @@ describe("deriveDecisionContext — non-RSVP types", () => {
 
 describe("deriveDecisionContext — defaults", () => {
   it("defaults to English locale when none is provided", () => {
+    // Compute tomorrow (local calendar) at 09:30 so the "Tomorrow, …"
+    // assertion stays stable regardless of when the suite runs.
+    const now = new Date();
+    const tomorrow = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      9,
+      30,
+      0,
+    );
     const ctx = deriveDecisionContext({
       type: "rsvp",
       action: {
-        params: { start: "2026-07-17T09:30:00Z", organizer: "Sam" },
+        params: { start: tomorrow.toISOString(), organizer: "Sam" },
       },
     });
     expect(ctx).not.toBeNull();

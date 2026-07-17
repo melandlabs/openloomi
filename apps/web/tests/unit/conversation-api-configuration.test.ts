@@ -10,6 +10,7 @@ function createResponse(
     model?: string | null;
     systemHasApiKey?: boolean;
     defaultAgent?: string;
+    nativeRuntimeAuthenticated?: boolean;
   } = {},
 ) {
   return {
@@ -28,6 +29,9 @@ function createResponse(
       },
     },
     defaultAgent: overrides.defaultAgent,
+    nativeRuntime: overrides.nativeRuntimeAuthenticated
+      ? { ready: true, authenticated: true }
+      : null,
   };
 }
 
@@ -83,12 +87,20 @@ describe("conversation API configuration", () => {
     expect(hasUsableConversationApiConfiguration(response)).toBe(false);
   });
 
-  it("accepts the system Anthropic API key fallback", () => {
+  it("accepts an authenticated native Claude CLI runtime", () => {
+    expect(
+      hasUsableConversationApiConfiguration(
+        createResponse({ nativeRuntimeAuthenticated: true }),
+      ),
+    ).toBe(true);
+  });
+
+  it("ignores the stale system Anthropic API key mirror", () => {
     expect(
       hasUsableConversationApiConfiguration(
         createResponse({ systemHasApiKey: true }),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("treats a non-claude defaultAgent as configured even without an API key", () => {
