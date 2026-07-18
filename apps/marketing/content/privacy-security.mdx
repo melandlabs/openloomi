@@ -295,7 +295,7 @@ The `/audit` page shows a scrollable, paginated list (50 per page):
 
 ### Troubleshooting
 
-- **An action I expected isn't logged.** Only non-project file reads and command executions are recorded. Reads within your active project and other activity (like an agent's chat output) aren't audit entries — check the [Tasks](/docs/scheduled-jobs) execution history or the chat transcript for those.
+- **An action I expected isn't logged.** Only non-project file reads and command executions are recorded. Reads within your active project and other activity (like an agent's chat output) aren't audit entries — check the [Tasks](/docs/automation) execution history or the chat transcript for those.
 - **The log looks empty after an update.** The log self-trims once it passes its size cap, and **Clear** empties it entirely. New activity will start populating it again.
 - **I'm on a different profile.** The audit log is tied to your local data directory; switching profiles or data directories shows a different log.
 

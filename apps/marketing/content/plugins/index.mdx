@@ -16,7 +16,7 @@ Both plugins follow the same contract:
 - A Node bridge that talks to the local OpenLoomi runtime over HTTP (`127.0.0.1:3414`, falling back to `127.0.0.1:3515`).
 - A `setup-status` command that reports readiness as stable JSON (`mode`, `installed`, `tokenPresent`, `aiProviderConfigured`, `ready`, `nextAction`, `reason`).
 - An auto-enable wizard (`setup`) that walks the install → launch → guest login → token-mint → recheck state machine.
-- An opt-in Pet mirror that maps plugin lifecycle events onto the [Pet](/docs/pet) without ever blocking the user's turn.
+- An opt-in Pet mirror that maps plugin lifecycle events onto the [Pet](/docs/attention-agent) without ever blocking the user's turn.
 
 > 🔐 **Secret handling is identical across both plugins.** API keys, OAuth tokens, connector secrets, and auth tokens never appear in chat, argv, stdout, stderr, or logs. The bridge only reports _presence_ (`hasApiKey`, `baseUrlPresent`, `modelPresent`, etc.) — never values.
 
@@ -27,6 +27,6 @@ Both plugins follow the same contract:
 
 ## Related
 
-- [Pet](/docs/pet) — the desktop companion that mirrors plugin lifecycle events
-- [Onboarding](/docs/onboarding) — first-run setup for the OpenLoomi desktop app itself
+- [Pet](/docs/attention-agent) — the desktop companion that mirrors plugin lifecycle events
+- Onboarding — first-run setup for the OpenLoomi desktop app itself
 - [Claude Agent Runtime](/docs/reference/agent-runtimes/claude) · [Codex CLI Runtime](/docs/reference/agent-runtimes/codex) — how OpenLoomi drives the underlying runtimes

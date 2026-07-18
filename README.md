@@ -22,7 +22,7 @@
 
 ## What is OpenLoomi?
 
-OpenLoomi is an open-source AI coworker. Centered on a desktop **attention agent**, it connects your authorized work tools and screen content, builds a **holistic context** of your people, projects, and decisions, and tells you what happened, why it matters, what to do next, and surfaces daily summaries — fully saves your attention.
+OpenLoomi is an open-source AI coworker. Centered on a desktop **attention agent**, it connects your authorized work tools and screen content, builds a **holistic context** of your people, projects, and decisions, and tells you what happened, why it matters, what to do next, and surfaces daily summaries — saving your attention for what matters.
 
 <p align="center">
   <img src="screenshots/app/main-with-loomi.png" alt="OpenLoomi main window with Loomi" width="100%">
@@ -36,7 +36,7 @@ OpenLoomi is an open-source AI coworker. Centered on a desktop **attention agent
 | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | [.dmg](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_macOS_aarch64.dmg) | [.dmg](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_macOS_amd64.dmg) | [.deb](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_linux_amd64.deb) / [.rpm](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_linux_amd64.rpm) | [.deb](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_linux_aarch64.deb) / [.rpm](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_linux_aarch64.rpm) | [.exe](https://github.com/melandlabs/openloomi/releases/download/v0.8.0/openloomi_0.8.0_windows_amd64.exe) |
 
-Full documentation is available at [here](https://openloomi.ai/docs).
+Full documentation: [openloomi.ai/docs](https://openloomi.ai/docs)
 
 **Use as an Agent plugin** (for Claude Code / Codex users):
 

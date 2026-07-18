@@ -322,7 +322,7 @@ Beyond pushing decision cards, Loop ships three concrete surfaces where its judg
 
 ### Daily Brief
 
-A morning rollup at the [`/brief`](/docs/onboarding) route. It gathers the day's calendar, the emails that need your reply, the GitHub items you're tagged in, and any open decision cards, and lays them out as a single page. OpenLoomi calls this from your morning scheduled job (`scheduled-jobs.mdx`) and renders it through `components/agent/brief-panel.tsx`. You can also open `/brief` directly to read the latest rollup.
+A morning rollup at the `/brief` route. It gathers the day's calendar, the emails that need your reply, the GitHub items you're tagged in, and any open decision cards, and lays them out as a single page. OpenLoomi calls this from your morning scheduled job (`scheduled-jobs.mdx`) and renders it through `components/agent/brief-panel.tsx`. You can also open `/brief` directly to read the latest rollup.
 
 ### Evening Wrap
 
@@ -348,7 +348,7 @@ If you tap **Edit Draft**, you jump into Chat in the main OpenLoomi window with 
 
 Both the morning briefing and the evening recap are themselves **scheduled jobs** running through `/scheduled-jobs`. Loop's tick is also a job — every 10 minutes, an internal job fires the judgement pass. If your day starts at a different time, edit the morning/evening schedules in `Settings → Loop` and the next tick will pick them up.
 
-See [Tasks](/docs/scheduled-jobs) for the full cron / interval / once schedule types and how to write your own Loop-style jobs.
+See [Tasks](/docs/automation) for the full cron / interval / once schedule types and how to write your own Loop-style jobs.
 
 ---
 
