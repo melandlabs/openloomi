@@ -1667,6 +1667,28 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 }
                 return updated;
               }, chatIdForMessages);
+            } else if (data.type === "retry") {
+              // Codex CLI 0.144+ emits non-terminal retry/transport-fallback
+              // notices as `retry` AgentMessages (e.g. "Reconnecting... 2/5
+              // (request timed out)"). These are transient status events
+              // from a still-running turn, not terminal assistant errors.
+              // Surface a brief info toast for visibility, but do NOT push a
+              // chat part — the loading indicator stays up, the turn keeps
+              // running, and the final `turn.completed` / agent message will
+              // follow normally. Pushing a part here would leave a duplicate
+              // Agent Execution Timeout card above the eventual successful
+              // reply (issue #385).
+              const retryMessage =
+                data.content || data.message || "Codex is reconnecting…";
+              const attempt =
+                typeof data.attempt === "number" &&
+                typeof data.maxAttempts === "number"
+                  ? ` (${data.attempt}/${data.maxAttempts})`
+                  : "";
+              toast({
+                type: "info",
+                description: `${retryMessage}${attempt}`,
+              });
             } else if (data.type === "error") {
               console.error("[NativeAgent] Error:", data.message);
               const errorMessage = data.message || "Unknown error";

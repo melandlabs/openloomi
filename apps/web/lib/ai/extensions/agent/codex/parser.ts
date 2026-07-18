@@ -14,6 +14,11 @@ import type { AgentMessage } from "@openloomi/ai/agent/types";
  *   { "type": "item.completed",  "item": { …same payload, plus status… } }
  *   { "type": "turn.completed",  "usage": { "input_tokens": N, "cached_input_tokens": N, "output_tokens": N } }
  *   { "type": "error",           "message": "…" }
+ *
+ * Note: Codex CLI 0.144+ emits non-terminal retry/transport-fallback
+ * notices using the same top-level `error` shape. We classify the message
+ * text and surface those as `retry` AgentMessages instead of fatal
+ * `error` AgentMessages (issue #385).
  */
 export function parseCodexJsonLine(line: string): AgentMessage[] {
   const trimmed = line.trim();
@@ -82,10 +87,80 @@ export function convertCodexEvent(event: unknown): AgentMessage[] {
       readString(record.message) ||
       readString(record.error) ||
       "Codex CLI reported an error";
-    return [{ type: "error", message }];
+    return [classifyCodexErrorMessage(message)];
   }
 
   return [];
+}
+
+/**
+ * Codex CLI 0.144+ emits non-terminal retry/transport-fallback notices as
+ * top-level `{"type":"error",…}` events (e.g. `Reconnecting... 2/5 (request
+ * timed out)`, `stream disconnected - retrying sampling request (1/5 ...)`,
+ * `falling back to HTTP`). Treating these as fatal would surface Codex's
+ * in-flight transport recovery as red Agent Execution Timeout cards above
+ * the successful reply (issue #385). We classify the message text and only
+ * fall through to a fatal `error` AgentMessage when the message does not
+ * look like a transient transport-retry notice.
+ */
+function classifyCodexErrorMessage(message: string): AgentMessage {
+  const transient = classifyTransientCodexError(message);
+  if (transient.kind === "retry") {
+    const retry: AgentMessage = { type: "retry", content: message };
+    if (typeof transient.attempt === "number") {
+      retry.attempt = transient.attempt;
+    }
+    if (typeof transient.maxAttempts === "number") {
+      retry.maxAttempts = transient.maxAttempts;
+    }
+    return retry;
+  }
+  return { type: "error", message };
+}
+
+type TransientCodexErrorClassification =
+  | { kind: "retry"; attempt?: number; maxAttempts?: number }
+  | { kind: "fatal" };
+
+function classifyTransientCodexError(
+  message: string,
+): TransientCodexErrorClassification {
+  const text = message.toLowerCase();
+
+  // Recognised transient shapes (case-insensitive, punctuation-tolerant):
+  //   - "Reconnecting... 2/5 (request timed out)"
+  //   - "stream disconnected - retrying sampling request (1/5 ...)"
+  //   - "falling back to http" / "falling back to https"
+  //   - "retrying sampling request"
+  const reconnectMatch = text.match(/reconnecting[^()]*?(\d+)\s*\/\s*(\d+)/);
+  if (reconnectMatch) {
+    return {
+      kind: "retry",
+      attempt: Number.parseInt(reconnectMatch[1], 10),
+      maxAttempts: Number.parseInt(reconnectMatch[2], 10),
+    };
+  }
+
+  const samplingMatch = text.match(
+    /retrying sampling request[^\d]*?(\d+)\s*\/\s*(\d+)/,
+  );
+  if (samplingMatch) {
+    return {
+      kind: "retry",
+      attempt: Number.parseInt(samplingMatch[1], 10),
+      maxAttempts: Number.parseInt(samplingMatch[2], 10),
+    };
+  }
+
+  if (
+    text.includes("falling back to http") ||
+    text.includes("stream disconnected") ||
+    text.includes("retrying sampling request")
+  ) {
+    return { kind: "retry" };
+  }
+
+  return { kind: "fatal" };
 }
 
 function convertCodexItem(

@@ -374,6 +374,79 @@ describe("Codex parser", () => {
     ).toEqual([{ type: "error", message: "boom" }]);
   });
 
+  // Issue #385 — Codex CLI 0.144+ emits non-terminal retry/transport
+  // fallback notices using the same top-level `{"type":"error",…}` shape
+  // as fatal errors (e.g. "Reconnecting... 2/5 (request timed out)"). These
+  // must NOT be projected to a fatal `error` AgentMessage; they are
+  // transient status from a still-running turn and the chat UI surfaces
+  // them via a brief info toast only.
+  it("classifies 'Reconnecting... n/m' as a retry, not a fatal error", () => {
+    const messages = parseCodexJsonLine(
+      JSON.stringify({
+        type: "error",
+        message: "Reconnecting... 2/5 (request timed out)",
+      }),
+    );
+    expect(messages).toEqual([
+      {
+        type: "retry",
+        content: "Reconnecting... 2/5 (request timed out)",
+        attempt: 2,
+        maxAttempts: 5,
+      },
+    ]);
+  });
+
+  it("classifies 'stream disconnected - retrying sampling request (n/m)' as a retry", () => {
+    const messages = parseCodexJsonLine(
+      JSON.stringify({
+        type: "error",
+        message: "stream disconnected - retrying sampling request (3/5 ...)",
+      }),
+    );
+    expect(messages).toEqual([
+      {
+        type: "retry",
+        content: "stream disconnected - retrying sampling request (3/5 ...)",
+        attempt: 3,
+        maxAttempts: 5,
+      },
+    ]);
+  });
+
+  it("classifies 'falling back to HTTP' as a retry without attempt numbers", () => {
+    const messages = parseCodexJsonLine(
+      JSON.stringify({
+        type: "error",
+        message: "falling back to HTTP",
+      }),
+    );
+    expect(messages).toEqual([
+      {
+        type: "retry",
+        content: "falling back to HTTP",
+      },
+    ]);
+  });
+
+  it("keeps a fatal Codex exit-code error fatal even when it mentions a transient keyword", () => {
+    // A genuine terminal error (here, a non-zero CLI exit) must still
+    // surface as `type: "error"` so the chat UI can render exactly one
+    // terminal error card per the acceptance criteria of #385.
+    const messages = parseCodexJsonLine(
+      JSON.stringify({
+        type: "error",
+        message: "Codex CLI exited with code 7: connection refused",
+      }),
+    );
+    expect(messages).toEqual([
+      {
+        type: "error",
+        message: "Codex CLI exited with code 7: connection refused",
+      },
+    ]);
+  });
+
   it("ignores unknown event types without crashing", () => {
     expect(
       parseCodexJsonLine(JSON.stringify({ type: "future.event", x: 1 })),
@@ -589,6 +662,96 @@ setTimeout(() => process.stdout.write(payload.subarray(split)), 10);
         expect.objectContaining({ type: "text", content: "你好" }),
       ]),
     );
+  });
+
+  // Issue #385 — non-terminal Codex retry/transport-fallback events must
+  // not be projected to a fatal `error` AgentMessage and must not suppress
+  // the final success `result`. The chat UI relies on this invariant to
+  // avoid rendering duplicate Agent Execution Timeout cards above a
+  // successful reply.
+  it("treats Codex retry events as transient and still yields a success result", async () => {
+    const workDir = await createFakeCodexWorkDir(`
+require("node:fs").writeFileSync("args.json", JSON.stringify(process.argv.slice(2)));
+console.log(JSON.stringify({ type: "thread.started", thread_id: "thread-1" }));
+// Non-terminal transport-fallback notices that used to be projected as
+// fatal error AgentMessages and rendered as duplicate Agent Execution
+// Timeout cards. The parser must classify them as retry and the agent
+// must keep the turn alive through to the successful reply.
+console.log(JSON.stringify({ type: "error", message: "Reconnecting... 2/5 (request timed out)" }));
+console.log(JSON.stringify({ type: "error", message: "Reconnecting... 3/5 (request timed out)" }));
+console.log(JSON.stringify({ type: "error", message: "stream disconnected - retrying sampling request (4/5 ...)" }));
+console.log(JSON.stringify({ type: "error", message: "falling back to HTTP" }));
+console.log(JSON.stringify({
+  type: "item.completed",
+  item: { type: "agent_message", id: "msg-1", text: "测试成功" }
+}));
+console.log(JSON.stringify({
+  type: "turn.completed",
+  usage: { input_tokens: 7, output_tokens: 3 }
+}));
+`);
+
+    const agent = new CodexAgent({
+      provider: "codex",
+      workDir,
+      providerConfig: { codexPath: process.execPath },
+    });
+
+    const messages = await collectMessages(agent.run("只回复：测试成功"));
+
+    // No fatal error was emitted — every transport-fallback line is a retry.
+    expect(
+      messages.find((message) => message.type === "error"),
+    ).toBeUndefined();
+
+    // The four retry notices survive as `retry` AgentMessages carrying
+    // attempt/maxAttempts where the original text encodes them.
+    const retries = messages.filter((message) => message.type === "retry");
+    expect(retries).toHaveLength(4);
+    expect(retries[0]).toMatchObject({
+      type: "retry",
+      content: "Reconnecting... 2/5 (request timed out)",
+      attempt: 2,
+      maxAttempts: 5,
+    });
+    expect(retries[1]).toMatchObject({
+      type: "retry",
+      content: "Reconnecting... 3/5 (request timed out)",
+      attempt: 3,
+      maxAttempts: 5,
+    });
+    expect(retries[2]).toMatchObject({
+      type: "retry",
+      content: "stream disconnected - retrying sampling request (4/5 ...)",
+      attempt: 4,
+      maxAttempts: 5,
+    });
+    // "falling back to HTTP" carries no attempt numbers.
+    expect(retries[3]).toMatchObject({
+      type: "retry",
+      content: "falling back to HTTP",
+    });
+    expect((retries[3] as { attempt?: number }).attempt).toBeUndefined();
+    expect(
+      (retries[3] as { maxAttempts?: number }).maxAttempts,
+    ).toBeUndefined();
+
+    // The successful reply still arrives exactly once.
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", content: "测试成功" }),
+        expect.objectContaining({
+          type: "result",
+          content: "success",
+          usage: { inputTokens: 7, outputTokens: 3 },
+        }),
+      ]),
+    );
+    expect(
+      messages.filter((message) => message.type === "result"),
+    ).toHaveLength(1);
+
+    expect(messages.at(-1)?.type).toBe("done");
   });
 
   // Issue #356 — provider-timeout interruption must not leave in-flight tool

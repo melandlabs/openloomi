@@ -301,6 +301,12 @@ export class CodexAgent extends BaseAgent {
             continue;
           }
           if (message.type === "error") {
+            // Transient Codex retry/transport-fallback notices are projected
+            // to `type: "retry"` by the parser, not `type: "error"`, so they
+            // intentionally skip this branch and fall through to the default
+            // yield. They must not flip `sawRuntimeError`, which would
+            // suppress the final `result` even when the run ultimately
+            // succeeds (issue #385).
             sawRuntimeError = true;
           }
           if (message.type === "tool_use") {
