@@ -1139,8 +1139,8 @@ async function readBundleVersion(appPath) {
   // Try plutil first — it prints a stable `key: "value"` text format.
   const r = await runBin("plutil", ["-p", infoPlist], { timeoutMs: 3000 });
   if (r.ok && r.stdout) {
-    // plutil output is like:  "CFBundleShortVersionString" => "0.8.1"
-    // or (older):            CFBundleShortVersionString = "0.8.1"
+    // plutil output is like:  "CFBundleShortVersionString" => "0.8.2"
+    // or (older):            CFBundleShortVersionString = "0.8.2"
     const m = r.stdout.match(
       /["']?CFBundleShortVersionString["']?\s*(?:=>|=)\s*["']([^"']+)["']/,
     );
@@ -1185,8 +1185,8 @@ async function readBinVersion(binPath) {
   // --version is safe and doesn't flash a GUI.
   const r = await runBin(binPath, ["--version"], { timeoutMs: 5000 });
   if (!r.ok) return null;
-  // Match a semver-ish version (e.g. "0.8.1", "1.2.3-rc.1") anywhere in
-  // the --version output. Real binaries print "<name> 0.8.1"; tests
+  // Match a semver-ish version (e.g. "0.8.2", "1.2.3-rc.1") anywhere in
+  // the --version output. Real binaries print "<name> 0.8.2"; tests
   // just print "9.9.9" — both should parse.
   const m = (r.stdout || "").match(/(\d+\.\d+\.\d+(?:[-+][\w.\-]+)?)/);
   return m ? m[1].trim() : (r.stdout || "").trim();
