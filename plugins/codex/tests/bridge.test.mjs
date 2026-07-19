@@ -388,7 +388,6 @@ test("version returns bridge identity and command list", () => {
     "install-openloomi",
     "install-instructions",
     "initialize-session",
-    "configure-ai-provider",
     "workflow-guidance",
     "version",
     "help",
@@ -449,7 +448,6 @@ test("setup-status exposes the protocol contract fields", () => {
     "appPath",
     "version",
     "tokenPresent",
-    "aiProviderConfigured",
     "apiReachable",
     "ready",
     "nextAction",
@@ -475,17 +473,13 @@ test("setup-status exposes the protocol contract fields", () => {
   }
 });
 
-test("setup-status treats active native Codex runtime as execution-ready without an AI provider", async () => {
+test("setup-status treats active native Codex runtime as execution-ready", async () => {
   await withFakeHomeAsync(async (env) => {
     const ctl = writeFakeApp(env.HOME);
     writeFakeToken(env.HOME);
 
     await withLocalApiServer(
       createReadySetupApiHandler({
-        aiPreferencePayload: {
-          settings: [],
-          systemDefaults: {},
-        },
         nativeProviderPayload: {
           defaultAgent: "codex",
           agents: [{ type: "codex", name: "Codex CLI" }],
@@ -499,7 +493,6 @@ test("setup-status treats active native Codex runtime as execution-ready without
           OPENLOOMI_AGENT_PROVIDER: "codex",
         });
 
-        assert.equal(j.aiProviderConfigured, false);
         assert.equal(j.executionProviderReady, true);
         assert.equal(j.executionProviderSource, "native_codex_runtime");
         assert.equal(j.nativeRuntimeActive, true);
@@ -510,46 +503,6 @@ test("setup-status treats active native Codex runtime as execution-ready without
         assert.equal(j.reason, "READY");
         assert.equal(j.readinessSource, "native_codex_runtime");
         assert.equal(j.checks.nativeProvider.active, true);
-      },
-    );
-  });
-});
-
-test("setup-status still requires an AI provider when the native Codex runtime is inactive", async () => {
-  await withFakeHomeAsync(async (env) => {
-    const ctl = writeFakeApp(env.HOME);
-    writeFakeToken(env.HOME);
-
-    await withLocalApiServer(
-      createReadySetupApiHandler({
-        aiPreferencePayload: {
-          settings: [],
-          systemDefaults: {},
-        },
-        nativeProviderPayload: {
-          defaultAgent: "claude",
-          agents: [
-            { type: "claude", name: "Claude" },
-            { type: "codex", name: "Codex CLI" },
-          ],
-        },
-      }),
-      async ({ baseUrl }) => {
-        const j = await runJsonAsync(["setup-status"], {
-          ...env,
-          OPENLOOMI_APP: ctl,
-          OPENLOOMI_BASE_URL: baseUrl,
-        });
-
-        assert.equal(j.aiProviderConfigured, false);
-        assert.equal(j.executionProviderReady, false);
-        assert.equal(j.executionProviderSource, null);
-        assert.equal(j.nativeRuntimeActive, false);
-        assert.equal(j.nativeRuntimeProvider, "claude");
-        assert.equal(j.nativeRuntime.codexAgentAvailable, true);
-        assert.equal(j.ready, false);
-        assert.equal(j.nextAction, "configure_ai_provider");
-        assert.equal(j.reason, "AI_PROVIDER_REQUIRED");
       },
     );
   });
@@ -765,35 +718,23 @@ test("setup-status falls back to native integrations when loop connector status 
   });
 });
 
-test("setup-status aiProvider runtime check never reports key values", () => {
+test("setup-status never reports AI provider key values", () => {
   withFakeHome((env) => {
     const j = runJson(["setup-status"], env);
-    // The aiProvider checks[] is intentionally empty now (the bridge no
-    // longer reads provider env vars). Guard against accidentally
-    // re-introducing an entry that carries a key value.
-    for (const entry of j.checks.aiProvider || []) {
-      assert.ok(
-        !("value" in entry),
-        `aiProvider check leaked a value: ${entry.key ?? "<unknown>"}`,
-      );
-    }
-    // Runtime-sourced providers must also satisfy the no-value
-    // contract — anything that could carry an apiKey / token / secret
-    // value is forbidden here.
-    for (const provider of j.checks.aiProviderRuntime?.providers || []) {
-      for (const field of [
-        "value",
-        "apiKey",
-        "authToken",
-        "token",
-        "secret",
-      ]) {
-        assert.ok(
-          !(field in provider) || provider[field] === "",
-          `aiProviderRuntime.providers leaked a value via ${field}`,
-        );
-      }
-    }
+    // The aiProvider / aiProviderRuntime fields are gone — guard against
+    // accidentally re-introducing entries that carry API key values.
+    assert.equal(
+      "aiProvider" in (j.checks || {}),
+      false,
+      "checks.aiProvider was reintroduced — the bridge no longer reads provider env vars",
+    );
+    assert.equal(
+      "aiProviderRuntime" in (j.checks || {}),
+      false,
+      "checks.aiProviderRuntime was reintroduced",
+    );
+    assert.equal("aiProviderConfigured" in j, false);
+    assert.equal("aiProviderStatus" in j, false);
     // Same contract for the auth checks block.
     for (const entry of j.checks.auth || []) {
       assert.equal(typeof entry.key, "string");
@@ -869,17 +810,12 @@ test("secrets contract: fake key value never appears in any subcommand output", 
       OPENLOOMI_AUTH_TOKEN: fake,
       OPENAI_API_KEY: fake,
       ANTHROPIC_API_KEY: fake,
-      OPENLOOMI_AI_API_KEY: fake,
-      ANTHROPIC_BASE_URL: "http://127.0.0.1:1",
-      OPENLOOMI_AI_BASE_URL: "http://127.0.0.1:1",
-      OPENLOOMI_AI_MODEL: "leaktest-model",
     };
     for (const sub of [
       ["version"],
       ["setup-status"],
       ["install-instructions"],
       ["workflow-guidance"],
-      ["configure-ai-provider"],
       ["help"],
     ]) {
       const r = runOutcome(sub, inputs);
@@ -981,7 +917,6 @@ test("setup status field mirrors setup-status when the loop exits", () => {
     for (const key of [
       "installed",
       "tokenPresent",
-      "aiProviderConfigured",
       "apiReachable",
       "ready",
       "nextAction",
@@ -1214,7 +1149,6 @@ test("argv hardening: unknown flags are not silently accepted as secrets", () =>
     for (const sub of [
       ["setup-status", "--api-key", fake],
       ["install-instructions", "--api-key", fake],
-      ["configure-ai-provider", "--api-key", fake],
     ]) {
       const r = runOutcome(sub, env);
       assert.ok(

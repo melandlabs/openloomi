@@ -10,7 +10,6 @@ Prerequisites:
 
 - OpenLoomi Desktop is installed or the user is willing to approve the plugin's
   official installer flow.
-- An AI provider is configured in OpenLoomi-owned settings.
 - Codex can load the OpenLoomi plugin from a marketplace or local checkout.
 
 Steps:
@@ -18,8 +17,8 @@ Steps:
 1. Start a new Codex thread after installing or refreshing the plugin cache.
 2. Ask: `@OpenLoomi Check whether OpenLoomi is ready.`
 3. Expected: the plugin calls `setup-status` and reports stable JSON fields:
-   `installed`, `appPath`, `tokenPresent`, `aiProviderConfigured`,
-   `apiReachable`, `ready`, `nextAction`, and `reason`.
+   `installed`, `appPath`, `tokenPresent`, `apiReachable`, `ready`,
+   `nextAction`, and `reason`.
 4. If `nextAction` is `open_openloomi`, open OpenLoomi Desktop and ask again.
 5. Ask: `@OpenLoomi Show the OpenLoomi workflows available from Codex.`
 6. Expected: Codex lists `openloomi-loop`, `openloomi-memory`,

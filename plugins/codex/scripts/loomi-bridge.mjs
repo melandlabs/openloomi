@@ -90,7 +90,6 @@ const RUNTIME_SAFE_PROMPT_GUARD = [
 const COMMANDS = new Set([
   "archive",
   "codex-runtime-info",
-  "configure-ai-provider",
   "help",
   "initialize-session",
   "install-openloomi",
@@ -153,7 +152,6 @@ const WORKFLOW_GUIDANCE = [
     nextActionsWhenBlocked: [
       "install_openloomi",
       "initialize_openloomi_session",
-      "configure_ai_provider",
       "configure_connectors",
     ],
     safety: [
@@ -174,7 +172,6 @@ const WORKFLOW_GUIDANCE = [
     nextActionsWhenBlocked: [
       "install_openloomi",
       "initialize_openloomi_session",
-      "configure_ai_provider",
       "configure_connectors",
     ],
     safety: [
@@ -216,7 +213,6 @@ const WORKFLOW_GUIDANCE = [
     nextActionsWhenBlocked: [
       "install_openloomi",
       "initialize_openloomi_session",
-      "configure_ai_provider",
       "configure_connectors",
     ],
     safety: [
@@ -316,15 +312,8 @@ async function probeApiReachable() {
 async function buildSetupStatus() {
   const discovery = await discoverOpenLoomi();
   const token = getTokenStatus();
-  const aiProvider = await getAiProviderStatus(token);
   const codexRuntimeEnv = await getCodexRuntimeEnvStatus();
   const apiProbe = await probeApiReachable();
-  const runtimeBaseUrl = normalizeLocalApiUrl(aiProvider.runtime?.baseUrl);
-
-  if (!apiProbe.reachableUrl && runtimeBaseUrl) {
-    apiProbe.reachableUrl = runtimeBaseUrl;
-    apiProbe.source = "aiProviderRuntime";
-  }
 
   const connectorStatus = await getConnectorStatus(
     apiProbe.reachableUrl,
@@ -333,10 +322,6 @@ async function buildSetupStatus() {
   const nativeProviderStatus = await getNativeProviderStatus(
     apiProbe.reachableUrl,
   );
-  const executionProvider = getExecutionProviderStatus(
-    aiProvider,
-    nativeProviderStatus,
-  );
 
   const baseStatus = {
     mode: discovery.mode,
@@ -344,10 +329,10 @@ async function buildSetupStatus() {
     appPath: discovery.appPath,
     version: discovery.version,
     tokenPresent: token.present,
-    aiProviderConfigured: aiProvider.configured,
-    aiProviderStatus: aiProvider.status,
-    executionProviderReady: executionProvider.ready,
-    executionProviderSource: executionProvider.source,
+    executionProviderReady: nativeProviderStatus.active,
+    executionProviderSource: nativeProviderStatus.active
+      ? "native_codex_runtime"
+      : null,
     nativeRuntimeActive: nativeProviderStatus.active,
     nativeRuntimeProvider: nativeProviderStatus.defaultAgent,
     nativeRuntimeStatus: nativeProviderStatus.reason,
@@ -408,8 +393,6 @@ async function buildSetupStatus() {
     },
     checks: {
       auth: token.checked,
-      aiProvider: aiProvider.checked,
-      aiProviderRuntime: aiProvider.runtime,
       nativeProvider: nativeProviderStatus,
       apiProbe: apiProbe.attempts,
       connectors: connectorStatus.check,
@@ -428,7 +411,6 @@ async function buildSetupStatus() {
     ...getReadinessDecision(
       discovery,
       token,
-      aiProvider,
       codexRuntimeEnv,
       apiProbe,
       nativeProviderStatus,
@@ -551,27 +533,6 @@ function summarizeNativeAgent(agent) {
   return {
     type: typeof agent?.type === "string" ? agent.type : null,
     name: typeof agent?.name === "string" ? agent.name : null,
-  };
-}
-
-function getExecutionProviderStatus(aiProvider, nativeProvider) {
-  if (aiProvider.configured) {
-    return {
-      ready: true,
-      source: "ai_provider",
-    };
-  }
-
-  if (nativeProvider.active) {
-    return {
-      ready: true,
-      source: "native_codex_runtime",
-    };
-  }
-
-  return {
-    ready: false,
-    source: null,
   };
 }
 
@@ -1324,51 +1285,6 @@ async function installOpenLoomi(args) {
   });
 }
 
-async function configureAiProvider(args) {
-  const secretViolation = getSecretArgViolation(args);
-
-  if (secretViolation) {
-    writeJson(
-      {
-        ready: false,
-        nextAction: "open_openloomi_ai_provider_setup",
-        reason: "SECRET_INPUT_NOT_ALLOWED",
-        rejectedFlag: secretViolation.flag,
-        message:
-          "API keys, OAuth tokens, and other secrets must not be passed through Codex chat or command-line arguments. Use an OpenLoomi-owned setup UI or CLI surface instead.",
-      },
-      1,
-    );
-    return;
-  }
-
-  const flags = parseFlags(args);
-  const aiProvider = await getAiProviderStatus(getTokenStatus());
-  const codexOAuth = getCodexOAuthFeasibility();
-  const setupRequest = getAiProviderSetupRequest(flags);
-
-  writeJson({
-    ready: aiProvider.configured,
-    nextAction: aiProvider.configured
-      ? "setup_status"
-      : "open_openloomi_ai_provider_setup",
-    reason: aiProvider.configured
-      ? "AI_PROVIDER_CONFIGURED"
-      : "AI_PROVIDER_REQUIRED",
-    aiProviderConfigured: aiProvider.configured,
-    aiProviderStatus: aiProvider.status,
-    checks: {
-      aiProvider: aiProvider.checked,
-      aiProviderRuntime: aiProvider.runtime,
-    },
-    codexOAuth,
-    setupRequest,
-    setupOptions: getAiProviderSetupOptions(codexOAuth),
-    safety:
-      "Only non-secret provider preferences may pass through Codex. API key entry must happen in OpenLoomi-owned UI or CLI surfaces.",
-  });
-}
-
 function workflowGuidance(args) {
   const flags = parseFlags(args);
   const workflowId = getRequestedWorkflow(args, flags);
@@ -1574,87 +1490,6 @@ function parseFlags(args) {
   }
 
   return flags;
-}
-
-function getSecretArgViolation(args) {
-  const secretFlags = [
-    "--api-key",
-    "--apikey",
-    "--auth-token",
-    "--oauth-token",
-    "--refresh-token",
-    "--secret",
-    "--token",
-  ];
-
-  for (const arg of args) {
-    const normalized = arg.toLowerCase();
-    const flag = secretFlags.find(
-      (candidate) =>
-        normalized === candidate || normalized.startsWith(`${candidate}=`),
-    );
-
-    if (flag) {
-      return {
-        flag,
-      };
-    }
-  }
-
-  return null;
-}
-
-function getCodexOAuthFeasibility() {
-  const markedSupported = process.env.OPENLOOMI_CODEX_OAUTH_SUPPORTED === "1";
-
-  return {
-    available: markedSupported,
-    source: markedSupported
-      ? "OPENLOOMI_CODEX_OAUTH_SUPPORTED"
-      : "not-configured",
-    reason: markedSupported
-      ? "OFFICIAL_CODEX_OAUTH_SURFACE_MARKED_AVAILABLE"
-      : "NO_OFFICIAL_CODEX_OAUTH_SURFACE_VERIFIED",
-    note: "Codex OAuth should only be used after an official supported surface is verified.",
-  };
-}
-
-function getAiProviderSetupRequest(flags) {
-  return {
-    provider: sanitizePreference(flags.provider),
-    baseUrl: sanitizePreference(flags.baseUrl),
-    model: sanitizePreference(flags.model),
-    apiKeyProvided: false,
-    secretInputAccepted: false,
-  };
-}
-
-function getAiProviderSetupOptions(codexOAuth) {
-  return [
-    {
-      id: "codex_oauth",
-      available: codexOAuth.available,
-      ownedBy: "Codex/OpenLoomi",
-      collectsSecrets: false,
-      reason: codexOAuth.reason,
-    },
-    {
-      id: "openloomi_desktop_settings",
-      available: true,
-      ownedBy: "OpenLoomi",
-      collectsSecrets: true,
-      action:
-        "Open OpenLoomi Desktop settings and configure provider base URL, API key, and model name there.",
-    },
-  ];
-}
-
-function sanitizePreference(value) {
-  if (!hasValue(value)) {
-    return null;
-  }
-
-  return value.trim().slice(0, 256);
 }
 
 function validateArtifactUrl(value) {
@@ -3374,18 +3209,6 @@ function normalizeRunFailure(result) {
     };
   }
 
-  if (
-    output.includes("api key") ||
-    output.includes("model provider") ||
-    output.includes("ai provider")
-  ) {
-    return {
-      nextAction: "configure_ai_provider",
-      reason: "AI_PROVIDER_REQUIRED",
-      openloomi: summarizeRunProcess(result),
-    };
-  }
-
   if (output.includes("connector") || output.includes("integration")) {
     return {
       nextAction: "configure_connectors",
@@ -4229,8 +4052,10 @@ async function setup(args) {
   //   3. launch the OpenLoomi desktop app and wait for the local API
   //   4. mint a guest/session token via the local API
   //
-  // We deliberately do NOT auto-configure the AI provider: secret entry
+  // We deliberately do NOT auto-configure any AI provider: secret entry
   // must happen in OpenLoomi-owned UI per the SKILL secrets contract.
+  // Provider readiness is the runtime's responsibility — the bridge only
+  // checks whether the native Codex runtime is active.
   const flags = parseFlags(args);
   const yesFlag = !!flags.yes || !!flags.confirm;
   const maxWaitMs = Number(flags["max-wait"] || 30_000);
@@ -4438,8 +4263,6 @@ async function setup(args) {
 
     // 5. No automatic transition matches. Surface a clear next step.
     //    The realistic stops here are:
-    //      - AI_PROVIDER_REQUIRED -> walk the user through OpenLoomi Desktop
-    //        Settings. Do NOT auto-call configure-ai-provider with a key.
     //      - INSTALL_REQUIRED without --yes -> already handled above.
     //      - any other upstream state -> just hand back the status.
     record("status_check", false, { reason: status.reason });
@@ -4764,7 +4587,6 @@ async function validateAppPath(candidate, options) {
 function getReadinessDecision(
   discovery,
   token,
-  aiProvider,
   codexRuntimeEnv,
   apiProbe,
   nativeProviderStatus,
@@ -4816,44 +4638,15 @@ function getReadinessDecision(
     };
   }
 
-  if (!token.present && !aiProvider.configured) {
-    return {
-      ready: true,
-      nextAction: "run",
-      reason: "READY_SESSION_BOOTSTRAP_PENDING",
-      sessionInitializationRequired: true,
-      message: nativeCodexRuntimeReady
-        ? "OpenLoomi is installed and the native Codex runtime is active. The bridge will initialize a local guest/session token on run before execution."
-        : "OpenLoomi is installed. The bridge will initialize a local guest/session token on run, then re-check OpenLoomi AI provider settings.",
-    };
-  }
-
-  if (!aiProvider.configured && nativeCodexRuntimeReady) {
+  if (nativeCodexRuntimeReady) {
     return {
       ready: true,
       nextAction: "run",
       reason: "READY",
       readinessSource: "native_codex_runtime",
-      message:
-        "OpenLoomi is ready through the native Codex runtime. A separate OpenLoomi AI provider is not required for native Codex execution.",
-    };
-  }
-
-  if (aiProvider.status === "runtime_status_unavailable") {
-    return {
-      ready: false,
-      nextAction: "open_openloomi",
-      reason: "AI_PROVIDER_STATUS_UNAVAILABLE",
-      message:
-        "OpenLoomi AI provider configuration could not be confirmed because the local OpenLoomi API is not reachable. Open OpenLoomi, then retry setup-status.",
-    };
-  }
-
-  if (!aiProvider.configured) {
-    return {
-      ready: false,
-      nextAction: "configure_ai_provider",
-      reason: "AI_PROVIDER_REQUIRED",
+      message: token.present
+        ? "OpenLoomi is ready through the native Codex runtime."
+        : "OpenLoomi is ready through the native Codex runtime. The bridge will initialize a local guest/session token on run before execution.",
     };
   }
 
@@ -4864,7 +4657,17 @@ function getReadinessDecision(
       reason: "READY_SESSION_BOOTSTRAP_PENDING",
       sessionInitializationRequired: true,
       message:
-        "OpenLoomi is installed and provider setup appears available. The bridge will initialize a local guest/session token on run when possible.",
+        "OpenLoomi is installed. The bridge will initialize a local guest/session token on run before execution.",
+    };
+  }
+
+  if (!apiProbe?.reachableUrl) {
+    return {
+      ready: false,
+      nextAction: "open_openloomi",
+      reason: "OPENLOOMI_API_UNREACHABLE",
+      message:
+        "OpenLoomi is installed but the local API is not reachable. Open OpenLoomi, then retry setup-status.",
     };
   }
 
@@ -4922,204 +4725,6 @@ function readOpenLoomiAuthToken(tokenStatus = getTokenStatus()) {
   } catch {
     return null;
   }
-}
-
-async function getAiProviderStatus(tokenStatus = getTokenStatus()) {
-  // AI provider readiness is the runtime's job — the bridge never reads
-  // provider env vars as a source of truth. The runtime's
-  // `/api/preferences/ai` is the sole signal (it owns user-saved
-  // settings, the native CLI auth probe where applicable, and the
-  // system defaults).
-  const runtime = await getRuntimeAiProviderStatus(tokenStatus);
-
-  return {
-    configured: runtime.configured,
-    status: runtime.configured ? "runtime_configured" : runtime.status,
-    runtime,
-    // `checked` is intentionally empty: the bridge previously surfaced
-    // env-var names + presence here, but the bridge no longer reads
-    // provider env vars at all. The empty array keeps the JSON shape
-    // stable for any tooling that introspects the field.
-    checked: [],
-  };
-}
-
-async function getRuntimeAiProviderStatus(tokenStatus) {
-  if (!tokenStatus.present) {
-    return {
-      configured: false,
-      status: "token_missing",
-      source: "openloomi-runtime",
-      checked: false,
-      attempts: [],
-      providers: [],
-    };
-  }
-
-  const token = readOpenLoomiAuthToken(tokenStatus);
-
-  if (!hasValue(token)) {
-    return {
-      configured: false,
-      status: "token_unreadable",
-      source: "openloomi-runtime",
-      checked: false,
-      attempts: [],
-      providers: [],
-    };
-  }
-
-  const attempts = [];
-
-  for (const baseUrl of getLocalApiBaseUrls()) {
-    const result = await requestAiProviderStatus(baseUrl, token);
-    attempts.push(summarizeRuntimeAiProviderAttempt(result));
-
-    if (result.providers && result.configured) {
-      return {
-        configured: true,
-        status: "runtime_configured",
-        source: "openloomi-runtime",
-        checked: true,
-        baseUrl,
-        attempts,
-        providers: result.providers,
-      };
-    }
-  }
-
-  for (const baseUrl of getLocalApiBaseUrls()) {
-    const nativeStatus = await getNativeProviderStatus(baseUrl);
-    if (nativeStatus && nativeStatus.active) {
-      return {
-        configured: true,
-        status: "runtime_configured",
-        source: "openloomi-runtime",
-        checked: true,
-        baseUrl,
-        attempts,
-        providers: [],
-        nativeRuntimeActive: true,
-      };
-    }
-  }
-
-  return {
-    configured: false,
-    status: "runtime_status_unavailable",
-    source: "openloomi-runtime",
-    checked: false,
-    attempts,
-    providers: [],
-  };
-}
-
-async function requestAiProviderStatus(baseUrl, token) {
-  try {
-    const sessionResponse = await fetchWithTimeout(
-      `${baseUrl}/api/auth/set-token?token=${encodeURIComponent(token)}`,
-      {
-        method: "GET",
-        redirect: "manual",
-      },
-      SESSION_API_TIMEOUT_MS,
-    );
-    const cookieHeader = toCookieHeader(
-      getSetCookieHeaders(sessionResponse.headers),
-    );
-
-    if (!cookieHeader) {
-      return {
-        baseUrl,
-        status: sessionResponse.status,
-        reason: "SESSION_COOKIE_MISSING",
-      };
-    }
-
-    const preferencesResponse = await fetchWithTimeout(
-      `${baseUrl}/api/preferences/ai`,
-      {
-        headers: {
-          Cookie: cookieHeader,
-        },
-        redirect: "manual",
-      },
-      SESSION_API_TIMEOUT_MS,
-    );
-
-    if (!preferencesResponse.ok) {
-      return {
-        baseUrl,
-        status: preferencesResponse.status,
-        reason: "PREFERENCES_REQUEST_FAILED",
-      };
-    }
-
-    const payload = await preferencesResponse.json();
-    const providers = summarizeAiPreferencePayload(payload);
-
-    return {
-      baseUrl,
-      status: preferencesResponse.status,
-      reason: "PREFERENCES_LOADED",
-      configured: providers.some((provider) => provider.configured),
-      providers,
-    };
-  } catch (error) {
-    return {
-      baseUrl,
-      reason: error?.name === "AbortError" ? "API_TIMEOUT" : "API_UNREACHABLE",
-    };
-  }
-}
-
-function summarizeAiPreferencePayload(payload) {
-  const settings = Array.isArray(payload?.settings) ? payload.settings : [];
-  const defaults = payload?.systemDefaults || {};
-  const providerTypes = ["openai_compatible", "anthropic_compatible"];
-
-  return providerTypes.map((providerType) => {
-    const setting = settings.find(
-      (candidate) => candidate?.providerType === providerType,
-    );
-    const systemDefault = defaults?.[providerType] || {};
-    const enabled = Boolean(setting?.enabled);
-    const hasApiKey = Boolean(setting?.hasApiKey);
-    const baseUrlPresent = Boolean(setting?.baseUrl);
-    const modelPresent = Boolean(setting?.model);
-    const userConfigured = Boolean(
-      enabled && hasApiKey && baseUrlPresent && modelPresent,
-    );
-    const systemConfigured = Boolean(
-      systemDefault?.hasApiKey &&
-      systemDefault?.baseUrl &&
-      systemDefault?.model,
-    );
-
-    return {
-      providerType,
-      configured: userConfigured || systemConfigured,
-      source: userConfigured
-        ? "openloomi-ui"
-        : systemConfigured
-          ? "openloomi-system-defaults"
-          : "openloomi-runtime",
-      enabled,
-      hasApiKey,
-      baseUrlPresent,
-      modelPresent,
-      systemDefaultConfigured: systemConfigured,
-    };
-  });
-}
-
-function summarizeRuntimeAiProviderAttempt(result) {
-  return {
-    baseUrl: result.baseUrl,
-    status: result.status || null,
-    reason: result.reason,
-    providerStatusAvailable: Boolean(result.providers),
-  };
 }
 
 function getAppCandidatesForRoot(root) {
@@ -5821,9 +5426,6 @@ async function main() {
       break;
     case "codex-runtime-info":
       codexRuntimeInfo();
-      break;
-    case "configure-ai-provider":
-      await configureAiProvider(process.argv.slice(3));
       break;
     case "help":
       help();

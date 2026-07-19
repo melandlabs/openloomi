@@ -661,8 +661,7 @@ A: Automatically extracted important information from your conversations, includ
 
 A: When OpenLoomi is used from Codex, the Codex runtime is the recommended
 desktop runtime. It lets OpenLoomi reuse the user's existing Codex CLI runtime
-instead of requiring a separate OpenLoomi AI provider key for the first plugin
-workflow.
+for the first plugin workflow.
 
 ```bash
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" codex-runtime-info

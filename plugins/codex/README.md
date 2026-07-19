@@ -21,7 +21,7 @@ your machine.
   it tomorrow" — the task goes into OpenLoomi's loop and pings you when it's
   ready.
 - **Route Codex through OpenLoomi.** When OpenLoomi answers, it can use your
-  Codex CLI runtime under the hood, so you only configure one AI provider.
+  Codex CLI runtime under the hood, so you only configure one runtime.
 - **Trigger OpenLoomi workflows from chat.** Memory, loop, connectors, and
   handoff are all exposed as Codex skills — type `@OpenLoomi …` and go.
 
@@ -83,7 +83,7 @@ only picks up the new plugin when a fresh process loads the cache.
   actually run.
 - Codex CLI on your `PATH` (e.g. `brew install --cask codex` or
   `npm i -g @openai/codex`) if you want OpenLoomi to route through your
-  Codex runtime instead of through a separate AI provider.
+  Codex runtime.
 
 ---
 
@@ -104,7 +104,7 @@ The setup wizard walks a small state machine in one call:
 2. **Install** (if needed) — downloads the official GitHub release. _Requires
    `--yes` or `--confirm`; it never installs silently._
 3. **Wire the Codex runtime** — sets `OPENLOOMI_AGENT_PROVIDER=codex` so
-   OpenLoomi reuses your Codex CLI instead of needing a separate AI key.
+   OpenLoomi reuses your Codex CLI.
 4. **Launch OpenLoomi Desktop** — opens the app and waits for the local API.
 5. **Mint a guest/session token** — writes `~/.openloomi/token`.
 6. **Re-check readiness** — confirms every step stuck.
@@ -153,7 +153,8 @@ A fully prepared environment answers with something like:
 installed: true
 appPath: /Applications/OpenLoomi.app
 tokenPresent: true
-aiProviderConfigured: true
+executionProviderReady: true
+executionProviderSource: native_codex_runtime
 ready: true
 nextAction: run
 ```
@@ -232,17 +233,17 @@ node plugins/codex/scripts/loomi-bridge.mjs setup
 
 The token lives at `~/.openloomi/token`. Delete it to force a re-mint.
 
-### "AI_PROVIDER_REQUIRED" / "AI_PROVIDER_STATUS_UNAVAILABLE"
+### "native runtime not detected"
 
-Two ways forward, in order of preference:
+The bridge expected the OpenLoomi Desktop web server to advertise a Codex
+agent at `/api/native/providers`. Two ways forward, in order of preference:
 
 1. **Route OpenLoomi through your Codex runtime.** The `setup` wizard does
    this by default; once `OPENLOOMI_AGENT_PROVIDER=codex` is set and you've
-   restarted OpenLoomi Desktop, no separate AI key is needed for Codex-driven
-   workflows.
-2. **Configure a separate AI provider fallback inside OpenLoomi Desktop.**
-   Do not paste API keys into Codex chat — enter them in OpenLoomi's own
-   settings.
+   restarted OpenLoomi Desktop, the native Codex runtime becomes active and
+   no extra setup is needed.
+2. **Open OpenLoomi Desktop** so its web server is reachable at the URL the
+   bridge probes, then re-run `setup-status`.
 
 ### Codex still shows an old plugin version
 
@@ -416,7 +417,7 @@ Responsibilities:
 - `skills/openloomi/SKILL.md`: thin Codex entrypoint that decides when to
   call the bridge.
 - `scripts/loomi-bridge.mjs`: local adapter for discovery, install
-  guidance, readiness checks, AI provider setup handoff, one-shot execution,
+  guidance, readiness checks, native runtime wiring, one-shot execution,
   and hook integration.
 - `assets/`: plugin icons and visual assets.
 - `hooks/hooks.json`: Codex lifecycle hooks (mirrored onto the OpenLoomi
@@ -434,7 +435,7 @@ Codex
       -> OpenLoomi skill entrypoint
           -> loomi-bridge
               -> discovery and install layer
-              -> first-use AI provider setup layer
+              -> first-use native runtime wiring layer
               -> readiness layer
               -> OpenLoomi skill guidance layer
               -> optional Codex hook layer
@@ -467,8 +468,8 @@ automatically without user confirmation.
 
 **Launching the desktop app with the Codex runtime.** When OpenLoomi is
 used from Codex, this is the recommended first-use path: it lets OpenLoomi
-reuse the user's existing Codex runtime and avoids requiring a separate
-OpenLoomi AI provider key just to complete the first Codex plugin workflow.
+reuse the user's existing Codex runtime to complete the first Codex plugin
+workflow.
 
 Whenever the bridge launches the OpenLoomi Desktop app (during `setup`,
 `initialize-session`, or any handoff that has to start OpenLoomi), it first
@@ -564,10 +565,8 @@ For source checkouts, project markers:
     "guestBootstrapSupported": true,
     "guestBootstrapMode": "local-openloomi-api"
   },
-  "aiProviderConfigured": true,
-  "aiProviderStatus": "runtime_configured",
   "executionProviderReady": true,
-  "executionProviderSource": "ai_provider | native_codex_runtime",
+  "executionProviderSource": "native_codex_runtime",
   "nativeRuntimeActive": false,
   "nativeRuntimeProvider": "claude | codex | null",
   "nativeRuntime": {
@@ -601,20 +600,6 @@ For source checkouts, project markers:
   "ready": true,
   "nextAction": "run",
   "checks": {
-    "aiProviderRuntime": {
-      "checked": true,
-      "status": "runtime_configured",
-      "providers": [
-        {
-          "providerType": "openai_compatible",
-          "configured": true,
-          "source": "openloomi-ui",
-          "hasApiKey": true,
-          "baseUrlPresent": true,
-          "modelPresent": true
-        }
-      ]
-    },
     "nativeProvider": {
       "checked": true,
       "available": true,
@@ -631,14 +616,11 @@ For source checkouts, project markers:
 }
 ```
 
-`aiProviderConfigured` only describes OpenLoomi-owned direct
-OpenAI-compatible or Anthropic-compatible provider settings. Native Codex
-CLI execution is tracked separately through `nativeRuntime*` and
+Native Codex CLI execution is tracked through `nativeRuntime*` and
 `executionProvider*` fields. When `/api/native/providers` reports
 `defaultAgent: "codex"` and the Codex agent metadata is present,
-`setup-status` may return `ready: true` with
-`executionProviderSource: "native_codex_runtime"` even while
-`aiProviderConfigured` remains `false`.
+`setup-status` returns `ready: true` with
+`executionProviderSource: "native_codex_runtime"`.
 
 Connector readiness is a status-only advisory. Missing Gmail, Slack,
 GitHub, Calendar, or Linear connections should not block memory-only or
@@ -663,7 +645,6 @@ provide_install_or_repo_path
 build_or_install_openloomi
 initialize_openloomi_session
 open_openloomi
-configure_ai_provider
 configure_connectors
 show_openloomi_skills
 return_without_bridge
@@ -679,8 +660,7 @@ SOURCE_FOUND_APP_NOT_BUILT
 INSTALL_REQUIRED
 SESSION_INITIALIZATION_REQUIRED
 READY_SESSION_BOOTSTRAP_PENDING
-AI_PROVIDER_REQUIRED
-AI_PROVIDER_STATUS_UNAVAILABLE
+OPENLOOMI_API_UNREACHABLE
 CONNECTOR_SETUP_REQUIRED
 READY
 ```
@@ -709,37 +689,17 @@ Both paths produce the same outcome from the bridge's perspective: a
 token written to `~/.openloomi/token`, masked out of logs and stderr, and
 reportable via `setup-status` as `session.tokenPresent: true`.
 
-AI provider readiness should respect both environment variables and
-OpenLoomi-owned UI/runtime settings. When a token is available, the bridge
-may convert that token to a local session cookie through OpenLoomi's
-existing auth surface, call the local AI preferences API, and report only
-masked status fields such as `hasApiKey`, `baseUrlPresent`, and
-`modelPresent`. If OpenLoomi is not running, the bridge reports
-`AI_PROVIDER_STATUS_UNAVAILABLE` instead of claiming the provider is
-missing.
-
-### First-use runtime and provider setup
+### First-use runtime setup
 
 The plugin guides users toward the Codex runtime path when OpenLoomi is
 first used from Codex. This lets OpenLoomi reuse the user's existing Codex
-CLI runtime and avoids requiring a separate OpenLoomi AI provider key for
-the first plugin workflow.
+CLI runtime for the first plugin workflow.
 
-Preferred paths:
-
-1. Set or verify `OPENLOOMI_AGENT_PROVIDER=codex` for the OpenLoomi
-   desktop runtime, then restart OpenLoomi and verify
-   `/api/native/providers`.
-2. If the user chooses a separate AI provider fallback, launch or guide an
-   OpenLoomi-owned setup flow for:
-   - base URL;
-   - API key;
-   - model name.
-
-Raw API keys must not be pasted into Codex chat. If a setup flow collects
-an API key, that input must happen in an OpenLoomi-owned UI or CLI
-surface that avoids printing secrets and writes directly to OpenLoomi's
-local configuration or secure storage.
+Preferred path: set or verify `OPENLOOMI_AGENT_PROVIDER=codex` for the
+OpenLoomi desktop runtime, then restart OpenLoomi and verify
+`/api/native/providers`. Once the bridge sees the Codex agent advertised
+as the default, `setup-status` reports `ready: true` with
+`executionProviderSource: "native_codex_runtime"`.
 
 ### OpenLoomi skill guidance
 
@@ -750,18 +710,18 @@ one main entry skill (`openloomi`) plus eight sub-skills under
 frontmatter `description` — they share the same `loomi-bridge.mjs`
 runtime, no business logic is duplicated.
 
-| Skill                     | Path                                      | Trigger words                                                                  | What it does                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `openloomi`               | `skills/openloomi/SKILL.md`               | `OpenLoomi`, `Loomi`, `@OpenLoomi`                                             | Main entrypoint. Dispatches to the right sub-skill or workflow.                                                                                                                                                                                                                                                                                              |
-| `openloomi-install`       | `skills/openloomi-install/SKILL.md`       | install, first-use setup, AI provider setup, `SESSION_INITIALIZATION_REQUIRED` | Walks install / first-use / AI-provider setup / session recovery. Translates `setup-status` `reason` codes into concrete next actions.                                                                                                                                                                                                                       |
-| `openloomi-loop`          | `skills/openloomi-loop/SKILL.md`          | loop tick, loop schedule, loop inbox, register loop type, add loop rule        | The proactive execution brain — pull signals, classify into decisions, schedule actions, register custom decision types / signal channels / classifier rules. Thin wrapper around `/api/loop/*`.                                                                                                                                                             |
-| `openloomi-memory`        | `skills/openloomi-memory/SKILL.md`        | memory search, knowledge base, documents, insights                             | Search or write memory through OpenLoomi-owned runtime surfaces. Thin wrapper — does **not** implement memory storage.                                                                                                                                                                                                                                       |
-| `openloomi-connectors`    | `skills/openloomi-connectors/SKILL.md`    | connect platform, integration status, list accounts, disconnect                | Check whether Slack, GitHub, Gmail, Calendar, and other sources are configured before acting. Reports status only; pair with `composio` for non-native accounts.                                                                                                                                                                                             |
-| `openloomi-handoff`       | `skills/openloomi-handoff/SKILL.md`       | hand off, delegate, queue, remind, follow up                                   | **Codex-only.** Send the current Codex task to Loomi for follow-up. The Claude Code plugin exposes the same capability through its own `/openloomi:*` slash-command surface instead — see [Handoff parity note](#handoff-parity-note) below.                                                                                                                 |
-| `openloomi-pet`           | `skills/openloomi-pet/SKILL.md`           | pet state, set pet, fox sprite, capybara sprite, custom pet theme              | The 9-state Loomi Pet vocabulary (`happy`/`idle`/`juggling`/`needsinput`/`presenting`/`sleeping`/`sweeping`/`thinking`/`working`). Mirrors the Claude plugin's `openloomi-pet` skill with Codex-specific deltas (no slash command, `codex-plugin` source tag). For custom themes & sprite overrides see the [Customize your Loomi Pet](/docs/pet) user docs. |
-| `openloomi-api`           | `skills/openloomi-api/SKILL.md`           | API endpoints, backend routes, auth, local API, integrations                   | Reference for the 131 OpenLoomi HTTP routes (auth, AI, RAG, Loop, Pet, workspace, integrations). Triggered on API / backend questions.                                                                                                                                                                                                                       |
-| `openloomi-feature-guide` | `skills/openloomi-feature-guide/SKILL.md` | "what can openloomi do", "怎么用", "how does openloomi work"                   | Product overview, capability tour, and how-tos for non-developer questions.                                                                                                                                                                                                                                                                                  |
-| `composio`                | `skills/composio/SKILL.md`                | composio, 1000+ apps, external integrations                                    | Third-party 1000+ app integration router (Gmail, Slack, GitHub, Linear, Jira, Notion, etc.) via the Composio CLI. Platform-agnostic; not OpenLoomi business logic.                                                                                                                                                                                           |
+| Skill                     | Path                                      | Trigger words                                                           | What it does                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------- | ----------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `openloomi`               | `skills/openloomi/SKILL.md`               | `OpenLoomi`, `Loomi`, `@OpenLoomi`                                      | Main entrypoint. Dispatches to the right sub-skill or workflow.                                                                                                                                                                                                                                                                                              |
+| `openloomi-install`       | `skills/openloomi-install/SKILL.md`       | install, first-use setup, `SESSION_INITIALIZATION_REQUIRED`             | Walks install / first-use / session recovery. Translates `setup-status` `reason` codes into concrete next actions.                                                                                                                                                                                                                                           |
+| `openloomi-loop`          | `skills/openloomi-loop/SKILL.md`          | loop tick, loop schedule, loop inbox, register loop type, add loop rule | The proactive execution brain — pull signals, classify into decisions, schedule actions, register custom decision types / signal channels / classifier rules. Thin wrapper around `/api/loop/*`.                                                                                                                                                             |
+| `openloomi-memory`        | `skills/openloomi-memory/SKILL.md`        | memory search, knowledge base, documents, insights                      | Search or write memory through OpenLoomi-owned runtime surfaces. Thin wrapper — does **not** implement memory storage.                                                                                                                                                                                                                                       |
+| `openloomi-connectors`    | `skills/openloomi-connectors/SKILL.md`    | connect platform, integration status, list accounts, disconnect         | Check whether Slack, GitHub, Gmail, Calendar, and other sources are configured before acting. Reports status only; pair with `composio` for non-native accounts.                                                                                                                                                                                             |
+| `openloomi-handoff`       | `skills/openloomi-handoff/SKILL.md`       | hand off, delegate, queue, remind, follow up                            | **Codex-only.** Send the current Codex task to Loomi for follow-up. The Claude Code plugin exposes the same capability through its own `/openloomi:*` slash-command surface instead — see [Handoff parity note](#handoff-parity-note) below.                                                                                                                 |
+| `openloomi-pet`           | `skills/openloomi-pet/SKILL.md`           | pet state, set pet, fox sprite, capybara sprite, custom pet theme       | The 9-state Loomi Pet vocabulary (`happy`/`idle`/`juggling`/`needsinput`/`presenting`/`sleeping`/`sweeping`/`thinking`/`working`). Mirrors the Claude plugin's `openloomi-pet` skill with Codex-specific deltas (no slash command, `codex-plugin` source tag). For custom themes & sprite overrides see the [Customize your Loomi Pet](/docs/pet) user docs. |
+| `openloomi-api`           | `skills/openloomi-api/SKILL.md`           | API endpoints, backend routes, auth, local API, integrations            | Reference for the 131 OpenLoomi HTTP routes (auth, AI, RAG, Loop, Pet, workspace, integrations). Triggered on API / backend questions.                                                                                                                                                                                                                       |
+| `openloomi-feature-guide` | `skills/openloomi-feature-guide/SKILL.md` | "what can openloomi do", "怎么用", "how does openloomi work"            | Product overview, capability tour, and how-tos for non-developer questions.                                                                                                                                                                                                                                                                                  |
+| `composio`                | `skills/composio/SKILL.md`                | composio, 1000+ apps, external integrations                             | Third-party 1000+ app integration router (Gmail, Slack, GitHub, Linear, Jira, Notion, etc.) via the Composio CLI. Platform-agnostic; not OpenLoomi business logic.                                                                                                                                                                                           |
 
 The `workflow-guidance` bridge command exposes structured guidance for the
 four workflow skills (`openloomi-loop`, `openloomi-memory`,
@@ -919,46 +879,27 @@ Allowed status-only checks:
 OPENLOOMI_AUTH_TOKEN present/missing
 ~/.openloomi/token present/missing
 guest/session initialization available/unavailable
-AI provider configured/missing
-AI provider runtime status available/unavailable
-AI provider hasApiKey/baseUrl/model presence (per-provider)
 connector configured/missing
 local API reachable/unreachable
+native Codex runtime active/inactive
 ```
 
 Example safe output:
 
 ```json
 {
-  "aiProviderConfigured": true,
-  "aiProviderStatus": "runtime_configured",
-  "runtime": {
-    "source": "openloomi-runtime",
-    "checked": true,
-    "providers": [
-      {
-        "providerType": "openai_compatible",
-        "configured": true,
-        "source": "openloomi-ui",
-        "enabled": true,
-        "hasApiKey": true,
-        "baseUrlPresent": true,
-        "modelPresent": true
-      },
-      {
-        "providerType": "anthropic_compatible",
-        "configured": false,
-        "source": "openloomi-runtime",
-        "enabled": false,
-        "hasApiKey": false
-      }
-    ]
+  "executionProviderReady": true,
+  "executionProviderSource": "native_codex_runtime",
+  "nativeRuntime": {
+    "active": true,
+    "defaultAgent": "codex",
+    "codexAgentAvailable": true
   }
 }
 ```
 
-The bridge may report key presence and provider configuration. It must
-not print values.
+The bridge may report provider configuration presence. It must not print
+values.
 
 The bridge may receive a guest/session token from the local OpenLoomi
 API only to write the standard `~/.openloomi/token` file. It must keep

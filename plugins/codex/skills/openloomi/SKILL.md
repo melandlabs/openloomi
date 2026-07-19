@@ -54,23 +54,6 @@ interactive installer UI instead of default automatic installation. Add
 checksum; otherwise the bridge verifies GitHub release digest metadata when
 available.
 
-For AI provider setup guidance, call:
-
-```bash
-node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" configure-ai-provider
-```
-
-You may pass non-secret preferences such as `--provider`, `--base-url`, and
-`--model` when the user provides them. Never pass `--api-key`, tokens, or other
-secrets. Secret entry must happen in an OpenLoomi-owned UI or interactive CLI
-surface.
-
-AI provider readiness may come from environment variables or from
-OpenLoomi-owned UI/runtime settings. If the bridge reports
-`AI_PROVIDER_STATUS_UNAVAILABLE`, guide the user to open OpenLoomi so the local
-API can confirm whether provider settings exist. Do not ask the user to repeat
-API keys in Codex chat.
-
 For bridge metadata, call:
 
 ```bash
@@ -101,8 +84,8 @@ connector, memory, loop, scheduling, or handoff persistence logic into Codex.
 ## Launching the desktop app with the Codex runtime
 
 When OpenLoomi is used from Codex, prefer the desktop Codex runtime so
-OpenLoomi can reuse the user's existing Codex CLI runtime instead of requiring
-a separate OpenLoomi AI provider setup for the first workflow.
+OpenLoomi can reuse the user's existing Codex CLI runtime for the first
+workflow.
 
 When the user asks to make OpenLoomi spawn Codex as the native-agent executor,
 or diagnostics show that the desktop runtime is not using Codex, call:
