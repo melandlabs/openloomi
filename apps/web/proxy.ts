@@ -69,6 +69,15 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith("/api/brave-search")) return NextResponse.next();
   if (pathname.startsWith("/api/password-reset")) return NextResponse.next();
   if (pathname.startsWith("/api/ai")) return NextResponse.next();
+  // /api/native/* exposes provider/agent metadata used by the Codex /
+  // Claude Code bridges and by the desktop app's runtime readiness
+  // probes. The route handler returns configuration data only — no
+  // user data — so it's safe to let through without a session cookie.
+  // Whitelisting here prevents the bridge from receiving a misleading
+  // 401 AUTH_REQUIRED before any provider has been configured (the
+  // status response itself is what tells the bridge whether the AI
+  // provider is set up).
+  if (pathname.startsWith("/api/native")) return NextResponse.next();
   if (pathname.startsWith("/api/preferences")) return NextResponse.next();
   if (pathname.startsWith("/api/integrations")) return NextResponse.next();
   // /api/loop/* and /api/llm/usage/* are guest-bootstrapping APIs: their
