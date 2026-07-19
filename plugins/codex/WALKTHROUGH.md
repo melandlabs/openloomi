@@ -33,6 +33,8 @@ Codex prompts for a source. Enter `melandlabs/openloomi` — it refreshes
 the marketplace cache and you now see the `openloomi` plugin in the
 marketplace list.
 
+![Step 2 — codex plugin marketplace add melandlabs/openloomi + codex plugin add openloomi@openloomi resolves the marketplace cache](../../apps/marketing/public/img/openloomi/plugins/codex/02-add-marketplace.png)
+
 ## 3. Launch Codex pointing at the local plugin
 
 For plugin contributors (or anyone running from a checkout):
@@ -43,6 +45,8 @@ For plugin contributors (or anyone running from a checkout):
 
 The plugin is now loaded into the session; you can confirm by typing
 `@OpenLoomi` and seeing the skill resolve.
+
+![Step 3 — codex CLI loaded with MiniMax-M3 model and the OpenLoomi plugin ready to install](../../apps/marketing/public/img/openloomi/plugins/codex/03-launch-codex-with-plugin-dir.png)
 
 ## 4. Discover the skills
 
@@ -61,6 +65,8 @@ Type `@OpenLoomi` — Codex surfaces the skill namespace. The thin
 - `@OpenLoomi loop` — Loop dashboard snapshot
 - `@OpenLoomi handoff` — send a task to Loomi for follow-up
 
+![Step 4 — typing @OpenLoomi surfaces the full skill namespace (openloomi, openloomi-api, openloomi-connectors, openloomi-feature-guide, openloomi-handoff, openloomi-install, …)](../../apps/marketing/public/img/openloomi/plugins/codex/04-discover-skills.png)
+
 ## 5. Run `@OpenLoomi install` — readiness table + fox Pet appears
 
 The install skill auto-chains install → launch → wait API → guest login.
@@ -78,10 +84,23 @@ bridge; it watches `~/.openloomi/pet-config.json` and the
 | Runtime mode       | packaged   |
 | Version            | 0.8.2      |
 | Local API          | Reachable  |
-| AI provider        | Configured |
 | Execution provider | Ready      |
 | Desktop process    | Running    |
 | Final status       | **READY**  |
+
+![Step 5 — setup prints the OpenLoomi Setup Status block from Codex (ok / setup / nextAction / reason / ready) once the install chain completes](../../apps/marketing/public/img/openloomi/plugins/codex/05-install-readiness.png)
+
+![Step 5a — OpenLoomi Desktop itself launches in parallel: Chats / Tasks / Connectors / Library sidebar plus the chat panel; the Loomi Pet (here, the kawaii cat pack) sits in the corner mirroring state](../../apps/marketing/public/img/openloomi/plugins/codex/05a-openloomi-desktop-app.png)
+
+### 5b. If the Pet looks lost — read the `reason`
+
+When a runtime dependency is missing the setup block surfaces a
+`reason` such as `AI_PROVIDER_REQUIRED` and the Pet swaps to a
+wondering pose. The red callout below shows the exact field to look
+at — `reason` plus `nextAction` (here `configure_ai_provider`) tells
+you which env variable or connector to set up next.
+
+![Step 5b — OpenLoomi Setup Status with the wondering Pet highlighted; read `reason: AI_PROVIDER_REQUIRED` and `nextAction: configure_ai_provider` to drive the next step](../../apps/marketing/public/img/openloomi/plugins/codex/05b-install-readiness-pending.png)
 
 ## 6. Right-click the Pet to open the context menu
 
@@ -89,6 +108,8 @@ The pet's context menu exposes **Open Loomi / Settings / THEME (Fox ✓,
 Capybara) / Quit**. The theme switch is hot-reload — the file watcher
 picks up `activeTheme` in `pet-config.json` within ~250 ms, and the
 bridge never writes these files.
+
+![Step 6 — right-clicking the Pet opens the Open Loomi context menu with Open Loomi / Settings / THEME (Fox ✓, Capybara) / Quit](../../apps/marketing/public/img/openloomi/plugins/codex/06-pet-context-menu.png)
 
 ## 7. Pick **Capybara** — the theme hot-reloads immediately
 
@@ -106,6 +127,8 @@ right-click menu within ~250 ms — no bridge call, no restart. Below, a
 top-left of the desktop app swaps to the kawaii cat, and the inline
 chat pet (shown `thinking` with a thought bubble while a tool call is
 in flight) renders from the same pack.
+
+![Step 7c — `@OpenLoomi pet happy` drives the new kawaii pack; the Pet flips to the happy sprite across the desktop app and the inline chat simultaneously](../../apps/marketing/public/img/openloomi/plugins/codex/07c-pet-kawaii-theme.png)
 
 ### 7b. Manually override the Pet state from Codex
 
@@ -131,7 +154,7 @@ want the pet to flip to `happy` between turns.
 
 For any triage / bug report, paste the JSON output verbatim. The shape
 is stable: `mode / installed / version / tokenPresent /
-aiProviderConfigured / nativeRuntime / apiReachable / hooksInstalled /
+nativeRuntime / apiReachable / hooksInstalled /
 ready / nextAction / reason / source`
 
 ## 9. Codex hooks — bundled by default, no install step

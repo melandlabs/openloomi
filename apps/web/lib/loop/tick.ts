@@ -333,8 +333,20 @@ async function runAgentic(opts: TickOptions): Promise<LoopTickResult> {
   }
 
   const dur = Date.now() - t0;
+  // #391 — when the agent's `result` payload carried no `surfaces_used`
+  // (the failure mode that made the tick log print the literal `?`),
+  // fall back to the connected toolkit IDs from the snapshot the agent
+  // just reported. `surfaces_used` is still preferred when present — it
+  // carries richer entries (e.g. `insights`, `cli`) than the snapshot.
+  const snapshotSurfaces = Array.isArray(payload.connectors)
+    ? payload.connectors
+        .filter((c) => Boolean(c.connected))
+        .map((c) => String(c.id ?? "").trim())
+        .filter((id) => id.length > 0)
+    : [];
+  const loggedSurfaces = surfaces.length > 0 ? surfaces : snapshotSurfaces;
   log(
-    `tick (agentic) done: scanned=${result.scanned} surfaced=${result.surfaced} muted=${result.muted} errors=${result.errors.length} surfaces=${surfaces.join(",") || "?"} dur=${dur}ms`,
+    `tick (agentic) done: scanned=${result.scanned} surfaced=${result.surfaced} muted=${result.muted} errors=${result.errors.length} surfaces=${loggedSurfaces.join(",") || "?"} dur=${dur}ms`,
   );
   writeStatus({
     lastTickAt: new Date().toISOString(),

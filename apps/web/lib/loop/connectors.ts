@@ -50,9 +50,37 @@ import type { ConnectorEntry } from "./types";
 
 const CACHE_TTL_MS = 1 * 60 * 60 * 1000;
 
+/**
+ * #391 — the kind of failure the last connector probe hit. Mirrors the
+ * failure arms of `ProbeOutcome` in `composio-bridge.ts` (timeout is
+ * observed here in `refreshConnectors`'s silent race, the rest come
+ * from the probe itself).
+ */
+export type ProbeErrorKind =
+  | "transport_error"
+  | "agent_http_error"
+  | "empty_response"
+  | "malformed_response"
+  | "timeout";
+
+/**
+ * #391 — persisted diagnostic for the last failed probe. Lives on the
+ * connector cache file alongside the (possibly stale) snapshot so the
+ * next API read can return both the entries and the reason the probe
+ * couldn't refresh them.
+ */
+export interface ProbeErrorInfo {
+  kind: ProbeErrorKind;
+  message: string;
+  /** ISO timestamp of when the failure was recorded. */
+  at: string;
+}
+
 interface ConnectorCache {
   fetchedAt: string;
   connectors: ConnectorEntry[];
+  /** #391 — present when the most recent probe failed. */
+  lastProbeError?: ProbeErrorInfo;
 }
 
 function readCache(): ConnectorCache | null {
@@ -67,6 +95,7 @@ function readCache(): ConnectorCache | null {
     ) as Partial<ConnectorCache> & {
       updatedAt?: unknown;
       connectors?: unknown;
+      lastProbeError?: unknown;
     };
     if (!Array.isArray(raw?.connectors)) return null;
     // Resolve a stamp from any of: top-level `fetchedAt` (current
@@ -113,10 +142,36 @@ function readCache(): ConnectorCache | null {
     return {
       fetchedAt: stamp,
       connectors,
+      ...(parseProbeError(raw.lastProbeError)
+        ? { lastProbeError: parseProbeError(raw.lastProbeError)! }
+        : {}),
     };
   } catch {
     return null;
   }
+}
+
+const PROBE_ERROR_KINDS: ReadonlySet<string> = new Set<ProbeErrorKind>([
+  "transport_error",
+  "agent_http_error",
+  "empty_response",
+  "malformed_response",
+  "timeout",
+]);
+
+/**
+ * Validate a raw `lastProbeError` blob from the on-disk cache into a
+ * clean {@link ProbeErrorInfo}, or `null` when the shape is missing /
+ * malformed. Permissive about extra fields (like `readCache`).
+ */
+function parseProbeError(raw: unknown): ProbeErrorInfo | null {
+  if (!raw || typeof raw !== "object") return null;
+  const rec = raw as Record<string, unknown>;
+  const kind = rec.kind;
+  if (typeof kind !== "string" || !PROBE_ERROR_KINDS.has(kind)) return null;
+  const message = typeof rec.message === "string" ? rec.message : "";
+  const at = typeof rec.at === "string" ? rec.at : new Date().toISOString();
+  return { kind: kind as ProbeErrorKind, message, at };
 }
 
 /**
@@ -330,6 +385,69 @@ export function clearProbeCooldown(): void {
 }
 
 /**
+ * #391 — stamp a `lastProbeError` diagnostic on the existing cache file
+ * (or a barebones one if it doesn't exist yet) so the next API read can
+ * surface WHY the probe couldn't refresh, alongside the last-known
+ * snapshot. Mirrors `writeProbeCooldownMarker`'s "preserve the existing
+ * snapshot, append one field" policy — we never clobber previously-
+ * persisted connector rows. A subsequent successful probe rewrites the
+ * whole file via `writeConnectorSnapshot`, which naturally drops this
+ * field (success clears the error).
+ *
+ * Swallows all errors — a missing diagnostic must never block a probe.
+ */
+export function writeProbeError(kind: ProbeErrorKind, message: string): void {
+  try {
+    let existing: Record<string, unknown> = {};
+    if (existsSync(LOOP_PATHS.connectors)) {
+      try {
+        existing = JSON.parse(
+          readFileSync(LOOP_PATHS.connectors, "utf8"),
+        ) as Record<string, unknown>;
+      } catch {
+        existing = {};
+      }
+    }
+    ensureDirs();
+    writeFileSync(
+      LOOP_PATHS.connectors,
+      JSON.stringify(
+        {
+          ...existing,
+          lastProbeError: {
+            kind,
+            message,
+            at: new Date().toISOString(),
+          } satisfies ProbeErrorInfo,
+        },
+        null,
+        2,
+      ),
+    );
+  } catch {
+    /* swallow — the diagnostic is best-effort */
+  }
+}
+
+/**
+ * #391 — read the persisted `lastProbeError` from the connector cache,
+ * or `null` when the last probe succeeded (or none ran yet). Mirrors
+ * `clearProbeCooldown`'s permissive read. Used by the `connectors()`
+ * server wrapper to thread the diagnostic into `/api/loop/connectors`.
+ */
+export function getLastProbeError(): ProbeErrorInfo | null {
+  try {
+    if (!existsSync(LOOP_PATHS.connectors)) return null;
+    const raw = JSON.parse(readFileSync(LOOP_PATHS.connectors, "utf8")) as {
+      lastProbeError?: unknown;
+    };
+    return parseProbeError(raw.lastProbeError);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Force-refresh by dispatching a small "connector probe" prompt to the
  * agent via `composio-bridge.ts`. The agent inspects the active
  * composio surfaces (skill / CLI / insights) and returns a fresh
@@ -367,42 +485,60 @@ export async function refreshConnectors(
     return appendCustomChannels(FALLBACK_CONNECTORS);
   }
 
-  const probe: Promise<ConnectorEntry[] | null> = (async () => {
+  const probe = (async () => {
     const { probeConnectorState } = await import("./composio-bridge");
     return probeConnectorState();
   })();
 
-  // `silent` mode wraps the probe in a short timeout so the first card
-  // open is bounded — we don't want to keep the user waiting on a hung
-  // agent. On timeout, write the cooldown marker and fall back to
-  // whatever's on disk (or FALLBACK).
-  let probed: ConnectorEntry[] | null;
+  // A sentinel the timeout race resolves to so we can tell "the probe
+  // returned a (possibly failed) ProbeOutcome" from "the timer fired
+  // first". The ProbeOutcome's own failure kinds are already persisted
+  // by `probeConnectorState`; only the timeout is observed here.
+  const TIMED_OUT = Symbol("probe-timeout");
+
   if (opts.silent) {
+    // `silent` mode wraps the probe in a short timeout so the first
+    // card open is bounded — we don't keep the user waiting on a hung
+    // agent. On timeout, write the cooldown marker + a `timeout`
+    // diagnostic and fall back to whatever's on disk (or FALLBACK).
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let raced: Awaited<typeof probe> | typeof TIMED_OUT;
     try {
-      probed = await Promise.race<ConnectorEntry[] | null>([
+      raced = await Promise.race<Awaited<typeof probe> | typeof TIMED_OUT>([
         probe,
-        new Promise<ConnectorEntry[] | null>((resolve) => {
-          timer = setTimeout(() => resolve(null), PROBE_TIMEOUT_MS);
+        new Promise<typeof TIMED_OUT>((resolve) => {
+          timer = setTimeout(() => resolve(TIMED_OUT), PROBE_TIMEOUT_MS);
         }),
       ]);
     } finally {
       if (timer) clearTimeout(timer);
     }
-    if (!probed || probed.length === 0) {
+    if (raced === TIMED_OUT) {
+      writeProbeError("timeout", `probe exceeded ${PROBE_TIMEOUT_MS}ms`);
       writeProbeCooldownMarker();
       const cached = readCache();
       if (cached) return appendCustomChannels(cached.connectors);
       return appendCustomChannels(FALLBACK_CONNECTORS);
     }
-    return appendCustomChannels(probed);
+    if (raced.kind === "ok" && raced.entries.length > 0) {
+      return appendCustomChannels(raced.entries);
+    }
+    // A structured failure (already persisted by the probe) or an empty
+    // ok — treat like a soft failure: leave a cooldown so a rapid re-
+    // open doesn't hammer a broken probe, and degrade to cache/FALLBACK.
+    writeProbeCooldownMarker();
+    const cached = readCache();
+    if (cached) return appendCustomChannels(cached.connectors);
+    return appendCustomChannels(FALLBACK_CONNECTORS);
   }
 
-  probed = await probe;
-  if (probed && probed.length > 0) {
-    return appendCustomChannels(probed);
+  const outcome = await probe;
+  if (outcome.kind === "ok" && outcome.entries.length > 0) {
+    return appendCustomChannels(outcome.entries);
   }
-  // Probe failed — degrade gracefully.
+  // Probe failed (the diagnostic was already persisted by
+  // `probeConnectorState`) — degrade gracefully to the last-known
+  // snapshot, or the FALLBACK sentinel when the cache is stale/missing.
   const cached = readCache();
   if (cached) {
     return appendCustomChannels(cached.connectors);

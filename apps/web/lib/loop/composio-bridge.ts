@@ -24,9 +24,29 @@
  */
 
 import { invokeAgentPrompt } from "./runner";
-import { writeConnectorSnapshot } from "./connectors";
+import { writeConnectorSnapshot, writeProbeError } from "./connectors";
 import { log } from "./store";
 import type { ConnectorAccount, ConnectorEntry } from "./types";
+
+/**
+ * Structured result of a connector probe (#391).
+ *
+ * The old contract collapsed every failure — transport error, empty SSE
+ * response, malformed JSON, agent HTTP error — into an opaque `null`, so
+ * the cache got no diagnostic and the UI could only render "No sources
+ * connected" whether the user genuinely had nothing connected or the
+ * probe itself was broken. This tagged union preserves the failure mode
+ * so `refreshConnectors` can persist a `lastProbeError` and the API /
+ * card can surface an actionable hint. Mirrors the `LoopDecisionExecution`
+ * tagged-union precedent in `outcomes.ts`.
+ */
+export type ProbeOutcome =
+  | { kind: "ok"; entries: ConnectorEntry[]; surfaces: string[] }
+  | { kind: "transport_error"; error: string }
+  | { kind: "agent_http_error"; status?: number; error: string }
+  | { kind: "empty_response" }
+  | { kind: "malformed_response"; diagnostic: string }
+  | { kind: "timeout"; durationMs: number };
 
 interface ProbeConnectorPromptOptions {
   /**
@@ -134,6 +154,7 @@ Do not pull signals, do not classify, do not write to \`~/.openloomi/loop/\` —
 }
 
 interface ConnectorBlockShape {
+  surfaces_used?: unknown;
   connectors?: Array<{
     id?: unknown;
     label?: unknown;
@@ -287,7 +308,46 @@ function findMatchingBrace(text: string, start: number): number {
 }
 
 /**
- * Parse the agent-reported `accounts` array (issue #360) into a clean,
+ * Fourth extraction pass (#391): walk `res.events` for any event whose
+ * `content` (already-parsed object or stringified JSON) carries a
+ * `connectors` array. Covers agents that wrap the snapshot inside a
+ * `tool_call` / `tool_result` event instead of the final `result` event.
+ * Returns the LAST usable block found (agents emit the final payload
+ * last), or `null` when no event contains one.
+ */
+function extractConnectorsFromEvents(
+  events: unknown[] | undefined,
+): ConnectorBlockShape | null {
+  if (!Array.isArray(events)) return null;
+  let last: ConnectorBlockShape | null = null;
+  for (const evt of events) {
+    if (!evt || typeof evt !== "object") continue;
+    const content = (evt as { content?: unknown }).content;
+    if (!content) continue;
+    if (typeof content === "object") {
+      const obj = content as ConnectorBlockShape;
+      if (Array.isArray(obj.connectors)) last = obj;
+      continue;
+    }
+    if (typeof content === "string") {
+      const parsed = tryParseJsonObject(content);
+      if (parsed) last = parsed;
+    }
+  }
+  return last;
+}
+
+/** Read `surfaces_used` from a parsed block as a clean `string[]`. */
+function readSurfaces(block: ConnectorBlockShape): string[] {
+  if (!Array.isArray(block.surfaces_used)) return [];
+  return block.surfaces_used.filter(
+    (s): s is string => typeof s === "string" && s.length > 0,
+  );
+}
+
+
+/**
+ * Parse the agent's per-account `accounts` array into a clean,
  * non-secret `ConnectorAccount[]`. Tolerant of missing / malformed shapes:
  * anything without a usable `id` is skipped, and only the whitelisted
  * `{ id, label, healthy, lastError }` fields survive — no token or credential
@@ -321,13 +381,23 @@ function parseAccounts(raw: unknown): ConnectorAccount[] | undefined {
 
 /**
  * Probe the configured toolkits by asking the agent to inspect the
- * active Composio surface, then persist + return the result. On any
- * failure (transport error, malformed result, timeout) return
- * `null` — the caller is expected to fall back to the cache.
+ * active Composio surface, then persist + return the result.
+ *
+ * Returns a structured {@link ProbeOutcome} (#391) instead of the old
+ * opaque `null`: `{ kind: "ok" }` on success, or one of the failure
+ * kinds (`transport_error` / `agent_http_error` / `empty_response` /
+ * `malformed_response`) so the caller can persist a `lastProbeError`
+ * and the UI can render an actionable hint rather than a false "no
+ * sources connected" empty state. On any failure this also stamps the
+ * cache's `lastProbeError` via `writeProbeError` so the next API read
+ * can surface the reason alongside the (possibly stale) entries.
+ *
+ * Callers that only want the old `ConnectorEntry[] | null` contract can
+ * use {@link probeConnectorStateEntries}.
  */
 export async function probeConnectorState(
   opts: ProbeConnectorPromptOptions = {},
-): Promise<ConnectorEntry[] | null> {
+): Promise<ProbeOutcome> {
   const toolkits = opts.toolkits ?? DEFAULT_TOOLKITS;
   const prompt = buildProbePrompt(toolkits);
 
@@ -363,51 +433,80 @@ export async function probeConnectorState(
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    log(`composio-bridge: probe transport failed: ${msg}`);
-    return null;
+    log(`composio-bridge: probe outcome=transport_error: ${msg}`);
+    writeProbeError("transport_error", msg);
+    return { kind: "transport_error", error: msg };
   }
 
   if (!res.ok) {
+    const msg = res.error ?? `HTTP ${res.status ?? "?"}`;
     log(
-      `composio-bridge: probe returned error: ${res.error ?? `HTTP ${res.status ?? "?"}`}`,
+      `composio-bridge: probe outcome=agent_http_error status=${res.status ?? "?"}: ${msg}`,
     );
-    return null;
+    writeProbeError(
+      "agent_http_error",
+      res.status ? `HTTP ${res.status}: ${msg}` : msg,
+    );
+    return { kind: "agent_http_error", status: res.status, error: msg };
   }
 
-  // The agent has TWO ways to return the snapshot, and the prompt asks
-  // for the structured `result` event path. In practice we see both:
+  // The agent has THREE ways to return the snapshot; the prompt asks
+  // for the structured `result` event path. In practice we see all of
+  // them, so we try each in order of reliability:
   //
   //   - **Preferred**: a `result` SSE event with `content` set to the
-  //     JSON object — the agent's runtime wraps the final structured
-  //     payload this way. `runner.ts` reads `evt.content` into
-  //     `res.result`.
-  //
-  //   - **Fallback**: the agent prints the JSON in its text output
-  //     (because the prompt only said "emit the result event" and the
-  //     short probe doesn't trigger the structured event reliably).
+  //     JSON object — `runner.ts` reads `evt.content` into `res.result`.
+  //   - **Text fallback**: the agent prints the JSON in its text output.
   //     We grep the text tail for a ```json ... ``` block and parse it.
-  //
-  // Try preferred first, fall back to text-mining. This makes the
-  // bridge robust to either agent behavior.
+  //   - **Event fallback** (#391): the agent wrapped the snapshot inside
+  //     a `tool_call` / `tool_result` event rather than the final
+  //     `result`. Walk `res.events` for any event whose `content`
+  //     carries a `connectors` array.
   const fromResult = extractConnectorsFromResult(res.result);
   let raw: ConnectorBlockShape | null = fromResult;
+  let path = "result";
   if (!raw) {
     raw = extractConnectorsFromText(res.text ?? "");
+    if (raw) path = "text-mining";
+  }
+  if (!raw) {
+    raw = extractConnectorsFromEvents(res.events);
+    if (raw) path = "event-walk";
   }
 
   if (!raw || !Array.isArray(raw.connectors) || raw.connectors.length === 0) {
-    // Both extraction paths failed — the agent didn't emit a `result`
-    // event with the snapshot AND didn't print a parseable JSON block
-    // in its text output. Log the tail of each so we can debug what
-    // shape it actually produced.
-    log(
-      `composio-bridge: probe returned no connectors block — text-tail="${(res.text ?? "").slice(-300)}" reasoning-tail="${(res.reasoning ?? "").slice(-150)}"`,
-    );
-    return null;
+    // Distinguish the two failure shapes (#391):
+    //   - `empty_response`: the agent produced NO usable output at all
+    //     (no result, no text, no reasoning) — the exact bug in #391
+    //     where the native Codex runtime returns a hollow envelope.
+    //   - `malformed_response`: the agent DID produce output, but no
+    //     extraction pass found a parseable `connectors` array.
+    const text = res.text ?? "";
+    const reasoning = res.reasoning ?? "";
+    const eventCount = Array.isArray(res.events) ? res.events.length : 0;
+    const hasOutput =
+      text.trim().length > 0 ||
+      reasoning.trim().length > 0 ||
+      res.result != null ||
+      eventCount > 0;
+    if (!hasOutput) {
+      log(
+        `composio-bridge: probe outcome=empty_response — no result/text/reasoning/events`,
+      );
+      writeProbeError(
+        "empty_response",
+        "agent returned no output (empty result / text / reasoning / events)",
+      );
+      return { kind: "empty_response" };
+    }
+    const diagnostic = `events=${eventCount} text-head="${text.slice(0, 200)}"`;
+    log(`composio-bridge: probe outcome=malformed_response — ${diagnostic}`);
+    writeProbeError("malformed_response", diagnostic);
+    return { kind: "malformed_response", diagnostic };
   }
 
   log(
-    `composio-bridge: extracted ${raw.connectors.length} connectors (path=${raw === fromResult ? "result" : "text-mining"})`,
+    `composio-bridge: probe outcome=ok — extracted ${raw.connectors.length} connectors (path=${path})`,
   );
 
   const stamp = new Date().toISOString();
@@ -476,5 +575,24 @@ export async function probeConnectorState(
     // and the next tick will rewrite the cache.
   }
 
-  return entries;
+  const surfaces =
+    readSurfaces(raw).length > 0
+      ? readSurfaces(raw)
+      : entries.filter((e) => e.connected).map((e) => e.id);
+  return { kind: "ok", entries, surfaces };
+}
+
+/**
+ * Backward-compatible thin wrapper (#391): returns the old
+ * `ConnectorEntry[] | null` contract. Existing callers that only care
+ * about "did we get entries or not" keep working unchanged — on a
+ * `kind: "ok"` outcome we return the entries, on any failure kind we
+ * return `null`. New callers that need the failure reason should call
+ * {@link probeConnectorState} directly.
+ */
+export async function probeConnectorStateEntries(
+  opts: ProbeConnectorPromptOptions = {},
+): Promise<ConnectorEntry[] | null> {
+  const outcome = await probeConnectorState(opts);
+  return outcome.kind === "ok" ? outcome.entries : null;
 }

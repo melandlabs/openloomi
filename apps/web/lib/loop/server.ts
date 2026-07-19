@@ -9,7 +9,12 @@ import {
   buildAndEnqueue as buildBrief,
   build as buildBriefOnly,
 } from "./brief";
-import { listConnectors, refreshConnectors } from "./connectors";
+import {
+  listConnectors,
+  refreshConnectors,
+  getLastProbeError,
+} from "./connectors";
+import type { ProbeErrorInfo } from "./connectors";
 import { summarizeConnectorCapability } from "./connectors-pure";
 import { decisions, log, readStatus, signals } from "./store";
 import { readPreferences, writePreferences } from "./preferences";
@@ -344,11 +349,19 @@ export async function applyDecisionAction(
 }
 
 /** GET /api/loop/connectors */
+export interface ConnectorsResult {
+  items: LoopState["connectors"];
+  /** #391 — present when the most recent probe failed. */
+  lastProbeError: ProbeErrorInfo | null;
+}
+
 export async function connectors(
   opts: { refresh?: boolean } = {},
-): Promise<LoopState["connectors"]> {
-  if (opts.refresh) return refreshConnectors();
-  return listConnectors();
+): Promise<ConnectorsResult> {
+  const items = opts.refresh
+    ? await refreshConnectors()
+    : await listConnectors();
+  return { items, lastProbeError: getLastProbeError() };
 }
 
 /** POST /api/loop/brief */

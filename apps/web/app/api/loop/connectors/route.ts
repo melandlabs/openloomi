@@ -20,8 +20,13 @@ export async function GET(req: Request) {
     // don't mind the wait.
     const url = new URL(req.url);
     const refresh = url.searchParams.get("refresh") === "1";
-    const items = await connectors({ refresh });
-    return NextResponse.json({ items });
+    const { items, lastProbeError } = await connectors({ refresh });
+    // `lastProbeError` (#391) is only present when the most recent probe
+    // failed; omit the key entirely on the happy path so existing
+    // clients reading just `items` see no shape change.
+    return NextResponse.json(
+      lastProbeError ? { items, lastProbeError } : { items },
+    );
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "connectors failed" },
@@ -38,8 +43,12 @@ export async function POST(req: Request) {
     } catch {
       /* default to no-refresh */
     }
-    const items = await connectors({ refresh: !!body.refresh });
-    return NextResponse.json({ items });
+    const { items, lastProbeError } = await connectors({
+      refresh: !!body.refresh,
+    });
+    return NextResponse.json(
+      lastProbeError ? { items, lastProbeError } : { items },
+    );
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "connectors failed" },
