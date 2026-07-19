@@ -14,14 +14,7 @@
  * `connectors.ts` run, redirect `LOOP_PATHS.connectors` to a temp
  * directory, and replace only the agent-bridge with a hanging promise.
  */
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   existsSync,
   mkdtempSync,
@@ -227,9 +220,7 @@ describe("refreshConnectors timeout (#391)", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
     // Seed a cache with a known snapshot that predates the timeout.
-    const seededFetchedAt = new Date(
-      Date.now() - 5 * 60 * 1000,
-    ).toISOString();
+    const seededFetchedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const seededConnectors = [
       {
         id: "gmail",

@@ -139,12 +139,11 @@ function readCache(): ConnectorCache | null {
           : { ...c, probed: true };
       return withConnectorCapability(probed as ConnectorEntry);
     });
+    const probeError = parseProbeError(raw.lastProbeError);
     return {
       fetchedAt: stamp,
       connectors,
-      ...(parseProbeError(raw.lastProbeError)
-        ? { lastProbeError: parseProbeError(raw.lastProbeError)! }
-        : {}),
+      ...(probeError ? { lastProbeError: probeError } : {}),
     };
   } catch {
     return null;

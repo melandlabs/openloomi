@@ -345,7 +345,6 @@ function readSurfaces(block: ConnectorBlockShape): string[] {
   );
 }
 
-
 /**
  * Parse the agent's per-account `accounts` array into a clean,
  * non-secret `ConnectorAccount[]`. Tolerant of missing / malformed shapes:

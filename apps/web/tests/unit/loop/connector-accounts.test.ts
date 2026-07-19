@@ -23,9 +23,8 @@ vi.mock("@/lib/loop/connectors", () => ({
 }));
 vi.mock("@/lib/loop/store", () => ({ log: () => {} }));
 
-const { probeConnectorState, probeConnectorStateEntries } = await import(
-  "@/lib/loop/composio-bridge"
-);
+const { probeConnectorState, probeConnectorStateEntries } =
+  await import("@/lib/loop/composio-bridge");
 
 function agentResult(connectors: unknown) {
   return { ok: true, result: { connectors } };
