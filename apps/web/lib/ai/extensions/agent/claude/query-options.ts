@@ -2,10 +2,11 @@ import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentConfig, AgentOptions } from "@openloomi/ai/agent/types";
 
 import {
-  createBusinessToolsMcpServer,
   type McpServerConfig,
+  createBusinessToolsMcpServer,
 } from "@/lib/ai/mcp";
 
+import { createClaudeSupplementalInputHooks } from "./live-input";
 import { createCanUseToolOption } from "./permissions";
 import type { ClaudeRuntimeLogger } from "./skills";
 
@@ -90,7 +91,10 @@ export function createClaudeQueryOptions({
   allowedTools: string[];
   agentOptions?: Pick<
     AgentOptions,
-    "permissionMode" | "onPermissionRequest" | "disallowedTools"
+    | "permissionMode"
+    | "onPermissionRequest"
+    | "disallowedTools"
+    | "supplementalInput"
   >;
   abortController: AbortController;
   env: Record<string, string>;
@@ -109,6 +113,11 @@ export function createClaudeQueryOptions({
   includePartialMessages?: boolean;
 }): Options {
   const effectivePermissionMode = permissionMode || "bypassPermissions";
+  const supplementalHooks = createClaudeSupplementalInputHooks({
+    supplementalInput: agentOptions?.supplementalInput,
+    sessionId,
+    logger,
+  });
 
   return {
     cwd,
@@ -141,6 +150,7 @@ export function createClaudeQueryOptions({
     },
     spawnClaudeCodeProcess,
     systemPrompt,
+    ...(supplementalHooks ? { hooks: supplementalHooks } : {}),
     ...createCanUseToolOption({
       sessionId,
       options: agentOptions,

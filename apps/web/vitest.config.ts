@@ -112,6 +112,12 @@ export default defineConfig({
         ),
       },
       {
+        find: "@openloomi/ai/agent/supplemental-input",
+        replacement: alias(
+          "../../packages/ai/src/agent/supplemental-input/index.ts",
+        ),
+      },
+      {
         find: "@openloomi/ai/agent/sandbox",
         replacement: alias("../../packages/ai/src/agent/sandbox"),
       },

@@ -261,12 +261,19 @@ export interface AgentSupplementalInputSource extends AsyncIterable<AgentSupplem
   /** Returns true when user input is queued but not yet yielded to the SDK. */
   hasPending?: () => boolean;
   /**
-   * Atomically removes and returns queued "inform" inputs so an adapter can
-   * surface them at a tool boundary (appended to the tool result) instead of
-   * waiting for the turn boundary. Inputs returned here are considered
-   * consumed and will not be yielded by the async iterator.
+   * Atomically removes and returns the leading queued "inform" inputs so an
+   * adapter can surface them at a tool boundary (appended to the tool result)
+   * instead of waiting for the turn boundary. It stops at the first steer to
+   * preserve global FIFO order. Returned inputs are considered consumed and
+   * will not be yielded by the async iterator.
    */
   takePendingInform?: () => AgentSupplementalInput[];
+  /**
+   * Makes queued `inform` inputs available to the async iterator at a natural
+   * turn boundary. Returns the number of inputs newly released. Providers that
+   * consume informs through `takePendingInform()` do not release them.
+   */
+  releasePendingInform?: () => number;
   /** Closes the input stream once the active run no longer accepts input. */
   close?: () => void;
 }

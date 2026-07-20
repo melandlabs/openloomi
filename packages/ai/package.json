@@ -13,6 +13,7 @@
     "./agent/native-cli": "./src/agent/native-cli/index.ts",
     "./agent/native-runner": "./src/agent/native-runner/index.ts",
     "./agent/runtime": "./src/agent/runtime/index.ts",
+    "./agent/supplemental-input": "./src/agent/supplemental-input/index.ts",
     "./agent/runtime-instructions": "./src/agent/runtime-instructions/index.ts",
     "./agent/image-gen": "./src/agent/image-gen/index.ts",
     "./agent/sandbox": "./src/agent/sandbox/index.ts",

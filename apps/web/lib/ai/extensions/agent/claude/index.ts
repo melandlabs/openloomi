@@ -73,6 +73,7 @@ import {
   getExtendedPath,
   isUsingCustomApi,
 } from "./env";
+import { startClaudeLiveQuery } from "./live-input";
 import { convertClaudeSdkMessage } from "./message-converter";
 import {
   attachClaudeMcpServers,
@@ -1930,6 +1931,7 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       mode: "run",
     });
 
+    let liveQuery: ReturnType<typeof startClaudeLiveQuery> | undefined;
     try {
       // Determine whether to send images/PDFs directly or use text-only prompt
       const hasMedia = hasImages || hasPDFs;
@@ -1946,10 +1948,16 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       let hasStreamedText = false;
       let queryMessageCount = 0;
 
-      for await (const message of query({
-        prompt: queryPrompt,
+      liveQuery = startClaudeLiveQuery({
+        queryFactory: query,
+        initialPrompt: queryPrompt,
         options: queryOptions,
-      })) {
+        supplementalInput: options?.supplementalInput,
+        sessionId: session.id,
+        logger,
+      });
+
+      for await (const message of liveQuery.query) {
         if (session.abortController.signal.aborted) {
           console.log(
             `[Claude ${session.id}] query() abort signal detected, breaking loop`,
@@ -1979,6 +1987,9 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
         // If we sent stream text, reset the flag for the next assistant message
         if ((message as { type?: string }).type === "assistant") {
           hasStreamedText = false;
+        }
+        if ((message as { type?: string }).type === "result") {
+          liveQuery.releaseBoundary();
         }
 
         queryMessageCount++;
@@ -2120,6 +2131,7 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
         };
       }
     } finally {
+      liveQuery?.dispose();
       this.sessions.delete(session.id);
       // Windows cleanup prevents skill files generated for this session from
       // leaking into the next Claude Code run.
@@ -2237,11 +2249,18 @@ If you need to create any files during planning, use this directory.
       `[Claude ${session.id}] [PLAN] about to call query() with cwd=${sessionCwd}, settingSources=${planSettingSources.join(",")}`,
     );
 
+    let liveQuery: ReturnType<typeof startClaudeLiveQuery> | undefined;
     try {
-      for await (const message of query({
-        prompt: planningPrompt,
+      liveQuery = startClaudeLiveQuery({
+        queryFactory: query,
+        initialPrompt: planningPrompt,
         options: queryOptions,
-      })) {
+        supplementalInput: options?.supplementalInput,
+        sessionId: session.id,
+        logger,
+      });
+
+      for await (const message of liveQuery.query) {
         if (session.abortController.signal.aborted) break;
 
         if (message.type === "assistant" && message.message?.content) {
@@ -2255,6 +2274,9 @@ If you need to create any files during planning, use this directory.
               };
             }
           }
+        }
+        if (message.type === "result") {
+          liveQuery.releaseBoundary();
         }
       }
 
@@ -2313,6 +2335,7 @@ If you need to create any files during planning, use this directory.
         message: error instanceof Error ? error.message : String(error),
       };
     } finally {
+      liveQuery?.dispose();
       // Cleanup mirrors run/execute so repeated planning sessions do not reuse
       // stale Windows skill sync output.
       clearSkillsForClaudeSession({
@@ -2666,6 +2689,7 @@ If you need to create any files during planning, use this directory.
       mode: "execute",
     });
 
+    let liveQuery: ReturnType<typeof startClaudeLiveQuery> | undefined;
     try {
       // Track whether we've sent text via stream_event to avoid duplication
       let hasStreamedText = false;
@@ -2673,10 +2697,16 @@ If you need to create any files during planning, use this directory.
       logger.info(
         `[Claude ${session.id}] [EXEC] about to call query() with cwd=${sessionCwd}, settingSources=${execSettingSources.join(",")}`,
       );
-      for await (const message of query({
-        prompt: executionPrompt,
+      liveQuery = startClaudeLiveQuery({
+        queryFactory: query,
+        initialPrompt: executionPrompt,
         options: queryOptions,
-      })) {
+        supplementalInput: options.supplementalInput,
+        sessionId: session.id,
+        logger,
+      });
+
+      for await (const message of liveQuery.query) {
         if (session.abortController.signal.aborted) break;
 
         for (const agentMessage of convertClaudeSdkMessage({
@@ -2702,6 +2732,9 @@ If you need to create any files during planning, use this directory.
         if ((message as { type?: string }).type === "assistant") {
           hasStreamedText = false;
         }
+        if ((message as { type?: string }).type === "result") {
+          liveQuery.releaseBoundary();
+        }
       }
     } catch (error) {
       console.error(`[Claude ${session.id}] Execution error:`, error);
@@ -2710,6 +2743,7 @@ If you need to create any files during planning, use this directory.
         message: error instanceof Error ? error.message : String(error),
       };
     } finally {
+      liveQuery?.dispose();
       console.log(`[Claude ${session.id}] Execution done`);
       this.deletePlan(options.planId);
       this.sessions.delete(session.id);
