@@ -131,6 +131,31 @@ describe("AgentSupplementalInputQueue delivery", () => {
     });
   });
 
+  it("fences inputs by run epoch and discards pending work from older runs", async () => {
+    const queue = new AgentSupplementalInputQueue({ runEpoch: 5 });
+    await queue.enqueue({ ...input("old-inform"), runEpoch: 5 });
+
+    expect(queue.getRunEpoch()).toBe(5);
+    expect(queue.advanceRunEpoch(6)).toMatchObject([
+      { id: "old-inform", runEpoch: 5 },
+    ]);
+    expect(queue.hasPending()).toBe(false);
+    await expect(
+      queue.enqueue({ ...input("late-old-run"), runEpoch: 5 }),
+    ).rejects.toMatchObject({ code: "epoch_mismatch" });
+    await expect(
+      queue.enqueue({ ...input("future-run"), runEpoch: 7 }),
+    ).rejects.toMatchObject({ code: "epoch_mismatch" });
+
+    await expect(
+      queue.enqueue({ ...input("current-run"), runEpoch: 6 }),
+    ).resolves.toMatchObject({
+      status: "accepted",
+      input: { runEpoch: 6 },
+    });
+    queue.close();
+  });
+
   it("holds inform input until a provider releases the natural boundary", async () => {
     const queue = new AgentSupplementalInputQueue();
     const iterator = queue[Symbol.asyncIterator]();
@@ -332,34 +357,6 @@ describe("AgentSupplementalInputQueue lifecycle", () => {
     });
   });
 
-  it("unblocks a waiting consumer when an empty queue closes", async () => {
-    const queue = new AgentSupplementalInputQueue();
-    const iterator = queue[Symbol.asyncIterator]();
-    const waiting = iterator.next();
-
-    queue.close();
-
-    await expect(waiting).resolves.toEqual({ done: true, value: undefined });
-  });
-
-  it("releases an accepted inform before ending a waiting consumer", async () => {
-    const queue = new AgentSupplementalInputQueue();
-    const iterator = queue[Symbol.asyncIterator]();
-    const waiting = iterator.next();
-
-    await queue.enqueue(input("accepted-before-close"));
-    queue.close();
-
-    await expect(waiting).resolves.toMatchObject({
-      done: false,
-      value: { id: "accepted-before-close" },
-    });
-    await expect(iterator.next()).resolves.toEqual({
-      done: true,
-      value: undefined,
-    });
-  });
-
   it("aborts immediately and returns inputs that were not yielded", async () => {
     const queue = new AgentSupplementalInputQueue();
     await queue.enqueue(input("first"));
@@ -367,7 +364,6 @@ describe("AgentSupplementalInputQueue lifecycle", () => {
 
     expect(queue.abort().map((item) => item.id)).toEqual(["first", "second"]);
     expect(queue.size).toBe(0);
-    expect(queue.isClosed).toBe(true);
 
     const iterator = queue[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({

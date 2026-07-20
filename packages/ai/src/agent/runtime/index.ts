@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { type AgentRegistry, getAgentRegistry } from "../registry";
 import type { AgentConfig, AgentMessage, AgentOptions, IAgent } from "../types";
 
+export * from "./output-event-bus";
+
 export interface AgentRuntimeRequest {
   prompt: string;
   phase?: "plan" | "execute";

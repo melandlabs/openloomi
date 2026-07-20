@@ -21,10 +21,13 @@ export interface AgentSupplementalInputQueueOptions {
   maxPendingInputs?: number;
   /** Maximum UTF-8 size of one input's content. */
   maxInputBytes?: number;
+  /** Initial run fence. Inputs without an epoch inherit this value. */
+  runEpoch?: number;
 }
 
 export type AgentSupplementalInputQueueErrorCode =
   | "closed"
+  | "epoch_mismatch"
   | "full"
   | "invalid_input"
   | "multiple_consumers";
@@ -59,6 +62,7 @@ export type AgentSupplementalInputEnqueueResult =
 export type NormalizedAgentSupplementalInput = Readonly<
   AgentSupplementalInput & {
     intent: AgentSupplementalInputIntent;
+    runEpoch: number;
   }
 >;
 
@@ -100,6 +104,7 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
   private readonly acceptedIds = new Set<string>();
 
   private state: "open" | "closed" | "aborted" = "open";
+  private activeRunEpoch: number;
   private iteratorCreated = false;
   private interruptHandler: (() => Promise<void> | void) | null = null;
   private interruptInFlight: Promise<InterruptOutcome> | null = null;
@@ -115,14 +120,11 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
       options.maxInputBytes ?? DEFAULT_SUPPLEMENTAL_INPUT_MAX_BYTES,
       MAX_CONFIGURED_INPUT_BYTES,
     );
+    this.activeRunEpoch = validateRunEpoch(options.runEpoch ?? 0);
   }
 
   get size(): number {
     return this.pending.length;
-  }
-
-  get isClosed(): boolean {
-    return this.state !== "open";
   }
 
   async enqueue(
@@ -132,7 +134,18 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
       throw queueError("closed", "Supplemental input queue is closed");
     }
 
-    const input = normalizeInput(candidate, this.maxInputBytes);
+    const input = normalizeInput(
+      candidate,
+      this.maxInputBytes,
+      this.activeRunEpoch,
+    );
+
+    if (input.runEpoch !== this.activeRunEpoch) {
+      throw queueError(
+        "epoch_mismatch",
+        `Supplemental input runEpoch ${input.runEpoch} does not match active runEpoch ${this.activeRunEpoch}`,
+      );
+    }
 
     if (this.acceptedIds.has(input.id)) {
       return {
@@ -210,6 +223,29 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
     }
     this.drainReleasableInputs();
     return released;
+  }
+
+  getRunEpoch(): number {
+    return this.activeRunEpoch;
+  }
+
+  /**
+   * Moves the queue to a newer run and removes inputs that can no longer be
+   * applied. Inputs already yielded remain fenced by downstream event state.
+   */
+  advanceRunEpoch(nextRunEpoch: number): AgentSupplementalInput[] {
+    const normalizedEpoch = validateRunEpoch(nextRunEpoch);
+    if (normalizedEpoch <= this.activeRunEpoch) {
+      throw queueError(
+        "epoch_mismatch",
+        `nextRunEpoch must be greater than active runEpoch ${this.activeRunEpoch}`,
+      );
+    }
+
+    this.activeRunEpoch = normalizedEpoch;
+    const discarded = this.pending.splice(0).map((entry) => entry.input);
+    this.drainReleasableInputs();
+    return discarded;
   }
 
   /** Requests the provider interrupt currently bound to this live queue. */
@@ -336,6 +372,7 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
 function normalizeInput(
   candidate: AgentSupplementalInput,
   maxInputBytes: number,
+  activeRunEpoch: number,
 ): NormalizedAgentSupplementalInput {
   if (candidate === null || typeof candidate !== "object") {
     throw queueError("invalid_input", "Supplemental input must be an object");
@@ -389,12 +426,28 @@ function normalizeInput(
     );
   }
 
+  const runEpoch =
+    candidate.runEpoch === undefined
+      ? activeRunEpoch
+      : validateRunEpoch(candidate.runEpoch);
+
   return Object.freeze({
     id,
     content: candidate.content,
     createdAt: candidate.createdAt,
+    runEpoch,
     intent,
   });
+}
+
+function validateRunEpoch(value: number): number {
+  if (!Number.isInteger(value) || value < 0) {
+    throw queueError(
+      "invalid_input",
+      "runEpoch must be a non-negative integer",
+    );
+  }
+  return value;
 }
 
 function validatePositiveIntegerOption(

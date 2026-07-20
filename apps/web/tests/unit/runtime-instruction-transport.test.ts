@@ -43,7 +43,7 @@ function transport(queue: AgentSupplementalInputQueue, runEpoch = 4) {
 
 describe("SupplementalInputRuntimeInstructionTransport", () => {
   it("formats next-boundary instructions and holds them as inform input", async () => {
-    const queue = new AgentSupplementalInputQueue();
+    const queue = new AgentSupplementalInputQueue({ runEpoch: 4 });
     const receipt = await transport(queue).deliver(instruction());
 
     expect(receipt).toEqual({
@@ -64,7 +64,7 @@ describe("SupplementalInputRuntimeInstructionTransport", () => {
   });
 
   it("maps steer and interrupt-replace delivery to immediate input", async () => {
-    const queue = new AgentSupplementalInputQueue();
+    const queue = new AgentSupplementalInputQueue({ runEpoch: 4 });
     const interrupt = vi.fn(async () => {});
     queue.setInterruptHandler(interrupt);
     const runtimeTransport = transport(queue);
@@ -100,7 +100,7 @@ describe("SupplementalInputRuntimeInstructionTransport", () => {
   });
 
   it("rejects wrong-session and expired instructions before queueing", async () => {
-    const queue = new AgentSupplementalInputQueue();
+    const queue = new AgentSupplementalInputQueue({ runEpoch: 4 });
     const runtimeTransport = transport(queue);
 
     await expect(
@@ -123,7 +123,7 @@ describe("SupplementalInputRuntimeInstructionTransport", () => {
   });
 
   it("returns a rejection receipt for malformed runtime input", async () => {
-    const queue = new AgentSupplementalInputQueue();
+    const queue = new AgentSupplementalInputQueue({ runEpoch: 4 });
 
     await expect(
       transport(queue).deliver(null as unknown as RuntimeInstruction),
@@ -136,7 +136,7 @@ describe("SupplementalInputRuntimeInstructionTransport", () => {
   });
 
   it("returns an idempotent queued receipt for duplicate instructions", async () => {
-    const queue = new AgentSupplementalInputQueue();
+    const queue = new AgentSupplementalInputQueue({ runEpoch: 4 });
     const runtimeTransport = transport(queue);
 
     await runtimeTransport.deliver(instruction());
@@ -146,11 +146,25 @@ describe("SupplementalInputRuntimeInstructionTransport", () => {
       state: "queued",
       reason: "Instruction was already queued",
     });
+    await expect(
+      runtimeTransport.deliver(
+        instruction({
+          goalId: "11111111-1111-4111-8111-111111111111",
+          goalRevision: 1,
+        }),
+      ),
+    ).resolves.toMatchObject({
+      state: "rejected",
+      reason: expect.stringContaining("different Goal revision"),
+    });
     expect(queue.size).toBe(1);
   });
 
   it("reports queue backpressure as a rejected delivery", async () => {
-    const queue = new AgentSupplementalInputQueue({ maxPendingInputs: 1 });
+    const queue = new AgentSupplementalInputQueue({
+      maxPendingInputs: 1,
+      runEpoch: 4,
+    });
     const runtimeTransport = transport(queue);
     await runtimeTransport.deliver(instruction());
 
@@ -169,7 +183,7 @@ describe("SupplementalInputRuntimeInstructionTransport", () => {
   });
 
   it("fences direct interrupts by run epoch and surfaces provider failures", async () => {
-    const queue = new AgentSupplementalInputQueue();
+    const queue = new AgentSupplementalInputQueue({ runEpoch: 4 });
     const runtimeTransport = transport(queue);
 
     await expect(

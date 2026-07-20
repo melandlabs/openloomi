@@ -7,6 +7,7 @@ import type {
   RuntimeDeliveryReceipt,
   RuntimeInstruction,
 } from "../runtime-instructions/types";
+import type { AgentSupplementalInput } from "../types";
 import {
   type AgentSupplementalInputQueue,
   AgentSupplementalInputQueueError,
@@ -39,8 +40,8 @@ export class SupplementalInputRuntimeInstructionTransport implements RuntimeInst
   readonly runtimeSessionId: string;
 
   private readonly queue: AgentSupplementalInputQueue;
-  private readonly runEpoch: number;
   private readonly now: () => Date;
+  private readonly acceptedInstructionIdentities = new Map<string, string>();
 
   constructor(input: {
     runtimeSessionId: string;
@@ -54,8 +55,13 @@ export class SupplementalInputRuntimeInstructionTransport implements RuntimeInst
         "Runtime transport runEpoch must be a non-negative integer",
       );
     }
+    if (input.queue.getRunEpoch() !== input.runEpoch) {
+      throw new SupplementalInputRuntimeTransportError(
+        "invalid_run_epoch",
+        `Input queue runEpoch ${input.queue.getRunEpoch()} does not match transport runEpoch ${input.runEpoch}`,
+      );
+    }
     this.runtimeSessionId = input.runtimeSessionId;
-    this.runEpoch = input.runEpoch;
     this.queue = input.queue;
     this.now = input.now ?? (() => new Date());
   }
@@ -85,18 +91,32 @@ export class SupplementalInputRuntimeInstructionTransport implements RuntimeInst
       return this.rejected(instruction.id, "Runtime Instruction has expired");
     }
 
+    const identity = instructionRevisionIdentity(instruction);
+    const acceptedIdentity = this.acceptedInstructionIdentities.get(
+      instruction.id,
+    );
+    if (acceptedIdentity !== undefined && acceptedIdentity !== identity) {
+      return this.rejected(
+        instruction.id,
+        "Instruction ID was already accepted for a different Goal revision",
+      );
+    }
+
     try {
       const result = await this.queue.enqueue({
         id: instruction.id,
         content: formatRuntimeInstruction(instruction),
         createdAt: instruction.issuedAt,
+        runEpoch: this.queue.getRunEpoch(),
         intent:
           instruction.deliveryMode === "next_boundary" ? "inform" : "steer",
       });
 
       if (result.status === "duplicate") {
+        this.acceptedInstructionIdentities.set(instruction.id, identity);
         return this.queued(instruction.id, "Instruction was already queued");
       }
+      this.acceptedInstructionIdentities.set(instruction.id, identity);
       if (result.interrupt.status === "unavailable") {
         return this.queued(
           instruction.id,
@@ -125,10 +145,11 @@ export class SupplementalInputRuntimeInstructionTransport implements RuntimeInst
     reason: string;
     expectedRunEpoch: number;
   }): Promise<void> {
-    if (input.expectedRunEpoch !== this.runEpoch) {
+    const activeRunEpoch = this.queue.getRunEpoch();
+    if (input.expectedRunEpoch !== activeRunEpoch) {
       throw new SupplementalInputRuntimeTransportError(
         "invalid_run_epoch",
-        `Expected run epoch ${input.expectedRunEpoch}, active epoch is ${this.runEpoch}`,
+        `Expected run epoch ${input.expectedRunEpoch}, active epoch is ${activeRunEpoch}`,
       );
     }
 
@@ -145,6 +166,17 @@ export class SupplementalInputRuntimeInstructionTransport implements RuntimeInst
       "interrupt_unavailable",
       `Provider interrupt is unavailable: ${input.reason}`,
     );
+  }
+
+  advanceRunEpoch(nextRunEpoch: number): AgentSupplementalInput[] {
+    const activeRunEpoch = this.queue.getRunEpoch();
+    if (!Number.isInteger(nextRunEpoch) || nextRunEpoch <= activeRunEpoch) {
+      throw new SupplementalInputRuntimeTransportError(
+        "invalid_run_epoch",
+        `nextRunEpoch must be greater than active run epoch ${activeRunEpoch}`,
+      );
+    }
+    return this.queue.advanceRunEpoch(nextRunEpoch);
   }
 
   private queued(
@@ -185,4 +217,11 @@ function instructionIdFrom(candidate: unknown): string {
     return candidate.id;
   }
   return "invalid-runtime-instruction";
+}
+
+function instructionRevisionIdentity(instruction: RuntimeInstruction): string {
+  return [
+    instruction.goalId ?? "no-goal",
+    instruction.goalRevision?.toString() ?? "no-revision",
+  ].join(":");
 }

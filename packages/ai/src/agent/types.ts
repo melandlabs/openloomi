@@ -247,6 +247,8 @@ export interface AgentSupplementalInput {
   id: string;
   content: string;
   createdAt: string;
+  /** Identifies the active run that is allowed to consume this input. */
+  runEpoch?: number;
   /** Defaults to "steer" when absent (legacy producers). */
   intent?: AgentSupplementalInputIntent;
 }
