@@ -1,13 +1,19 @@
 {
   "name": "openloomi",
   "version": "0.8.4",
-  "description": "Use local OpenLoomi from Codex as a personal assistant and memory layer.",
+  "description": "Use local OpenLoomi from Codex as a personal assistant, memory layer, and self-healing setup bridge (auto-recovers from Codex sandbox loopback false negatives via a host-side probe cache).",
   "author": {
     "name": "OpenLoomi"
   },
   "homepage": "https://openloomi.ai/docs/getting-started",
   "license": "Apache-2.0",
-  "keywords": ["openloomi", "loomi", "assistant", "memory", "codex"],
+  "keywords": [
+    "openloomi",
+    "loomi",
+    "assistant",
+    "memory",
+    "codex"
+  ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "hooks": "./hooks/hooks.json",
@@ -17,13 +23,17 @@
     "longDescription": "Connect Codex to a local OpenLoomi runtime for setup readiness, personal memory workflows, and future one-shot task execution.",
     "developerName": "OpenLoomi",
     "category": "Productivity",
-    "capabilities": ["Read", "Write", "Interactive"],
+    "capabilities": [
+      "Read",
+      "Interactive"
+    ],
     "defaultPrompt": [
       "Check whether OpenLoomi is ready",
       "Show OpenLoomi setup next steps",
-      "Send this task to Loomi for follow-up",
       "Switch the OpenLoomi desktop app to the Codex runtime",
-      "Show how to verify the desktop app is using Codex as its agent runtime"
+      "Show how to verify the desktop app is using Codex as its agent runtime",
+      "Recover from Codex sandbox loopback false negatives",
+      "Run the host probe and merge it into the next setup-status"
     ],
     "brandColor": "#2563EB",
     "logo": "./assets/logo.png"

@@ -24,12 +24,21 @@ auth tokens into Codex chat.
 
 When `setup-status` returns `loopbackAccessAmbiguous: true`, do not conclude
 that OpenLoomi is stopped. Codex network sandboxing can block access to the
-host's `localhost` even while the desktop API is listening. The embedded
-non-interactive `codex exec` adapter cannot service an approval-and-retry
-prompt. Use a host-side OpenLoomi MCP tool where available; otherwise present
-the commands in `loopbackAccess.verification.commands` for the user to run in
-a normal terminal. If that request reaches `/api/native/providers`, report the
-sandbox probe as a false negative.
+host's `localhost` even while the desktop API is listening. Prefer the
+bridge's own auto-recovery path over manual `lsof` / `curl` paste: invoke
+
+```bash
+node $SKILL_DIR/../../scripts/loomi-bridge.mjs run-host-probe
+```
+
+from a Codex shell where loopback is allowed. The command probes
+`/api/native/providers` outside the sandbox, writes the result to
+`~/.openloomi/codex-host-probe-cache.json` (5 minute TTL), and the very next
+`setup-status` call rebuilds its readiness decision from that cache
+(`ready: true`, `reason: "READY_VIA_HOST_PROBE_CACHE"`). When `setup-status`
+returns `nextAction: "run_host_probe"`, run this command yourself instead of
+asking the user to paste anything. Fall back to the manual
+`loopbackAccess.verification.commands` only if the host probe itself fails.
 
 OpenLoomi guest sessions are supported. A missing token is not a request for
 account registration or manual token entry. When the bridge reports

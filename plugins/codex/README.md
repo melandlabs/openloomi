@@ -390,12 +390,11 @@ actually has it.
 ### Host-side connector transport
 
 The plugin registers a narrow local stdio MCP server through `.mcp.json`.
-Native connector tools (`list_accounts`, `connector_status`, `connect`,
-`disconnect`, `query_contacts`, and `send_reply`) run in that host-side
-process and call the authenticated OpenLoomi Desktop API directly. This avoids
-depending on a model-generated shell command crossing macOS's host-loopback
-sandbox boundary; it does **not** expose an arbitrary host shell or connector
-credentials, and it does not enable network access for shell commands.
+Native connector tools (`list_platforms`, `list_accounts`,
+`connector_status`, `connect`, `disconnect`, `query_contacts`, and
+`send_reply`) run in that host-side process and call the authenticated
+OpenLoomi Desktop API directly. This avoids depending on a model-generated
+shell command crossing macOS's host-loopback sandbox boundary.
 
 Before sending the bearer token, the connector client probes
 `/api/native/providers` without credentials and checks the expected response
@@ -403,7 +402,9 @@ shape as a best-effort guard against accidentally targeting an unrelated
 loopback service. This is not cryptographic service identity; the token file
 and local host remain within the user's trust boundary. The CLI remains
 available as a compatibility path, with structured transport/authentication
-failures and mutation-safe retry rules.
+failures and mutation-safe retry rules. This connector-scoped transport does
+not expose an arbitrary host shell, grant network access to model-generated
+shell commands, or replace `setup-status`'s separate host-probe recovery.
 
 To pull the same switch plan as structured JSON (handy for surfacing inside
 Codex without retyping the shell snippets):
@@ -763,8 +764,8 @@ After OpenLoomi starts, the plugin guides users toward OpenLoomi-related
 skills and workflows that are useful from Codex. The Codex plugin ships
 one main entry skill (`openloomi`) plus eight sub-skills under
 `skills/`. Each sub-skill is auto-loaded by Codex on demand based on its
-frontmatter `description`. Runtime business logic stays in OpenLoomi; the
-skills use the bridge or a narrow connector API client.
+frontmatter `description` — they share the same `loomi-bridge.mjs`
+runtime, no business logic is duplicated.
 
 | Skill                     | Path                                      | Trigger words                                                           | What it does                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------- | ----------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -772,19 +773,18 @@ skills use the bridge or a narrow connector API client.
 | `openloomi-install`       | `skills/openloomi-install/SKILL.md`       | install, first-use setup, `SESSION_INITIALIZATION_REQUIRED`             | Walks install / first-use / session recovery. Translates `setup-status` `reason` codes into concrete next actions.                                                                                                                                                                                                                                           |
 | `openloomi-loop`          | `skills/openloomi-loop/SKILL.md`          | loop tick, loop schedule, loop inbox, register loop type, add loop rule | The proactive execution brain — pull signals, classify into decisions, schedule actions, register custom decision types / signal channels / classifier rules. Thin wrapper around `/api/loop/*`.                                                                                                                                                             |
 | `openloomi-memory`        | `skills/openloomi-memory/SKILL.md`        | memory search, knowledge base, documents, insights                      | Search or write memory through OpenLoomi-owned runtime surfaces. Thin wrapper — does **not** implement memory storage.                                                                                                                                                                                                                                       |
-| `openloomi-connectors`    | `skills/openloomi-connectors/SKILL.md`    | connect platform, integration status, list accounts, disconnect         | Manage OpenLoomi's native 7 through host-side MCP tools; credentials stay in the Desktop UI. Pair with `composio` for non-native accounts.                                                                                                                                                                                                                   |
-| `openloomi-handoff`       | `skills/openloomi-handoff/SKILL.md`       | hand off, delegate, queue, remind, follow up                            | **Codex-only.** Send the current Codex task to Loomi for follow-up. The Claude Code plugin exposes the same capability through its own `/openloomi:*` slash-command surface instead — see [Handoff parity note](#handoff-parity-note) below.                                                                                                                 |
+| `openloomi-connectors`    | `skills/openloomi-connectors/SKILL.md`    | connect platform, integration status, list accounts, disconnect         | Check whether Slack, GitHub, Gmail, Calendar, and other sources are configured before acting. Reports status only; pair with `composio` for non-native accounts.                                                                                                                                                                                             |
 | `openloomi-pet`           | `skills/openloomi-pet/SKILL.md`           | pet state, set pet, fox sprite, capybara sprite, custom pet theme       | The 9-state Loomi Pet vocabulary (`happy`/`idle`/`juggling`/`needsinput`/`presenting`/`sleeping`/`sweeping`/`thinking`/`working`). Mirrors the Claude plugin's `openloomi-pet` skill with Codex-specific deltas (no slash command, `codex-plugin` source tag). For custom themes & sprite overrides see the [Customize your Loomi Pet](/docs/pet) user docs. |
 | `openloomi-api`           | `skills/openloomi-api/SKILL.md`           | API endpoints, backend routes, auth, local API, integrations            | Reference for the 131 OpenLoomi HTTP routes (auth, AI, RAG, Loop, Pet, workspace, integrations). Triggered on API / backend questions.                                                                                                                                                                                                                       |
 | `openloomi-feature-guide` | `skills/openloomi-feature-guide/SKILL.md` | "what can openloomi do", "怎么用", "how does openloomi work"            | Product overview, capability tour, and how-tos for non-developer questions.                                                                                                                                                                                                                                                                                  |
 | `composio`                | `skills/composio/SKILL.md`                | composio, 1000+ apps, external integrations                             | Third-party 1000+ app integration router (Gmail, Slack, GitHub, Linear, Jira, Notion, etc.) via the Composio CLI. Platform-agnostic; not OpenLoomi business logic.                                                                                                                                                                                           |
 
 The `workflow-guidance` bridge command exposes structured guidance for the
-four workflow skills (`openloomi-loop`, `openloomi-memory`,
-`openloomi-connectors`, `openloomi-handoff`). All other skills are
-documentation or routing helpers. The plugin must not copy OpenLoomi
-connector, memory, loop, scheduling, or handoff persistence logic into
-Codex — runtime implementations stay inside the OpenLoomi desktop runtime.
+three workflow skills (`openloomi-loop`, `openloomi-memory`,
+`openloomi-connectors`). All other skills are documentation or routing
+helpers. The plugin must not copy OpenLoomi connector, memory, or loop
+logic into Codex — runtime implementations stay inside the OpenLoomi
+desktop runtime.
 
 **Pairing notes:**
 
@@ -798,23 +798,6 @@ Codex — runtime implementations stay inside the OpenLoomi desktop runtime.
   via `/api/loop/action/schedule`. It is read/derive, never destructive.
 - `openloomi-memory` is the canonical store. `openloomi-loop` deliberately
   delegates persistence to memory instead of duplicating it.
-
-#### Handoff parity note
-
-Codex and Claude Code expose the same "send current task to Loomi for
-follow-up" capability through **different surfaces**:
-
-- **Codex** (`@OpenLoomi …`): the `openloomi-handoff` skill above — wraps
-  the request with the `taskPromptPrefix` returned by `workflow-guidance`
-  and sends it through the workflow's dedicated bridge command or API route.
-- **Claude Code** (`/openloomi:*`): the slash-command surface. There is no
-  dedicated `openloomi-handoff` skill because `/openloomi:setup` /
-  `/openloomi:status` already cover the same user need through the
-  plugin's own commands.
-
-Both surfaces route to the same OpenLoomi runtime — the plugin stays a
-thin wrapper; persistence and notification routing live inside the
-OpenLoomi desktop runtime.
 
 ### Pet state control
 
