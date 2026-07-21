@@ -24,10 +24,12 @@ auth tokens into Codex chat.
 
 When `setup-status` returns `loopbackAccessAmbiguous: true`, do not conclude
 that OpenLoomi is stopped. Codex network sandboxing can block access to the
-host's `localhost` even while the desktop API is listening. Request approval
-to run the commands in `loopbackAccess.verification.commands` outside the
-sandbox. If an outside-sandbox request reaches `/api/native/providers`, report
-OpenLoomi as running and identify the sandbox probe as a false negative.
+host's `localhost` even while the desktop API is listening. The embedded
+non-interactive `codex exec` adapter cannot service an approval-and-retry
+prompt. Use a host-side OpenLoomi MCP tool where available; otherwise present
+the commands in `loopbackAccess.verification.commands` for the user to run in
+a normal terminal. If that request reaches `/api/native/providers`, report the
+sandbox probe as a false negative.
 
 OpenLoomi guest sessions are supported. A missing token is not a request for
 account registration or manual token entry. When the bridge reports
@@ -50,7 +52,7 @@ If the user asks to install OpenLoomi or explicitly approves installation, run t
 node "$SKILL_DIR/../../scripts/loomi-bridge.mjs" setup --yes
 ```
 
-That walks the whole state machine: resolve the official release → download → install → set `OPENLOOMI_AGENT_PROVIDER=codex` in the GUI launchd / environment.d → launch the OpenLoomi desktop app → wait for the local API on `http://localhost:3414` → mint a guest session token into `~/.openloomi/token`. Invoking this skill (or the user saying "install" / "install and run" / "一键装好并跑起来") counts as explicit approval to pass `--yes`. Sandbox prompts for network / install to `/Applications` / launching the GUI will appear — that's expected; approve them and the wizard continues.
+That walks the whole state machine: resolve the official release → download → install → set `OPENLOOMI_AGENT_PROVIDER=codex` in the GUI launchd / environment.d → launch the OpenLoomi desktop app → wait for the local API on `http://localhost:3414` → mint a guest session token into `~/.openloomi/token`. Invoking this skill (or the user saying "install" / "install and run" / "一键装好并跑起来") counts as explicit approval to pass `--yes`. If the embedded sandbox lacks the required GitHub, application-directory, or GUI access, give the same verified `loomi-bridge` command to the user for a normal terminal; do not promise an interactive escalation that `codex exec` cannot service.
 
 The bridge resolves the official GitHub release artifact for the current
 platform and architecture automatically, downloads it, and installs it with the

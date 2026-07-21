@@ -1671,14 +1671,19 @@ export async function getBotById({ id }: { id: string }) {
 }
 
 /**
- * Retrieve a single bot with its associated account by bot UUID
+ * Retrieve a single bot with its associated account by bot UUID.
+ * When userId is provided, ownership is enforced in the query so callers do
+ * not load another user's bot before performing an authenticated operation.
  * @param id Unique identifier of the bot
+ * @param userId Optional owner identifier used to scope the lookup
  * @returns BotWithAccount object if found, undefined otherwise
  */
 export async function getBotWithAccountById({
   id,
+  userId,
 }: {
   id: string;
+  userId?: string;
 }): Promise<BotWithAccount | undefined> {
   try {
     const [found] = await db
@@ -1691,7 +1696,11 @@ export async function getBotWithAccountById({
         integrationAccounts,
         eq(bot.platformAccountId, integrationAccounts.id),
       )
-      .where(eq(bot.id, id));
+      .where(
+        userId === undefined
+          ? eq(bot.id, id)
+          : and(eq(bot.id, id), eq(bot.userId, userId)),
+      );
 
     if (!found) {
       return undefined;

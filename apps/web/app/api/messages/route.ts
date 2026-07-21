@@ -1,13 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "@/app/(auth)/auth";
+import { authenticateCloudRequest } from "@/lib/auth/cloud-auth";
 import { sendMessage } from "@/lib/bots/message-service";
 import type { SendMessageParams } from "@/lib/bots/message-service";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
+    const user = await authenticateCloudRequest(request);
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
       recipients,
       message,
       messageHtml,
+      subject,
       cc,
       bcc,
       attachments,
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
       recipients,
       message,
       messageHtml,
+      subject,
       cc,
       bcc,
       attachments,
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
       params.withAppSuffix = withAppSuffix;
     }
 
-    const result = await sendMessage(params, session.user.id);
+    const result = await sendMessage(params, user.id);
 
     return NextResponse.json(result);
   } catch (error) {

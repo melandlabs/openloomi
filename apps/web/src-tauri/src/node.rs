@@ -1099,6 +1099,10 @@ pub fn try_start_nextjs(
         // across all API requests (module-level singletons are not shared across cluster workers).
         .env("WORKERS", "1")
         .env("PORT", "3414")
+        // The connector API carries a local bearer token. Keep the packaged
+        // Next.js server on loopback even if the host has LAN interfaces;
+        // the plugin's host-side MCP transport reaches it locally.
+        .env("HOSTNAME", "127.0.0.1")
         .env("IS_TAURI", "true")
         .env("TAURI_MODE", "1")
         .env("DEPLOYMENT_MODE", "tauri")

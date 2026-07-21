@@ -32,12 +32,12 @@ export interface SendMessageResult {
 /**
  * Unified message sending service
  * @param params Send parameters
- * @param userId User ID (optional, will be fetched from bot if not provided)
+ * @param userId Authenticated user ID used to enforce bot ownership
  * @returns Send result
  */
 export async function sendMessage(
   params: SendMessageParams,
-  userId?: string,
+  userId: string,
 ): Promise<SendMessageResult> {
   const {
     botId,

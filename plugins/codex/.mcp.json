@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "openloomi": {
+      "command": "node",
+      "args": ["scripts/openloomi-mcp-server.cjs"],
+      "cwd": "."
+    }
+  }
+}

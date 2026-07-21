@@ -1,12 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "@/app/(auth)/auth";
+import { authenticateCloudRequest } from "@/lib/auth/cloud-auth";
 import { getUserContacts } from "@/lib/db/queries";
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
+    const user = await authenticateCloudRequest(request);
 
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const page = Number.parseInt(searchParams.get("page") || "1", 10);
     const pageSize = Number.parseInt(searchParams.get("pageSize") || "10", 10);
 
-    const contacts = await getUserContacts(session.user.id);
+    const contacts = await getUserContacts(user.id);
 
     let resultContacts = contacts.map((c) => {
       const meta = c.contactMeta as Record<string, unknown> | null;

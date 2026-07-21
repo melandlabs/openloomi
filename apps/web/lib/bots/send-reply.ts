@@ -117,7 +117,7 @@ export async function sendReplyByBotId({
   weixinContextToken,
 }: {
   id: string;
-  userId?: string;
+  userId: string;
   recipients: string[];
   cc?: string[];
   bcc?: string[];
@@ -129,7 +129,10 @@ export async function sendReplyByBotId({
   weixinContextToken?: string;
 }) {
   try {
-    const bot = await getBotWithAccountById({ id });
+    // Authenticated callers must never load or dispatch through another
+    // user's bot. Keeping this constraint in the query also makes a foreign
+    // bot indistinguishable from a missing bot to the caller.
+    const bot = await getBotWithAccountById({ id, userId });
     if (!bot) {
       throw new AppError(
         "bad_request:bot",
@@ -146,7 +149,7 @@ export async function sendReplyByBotId({
       };
     }
 
-    const ownerId = userId ?? bot.userId;
+    const ownerId = userId;
     const suffix = withAppSuffix ? " (By openloomi AI)" : "";
     const sentMessage = (message ?? "").trim() + suffix;
     const normalizedHtml =

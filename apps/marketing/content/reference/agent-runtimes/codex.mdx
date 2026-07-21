@@ -66,9 +66,12 @@ Leave either value unset to use the corresponding Codex CLI configuration. `CODE
 
 Executable paths, profiles, models, sandbox modes, Git checks, and timeouts are server-owned configuration. Values supplied in native-agent request bodies are ignored, so a caller cannot switch the runtime or weaken its policy.
 
+Native connector operations use the plugin's narrow stdio MCP server. That server runs as a host-side plugin process and reaches the authenticated OpenLoomi Desktop API directly, so connector access does not require enabling network access for model-generated shell commands.
+
 ## Troubleshooting
 
 - **Executable not found:** run `codex --version` as the OpenLoomi service user, or set `OPENLOOMI_AGENT_CODEX_COMMAND` to the absolute executable path.
 - **Login or model error:** run the verification command above with the same `HOME`/`USERPROFILE` and `CODEX_HOME` used by OpenLoomi.
 - **Not inside a trusted directory:** keep `OPENLOOMI_AGENT_CODEX_SKIP_GIT_REPO_CHECK=true` for non-repository work directories, or run tasks in a Git repository and set it to `false`.
+- **A connector shell command cannot reach the local API:** use the plugin's connector MCP tools. They run host-side and do not require opening the Codex shell sandbox. The CLI command remains a normal-terminal fallback.
 - **Run times out:** increase `OPENLOOMI_AGENT_CODEX_TIMEOUT_MS` and verify the selected model is reachable from the Codex CLI itself.

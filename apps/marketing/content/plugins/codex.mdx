@@ -17,6 +17,7 @@ The Codex plugin turns **Codex CLI** into a coding shell for a local **OpenLoomi
 The Codex plugin is a **companion integration**, not a replacement for OpenLoomi Desktop. Codex provides the coding surface; OpenLoomi provides the runtime that the bridge calls into. The plugin ships:
 
 - a Node bridge (`scripts/loomi-bridge.mjs`) that exposes 13 commands
+- a narrow host-side stdio MCP server for native connector operations, so connector calls do not depend on sandboxed shell loopback
 - 8 workflow skills (`openloomi`, `openloomi-install`, `openloomi-loop`, `openloomi-memory`, `openloomi-connectors`, `openloomi-handoff`, `openloomi-api`, `openloomi-feature-guide`) plus `composio`
 - an opt-in Pet mirror that maps Codex lifecycle events onto the OpenLoomi Pet
 
@@ -509,7 +510,7 @@ The plugin ships these sub-skills under `plugins/codex/skills/`:
 | `openloomi`               | Main entry point — triggers on `OpenLoomi` / `Loomi` mention and dispatches to the right sub-skill.                                                   |
 | `openloomi-install`       | Walks install, first-use setup, AI provider setup, and `SESSION_INITIALIZATION_REQUIRED` recovery flows.                                              |
 | `openloomi-loop`          | Run attention-loop and follow-up workflows.                                                                                                           |
-| `openloomi-connectors`    | Check whether Slack, GitHub, Gmail, Calendar, and other sources are configured before acting. Reports status only.                                    |
+| `openloomi-connectors`    | Manage OpenLoomi's native 7 through host-side MCP tools; credentials and interactive authorization stay in Desktop.                                   |
 | `openloomi-memory`        | Search or write memory through OpenLoomi-owned runtime surfaces. Thin wrapper — does not implement memory storage.                                    |
 | `openloomi-handoff`       | Send the current Codex task to Loomi for follow-up. The Claude Code plugin exposes the same capability through `/openloomi:*` slash commands instead. |
 | `openloomi-api`           | OpenLoomi HTTP API reference (auth, chat, RAG, workspace, integrations, feedback). Triggered by API/backend questions.                                |
