@@ -48,7 +48,28 @@ import {
 } from "./connectors-pure";
 import type { ConnectorEntry } from "./types";
 
-const CACHE_TTL_MS = 1 * 60 * 60 * 1000;
+/**
+ * How long the on-disk connector snapshot is trusted to be current
+ * (#411). The CLI direct probe in `composio-cli.ts::probeViaCli`
+ * answers "which toolkits are connected" in ~200ms, so we no longer
+ * need a long TTL to amortize the agentic 60–120s probe. The 30s
+ * minimum just guards against double-click storms on the pill row;
+ * explicit `POST /api/loop/connectors { refresh: true }` requests
+ * always bypass the cache and re-probe via the CLI fast-path.
+ *
+ * Three explicit cache semantics now hold:
+ *   1. **Instant paint** — `GET /api/loop/connectors` reads the cache
+ *      if it is younger than this TTL (first paint shows last-known
+ *      truth in <1ms). Background probes handle staleness.
+ *   2. **Explicit refresh** — `POST { refresh: true }` or `?refresh=1`
+ *      always re-probes via the CLI fast-path (~200ms); never returns
+ *      cache.
+ *   3. **Agentic fallback** — only entered when the CLI direct probe
+ *      fails. The cache becomes the fallback truth and a
+ *      `lastProbeError` is stamped on top so the UI can still render
+ *      "last known + here's why we couldn't refresh".
+ */
+const CACHE_TTL_MS = 30 * 1000;
 
 /**
  * #391 — the kind of failure the last connector probe hit. Mirrors the

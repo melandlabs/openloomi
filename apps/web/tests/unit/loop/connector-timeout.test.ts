@@ -219,8 +219,11 @@ describe("refreshConnectors timeout (#391)", () => {
     // the last-known connector state.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
-    // Seed a cache with a known snapshot that predates the timeout.
-    const seededFetchedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // Seed a cache with a known snapshot that predates the timeout
+    // (#411: the cache TTL is now 30s, so 5s old is comfortably
+    // within validity and still meaningfully "predates" the probe
+    // call we're about to make).
+    const seededFetchedAt = new Date(Date.now() - 5 * 1000).toISOString();
     const seededConnectors = [
       {
         id: "gmail",

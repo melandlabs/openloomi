@@ -15,6 +15,7 @@ import { SessionAuthChecker } from "@/components/session-auth-checker";
 import { ConversationApiOnboardingGuard } from "@/components/conversation-api-onboarding-guard";
 import { ScreenMemoryCaptureProvider } from "@/components/chronicle/screen-memory-provider";
 import { LoopNavBridge } from "@/components/loop/loop-nav-bridge";
+import { LoopConnectorRefreshBridge } from "@/components/loop/loop-connector-refresh-bridge";
 import { PetChatBridge } from "@/components/pet/pet-chat-bridge";
 import { PetRuntimeBridge } from "@/components/pet/pet-runtime-bridge";
 import { ScheduledJobsInit } from "@/components/scheduled-jobs-init";
@@ -51,6 +52,17 @@ export default async function Layout({
                         components/loop/loop-nav-bridge.tsx for the why.
                       */}
                       <LoopNavBridge />
+                      {/*
+                        LoopConnectorRefreshBridge (#411) force-refreshes
+                        the Loop connector snapshot whenever a Composio
+                        OAuth flow completes anywhere in the app. The
+                        CLI fast-path resolves in ~200ms so we can
+                        safely re-probe on every event without paying
+                        the 60–120s agentic probe cost. See
+                        components/loop/loop-connector-refresh-bridge.tsx
+                        for the why.
+                      */}
+                      <LoopConnectorRefreshBridge />
                       {/*
                         PetChatBridge forwards the
                         openloomi:send-chat-message DOM event (fired by
