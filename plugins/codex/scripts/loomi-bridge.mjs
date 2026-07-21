@@ -174,6 +174,7 @@ const COMMANDS = new Set([
 if (process.env.OPENLOOMI_TEST_HOOKS === "1") {
   COMMANDS.add("__test-ensure-runtime-env");
   COMMANDS.add("__test-launch-desktop");
+  COMMANDS.add("__test-windows-image-name");
   COMMANDS.add("__test-setup-flags");
   COMMANDS.add("__test-wait-for-api");
 }
@@ -2481,7 +2482,7 @@ function launchInstaller(filePath) {
     detached: true,
     shell: process.platform === "win32",
     stdio: "ignore",
-    windowsHide: false,
+    windowsHide: true,
   });
 
   child.unref();
@@ -2773,12 +2774,12 @@ async function ensureOpenLoomiSession() {
   // to the launch metadata so callers can see why we did or did not
   // write.
   const envWiring = await ensureCodexRuntimeEnvForLaunch();
-  const launch = launchOpenLoomiForSession(discovery.appPath);
-  if (launch.launched) {
+  const launch = await launchOpenLoomiForSession(discovery.appPath);
+  if (launch.launched || launch.alreadyRunning) {
     launch.env = envWiring;
   }
 
-  if (launch.launched) {
+  if (launch.launched || launch.alreadyRunning) {
     const deadline = Date.now() + SESSION_BOOTSTRAP_TIMEOUT_MS;
 
     while (Date.now() < deadline) {
@@ -3395,27 +3396,60 @@ function saveOpenLoomiToken(token) {
   });
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function desktopProcessBinName(appPath) {
+  if (!appPath) return "";
+  const normalized = String(appPath).replace(/\.app$/i, "");
+  return normalized.includes("\\")
+    ? path.win32.basename(normalized)
+    : path.basename(normalized);
+}
+
+function windowsProcessImageName(appPath) {
+  const binName = desktopProcessBinName(appPath);
+  if (!binName) return "";
+  return binName.toLowerCase().endsWith(".exe") ? binName : `${binName}.exe`;
+}
+
+function getTestDesktopProcessRunningOverride() {
+  if (process.env.OPENLOOMI_TEST_HOOKS !== "1") return null;
+  if (process.env.OPENLOOMI_TEST_FORCE_APP_RUNNING === "1") return true;
+  if (process.env.OPENLOOMI_TEST_FORCE_APP_RUNNING === "0") return false;
+  return null;
+}
+
 // Detect whether the OpenLoomi desktop app process is currently running.
 // Mirrors plugins/claude/scripts/loomi-bridge.mjs:probeDesktopProcessRunning.
 // On darwin we match the distinctive `Contents/MacOS/<binName>` suffix so
 // we don't false-positive on the inner `node server.js` helper; on linux
 // the basename match is enough since there's no .app wrapper; on win32
-// we shell out to `tasklist /FI IMAGENAME eq <binName>`. Returns false on
+// we shell out to `tasklist /FI IMAGENAME eq <imageName>`. Returns false on
 // any probe failure — we treat "probe failed" the same as "not running"
 // because the caller's fall-through is always "launch / re-launch".
 async function probeDesktopProcessRunning(appPath) {
   if (!appPath) return false;
-  const binName = path.basename(appPath.replace(/\.app$/i, ""));
+  const testOverride = getTestDesktopProcessRunningOverride();
+  if (testOverride !== null) return testOverride;
+
+  const binName = desktopProcessBinName(appPath);
   if (!binName) return false;
 
   if (process.platform === "win32") {
+    const imageName = windowsProcessImageName(appPath);
+    if (!imageName) return false;
     return await new Promise((resolve) => {
-      const proc = spawn("tasklist", ["/FI", `IMAGENAME eq ${binName}.exe`], {
+      const proc = spawn("tasklist", ["/FI", `IMAGENAME eq ${imageName}`], {
         stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
       });
       let out = "";
       proc.stdout?.on("data", (b) => (out += b.toString("utf8")));
-      proc.on("exit", () => resolve(/openloomi/i.test(out)));
+      proc.on("exit", () =>
+        resolve(new RegExp(`\\b${escapeRegExp(imageName)}\\b`, "i").test(out)),
+      );
       proc.on("error", () => resolve(false));
     });
   }
@@ -3453,7 +3487,7 @@ async function quitDesktopApp({ appPath, graceMs = 5000 } = {}) {
   if (!appPath) {
     return { ok: false, code: "NO_APP_PATH", message: "No appPath to quit." };
   }
-  const binName = path.basename(appPath.replace(/\.app$/i, ""));
+  const binName = desktopProcessBinName(appPath);
   if (!binName) {
     return {
       ok: false,
@@ -3461,6 +3495,7 @@ async function quitDesktopApp({ appPath, graceMs = 5000 } = {}) {
       message: `Cannot derive binName from ${appPath}.`,
     };
   }
+  const windowsImageName = windowsProcessImageName(appPath);
 
   // Determine the bundle display name (darwin `osascript` needs it). When
   // appPath ends in `.app`, take the basename without extension; otherwise
@@ -3490,7 +3525,7 @@ async function quitDesktopApp({ appPath, graceMs = 5000 } = {}) {
 
   if (!sigSent) {
     if (process.platform === "win32") {
-      const r = await runCapture("taskkill", ["/IM", `${binName}.exe`]);
+      const r = await runCapture("taskkill", ["/IM", windowsImageName]);
       attempted.push({ via: "taskkill", exitCode: r.exitCode });
       if (r.exitCode === 0) sigSent = true;
     } else {
@@ -3511,7 +3546,7 @@ async function quitDesktopApp({ appPath, graceMs = 5000 } = {}) {
     const stillRunning = await probeDesktopProcessRunning(appPath);
     if (stillRunning) {
       if (process.platform === "win32") {
-        await runCapture("taskkill", ["/IM", `${binName}.exe`, "/F"]);
+        await runCapture("taskkill", ["/IM", windowsImageName, "/F"]);
       } else {
         const pattern =
           process.platform === "darwin" ? `Contents/MacOS/${binName}` : binName;
@@ -3543,7 +3578,7 @@ async function quitDesktopApp({ appPath, graceMs = 5000 } = {}) {
   };
 }
 
-function launchOpenLoomiForSession(appPath) {
+async function launchOpenLoomiForSession(appPath) {
   const resolved = appPath ? normalizePath(appPath) : null;
 
   if (!resolved || !appPathExists(resolved)) {
@@ -3553,26 +3588,62 @@ function launchOpenLoomiForSession(appPath) {
     };
   }
 
-  try {
-    const child = spawn(resolved, [], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: false,
-    });
-    child.unref();
-
-    return {
-      launched: true,
-      reason: "APP_LAUNCHED",
-      ...debugPath("appPath", resolved),
-    };
-  } catch {
+  if (await probeDesktopProcessRunning(resolved)) {
     return {
       launched: false,
-      reason: "APP_LAUNCH_FAILED",
+      alreadyRunning: true,
+      reason: "APP_ALREADY_RUNNING",
       ...debugPath("appPath", resolved),
     };
   }
+
+  return await new Promise((resolve) => {
+    let settled = false;
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      resolve(payload);
+    };
+
+    let child;
+    try {
+      child = spawn(resolved, [], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+        shell: false,
+      });
+      child.unref();
+    } catch (e) {
+      finish({
+        launched: false,
+        alreadyRunning: false,
+        reason: "APP_LAUNCH_FAILED",
+        message: e instanceof Error ? e.message : String(e),
+        ...debugPath("appPath", resolved),
+      });
+      return;
+    }
+
+    child.once("error", (e) => {
+      finish({
+        launched: false,
+        alreadyRunning: false,
+        reason: "APP_LAUNCH_FAILED",
+        message: e instanceof Error ? e.message : String(e),
+        ...debugPath("appPath", resolved),
+      });
+    });
+
+    child.once("spawn", () => {
+      finish({
+        launched: true,
+        alreadyRunning: false,
+        reason: "APP_LAUNCHED",
+        ...debugPath("appPath", resolved),
+      });
+    });
+  });
 }
 
 // Programmatically launches the OpenLoomi desktop app so the local HTTP
@@ -3584,7 +3655,7 @@ function launchOpenLoomiForSession(appPath) {
 // Per-platform:
 //   macOS   -> `open -a <bundle>`
 //   Linux   -> `gtk-launch <desktopId>` (best-effort), then direct spawn fallback
-//   Windows -> `cmd /c start "" <exe>`
+//   Windows -> direct hidden spawn of <exe>
 //
 // Before spawning, setup persists OPENLOOMI_AGENT_PROVIDER=codex through its
 // runtime-env step. The launcher also injects the value into its child
@@ -3614,6 +3685,18 @@ async function launchDesktopApp({ appPath } = {}) {
   }
 
   const resolvedAppPath = target;
+  if (await probeDesktopProcessRunning(resolvedAppPath)) {
+    return {
+      ok: true,
+      code: "ALREADY_RUNNING",
+      launched: false,
+      alreadyRunning: true,
+      via: "process-probe",
+      ...debugPath("appPath", resolvedAppPath),
+      stderr: null,
+      env: envResult,
+    };
+  }
 
   const platformName = process.platform;
   let cmd;
@@ -3625,9 +3708,9 @@ async function launchDesktopApp({ appPath } = {}) {
     args = ["-a", resolvedAppPath];
     via = "open -a";
   } else if (platformName === "win32") {
-    cmd = "cmd";
-    args = ["/c", "start", '""', resolvedAppPath];
-    via = "cmd /c start";
+    cmd = resolvedAppPath;
+    args = [];
+    via = "direct-spawn";
   } else {
     // Linux: try gtk-launch first (a .desktop file shipped by the app
     // bundle, if any), then fall back to spawning the binary directly.
@@ -3638,20 +3721,33 @@ async function launchDesktopApp({ appPath } = {}) {
 
   return await new Promise((resolve) => {
     let stderr = "";
+    let settled = false;
     let child;
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      resolve(payload);
+    };
+
     try {
       child = spawn(cmd, args, {
         stdio: ["ignore", "ignore", "pipe"],
         detached: true,
+        shell: false,
+        windowsHide: true,
+        cwd:
+          platformName === "win32" ? path.dirname(resolvedAppPath) : undefined,
         env: envResult.applied
           ? { ...process.env, [RUNTIME_ENV_KEY]: "codex" }
           : process.env,
       });
       child.unref();
     } catch (e) {
-      resolve({
+      finish({
         ok: false,
         code: "SPAWN_FAILED",
+        launched: false,
+        alreadyRunning: false,
         via,
         message: e instanceof Error ? e.message : String(e),
         ...debugPath("appPath", resolvedAppPath),
@@ -3664,16 +3760,31 @@ async function launchDesktopApp({ appPath } = {}) {
       stderr += b.toString("utf8");
     });
 
-    // `open -a` returns synchronously after handing the bundle to
-    // launchd, so we treat the lack of an immediate spawn error as
-    // "launched" and let `waitForApi` confirm the API actually came up.
-    resolve({
-      ok: true,
-      code: "LAUNCHED",
-      via,
-      ...debugPath("appPath", resolvedAppPath),
-      stderr: stderr.trim() || null,
-      env: envResult,
+    child.once("error", (e) => {
+      finish({
+        ok: false,
+        code: "SPAWN_FAILED",
+        launched: false,
+        alreadyRunning: false,
+        via,
+        message: e instanceof Error ? e.message : String(e),
+        ...debugPath("appPath", resolvedAppPath),
+        stderr: stderr.trim() || null,
+        env: envResult,
+      });
+    });
+
+    child.once("spawn", () => {
+      finish({
+        ok: true,
+        code: "LAUNCHED",
+        launched: true,
+        alreadyRunning: false,
+        via,
+        ...debugPath("appPath", resolvedAppPath),
+        stderr: stderr.trim() || null,
+        env: envResult,
+      });
     });
   });
 }
@@ -4937,7 +5048,25 @@ async function setup(args) {
         return;
       }
 
-      // 2b. App was running → automatically quit it so the next launch
+      // Windows cannot persist this env var from the bridge. Stop after one
+      // manual-only attempt instead of looping until the setup step limit.
+      if (r.parsed?.platform === "win32" && !r.parsed?.after) {
+        writeJson({
+          ok: false,
+          setup: "runtime_env_manual_required",
+          nextAction: "set_runtime_env_manually",
+          reason: "WINDOWS_RUNTIME_ENV_MANUAL",
+          steps,
+          status,
+          runtimeEnv: r.parsed,
+          manualSteps: r.parsed?.manualSteps || [],
+          message:
+            "Windows requires OPENLOOMI_AGENT_PROVIDER=codex in the current user environment before setup can continue. Set it, restart Codex/OpenLoomi so new processes inherit it, then re-run setup.",
+        });
+        return;
+      }
+
+      // 2b. App was running -> automatically quit it so the next launch
       //     inherits the new env. We never ask the user to do this.
       if (status.appRunning && status.appPath) {
         const quit = await quitDesktopApp({ appPath: status.appPath });
@@ -6544,6 +6673,18 @@ async function main() {
     case "__test-ensure-runtime-env":
       if (process.env.OPENLOOMI_TEST_HOOKS === "1") {
         writeJson(await ensureCodexRuntimeEnvForLaunch());
+      } else {
+        writeJson({ error: "TEST_HOOKS_DISABLED" }, 1);
+      }
+      break;
+    case "__test-windows-image-name":
+      if (process.env.OPENLOOMI_TEST_HOOKS === "1") {
+        const testAppPath = process.argv[3] || "";
+        writeJson({
+          appPath: testAppPath,
+          binName: desktopProcessBinName(testAppPath),
+          imageName: windowsProcessImageName(testAppPath),
+        });
       } else {
         writeJson({ error: "TEST_HOOKS_DISABLED" }, 1);
       }

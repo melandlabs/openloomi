@@ -1039,6 +1039,40 @@ test("setup with --yes proceeds past the install step (not INSTALL_CONFIRMATION_
   });
 });
 
+test("setup on Windows stops after one manual runtime env attempt", () => {
+  if (process.platform !== "win32") return;
+  withFakeHome((env) => {
+    const fakeApp = join(env.LOCALAPPDATA, "OpenLoomi", "openloomi.exe");
+    mkdirSync(dirname(fakeApp), { recursive: true });
+    writeFileSync(fakeApp, "");
+
+    const r = runOutcome(
+      [
+        "setup",
+        "--yes",
+        "--bin-path",
+        fakeApp,
+        "--api-timeout",
+        "100",
+        "--permission-timeout",
+        "0",
+      ],
+      {
+        ...env,
+        OPENLOOMI_AGENT_PROVIDER: "",
+      },
+    );
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.setup, "runtime_env_manual_required");
+    assert.equal(j.reason, "WINDOWS_RUNTIME_ENV_MANUAL");
+    assert.equal(j.nextAction, "set_runtime_env_manually");
+    assert.ok(
+      j.steps.filter((step) => step.step === "runtime_env_write").length <= 1,
+      "setup should not repeat no-op Windows env writes",
+    );
+  });
+});
+
 test("setup records steps in chronological order and timestamps are monotonic", () => {
   withFakeHome((env) => {
     const r = runOutcome(["setup"], env);
@@ -1766,6 +1800,24 @@ test("__test-ensure-runtime-env on Linux writes codex + persists when unset", ()
   });
 });
 
+test("__test-windows-image-name preserves an existing .exe suffix", () => {
+  const j = runJson([
+    "__test-windows-image-name",
+    "C:\\Users\\Example\\AppData\\Local\\OpenLoomi\\openloomi.exe",
+  ]);
+  assert.equal(j.binName, "openloomi.exe");
+  assert.equal(j.imageName, "openloomi.exe");
+});
+
+test("__test-windows-image-name appends .exe only when missing", () => {
+  const j = runJson([
+    "__test-windows-image-name",
+    "C:\\Users\\Example\\AppData\\Local\\OpenLoomi\\openloomi",
+  ]);
+  assert.equal(j.binName, "openloomi");
+  assert.equal(j.imageName, "openloomi.exe");
+});
+
 test("__test-launch-desktop rejects no appPath with NO_LAUNCH_TARGET", () => {
   // No appPath argument -> the helper must bail with NO_LAUNCH_TARGET
   // BEFORE calling ensureCodexRuntimeEnvForLaunch. We can't easily
@@ -1806,6 +1858,22 @@ test("__test-launch-desktop is gated by OPENLOOMI_TEST_HOOKS", () => {
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+test("__test-launch-desktop skips spawn when process is already running", () => {
+  const fakeAppPath = join(
+    tmpdir(),
+    "openloomi-already-running",
+    "openloomi.exe",
+  );
+  const j = runJson(["__test-launch-desktop", fakeAppPath], {
+    OPENLOOMI_TEST_FORCE_APP_RUNNING: "1",
+  });
+  assert.equal(j.ok, true);
+  assert.equal(j.code, "ALREADY_RUNNING");
+  assert.equal(j.launched, false);
+  assert.equal(j.alreadyRunning, true);
+  assert.equal(j.via, "process-probe");
 });
 
 test("__test-launch-desktop with a real-looking path carries env wiring result", () => {
