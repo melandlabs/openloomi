@@ -14,6 +14,7 @@ import {
   buildCodexRunCommand,
   CodexCommandNotFoundError,
   normalizeCodexProviderConfig,
+  resolveCodexSandboxMode,
 } from "@/lib/ai/extensions/agent/codex/command";
 import { parseCodexJsonLine } from "@/lib/ai/extensions/agent/codex/parser";
 
@@ -49,11 +50,35 @@ describe("Codex command builder", () => {
       "-m",
       "gpt-5.4",
       "--sandbox",
-      "workspace-write",
+      process.platform === "darwin" ? "danger-full-access" : "workspace-write",
       "--skip-git-repo-check",
       "fix the failing tests",
     ]);
     expect(command.args).not.toContain("--full-auto");
+  });
+
+  it("runs macOS execution turns without the workspace-write sandbox", () => {
+    for (const mode of ["run", "execute"] as const) {
+      for (const configuredSandbox of [undefined, "workspace-write"] as const) {
+        expect(resolveCodexSandboxMode(mode, configuredSandbox, "darwin")).toBe(
+          "danger-full-access",
+        );
+      }
+    }
+  });
+
+  it("preserves an explicit read-only sandbox for macOS execution", () => {
+    expect(resolveCodexSandboxMode("execute", "read-only", "darwin")).toBe(
+      "read-only",
+    );
+  });
+
+  it("keeps workspace-write as the Linux and Windows execution default", () => {
+    for (const platform of ["linux", "win32"] as const) {
+      expect(resolveCodexSandboxMode("run", undefined, platform)).toBe(
+        "workspace-write",
+      );
+    }
   });
 
   it("forces read-only sandbox and skips --full-auto during planning", () => {
@@ -69,6 +94,9 @@ describe("Codex command builder", () => {
     expect(sandboxIdx).toBeGreaterThan(-1);
     expect(command.args[sandboxIdx + 1]).toBe("read-only");
     expect(command.args).not.toContain("--full-auto");
+    expect(
+      resolveCodexSandboxMode("plan", "danger-full-access", "darwin"),
+    ).toBe("read-only");
   });
 
   it("passes --full-auto only for bypassPermissions with explicit provider opt-in", () => {
@@ -489,7 +517,9 @@ describe("CodexAgent", () => {
     ) as string[];
     expect(args).toContain("--json");
     expect(args).toContain("--sandbox");
-    expect(args).toContain("workspace-write");
+    expect(args).toContain(
+      process.platform === "darwin" ? "danger-full-access" : "workspace-write",
+    );
     // Codex CLI 0.144 dropped `--ask-for-approval`; the argv no longer
     // carries an approval flag.
     expect(args).not.toContain("--ask-for-approval");

@@ -27,7 +27,7 @@ export const CODEX_CONFIG_SCHEMA = {
           type: "string",
           enum: ["read-only", "workspace-write", "danger-full-access"],
           description:
-            "Sandbox mode forwarded to the Codex CLI. Defaults to read-only during planning and workspace-write during execution.",
+            "Sandbox mode forwarded to the Codex CLI. Planning always uses read-only. Execution defaults to workspace-write, which OpenLoomi maps to danger-full-access on macOS so Codex can reach local and remote services.",
         },
         askForApproval: {
           type: "string",

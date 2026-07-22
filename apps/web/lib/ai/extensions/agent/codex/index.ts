@@ -54,10 +54,11 @@ export {
  * and projects the Codex item lifecycle into OpenLoomi AgentMessage events.
  *
  * The agent follows the same planning / execution contract as the OpenCode
- * adapter: planning forces `read-only` sandbox and disables `--full-auto`,
- * execution defaults to `workspace-write`, and `--full-auto` only fires when
- * both OpenLoomi permissionMode is `bypassPermissions` and the provider
- * config explicitly opts in.
+ * adapter: planning forces `read-only` sandbox and disables `--full-auto`.
+ * Execution defaults to `workspace-write` on Linux/Windows and
+ * `danger-full-access` on macOS so local and remote services remain reachable.
+ * `--full-auto` only fires when both OpenLoomi permissionMode is
+ * `bypassPermissions` and the provider config explicitly opts in.
  */
 export class CodexAgent extends BaseAgent {
   readonly provider: AgentProvider = "codex";

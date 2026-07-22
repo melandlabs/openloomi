@@ -4276,7 +4276,7 @@ const CODEX_RUNTIME_COMPANION_ENV_VARS = [
   {
     name: "OPENLOOMI_AGENT_CODEX_SANDBOX",
     description:
-      "`read-only` | `workspace-write` | `danger-full-access` (default `workspace-write`; plan phase is always forced to `read-only`).",
+      "`read-only` | `workspace-write` | `danger-full-access` (plan is always `read-only`; macOS run/execute maps `workspace-write` to `danger-full-access`).",
   },
   {
     name: "OPENLOOMI_AGENT_CODEX_ASK_FOR_APPROVAL",

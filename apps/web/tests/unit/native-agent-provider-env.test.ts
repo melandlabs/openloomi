@@ -490,7 +490,9 @@ describe("native agent provider env resolver", () => {
       providerConfig: request.providerConfig,
     });
     expect(command.args).toContain("--sandbox");
-    expect(command.args).toContain("workspace-write");
+    expect(command.args).toContain(
+      process.platform === "darwin" ? "danger-full-access" : "workspace-write",
+    );
     expect(command.args).toContain("--skip-git-repo-check");
     expect(command.args).not.toContain("--full-auto");
   });

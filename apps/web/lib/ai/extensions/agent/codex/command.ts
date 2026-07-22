@@ -23,6 +23,8 @@ export type CodexApprovalPolicy =
   | "on-request"
   | "never";
 
+export type CodexRunMode = "run" | "plan" | "execute";
+
 export interface CodexProviderConfig {
   codexPath?: string;
   profile?: string;
@@ -50,7 +52,7 @@ export interface CodexRunCommandOptions {
    * Planning-mode callers pass `plan` to force `read-only` sandbox and disable
    * `--full-auto`. The plan/execute contract mirrors the OpenCode runtime.
    */
-  mode?: "run" | "plan" | "execute";
+  mode?: CodexRunMode;
   providerConfig?: Record<string, unknown>;
 }
 
@@ -139,6 +141,34 @@ export function normalizeCodexProviderConfig(
 }
 
 /**
+ * Resolve the sandbox that OpenLoomi passes to `codex exec`.
+ *
+ * Codex's macOS `workspace-write` sandbox blocks all outbound networking,
+ * including loopback requests to OpenLoomi's local API. OpenLoomi therefore
+ * runs execution turns without that sandbox on macOS. The explicit
+ * `danger-full-access` value is intentional: omitting `--sandbox` would let a
+ * Codex profile or CLI default silently re-enable the network-blocking sandbox.
+ * Planning remains read-only, and an explicitly configured read-only sandbox
+ * is preserved.
+ */
+export function resolveCodexSandboxMode(
+  mode: CodexRunMode,
+  configuredSandbox: CodexSandboxMode | undefined,
+  platform: NodeJS.Platform = process.platform,
+): CodexSandboxMode {
+  if (mode === "plan") {
+    return "read-only";
+  }
+
+  const sandbox = configuredSandbox ?? "workspace-write";
+  if (platform === "darwin" && sandbox === "workspace-write") {
+    return "danger-full-access";
+  }
+
+  return sandbox;
+}
+
+/**
  * Build the `codex exec --json ...` argv. Every provider-configurable value
  * passes through normalization first so unexpected input cannot inject Codex
  * flags or override `--full-auto`/`--sandbox` policy decisions.
@@ -157,12 +187,7 @@ export function buildCodexRunCommand(
   if (options.model) {
     args.push("-m", options.model);
   }
-  args.push(
-    "--sandbox",
-    mode === "plan"
-      ? "read-only"
-      : (providerConfig.sandbox ?? "workspace-write"),
-  );
+  args.push("--sandbox", resolveCodexSandboxMode(mode, providerConfig.sandbox));
   if (providerConfig.skipGitRepoCheck) {
     args.push("--skip-git-repo-check");
   }
