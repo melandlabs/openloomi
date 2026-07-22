@@ -10,7 +10,10 @@ import {
 } from "@/lib/db/queries";
 import { isTauriMode } from "@/lib/env/constants";
 import { getConfiguredDefaultAgentProvider } from "@/lib/ai/native-agent/provider-env";
-import { probeNativeClaudeRuntime } from "@/lib/ai/native-agent/runtime-probe";
+import {
+  probeNativeClaudeRuntime,
+  type NativeRuntimeProbe,
+} from "@/lib/ai/native-agent/runtime-probe";
 import { AppError } from "@openloomi/shared/errors";
 
 const providerTypeSchema = z.enum([
@@ -150,6 +153,21 @@ function invalidPayloadResponse() {
   ).toResponse();
 }
 
+async function probeDefaultNativeRuntime(
+  defaultAgent: string,
+): Promise<NativeRuntimeProbe | null> {
+  if (defaultAgent !== "claude") {
+    return null;
+  }
+
+  try {
+    return await probeNativeClaudeRuntime();
+  } catch (error) {
+    console.warn("[AI Preferences] Native Claude runtime probe failed", error);
+    return null;
+  }
+}
+
 export async function GET() {
   const session = await auth().catch(() => null);
   if (!session?.user?.id && !isTauriMode()) {
@@ -161,8 +179,8 @@ export async function GET() {
   // local `claude` CLI auth, not from `process.env.ANTHROPIC_*`. The plugin
   // and the GUI use this field to decide whether the user needs to run
   // `claude auth login` or configure a custom endpoint.
-  const nativeRuntime = await probeNativeClaudeRuntime();
   const defaultAgent = getConfiguredDefaultAgentProvider();
+  const nativeRuntime = await probeDefaultNativeRuntime(defaultAgent);
 
   // Tauri mode may reach this handler before the user has finished guest
   // login (the pet card webview is a separate origin from the main webview

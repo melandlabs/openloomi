@@ -168,10 +168,13 @@ function runCli(
   return new Promise((resolve) => {
     let timedOut = false;
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const settle = (result: ProbeResult) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
       resolve(result);
     };
 
@@ -203,7 +206,7 @@ function runCli(
     proc.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
     proc.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
 
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       timedOut = true;
       try {
         proc.kill("SIGKILL");
