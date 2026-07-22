@@ -41,7 +41,7 @@ describe("probeNativeClaudeRuntime", () => {
 
   afterEach(() => {
     clearNativeClaudeRuntimeCache();
-    delete process.env.CLAUDE_CODE_PATH;
+    process.env.CLAUDE_CODE_PATH = undefined;
   });
 
   test("returns a structured failure when spawning claude fails synchronously", async () => {
