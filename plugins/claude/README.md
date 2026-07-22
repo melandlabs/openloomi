@@ -118,6 +118,13 @@ if you want to land on `/loop` directly. The flag is unset if you
 double-click the desktop icon, so standalone sessions keep their
 long-standing one-click-to-dashboard behaviour.
 
+The env write is recorded in `steps[]` as `launch_mode_env` immediately
+before the corresponding `launch` / `launch_gui` entry. Operators can
+read the audit trail to confirm whether the wizard actually tagged the
+desktop process — failures here are non-fatal (the spawn still succeeds;
+pet left-click falls back to standalone behaviour) so the step carries
+`{ ok, platform, method, error? }` rather than blocking `ready`.
+
 The only thing it ever prompts for is the install y/N — and only if the
 shell has a TTY. From Claude Code's Bash tool you pass `--yes`.
 

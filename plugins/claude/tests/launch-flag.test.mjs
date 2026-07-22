@@ -80,6 +80,10 @@ test("launch-mode-info documents the OPENLOOMI_LAUNCH_MODE contract", () => {
   // Cross-reference the Rust file that consumes the env var so a
   // rename in either place fails this test.
   assert.match(j.consumerFile, /launch_mode\.rs$/);
+  // The setup state machine records this name in its audit trail.
+  // Operators rely on it to confirm the wizard surfaced the env
+  // write — a renamed step would orphan `steps[]` lookups.
+  assert.equal(j.auditStep, "launch_mode_env");
   // Every platform should have a non-empty per-platform note.
   assert.equal(typeof j.perPlatform.darwin, "string");
   assert.ok(j.perPlatform.darwin.length > 0);
@@ -222,5 +226,62 @@ test("launchDesktopApp injects OPENLOOMI_LAUNCH_MODE into spawn env on Linux", (
   assert.ok(
     Array.isArray(linuxEnvMentions) && linuxEnvMentions.length >= 1,
     "expected the Linux spawn site(s) to inject OPENLOOMI_LAUNCH_MODE into env",
+  );
+});
+
+// -----------------------------------------------------------------------------
+// launchDesktopApp surfaces `launchMode` so the setup audit trail
+// can record the env write as its own step.
+//
+// Without this, the setup state machine can only see `{ ok, code, via }`
+// and the launch-mode env write (which can fail independently of the
+// spawn on macOS TCC prompts) becomes invisible to operators reading
+// `steps[]`. The contract is: `launchDesktopApp`'s return value MUST
+// include `launchMode: { ok, platform, method, error? }` whenever the
+// helper was actually invoked.
+// -----------------------------------------------------------------------------
+
+test("launchDesktopApp attaches launchMode to its return value", () => {
+  const source = readBridgeSource();
+  const funcIdx = source.indexOf("async function launchDesktopApp");
+  assert.ok(funcIdx >= 0, "launchDesktopApp not found in bridge source");
+  const funcBody = source.slice(funcIdx);
+  // The function must spread the spawn result and tack on `launchMode`
+  // bound to `launchModeEnvResult` — that is the single source of truth
+  // for the audit step.
+  assert.match(
+    funcBody,
+    /return\s*\{\s*\.\.\.spawnResult,\s*launchMode:\s*launchModeEnvResult\s*\}/,
+    "expected launchDesktopApp to return { ...spawnResult, launchMode: launchModeEnvResult }",
+  );
+});
+
+test("setup state machine records launch_mode_env at every launchDesktopApp call site", () => {
+  // Three launch sites in the setup loop:
+  //   1. `launch_gui` (GUI not running yet)
+  //   2. `launch`     (OPENLOOMI_NOT_FINALIZED branch)
+  //   3. `launch`     (apiReachable branch)
+  // Each one must record `launch_mode_env` BEFORE the launch record
+  // so the audit trail is chronological (env write → spawn).
+  const source = readBridgeSource();
+  // The setup wizard lives inside `case "setup":` of the main
+  // dispatcher, not a standalone `runSetup` helper. Slice from
+  // that marker so we count call sites only inside the wizard.
+  const setupIdx = source.indexOf('case "setup"');
+  assert.ok(setupIdx >= 0, '`case "setup"` not found in bridge source');
+  const setupBody = source.slice(setupIdx);
+  // Count call sites for `launchDesktopApp` — every one must have a
+  // matching `launch_mode_env` record immediately after.
+  const callSites = setupBody.match(/launchDesktopApp\s*\(\s*\{/g) || [];
+  const auditSteps = setupBody.match(/record\(\s*"launch_mode_env"/g) || [];
+  assert.ok(
+    callSites.length >= 2,
+    `expected at least 2 launchDesktopApp call sites in the setup wizard, found ${callSites.length}`,
+  );
+  assert.equal(
+    auditSteps.length,
+    callSites.length,
+    `expected one launch_mode_env record per launchDesktopApp call site ` +
+      `(found ${auditSteps.length} audit records vs ${callSites.length} call sites)`,
   );
 });

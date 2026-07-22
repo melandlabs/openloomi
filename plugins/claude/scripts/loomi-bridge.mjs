@@ -1588,8 +1588,8 @@ async function readBundleVersion(appPath) {
   // Try plutil first — it prints a stable `key: "value"` text format.
   const r = await runBin("plutil", ["-p", infoPlist], { timeoutMs: 3000 });
   if (r.ok && r.stdout) {
-    // plutil output is like:  "CFBundleShortVersionString" => "0.8.6"
-    // or (older):            CFBundleShortVersionString = "0.8.6"
+    // plutil output is like:  "CFBundleShortVersionString" => "0.8.5"
+    // or (older):            CFBundleShortVersionString = "0.8.5"
     const m = r.stdout.match(
       /["']?CFBundleShortVersionString["']?\s*(?:=>|=)\s*["']([^"']+)["']/,
     );
@@ -1634,8 +1634,8 @@ async function readBinVersion(binPath) {
   // --version is safe and doesn't flash a GUI.
   const r = await runBin(binPath, ["--version"], { timeoutMs: 5000 });
   if (!r.ok) return null;
-  // Match a semver-ish version (e.g. "0.8.6", "1.2.3-rc.1") anywhere in
-  // the --version output. Real binaries print "<name> 0.8.6"; tests
+  // Match a semver-ish version (e.g. "0.8.5", "1.2.3-rc.1") anywhere in
+  // the --version output. Real binaries print "<name> 0.8.5"; tests
   // just print "9.9.9" — both should parse.
   const m = (r.stdout || "").match(/(\d+\.\d+\.\d+(?:[-+][\w.\-]+)?)/);
   return m ? m[1].trim() : (r.stdout || "").trim();
@@ -2889,7 +2889,7 @@ async function launchDesktopApp({ desktopMarker, binPath } = {}) {
     // without it (e.g. by a hook that scrubbed the env).
     spawnEnv = { ...process.env, OPENLOOMI_LAUNCH_MODE: "plugin" };
   }
-  return await new Promise((resolve) => {
+  const spawnResult = await new Promise((resolve) => {
     let stderr = "";
     let stdout = "";
     let child;
@@ -2947,6 +2947,13 @@ async function launchDesktopApp({ desktopMarker, binPath } = {}) {
       2000,
     ).unref();
   });
+  // Surface `launchMode` so callers (notably the setup state machine)
+  // can record it as a distinct audit step. The env write is logically
+  // a separate action from the spawn — they have different failure
+  // modes (e.g. macOS TCC blocking `launchctl setenv` succeeds the
+  // spawn but loses the signal) and different operators (env state
+  // vs process state). Merging them into one step would obscure both.
+  return { ...spawnResult, launchMode: launchModeEnvResult };
 }
 
 // Polls the local OpenLoomi HTTP API until it responds, or the timeout
@@ -3061,6 +3068,12 @@ async function main() {
         // key matches what the desktop reads in `launch_mode.rs`.
         helper: "ensureLaunchModeEnvForLaunch",
         consumerFile: "apps/web/src-tauri/src/launch_mode.rs",
+        // Name of the audit step the setup state machine records
+        // when `launchDesktopApp` runs the helper. Lets operators
+        // and tests confirm the wizard surfaces this side-band —
+        // it isn't merged into `launch` / `launch_gui` because it
+        // has a distinct failure mode (env write vs process spawn).
+        auditStep: "launch_mode_env",
       });
       return;
     }
@@ -3131,6 +3144,15 @@ async function main() {
             desktopMarker: status.desktopMarker,
             binPath: status.binPath,
           });
+          // The env write happens before the spawn in `launchDesktopApp`,
+          // so record it first — the audit trail is chronological.
+          if (launch.launchMode) {
+            record("launch_mode_env", launch.launchMode.ok, {
+              platform: launch.launchMode.platform,
+              method: launch.launchMode.method,
+              error: launch.launchMode.error,
+            });
+          }
           record("launch_gui", launch.ok, {
             code: launch.code,
             via: launch.via,
@@ -3213,6 +3235,13 @@ async function main() {
             desktopMarker: status.desktopMarker,
             binPath: status.binPath,
           });
+          if (launch.launchMode) {
+            record("launch_mode_env", launch.launchMode.ok, {
+              platform: launch.launchMode.platform,
+              method: launch.launchMode.method,
+              error: launch.launchMode.error,
+            });
+          }
           record("launch", launch.ok, { code: launch.code, via: launch.via });
           if (!launch.ok) {
             out({ ok: false, setup: "launch_failed", steps, launch, status });
@@ -3305,6 +3334,13 @@ async function main() {
             desktopMarker: status.desktopMarker,
             binPath: status.binPath,
           });
+          if (launch.launchMode) {
+            record("launch_mode_env", launch.launchMode.ok, {
+              platform: launch.launchMode.platform,
+              method: launch.launchMode.method,
+              error: launch.launchMode.error,
+            });
+          }
           record("launch", launch.ok, { code: launch.code, via: launch.via });
           if (!launch.ok) {
             out({ ok: false, setup: "launch_failed", steps, launch, status });
