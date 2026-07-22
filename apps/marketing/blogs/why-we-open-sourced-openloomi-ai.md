@@ -161,11 +161,11 @@ Star the repo, read the source, open issues, or fork it — everything lives the
 
 | Platform            | Download                                                                                                   |
 | ------------------- | ---------------------------------------------------------------------------------------------------------- |
-| macOS Apple Silicon | [.dmg](https://github.com/melandlabs/openloomi/releases/download/v0.8.5/openloomi_0.8.5_macOS_aarch64.dmg) |
-| macOS Intel         | [.dmg](https://github.com/melandlabs/openloomi/releases/download/v0.8.5/openloomi_0.8.5_macOS_amd64.dmg)   |
-| Linux AMD64         | [.deb](https://github.com/melandlabs/openloomi/releases/download/v0.8.5/openloomi_0.8.5_linux_amd64.deb)   |
-| Linux ARM64         | [.deb](https://github.com/melandlabs/openloomi/releases/download/v0.8.5/openloomi_0.8.5_linux_aarch64.deb) |
-| Windows             | [.exe](https://github.com/melandlabs/openloomi/releases/download/v0.8.5/openloomi_0.8.5_windows_amd64.exe) |
+| macOS Apple Silicon | [.dmg](https://github.com/melandlabs/openloomi/releases/download/v0.8.6/openloomi_0.8.6_macOS_aarch64.dmg) |
+| macOS Intel         | [.dmg](https://github.com/melandlabs/openloomi/releases/download/v0.8.6/openloomi_0.8.6_macOS_amd64.dmg)   |
+| Linux AMD64         | [.deb](https://github.com/melandlabs/openloomi/releases/download/v0.8.6/openloomi_0.8.6_linux_amd64.deb)   |
+| Linux ARM64         | [.deb](https://github.com/melandlabs/openloomi/releases/download/v0.8.6/openloomi_0.8.6_linux_aarch64.deb) |
+| Windows             | [.exe](https://github.com/melandlabs/openloomi/releases/download/v0.8.6/openloomi_0.8.6_windows_amd64.exe) |
 
 Or clone and run it yourself:
 
