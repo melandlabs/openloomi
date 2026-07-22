@@ -20,6 +20,7 @@ import type { DocumentChunk } from "@openloomi/rag/vector-service";
 import {
   createUserEmbeddingProvider,
   getUserEmbeddingModelName,
+  hasUserEmbeddingProviderConfig,
 } from "@/lib/ai/user-embedding-settings";
 
 // Re-export for consumers of langchain-service
@@ -350,6 +351,15 @@ export async function searchSimilarChunks(
   authToken?: string, // User's JWT token for authentication in local mode
 ): Promise<SearchResult[]> {
   const { limit = 5, threshold = 0.7, documentIds } = options;
+
+  // Guard: surface a clear "no provider configured" error instead of letting
+  // the request reach OpenRouter with no/invalid credentials and surface a
+  // misleading 401 "Missing Authentication header".
+  if (!(await hasUserEmbeddingProviderConfig({ userId, authToken }))) {
+    throw new Error(
+      "Embedding provider is not configured. Set OPENROUTER_API_KEY, configure a user-level embedding provider, or switch to EMBEDDING_PROVIDER=local.",
+    );
+  }
 
   // 1. Generate embedding for query
   const embeddings = await getEmbeddings(userId, authToken);

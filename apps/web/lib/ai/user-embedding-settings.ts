@@ -79,9 +79,18 @@ export async function getUserEmbeddingModelName(
 
 export async function hasUserEmbeddingProviderConfig({
   userId,
-  authToken,
+  authToken: _authToken,
 }: {
   userId?: string;
+  /**
+   * Kept for backward compatibility with existing callers. Intentionally
+   * ignored for the cloud check: the user's session JWT is a NextAuth token,
+   * not an OpenRouter API key, so treating it as a valid cloud credential
+   * causes requests to hit OpenRouter with an invalid Bearer and surface a
+   * misleading 401 "Missing Authentication header" instead of a clear
+   * "no provider configured" error. For local mode (which never needs a
+   * key) the check below already short-circuits.
+   */
   authToken?: string;
 }): Promise<boolean> {
   const config = await getUserEmbeddingRuntimeConfig(userId);
@@ -91,7 +100,5 @@ export async function hasUserEmbeddingProviderConfig({
     return true;
   }
 
-  return Boolean(
-    config?.cloud?.apiKey || authToken || process.env.OPENROUTER_API_KEY,
-  );
+  return Boolean(config?.cloud?.apiKey || process.env.OPENROUTER_API_KEY);
 }
