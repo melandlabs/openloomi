@@ -449,7 +449,8 @@ describe("native agent provider env resolver", () => {
     expect(command.args).not.toContain("--ask-for-approval");
     expect(command.args).not.toContain("--skip-git-repo-check");
     expect(command.args).toContain("--full-auto");
-    expect(command.args.at(-1)).toBe("fix the failing tests");
+    expect(command.args).not.toContain("fix the failing tests");
+    expect(command.stdin).toBe("fix the failing tests");
   });
 
   it("rejects unsupported Codex sandbox env values and silently ignores ASK_FOR_APPROVAL", () => {

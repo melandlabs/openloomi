@@ -52,8 +52,8 @@ describe("Codex command builder", () => {
       "--sandbox",
       process.platform === "darwin" ? "danger-full-access" : "workspace-write",
       "--skip-git-repo-check",
-      "fix the failing tests",
     ]);
+    expect(command.stdin).toBe("fix the failing tests");
     expect(command.args).not.toContain("--full-auto");
   });
 
@@ -108,7 +108,7 @@ describe("Codex command builder", () => {
     });
 
     expect(command.args).toContain("--full-auto");
-    expect(command.args.at(-1)).toBe("ship it");
+    expect(command.stdin).toBe("ship it");
   });
 
   it("does not pass --full-auto for bypassPermissions without explicit opt-in", () => {
@@ -524,10 +524,13 @@ describe("CodexAgent", () => {
     // carries an approval flag.
     expect(args).not.toContain("--ask-for-approval");
     expect(args).toContain("--skip-git-repo-check");
-    expect(args.at(-1)).toBe("hello codex");
+    expect(args).not.toContain("hello codex");
+    expect(await readFile(join(workDir, "stdin.txt"), "utf8")).toBe(
+      "hello codex",
+    );
   });
 
-  it("embeds conversation context into the Codex prompt", async () => {
+  it("writes multiline conversation context to Codex stdin", async () => {
     const workDir = await createFakeCodexWorkDir(defaultFakeCodexScript());
     const agent = new CodexAgent({
       provider: "codex",
@@ -538,8 +541,8 @@ describe("CodexAgent", () => {
     await collectMessages(
       agent.run("current question", {
         conversation: [
-          { role: "user", content: "earlier question" },
-          { role: "assistant", content: "earlier answer" },
+          { role: "user", content: "之前的问题\n还有第二行" },
+          { role: "assistant", content: "飞书连接于六月十五日" },
         ],
       }),
     );
@@ -547,10 +550,52 @@ describe("CodexAgent", () => {
     const args = JSON.parse(
       await readFile(join(workDir, "args.json"), "utf8"),
     ) as string[];
-    const prompt = args.at(-1) ?? "";
-    expect(prompt).toEqual(expect.stringContaining("earlier question"));
+    const prompt = await readFile(join(workDir, "stdin.txt"), "utf8");
+    expect(args).not.toContain(prompt);
+    expect(prompt).toEqual(expect.stringContaining("之前的问题\n还有第二行"));
+    expect(prompt).toEqual(expect.stringContaining("飞书连接于六月十五日"));
     expect(prompt).toEqual(expect.stringContaining("current question"));
   });
+
+  it.skipIf(process.platform !== "win32")(
+    "preserves multiline conversation context through a Windows cmd shim",
+    async () => {
+      const workDir = await createFakeCodexWorkDir(defaultFakeCodexScript());
+      const shimPath = join(workDir, "fake-codex.cmd");
+      await writeFile(
+        shimPath,
+        `@ECHO off\r\n"${process.execPath}" "${join(workDir, "exec")}" %*\r\n`,
+        "utf8",
+      );
+      const agent = new CodexAgent({
+        provider: "codex",
+        workDir,
+        providerConfig: { codexPath: shimPath },
+      });
+
+      await collectMessages(
+        agent.run("飞书是什么时候连接的？", {
+          conversation: [
+            { role: "user", content: "帮我检查连接状态" },
+            {
+              role: "assistant",
+              content: "飞书连接于 2026 年 6 月 15 日。",
+            },
+          ],
+        }),
+      );
+
+      const args = JSON.parse(
+        await readFile(join(workDir, "args.json"), "utf8"),
+      ) as string[];
+      const prompt = await readFile(join(workDir, "stdin.txt"), "utf8");
+      expect(args.join(" ")).not.toContain("openloomi_conversation_history");
+      expect(prompt).toContain("飞书连接于 2026 年 6 月 15 日。");
+      expect(prompt).toContain(
+        "[current_user_request]\n飞书是什么时候连接的？",
+      );
+    },
+  );
 
   it("converts a nonzero CLI exit into an error message", async () => {
     const workDir = await createFakeCodexWorkDir(`
@@ -930,25 +975,32 @@ function defaultFakeCodexScript() {
   // thread.started -> item.started (command_execution) -> item.completed
   // (agent_message + command_execution) -> turn.completed (with usage).
   return `
+const fs = require("node:fs");
 const args = process.argv.slice(2);
-require("node:fs").writeFileSync("args.json", JSON.stringify(args));
-console.log(JSON.stringify({ type: "thread.started", thread_id: "thread-1" }));
-console.log(JSON.stringify({
-  type: "item.started",
-  item: { type: "command_execution", id: "cmd-1", command: "pwd" }
-}));
-console.log(JSON.stringify({
-  type: "item.completed",
-  item: { type: "command_execution", id: "cmd-1", command: "pwd", aggregated_output: "/workspace\\n", exit_code: 0, status: "completed" }
-}));
-console.log(JSON.stringify({
-  type: "item.completed",
-  item: { type: "agent_message", id: "msg-1", text: "hello" }
-}));
-console.log(JSON.stringify({
-  type: "turn.completed",
-  usage: { input_tokens: 9, cached_input_tokens: 4, output_tokens: 4 }
-}));
+fs.writeFileSync("args.json", JSON.stringify(args));
+let stdin = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => { stdin += chunk; });
+process.stdin.on("end", () => {
+  fs.writeFileSync("stdin.txt", stdin);
+  console.log(JSON.stringify({ type: "thread.started", thread_id: "thread-1" }));
+  console.log(JSON.stringify({
+    type: "item.started",
+    item: { type: "command_execution", id: "cmd-1", command: "pwd" }
+  }));
+  console.log(JSON.stringify({
+    type: "item.completed",
+    item: { type: "command_execution", id: "cmd-1", command: "pwd", aggregated_output: "/workspace\\n", exit_code: 0, status: "completed" }
+  }));
+  console.log(JSON.stringify({
+    type: "item.completed",
+    item: { type: "agent_message", id: "msg-1", text: "hello" }
+  }));
+  console.log(JSON.stringify({
+    type: "turn.completed",
+    usage: { input_tokens: 9, cached_input_tokens: 4, output_tokens: 4 }
+  }));
+});
 `;
 }
 

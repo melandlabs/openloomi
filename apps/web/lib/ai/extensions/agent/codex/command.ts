@@ -59,6 +59,13 @@ export interface CodexRunCommandOptions {
 export interface CodexRunCommand {
   command: string;
   args: string[];
+  /**
+   * Prompt payload written to the child process stdin.
+   *
+   * Keep this out of argv: on Windows, npm's `codex.cmd` shim is launched
+   * through `cmd.exe`, which truncates arguments containing literal newlines.
+   */
+  stdin: string;
 }
 
 export type CodexCliEvent =
@@ -169,9 +176,11 @@ export function resolveCodexSandboxMode(
 }
 
 /**
- * Build the `codex exec --json ...` argv. Every provider-configurable value
- * passes through normalization first so unexpected input cannot inject Codex
- * flags or override `--full-auto`/`--sandbox` policy decisions.
+ * Build the `codex exec --json ...` invocation. Every provider-configurable
+ * value passes through normalization first so unexpected input cannot inject
+ * Codex flags or override `--full-auto`/`--sandbox` policy decisions. The
+ * prompt is returned separately and written to stdin by `runCodexCli` so
+ * multiline conversation context survives Windows npm `.cmd` shims.
  */
 export function buildCodexRunCommand(
   options: CodexRunCommandOptions,
@@ -203,11 +212,10 @@ export function buildCodexRunCommand(
     args.push("--", ...providerConfig.extraArgs);
   }
 
-  args.push(options.prompt);
-
   return {
     command: providerConfig.codexPath || "codex",
     args,
+    stdin: options.prompt,
   };
 }
 
@@ -216,6 +224,7 @@ export async function* runCodexCli(
   args: string[],
   options: {
     cwd: string;
+    stdin: string;
     env?: Record<string, string>;
     signal?: AbortSignal;
     timeoutMs?: number;
@@ -231,6 +240,7 @@ export async function* runCodexCli(
   let timedOut = false;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let spawnError: Error | undefined;
+  let stdinError: Error | undefined;
   let proc: ChildProcessWithoutNullStreams;
   const stdoutDecoder = new StringDecoder("utf8");
   const stderrDecoder = new StringDecoder("utf8");
@@ -253,14 +263,15 @@ export async function* runCodexCli(
       detached: shouldDetachCliProcess(),
       windowsHide: true,
     }) as ChildProcessWithoutNullStreams;
-    // Codex CLI 0.144+ reads the prompt from argv but ALSO blocks waiting
-    // for stdin to reach EOF whenever stdin is a piped stream (e.g.
-    // `node`'s default `pipe` stdio). Without this explicit close the
-    // child process hangs in "Reading additional input from stdin..."
-    // forever and the SSE stream never receives any events. We never write
-    // to stdin ourselves (the prompt is passed positionally), so closing
-    // it immediately is safe and signals EOF to the CLI.
-    proc.stdin.end();
+    // Codex officially reads its prompt from stdin when no positional prompt
+    // is supplied. This also avoids the Windows `cmd.exe`/npm-shim path, which
+    // truncates multiline argv values at the first newline. Attach an error
+    // listener before writing so a failed prompt delivery cannot surface as
+    // an unhandled EPIPE.
+    proc.stdin.on("error", (error: Error) => {
+      stdinError = error;
+    });
+    proc.stdin.end(options.stdin, "utf8");
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     if (isCommandNotFoundError(err)) {
@@ -340,6 +351,14 @@ export async function* runCodexCli(
     if (stdoutBuffer.trim()) {
       push({ type: "line", line: stdoutBuffer });
       stdoutBuffer = "";
+    }
+    // Prefer the provider's own stderr/exit status for failed processes. If
+    // the provider nevertheless reports success after stdin delivery failed,
+    // fail the run explicitly instead of silently executing an empty prompt.
+    if (!timedOut && code === 0 && stdinError) {
+      spawnError = new Error(
+        `Failed to write Codex prompt to stdin: ${stdinError.message}`,
+      );
     }
     push({
       type: "close",
