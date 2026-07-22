@@ -1908,3 +1908,49 @@ test("__test-launch-desktop with a real-looking path carries env wiring result",
     rmSync(fakeAppDir, { recursive: true, force: true });
   }
 });
+
+// -----------------------------------------------------------------------------
+// OPENLOOMI_LAUNCH_MODE=plugin side-band surfaces in the launch envelope
+//
+// `ensureCodexRuntimeEnvForLaunch` does two env writes before spawning:
+// the main `OPENLOOMI_AGENT_PROVIDER=codex` write (already covered above)
+// and the pet-click routing side-band `OPENLOOMI_LAUNCH_MODE=plugin`.
+// Both must reach `launchDesktopApp`'s `env` field so the setup state
+// machine can record them in the `launch` audit step. Without
+// `env.launchMode`, operators reading `steps[]` would have no way to
+// confirm whether the wizard actually tagged the desktop process for
+// the compact-card routing — the failure was previously swallowed into
+// console.warn only.
+// -----------------------------------------------------------------------------
+
+test("__test-launch-desktop surfaces env.launchMode for the OPENLOOMI_LAUNCH_MODE side-band", () => {
+  const fakeAppDir = mkdtempSync(join(tmpdir(), "openloomi-fakeapp-"));
+  try {
+    const r = runOutcome(["__test-launch-desktop", fakeAppDir], {});
+    const j = JSON.parse(r.stdout);
+    // Top-level env wiring must always be present (covered above);
+    // the side-band should ride along as `env.launchMode` so the
+    // setup wizard's `launchModeEnv` audit field has something to
+    // record.
+    assert.ok(j.env, "expected top-level env wiring metadata");
+    assert.ok(
+      j.env.launchMode,
+      "expected env.launchMode to surface the OPENLOOMI_LAUNCH_MODE side-band",
+    );
+    // Shape must mirror the wrapped main env result so the audit
+    // field can pull {ok, key, after, reason} without surprises.
+    assert.equal(j.env.launchMode.key, "OPENLOOMI_LAUNCH_MODE");
+    assert.equal(j.env.launchMode.value, "plugin");
+    assert.ok(
+      ["applied", "failed"].includes(j.env.launchMode.reason),
+      `unexpected env.launchMode.reason: ${j.env.launchMode.reason}`,
+    );
+    // Side-band failures must NOT change the top-level env wiring
+    // outcome — they're independent env writes and the operator
+    // should see both shapes regardless of which one succeeded.
+    assert.equal(j.env.key, "OPENLOOMI_AGENT_PROVIDER");
+    assert.equal(j.env.value, "codex");
+  } finally {
+    rmSync(fakeAppDir, { recursive: true, force: true });
+  }
+});
