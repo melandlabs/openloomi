@@ -57,10 +57,20 @@ const PLUGIN_VERSION = "0.1.0";
 const CLAUDE_NATIVE_PROVIDER = "claude";
 const DEFAULT_PROVIDER_BASE = "https://api.anthropic.com";
 const DEFAULT_PROVIDER_MODEL = "claude-opus-4-6";
+function parsePortEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+    return fallback;
+  }
+  return parsed;
+}
+
 // Matches the documented ports in skills/openloomi-api/SKILL.md; the
 // desktop app falls back to 3515 when 3414 is busy.
-const OPENLOOMI_PORT_DEFAULT = 3414;
-const OPENLOOMI_PORT_FALLBACK = 3515;
+const OPENLOOMI_PORT_DEFAULT = parsePortEnv("OPENLOOMI_PORT_DEFAULT", 3414);
+const OPENLOOMI_PORT_FALLBACK = parsePortEnv("OPENLOOMI_PORT_FALLBACK", 3515);
 let _resolvedPort = OPENLOOMI_PORT_DEFAULT;
 const STATE_HTTP_TIMEOUT_MS = 2000;
 const ARCHIVE_HTTP_TIMEOUT_MS = 15_000;
@@ -1447,12 +1457,18 @@ function openloomiBaseUrl() {
   return `http://127.0.0.1:${_resolvedPort}`;
 }
 
-// Probes the default then fallback port for any HTTP response from
+function openloomiProbePorts() {
+  return Array.from(
+    new Set([_resolvedPort, OPENLOOMI_PORT_DEFAULT, OPENLOOMI_PORT_FALLBACK]),
+  );
+}
+
+// Probes the cached, default, then fallback ports for any HTTP response from
 // /api/remote-auth/user, caches whichever port answered for the
 // lifetime of the process, and returns the resolved base URL. Returns
 // null if neither port responds.
 async function probeOpenLoomiBaseUrl() {
-  for (const port of [OPENLOOMI_PORT_DEFAULT, OPENLOOMI_PORT_FALLBACK]) {
+  for (const port of openloomiProbePorts()) {
     const url = `http://127.0.0.1:${port}`;
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 1500);
@@ -1478,13 +1494,20 @@ async function probeOpenLoomiBaseUrl() {
   return null;
 }
 
+async function resolveOpenLoomiBaseUrl() {
+  if (process.env.OPENLOOMI_BASE_URL) return openloomiBaseUrl();
+  const probed = await probeOpenLoomiBaseUrl();
+  return probed || openloomiBaseUrl();
+}
+
 async function apiGET(path, { timeoutMs = 5000 } = {}) {
   const bearer = loadBearerToken();
   const headers = { Accept: "application/json" };
   if (bearer) headers.Authorization = `Bearer ${bearer}`;
   try {
+    const baseUrl = await resolveOpenLoomiBaseUrl();
     const res = await fetchWithRetry(
-      openloomiBaseUrl() + path,
+      baseUrl + path,
       { method: "GET", headers },
       { timeoutMs },
     );
@@ -1513,8 +1536,9 @@ async function apiPOST(path, body, { timeoutMs = 10_000 } = {}) {
   };
   if (bearer) headers.Authorization = `Bearer ${bearer}`;
   try {
+    const baseUrl = await resolveOpenLoomiBaseUrl();
     const res = await fetchWithRetry(
-      openloomiBaseUrl() + path,
+      baseUrl + path,
       {
         method: "POST",
         headers,
@@ -1550,8 +1574,9 @@ async function apiPUT(path, body, { timeoutMs = 10_000 } = {}) {
   };
   if (bearer) headers.Authorization = `Bearer ${bearer}`;
   try {
+    const baseUrl = await resolveOpenLoomiBaseUrl();
     const res = await fetchWithRetry(
-      openloomiBaseUrl() + path,
+      baseUrl + path,
       {
         method: "PUT",
         headers,

@@ -127,7 +127,15 @@ async function withClaHomeAsync(fn, options = {}) {
   }
 }
 
-async function withPreferencesServer(payload, fn) {
+async function getUnusedPort() {
+  const server = createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+async function withPreferencesServer(payload, fn, { port = 0 } = {}) {
   const server = createServer((req, res) => {
     if (req.url === "/api/preferences/ai") {
       res.writeHead(200, { "content-type": "application/json" });
@@ -143,10 +151,10 @@ async function withPreferencesServer(payload, fn) {
     res.end(JSON.stringify({ error: "not found" }));
   });
 
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address();
+  await new Promise((resolve) => server.listen(port, "127.0.0.1", resolve));
+  const address = server.address();
   try {
-    return await fn(`http://127.0.0.1:${port}`);
+    return await fn(`http://127.0.0.1:${address.port}`, address.port);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
@@ -742,6 +750,53 @@ test("setup-status treats a user-saved anthropic_compatible row as the AI provid
           CLAUDE_CODE_PATH: "",
         });
 
+        assert.equal(j.aiProviderConfigured, true);
+        assert.equal(j.executionProviderReady, true);
+        assert.equal(j.executionProviderSource, "ai_provider");
+        assert.equal(j.ready, true);
+        assert.equal(j.nextAction, "run");
+        assert.equal(j.reason, "READY");
+      },
+    );
+  });
+});
+
+test("setup-status reads the AI provider after resolving the fallback API port", async () => {
+  // Source-mode desktop runs on the documented fallback port when 3414
+  // is busy. The bridge must discover that port before reading
+  // /api/preferences/ai, otherwise it reports AI_PROVIDER_REQUIRED even
+  // though the runtime has a saved direct API provider.
+  await withClaHomeAsync(async (env) => {
+    const fakeOpenLoomi = createFakeOpenLoomiBin(join(env.HOME, "fake-bin"), {
+      name: "openloomi",
+    });
+    const unusedDefaultPort = await getUnusedPort();
+
+    await withPreferencesServer(
+      aiPreferencesPayload({
+        settings: [
+          {
+            providerType: "anthropic_compatible",
+            baseUrl: "https://example.com",
+            model: "claude-sonnet-5",
+            enabled: true,
+            hasApiKey: true,
+          },
+        ],
+      }),
+      async (_baseUrl, fallbackPort) => {
+        const j = await runJsonAsync(["setup-status"], {
+          ...env,
+          PATH: makePath(),
+          OPENLOOMI_BIN: fakeOpenLoomi.binPath,
+          OPENLOOMI_AUTH_TOKEN: "mock-bearer",
+          OPENLOOMI_BASE_URL: "",
+          OPENLOOMI_PORT_DEFAULT: String(unusedDefaultPort),
+          OPENLOOMI_PORT_FALLBACK: String(fallbackPort),
+          CLAUDE_CODE_PATH: "",
+        });
+
+        assert.equal(j.apiReachable, true);
         assert.equal(j.aiProviderConfigured, true);
         assert.equal(j.executionProviderReady, true);
         assert.equal(j.executionProviderSource, "ai_provider");
