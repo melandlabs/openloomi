@@ -8,7 +8,7 @@
 <a href="./README.md">English</a> | <a href="./README-zh.md">简体中文</a> | <a href="./README-ja.md">日本語</a>
 </p>
 
-**开源 AI 伙伴，由注意力代理驱动**
+**一个守护你注意力的开源AI工作伙伴**
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-4B4B4B?logo=linux&logoColor=white)](https://openloomi.ai)
 [![License](https://img.shields.io/badge/License-Apache%202.0-F8D52A?logo=apache)](https://www.apache.org/licenses/LICENSE-2.0)
@@ -30,7 +30,8 @@
 
 ## 什么是 OpenLoomi？
 
-OpenLoomi 是一个开源 AI 伙伴。它以桌面**注意力代理**为核心，连接你授权的工作工具和屏幕内容，为你的人、项目和决策构建一个**全域上下文**，并告诉你发生了什么、为什么重要、下一步建议做什么以及每日总结，帮助你节省注意力。
+你的工作分散在不同应用里。OpenLoomi 连接这些工具，并在你授权后理解你屏幕上正在进行的工作。它把协作关系、项目进展和过往决策串联成持续更新的工作上下文，再从纷繁变化中挑出真正需要你判断或行动的事，让你能只专注于真正重要的事。
+这就是你的 Attention Agent（注意力代理）。
 
 <p align="center">
   <img src="screenshots/app/main-with-loomi.png" alt="OpenLoomi 主窗口与 Loomi" width="100%">
@@ -134,3 +135,4 @@ pnpm tauri:dev
 ## 开源协议
 
 [Apache 2.0](./LICENSE)
+
