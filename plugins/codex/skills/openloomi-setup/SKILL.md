@@ -192,7 +192,7 @@ see. Skip steps the user has already done — but always emit step 1
 | 2 | **Pet reacts** | `node "$PLUGIN/scripts/loomi-bridge.mjs" pet happy` | Loomi the fox flips to the happy sprite. Try `thinking`, `working`, `juggling` to see the rest of the 9-state set. |
 | 3 | **Connect a tool** | Native: `node "$PLUGIN/skills/openloomi-connectors/scripts/openloomi-connectors.cjs" connect telegram` *or* OAuth: `composio link gmail` | A QR scan or browser OAuth opens; once you approve, the account shows in `list-accounts`. |
 | 4 | **Run one Loop tick** | `TOKEN=$(cat ~/.openloomi/token \| base64 -d); curl -X POST http://localhost:3414/api/loop/tick -H "Authorization: Bearer $TOKEN"` | Loop pulls signals, classifies them, and enqueues decisions. Then `GET /api/loop/decisions?status=pending` to see the cards. Approve with `POST /api/loop/action/schedule`. |
-| 5 | **Seed Memory** | `node "$PLUGIN/skills/openloomi-memory/scripts/openloomi-memory.cjs" add-memory "About me: ..." --file=people/me.md` | A real `.md` shows up in `~/.openloomi/data/memory/people/`. Future Loop ticks have grounding context. |
+| 5 | **Seed Memory** | `node "$PLUGIN/skills/openloomi-memory/scripts/openloomi-memory.cjs" add-memory "About me: ..." --file=tour/about-me.md` | A tour-owned `.md` shows up in `~/.openloomi/data/memory/tour/`. Future Loop ticks have grounding context without overwriting user memory. |
 
 Optional extensions after step 4 (skip if the user is new):
 

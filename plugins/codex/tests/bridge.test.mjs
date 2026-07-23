@@ -436,6 +436,60 @@ test("tour Memory phase uses known commands without help discovery", () => {
   }
 });
 
+test("tour Memory phase writes only tour-owned seed files", () => {
+  const expectedTourFiles = [
+    "--file=tour/about-me.md",
+    "--file=tour/current-project.md",
+    "--file=tour/values.md",
+  ];
+  const forbiddenUserFiles = [
+    "--file=people/me.md",
+    "--file=projects/current.md",
+    "--file=strategy/values.md",
+  ];
+
+  for (const pluginName of ["codex", "claude"]) {
+    const tourPath = join(
+      PLUGIN_DIR,
+      "..",
+      pluginName,
+      "skills",
+      "openloomi-tour",
+      "SKILL.md",
+    );
+    const source = readFileSync(tourPath, "utf8");
+
+    for (const expected of expectedTourFiles) {
+      assert.ok(source.includes(expected), `${tourPath} missing ${expected}`);
+    }
+    for (const forbidden of forbiddenUserFiles) {
+      assert.equal(
+        source.includes(forbidden),
+        false,
+        `${tourPath} must not seed user memory path ${forbidden}`,
+      );
+    }
+  }
+});
+
+test("setup handoffs point Memory seeding at tour-owned files", () => {
+  const codexSetup = readFileSync(
+    join(PLUGIN_DIR, "skills", "openloomi-setup", "SKILL.md"),
+    "utf8",
+  );
+  assert.ok(codexSetup.includes("--file=tour/about-me.md"));
+  assert.ok(codexSetup.includes("~/.openloomi/data/memory/tour/"));
+  assert.equal(codexSetup.includes("--file=people/me.md"), false);
+
+  const claudeSetup = readFileSync(
+    join(PLUGIN_DIR, "..", "claude", "commands", "setup.md"),
+    "utf8",
+  );
+  assert.ok(claudeSetup.includes("tour/*.md"));
+  assert.ok(claudeSetup.includes("~/.openloomi/data/memory/tour/"));
+  assert.equal(claudeSetup.includes("~/.openloomi/data/memory/people/"), false);
+});
+
 // -----------------------------------------------------------------------------
 // setup-status shape contract
 // -----------------------------------------------------------------------------

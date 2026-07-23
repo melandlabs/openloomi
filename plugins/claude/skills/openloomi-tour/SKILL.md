@@ -296,25 +296,28 @@ MEM="${CLAUDE_PLUGIN_ROOT}/skills/openloomi-memory/scripts/openloomi-memory.cjs"
 # such as `node "$MEM" --help`, `node "$MEM" -h`, or `node "$MEM" help`
 # before this phase; go directly to add-memory and search-all.
 
-# 1. People / me
+# Tour seed files are tour-owned demo artifacts. Reruns may overwrite
+# these tour/*.md files, but must not write to user-authored memory paths.
+
+# 1. Tour / about me
 node "$MEM" add-memory "About me: <one-line role + timezone + how I prefer to work>" \
-  --file=people/me.md
+  --file=tour/about-me.md
 
-# 2. Projects / current
+# 2. Tour / current project
 node "$MEM" add-memory "Current project: <name + goal + next milestone>" \
-  --file=projects/current.md
+  --file=tour/current-project.md
 
-# 3. Strategy / values
+# 3. Tour / values
 node "$MEM" add-memory "What I optimise for: <signal vs noise, deep work vs responsiveness, etc.>" \
-  --file=strategy/values.md
+  --file=tour/values.md
 
 # 4. Search-all to prove the new files are indexed
 node "$MEM" search-all "<a keyword from the file you just wrote>"
 ```
 
 If the user is shy, do step 1 only and let them fill the rest later.
-The point is to prove `add-memory` writes to `~/.openloomi/data/memory/`
-and `search-all` returns it.
+The point is to prove `add-memory` writes tour-owned files under
+`~/.openloomi/data/memory/tour/` and `search-all` returns them.
 
 After this phase, peek at the Memory surfaces (see [Insights](https://openloomi.ai/docs/memory) and [Library](https://openloomi.ai/docs/library)):
 
