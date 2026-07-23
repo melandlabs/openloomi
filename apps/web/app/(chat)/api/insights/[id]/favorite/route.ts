@@ -1,8 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
 import { db } from "@/lib/db/queries";
-import { insight } from "@/lib/db/schema";
+import { insight, bot } from "@/lib/db/schema";
 import { AppError } from "@openloomi/shared/errors";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { applyFavoriteBoost } from "@/lib/insights/weight-adjustment";
 
 /**
@@ -39,6 +39,17 @@ export async function POST(
         "bad_request:insight",
         "favorited must be a boolean",
       ).toResponse();
+    }
+
+    // Verify the insight belongs to the authenticated user
+    const [existingInsight] = await db
+      .select({ id: insight.id })
+      .from(insight)
+      .innerJoin(bot, eq(insight.botId, bot.id))
+      .where(and(eq(insight.id, id), eq(bot.userId, session.user.id)));
+
+    if (!existingInsight) {
+      return new AppError("not_found:insight").toResponse();
     }
 
     // Update favorite status
