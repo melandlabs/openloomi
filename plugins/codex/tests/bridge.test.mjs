@@ -415,6 +415,27 @@ test("Codex memory and connector helpers stay in parity with Claude", () => {
   }
 });
 
+test("tour Memory phase uses known commands without help discovery", () => {
+  for (const pluginName of ["codex", "claude"]) {
+    const tourPath = join(
+      PLUGIN_DIR,
+      "..",
+      pluginName,
+      "skills",
+      "openloomi-tour",
+      "SKILL.md",
+    );
+    const source = readFileSync(tourPath, "utf8");
+    assert.match(source, /Do not run discovery\/help probes/);
+    assert.match(source, /node "\$MEM" add-memory/);
+    assert.match(source, /node "\$MEM" search-all/);
+    const memoryHelpCommandLines = source
+      .split(/\r?\n/)
+      .filter((line) => /^\s*node "\$MEM" (--help|-h|help)\b/.test(line));
+    assert.deepEqual(memoryHelpCommandLines, []);
+  }
+});
+
 // -----------------------------------------------------------------------------
 // setup-status shape contract
 // -----------------------------------------------------------------------------

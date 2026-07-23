@@ -292,6 +292,10 @@ grounding. The [Library / Knowledge Base](https://openloomi.ai/docs/library) sit
 ```bash
 MEM="${CLAUDE_PLUGIN_ROOT}/skills/openloomi-memory/scripts/openloomi-memory.cjs"
 
+# The required Memory commands are known. Do not run discovery/help probes
+# such as `node "$MEM" --help`, `node "$MEM" -h`, or `node "$MEM" help`
+# before this phase; go directly to add-memory and search-all.
+
 # 1. People / me
 node "$MEM" add-memory "About me: <one-line role + timezone + how I prefer to work>" \
   --file=people/me.md
