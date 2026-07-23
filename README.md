@@ -4,7 +4,7 @@
   <img src="apps/web/public/images/logo-text.png" alt="OpenLoomi Logo" width="400">
 </picture>
 
-**Open-source AI coworker, driven by attention agent**
+**Open-source AI coworker, built to protect your attention**
 
 <p align="center">
 <a href="./README.md">English</a> | <a href="./README-zh.md">简体中文</a> | <a href="./README-ja.md">日本語</a>
@@ -30,7 +30,9 @@
 
 ## What is OpenLoomi?
 
-OpenLoomi is an open-source AI coworker. Centered on a desktop **attention agent**, it connects your authorized work tools and screen content, builds a **holistic context** of your people, projects, and decisions, and tells you what happened, why it matters, what to do next, and surfaces daily summaries — saving your attention for what matters.
+Your work is scattered across apps. OpenLoomi connects the tools you use and, with your permission, understands what’s on your screen. It brings together the context behind your people, projects, and decisions, then surfaces only what needs your decision or action.
+
+**Focus on what matters. This is your Attention Agent.**
 
 <p align="center">
   <img src="screenshots/app/main-with-loomi.png" alt="OpenLoomi main window with Loomi" width="100%">
