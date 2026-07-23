@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentMessage, TaskPlan } from "@openloomi/ai/agent/types";
 import {
   CodexAgent,
@@ -17,6 +17,7 @@ import {
   resolveCodexSandboxMode,
 } from "@/lib/ai/extensions/agent/codex/command";
 import { parseCodexJsonLine } from "@/lib/ai/extensions/agent/codex/parser";
+import { createCodexTransportStatusController } from "@/lib/ai/extensions/agent/codex/transport-status";
 
 const tempDirs: string[] = [];
 
@@ -407,7 +408,7 @@ describe("Codex parser", () => {
   // as fatal errors (e.g. "Reconnecting... 2/5 (request timed out)"). These
   // must NOT be projected to a fatal `error` AgentMessage; they are
   // transient status from a still-running turn and the chat UI surfaces
-  // them via a brief info toast only.
+  // them through one replaceable temporary status.
   it("classifies 'Reconnecting... n/m' as a retry, not a fatal error", () => {
     const messages = parseCodexJsonLine(
       JSON.stringify({
@@ -419,8 +420,25 @@ describe("Codex parser", () => {
       {
         type: "retry",
         content: "Reconnecting... 2/5 (request timed out)",
+        retryKind: "reconnecting",
         attempt: 2,
         maxAttempts: 5,
+      },
+    ]);
+  });
+
+  it("classifies a reconnect timeout without attempt numbers as a retry", () => {
+    const messages = parseCodexJsonLine(
+      JSON.stringify({
+        type: "error",
+        message: "Reconnecting... (request timed out)",
+      }),
+    );
+    expect(messages).toEqual([
+      {
+        type: "retry",
+        content: "Reconnecting... (request timed out)",
+        retryKind: "reconnecting",
       },
     ]);
   });
@@ -436,6 +454,7 @@ describe("Codex parser", () => {
       {
         type: "retry",
         content: "stream disconnected - retrying sampling request (3/5 ...)",
+        retryKind: "reconnecting",
         attempt: 3,
         maxAttempts: 5,
       },
@@ -453,6 +472,29 @@ describe("Codex parser", () => {
       {
         type: "retry",
         content: "falling back to HTTP",
+        retryKind: "fallback",
+      },
+    ]);
+  });
+
+  it("classifies the real item-level WebSocket fallback as a retry", () => {
+    const messages = parseCodexJsonLine(
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          id: "item_0",
+          type: "error",
+          message:
+            "Falling back from WebSockets to HTTPS transport. request timed out",
+        },
+      }),
+    );
+    expect(messages).toEqual([
+      {
+        type: "retry",
+        content:
+          "Falling back from WebSockets to HTTPS transport. request timed out",
+        retryKind: "fallback",
       },
     ]);
   });
@@ -479,6 +521,77 @@ describe("Codex parser", () => {
     expect(
       parseCodexJsonLine(JSON.stringify({ type: "future.event", x: 1 })),
     ).toEqual([]);
+  });
+});
+
+describe("Codex transport status controller", () => {
+  it("updates the temporary status and clears it on successful completion", () => {
+    const show = vi.fn();
+    const clear = vi.fn();
+    const controller = createCodexTransportStatusController({ show, clear });
+
+    expect(
+      controller.handle({
+        type: "retry",
+        content: "Reconnecting... (request timed out)",
+        retryKind: "reconnecting",
+      }),
+    ).toBe(true);
+    expect(show).toHaveBeenLastCalledWith({
+      phase: "reconnecting",
+      attempt: undefined,
+      maxAttempts: undefined,
+    });
+
+    expect(
+      controller.handle({
+        type: "retry",
+        content:
+          "Falling back from WebSockets to HTTPS transport. request timed out",
+        retryKind: "fallback",
+      }),
+    ).toBe(true);
+    expect(show).toHaveBeenLastCalledWith({
+      phase: "fallback",
+      attempt: undefined,
+      maxAttempts: undefined,
+    });
+
+    expect(
+      controller.handle({ type: "result", content: "turn.completed" }),
+    ).toBe(false);
+    expect(clear).toHaveBeenCalledTimes(1);
+
+    // onDone may call clear again; cleanup is deliberately idempotent.
+    controller.clear();
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the temporary status before a true terminal error is handled", () => {
+    const show = vi.fn();
+    const clear = vi.fn();
+    const controller = createCodexTransportStatusController({ show, clear });
+
+    controller.handle({
+      type: "retry",
+      content: "Reconnecting... 5/5 (request timed out)",
+      retryKind: "reconnecting",
+      attempt: 5,
+      maxAttempts: 5,
+    });
+    expect(
+      controller.handle({
+        type: "error",
+        message: "Codex CLI exited with code 7: connection refused",
+      }),
+    ).toBe(false);
+
+    expect(show).toHaveBeenCalledWith({
+      phase: "reconnecting",
+      attempt: 5,
+      maxAttempts: 5,
+    });
+    expect(clear).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -599,6 +712,7 @@ describe("CodexAgent", () => {
 
   it("converts a nonzero CLI exit into an error message", async () => {
     const workDir = await createFakeCodexWorkDir(`
+console.log(JSON.stringify({ type: "error", message: "Reconnecting... 5/5 (request timed out)" }));
 console.error("simulated failure");
 process.exit(7);
 `);
@@ -611,6 +725,12 @@ process.exit(7);
 
     const messages = await collectMessages(agent.run("do work"));
 
+    expect(messages.find((message) => message.type === "retry")).toMatchObject({
+      type: "retry",
+      retryKind: "reconnecting",
+      attempt: 5,
+      maxAttempts: 5,
+    });
     expect(messages.find((message) => message.type === "error")).toMatchObject({
       type: "error",
       message: expect.stringContaining("Codex CLI exited with code 7"),
@@ -618,6 +738,9 @@ process.exit(7);
     expect(
       messages.find((message) => message.type === "error")?.message,
     ).toContain("simulated failure");
+    expect(
+      messages.find((message) => message.type === "result"),
+    ).toBeUndefined();
     expect(messages.at(-1)?.type).toBe("done");
   });
 
@@ -739,11 +862,11 @@ setTimeout(() => process.stdout.write(payload.subarray(split)), 10);
     );
   });
 
-  // Issue #385 — non-terminal Codex retry/transport-fallback events must
-  // not be projected to a fatal `error` AgentMessage and must not suppress
-  // the final success `result`. The chat UI relies on this invariant to
-  // avoid rendering duplicate Agent Execution Timeout cards above a
-  // successful reply.
+  // Issues #385 and #436 — non-terminal Codex retry/transport-fallback
+  // events must not be projected to a fatal `error` AgentMessage and must
+  // not suppress the final success `result`. The chat UI relies on this
+  // invariant to avoid rendering duplicate Agent Execution Timeout cards
+  // above a successful reply.
   it("treats Codex retry events as transient and still yields a success result", async () => {
     const workDir = await createFakeCodexWorkDir(`
 require("node:fs").writeFileSync("args.json", JSON.stringify(process.argv.slice(2)));
@@ -755,7 +878,14 @@ console.log(JSON.stringify({ type: "thread.started", thread_id: "thread-1" }));
 console.log(JSON.stringify({ type: "error", message: "Reconnecting... 2/5 (request timed out)" }));
 console.log(JSON.stringify({ type: "error", message: "Reconnecting... 3/5 (request timed out)" }));
 console.log(JSON.stringify({ type: "error", message: "stream disconnected - retrying sampling request (4/5 ...)" }));
-console.log(JSON.stringify({ type: "error", message: "falling back to HTTP" }));
+console.log(JSON.stringify({
+  type: "item.completed",
+  item: {
+    id: "item_0",
+    type: "error",
+    message: "Falling back from WebSockets to HTTPS transport. request timed out"
+  }
+}));
 console.log(JSON.stringify({
   type: "item.completed",
   item: { type: "agent_message", id: "msg-1", text: "测试成功" }
@@ -786,25 +916,30 @@ console.log(JSON.stringify({
     expect(retries[0]).toMatchObject({
       type: "retry",
       content: "Reconnecting... 2/5 (request timed out)",
+      retryKind: "reconnecting",
       attempt: 2,
       maxAttempts: 5,
     });
     expect(retries[1]).toMatchObject({
       type: "retry",
       content: "Reconnecting... 3/5 (request timed out)",
+      retryKind: "reconnecting",
       attempt: 3,
       maxAttempts: 5,
     });
     expect(retries[2]).toMatchObject({
       type: "retry",
       content: "stream disconnected - retrying sampling request (4/5 ...)",
+      retryKind: "reconnecting",
       attempt: 4,
       maxAttempts: 5,
     });
-    // "falling back to HTTP" carries no attempt numbers.
+    // The real item-level WebSocket fallback carries no attempt numbers.
     expect(retries[3]).toMatchObject({
       type: "retry",
-      content: "falling back to HTTP",
+      content:
+        "Falling back from WebSockets to HTTPS transport. request timed out",
+      retryKind: "fallback",
     });
     expect((retries[3] as { attempt?: number }).attempt).toBeUndefined();
     expect(
@@ -884,9 +1019,12 @@ setInterval(() => {}, 1000);
     );
     expect(error).toBeDefined();
     expect(error?.message).toContain("__CODEX_INTERRUPTED__");
-    expect(error?.message).toContain(workDir);
-    expect(error?.message).toContain("report.md");
-    expect(error?.message).toMatch(/"canResume":\s*true/);
+    const interruption = parseCodexInterruptedError(error?.message);
+    expect(interruption).toMatchObject({
+      workspacePath: workDir,
+      completedArtifacts: ["report.md"],
+      canResume: true,
+    });
 
     // The agent still closes with `done` so the SSE stream terminates cleanly
     // and the chat UI does not loop waiting for a result.

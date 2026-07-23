@@ -6,6 +6,12 @@ const zh = {
   chat: {
     ...baseZh.chat,
     stopGenerating: "停止生成",
+    codexTransport: {
+      retrying: "Codex WebSocket 超时，正在重试，任务仍在运行",
+      retryingWithAttempt:
+        "Codex WebSocket 超时，正在重试 {{attempt}}/{{maxAttempts}}，任务仍在运行",
+      fallback: "Codex WebSocket 超时，正在切换到 HTTPS，任务仍在运行",
+    },
   },
   common: {
     ...baseZh.common,

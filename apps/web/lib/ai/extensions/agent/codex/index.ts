@@ -308,7 +308,7 @@ export class CodexAgent extends BaseAgent {
             // intentionally skip this branch and fall through to the default
             // yield. They must not flip `sawRuntimeError`, which would
             // suppress the final `result` even when the run ultimately
-            // succeeds (issue #385).
+            // succeeds (issues #385 and #436).
             sawRuntimeError = true;
           }
           if (message.type === "tool_use") {

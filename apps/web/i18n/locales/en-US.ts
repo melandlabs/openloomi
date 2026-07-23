@@ -6,6 +6,14 @@ const en = {
   chat: {
     ...baseEn.chat,
     stopGenerating: "Stop generating",
+    codexTransport: {
+      retrying:
+        "Codex WebSocket timed out. Retrying; the task is still running.",
+      retryingWithAttempt:
+        "Codex WebSocket timed out. Retrying {{attempt}}/{{maxAttempts}}; the task is still running.",
+      fallback:
+        "Codex WebSocket timed out. Switching to HTTPS; the task is still running.",
+    },
   },
   common: {
     ...baseEn.common,

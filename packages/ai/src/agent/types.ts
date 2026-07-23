@@ -200,6 +200,12 @@ export interface AgentMessage {
    */
   attempt?: number;
   maxAttempts?: number;
+  /**
+   * Optional structured phase for transport-level retries. Keeping this
+   * separate from the provider's human-readable message lets clients render
+   * stable, localized status without parsing CLI output a second time.
+   */
+  retryKind?: "reconnecting" | "fallback";
 }
 
 /**

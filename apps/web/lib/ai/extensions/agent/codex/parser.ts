@@ -15,10 +15,10 @@ import type { AgentMessage } from "@openloomi/ai/agent/types";
  *   { "type": "turn.completed",  "usage": { "input_tokens": N, "cached_input_tokens": N, "output_tokens": N } }
  *   { "type": "error",           "message": "…" }
  *
- * Note: Codex CLI 0.144+ emits non-terminal retry/transport-fallback
- * notices using the same top-level `error` shape. We classify the message
- * text and surface those as `retry` AgentMessages instead of fatal
- * `error` AgentMessages (issue #385).
+ * Note: Codex CLI emits non-terminal retry/transport-fallback notices using
+ * both top-level `error` events and completed error items. We classify the
+ * message text and surface those as `retry` AgentMessages instead of fatal
+ * `error` AgentMessages (issues #385 and #436).
  */
 export function parseCodexJsonLine(line: string): AgentMessage[] {
   const trimmed = line.trim();
@@ -106,7 +106,11 @@ export function convertCodexEvent(event: unknown): AgentMessage[] {
 function classifyCodexErrorMessage(message: string): AgentMessage {
   const transient = classifyTransientCodexError(message);
   if (transient.kind === "retry") {
-    const retry: AgentMessage = { type: "retry", content: message };
+    const retry: AgentMessage = {
+      type: "retry",
+      content: message,
+      retryKind: transient.retryKind,
+    };
     if (typeof transient.attempt === "number") {
       retry.attempt = transient.attempt;
     }
@@ -119,7 +123,12 @@ function classifyCodexErrorMessage(message: string): AgentMessage {
 }
 
 type TransientCodexErrorClassification =
-  | { kind: "retry"; attempt?: number; maxAttempts?: number }
+  | {
+      kind: "retry";
+      retryKind: "reconnecting" | "fallback";
+      attempt?: number;
+      maxAttempts?: number;
+    }
   | { kind: "fatal" };
 
 function classifyTransientCodexError(
@@ -130,12 +139,15 @@ function classifyTransientCodexError(
   // Recognised transient shapes (case-insensitive, punctuation-tolerant):
   //   - "Reconnecting... 2/5 (request timed out)"
   //   - "stream disconnected - retrying sampling request (1/5 ...)"
-  //   - "falling back to http" / "falling back to https"
+  //   - "Reconnecting... (request timed out)" (without attempt numbers)
+  //   - "falling back to HTTP"
+  //   - "Falling back from WebSockets to HTTPS transport. request timed out"
   //   - "retrying sampling request"
   const reconnectMatch = text.match(/reconnecting[^()]*?(\d+)\s*\/\s*(\d+)/);
   if (reconnectMatch) {
     return {
       kind: "retry",
+      retryKind: "reconnecting",
       attempt: Number.parseInt(reconnectMatch[1], 10),
       maxAttempts: Number.parseInt(reconnectMatch[2], 10),
     };
@@ -147,17 +159,25 @@ function classifyTransientCodexError(
   if (samplingMatch) {
     return {
       kind: "retry",
+      retryKind: "reconnecting",
       attempt: Number.parseInt(samplingMatch[1], 10),
       maxAttempts: Number.parseInt(samplingMatch[2], 10),
     };
   }
 
+  const isHttpFallback =
+    text.includes("falling back") &&
+    (text.includes("http") || text.includes("websocket"));
+  if (isHttpFallback) {
+    return { kind: "retry", retryKind: "fallback" };
+  }
+
   if (
-    text.includes("falling back to http") ||
+    text.trimStart().startsWith("reconnecting") ||
     text.includes("stream disconnected") ||
     text.includes("retrying sampling request")
   ) {
-    return { kind: "retry" };
+    return { kind: "retry", retryKind: "reconnecting" };
   }
 
   return { kind: "fatal" };
@@ -284,30 +304,30 @@ function convertCodexItem(
     }
 
     case "error": {
-      // Codex CLI 0.144+ emits two distinct flavors of error in the
+      // Codex CLI emits two distinct flavors of error in the
       // NDJSON event stream:
       //
-      //   1. **Top-level** `{"type":"error","message":"..."}` — this means
-      //      the turn was aborted and no further events will arrive. We map
-      //      this to a fatal AgentMessage error in `convertCodexEvent` below.
+      //   1. **Top-level** `{"type":"error","message":"..."}` — either a
+      //      terminal error or a transient reconnect notice, classified by
+      //      `classifyCodexErrorMessage`.
       //   2. **Item-level** `{"type":"item.completed","item":{"type":"error",...}}`
-      //      — Codex uses this shape for *non-fatal* self-diagnostics
+      //      — Codex uses this shape for *non-fatal* self-diagnostics and for
+      //      the WebSocket-to-HTTPS fallback notice
       //      (e.g. "Model metadata for `X` not found. Defaulting to
-      //      fallback metadata" or "Skill descriptions were shortened to
-      //      fit the 2% skills context budget"). The turn continues
-      //      normally afterwards. Treating these as fatal UI errors would
-      //      surface Codex's internal logging as red error banners even
-      //      when the chat reply is delivered a moment later.
+      //      fallback metadata" or "Falling back from WebSockets to HTTPS
+      //      transport. request timed out"). The turn continues normally.
       //
-      // So for the item-level variant we only emit a non-fatal
-      // `tool_result` carrying the message. Callers can still surface
-      // the text in debug UIs via the tool result, but the chat timeline
-      // stays clean. Real fatal errors are caught by the top-level
-      // branch and by the nonzero-exit branch in CodexAgent.
+      // Promote a recognised transport fallback to the same structured
+      // `retry` event as top-level reconnect notices. Other item-level
+      // diagnostics remain non-fatal tool results so the chat stays clean.
       const message =
         readString(item.message) ||
         readString(item.error) ||
         "Codex tool error";
+      const classified = classifyCodexErrorMessage(message);
+      if (classified.type === "retry") {
+        return [classified];
+      }
       const toolUseId = itemId ?? `err_${randomSuffix()}`;
       return [
         {

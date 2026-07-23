@@ -9,12 +9,13 @@ const iconsByType: Record<"success" | "error" | "info", ReactNode> = {
   info: <RemixIcon name="info" size="size-4" />,
 };
 
-type ToastTriggerProps = Omit<ToastProps, "id"> & {
+type ToastTriggerProps = Omit<ToastProps, "id" | "onDismiss"> & {
+  id?: string | number;
   duration?: number;
 };
 
 export function toast(props: ToastTriggerProps) {
-  const { duration, ...rest } = props;
+  const { duration, id: requestedId, ...rest } = props;
   return sonnerToast.custom(
     (id) => (
       <Toast
@@ -24,8 +25,12 @@ export function toast(props: ToastTriggerProps) {
         onDismiss={() => sonnerToast.dismiss(id)}
       />
     ),
-    { duration },
+    { duration, id: requestedId },
   );
+}
+
+export function dismissToast(id?: string | number) {
+  sonnerToast.dismiss(id);
 }
 
 function Toast(props: ToastProps) {

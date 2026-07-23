@@ -20,7 +20,7 @@ import {
   getTextFromMessage,
 } from "@/lib/utils";
 import { mutate } from "swr";
-import { toast } from "@/components/toast";
+import { dismissToast, toast } from "@/components/toast";
 import { streamNativeAgentResponse } from "@/lib/ai/router/index";
 import { isTauri } from "@/lib/tauri";
 import {
@@ -40,6 +40,7 @@ import {
 } from "@/lib/files/extract-artifact-paths";
 import { formatAgentStreamErrorForUser } from "@/lib/ai/runtime/format-error";
 import { parseCodexInterruptedError } from "@/lib/ai/extensions/agent/codex/interrupt-marker";
+import { createCodexTransportStatusController } from "@/lib/ai/extensions/agent/codex/transport-status";
 import { detectLifestyleImageTrigger } from "@/lib/ai/image-generation/lifestyle-trigger";
 
 // Max retry attempts for stream errors
@@ -1216,6 +1217,28 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       // Bug fix: store assistantMessageId for onDone to use instead of index
       const newMessageStartIndex = messages.length;
       const assistantMessageIdForRetry = assistantMessageId;
+      const codexTransportToastId = `codex-transport-${assistantMessageId}`;
+      const codexTransportStatus = createCodexTransportStatusController({
+        show: (status) => {
+          const description =
+            status.phase === "fallback"
+              ? t("chat.codexTransport.fallback")
+              : typeof status.attempt === "number" &&
+                  typeof status.maxAttempts === "number"
+                ? t("chat.codexTransport.retryingWithAttempt", {
+                    attempt: status.attempt,
+                    maxAttempts: status.maxAttempts,
+                  })
+                : t("chat.codexTransport.retrying");
+          toast({
+            id: codexTransportToastId,
+            type: "info",
+            description,
+            duration: Number.POSITIVE_INFINITY,
+          });
+        },
+        clear: () => dismissToast(codexTransportToastId),
+      });
 
       // Used to manage message stream order
       let parts: any[] = [];
@@ -1347,6 +1370,12 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               }
               receivedMessageIds.add(messageId);
             }
+
+            // Codex WebSocket reconnect and HTTPS fallback notices are one
+            // temporary status for this turn. Terminal result/error messages
+            // clear it before their normal chat handling continues.
+            const handledCodexTransportStatus =
+              codexTransportStatus.handle(data);
 
             // Handle streaming updates
             if (data.type === "text") {
@@ -1673,27 +1702,17 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 return updated;
               }, chatIdForMessages);
             } else if (data.type === "retry") {
-              // Codex CLI 0.144+ emits non-terminal retry/transport-fallback
-              // notices as `retry` AgentMessages (e.g. "Reconnecting... 2/5
-              // (request timed out)"). These are transient status events
-              // from a still-running turn, not terminal assistant errors.
-              // Surface a brief info toast for visibility, but do NOT push a
-              // chat part — the loading indicator stays up, the turn keeps
-              // running, and the final `turn.completed` / agent message will
-              // follow normally. Pushing a part here would leave a duplicate
-              // Agent Execution Timeout card above the eventual successful
-              // reply (issue #385).
-              const retryMessage =
-                data.content || data.message || "Codex is reconnecting…";
-              const attempt =
-                typeof data.attempt === "number" &&
-                typeof data.maxAttempts === "number"
-                  ? ` (${data.attempt}/${data.maxAttempts})`
-                  : "";
-              toast({
-                type: "info",
-                description: `${retryMessage}${attempt}`,
-              });
+              // Other providers may also emit retry messages without Codex's
+              // structured transport phase. Preserve their existing brief
+              // informational notice.
+              if (!handledCodexTransportStatus) {
+                const retryMessage =
+                  data.content || data.message || "Agent is retrying…";
+                toast({
+                  type: "info",
+                  description: retryMessage,
+                });
+              }
             } else if (data.type === "error") {
               console.error("[NativeAgent] Error:", data.message);
               const errorMessage = data.message || "Unknown error";
@@ -1858,6 +1877,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           },
           modelConfig,
           onDone: async () => {
+            codexTransportStatus.clear();
             // Clear sending lock
             setIsSending(false);
             // Cleanup native agent state - use chatIdForAbort to ensure lock is cleared for correct chat
@@ -1907,6 +1927,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             );
           },
           onError: (error) => {
+            codexTransportStatus.clear();
             // Clear sending lock
             setIsSending(false);
             console.error("[NativeAgent] Stream error:", error);
@@ -2115,6 +2136,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
         return Promise.resolve();
       } catch (error) {
+        codexTransportStatus.clear();
         console.error("[NativeAgent] API call failed:", error);
         const errorMessage =
           error instanceof Error ? error.message : String(error);
