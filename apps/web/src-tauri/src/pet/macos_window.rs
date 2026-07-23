@@ -197,6 +197,39 @@ pub fn configure_for_all_spaces(_window: &tauri::WebviewWindow) {}
 /// the builder-level `.accept_first_mouse(true)`.
 #[cfg(target_os = "macos")]
 pub fn configure_as_floating_panel(window: &tauri::WebviewWindow) {
+    configure_as_floating_panel_with(window, true);
+}
+
+/// Variant of [`configure_as_floating_panel`] that lets the caller
+/// suppress the `object_setClass(TaoWindow → NSPanel)` swap. The pet /
+/// bubble use the default (`swap = true`) because they need
+/// NSPanel's non-activating, screen-saver-level overlay behaviour to
+/// sit above another app's full-screen Space. The card does NOT — it
+/// is explicitly opened by the user and *should* accept keyboard
+/// focus on click, and the class swap is exactly what breaks that:
+///
+///   * Tauri's `TaoWindow` is a subclass of `NSWindow` that overrides
+///     `canBecomeKeyWindow` to read a `focusable` Bool ivar set by
+///     `.focusable(true)` on the `WebviewWindowBuilder`. (See
+///     `tao-0.35.3/src/platform_impl/macos/window.rs:404-434`.)
+///   * `object_setClass` rebinds the ISA pointer to `NSPanel`, so
+///     subsequent `canBecomeKeyWindow` dispatches go through
+///     `NSPanel`'s default implementation — which returns `NO` for
+///     utility-style panels. The TaoWindow focusable ivar is now dead
+///     memory: still allocated, never read.
+///   * Net effect: mouse events still hit-test into the WKWebView
+///     (so `<button>` clicks fire their action handlers just fine),
+///     but `becomeKeyWindow` is rejected by AppKit and the textarea /
+///     input inside the webview never receives an I-beam cursor on
+///     hover, never accepts `focus()`, and silently no-ops every
+///     keystroke. This is exactly the "buttons can be clicked, inputs
+///     can't" symptom reported on the card editor.
+///
+/// Keeping the swap for the pet / bubble (they don't host text input)
+/// and skipping it for the card restores focus without losing the
+/// floating-overlay behaviour where it actually matters.
+#[cfg(target_os = "macos")]
+pub fn configure_as_floating_panel_with(window: &tauri::WebviewWindow, swap_to_panel: bool) {
     use objc2::{
         class, ffi, msg_send,
         runtime::{AnyClass, AnyObject},
@@ -206,6 +239,7 @@ pub fn configure_as_floating_panel(window: &tauri::WebviewWindow) {
     let label = window.label().to_string();
     let label_on_main = label.clone();
     let window_on_main = window.clone();
+    let swap_on_main = swap_to_panel;
     if let Err(error) = window.run_on_main_thread(move || {
         let raw_window = match window_on_main.ns_window() {
             Ok(raw) if !raw.is_null() => raw.cast::<AnyObject>(),
@@ -240,7 +274,18 @@ pub fn configure_as_floating_panel(window: &tauri::WebviewWindow) {
             //    range and the subsequent setters go through ObjC
             //    method dispatch (not fixed-offset ivar writes).
             let panel_class = class!(NSPanel);
-            let _ = ffi::object_setClass(raw_window, panel_class as *const AnyClass);
+            // The class swap is gated on `swap_to_panel` so the card
+            // (which hosts text-input elements — Subject / Body) can
+            // skip it. After the swap, `canBecomeKeyWindow` dispatches
+            // through NSPanel's default and returns NO, which AppKit
+            // uses to refuse `becomeKeyWindow`. That blocks
+            // `<textarea>` / `<input>` focus() while still letting
+            // `<button>` clicks through (they don't need key status).
+            // See `configure_as_floating_panel_with` doc-comment for
+            // the full diagnosis.
+            if swap_on_main {
+                let _ = ffi::object_setClass(raw_window, panel_class as *const AnyClass);
+            }
 
             // 2. Panel-only properties. Setting these after the
             //    class swap is what makes the window behave like a
@@ -277,13 +322,25 @@ pub fn configure_as_floating_panel(window: &tauri::WebviewWindow) {
             if responds_hides {
                 let _: () = msg_send![raw_window, setHidesOnDeactivate: false];
             }
-            let responds_becomes: bool = msg_send![
-                raw_window,
-                respondsToSelector: sel!(setBecomesKeyOnlyOnOrderFront:)
-            ];
-            if responds_becomes {
-                let _: () = msg_send![raw_window, setBecomesKeyOnlyOnOrderFront: true];
-            }
+            // NOTE: setting `setBecomesKeyOnlyOnOrderFront: true` used
+            // to live here, but it locks the panel out of becoming a
+            // key window on a plain user click. The card's draft
+            // editor needs the panel to become key the moment the
+            // user clicks Subject / Body so the textarea/input can
+            // accept keyboard input — otherwise the focus() call
+            // silently no-ops and the user reports "Subject and Body
+            // are unclickable". With `.focusable(true)` set on the
+            // WebviewWindowBuilder (see `pet/card.rs`), `canBecomeKey
+            // Window` already returns YES on the underlying NSWindow,
+            // and NSPanel's default (`becomesKeyOnlyOnOrderFront =
+            // false`) lets the panel become key normally on click —
+            // which is exactly what we need for the editor.
+            //
+            // We deliberately do NOT mirror this from the pet
+            // window — the pet is a passive overlay (the user can
+            // click anywhere else without the panel stealing focus),
+            // and any future regression in the pet path can be fixed
+            // independently of the card.
             let responds_works: bool = msg_send![
                 raw_window,
                 respondsToSelector: sel!(setWorksWhenModal:)
@@ -304,6 +361,133 @@ pub fn configure_as_floating_panel(window: &tauri::WebviewWindow) {
             //    full-screen.
             let level = desired_window_level_for(&label_on_main);
             let _: () = msg_send![raw_window, setLevel: level];
+
+            // 3b. Re-thread the first-responder chain through the
+            //     panel's content view. This block is the *defensive*
+            //     half of the focus story for the pet / bubble: with
+            //     the swap applied (default `swap_to_panel = true`),
+            //     the content view still belongs to tao's webview
+            //     manager and its `acceptsFirstResponder` /
+            //     `becomeFirstResponder` chain is wired to the
+            //     pre-swap windowing model. Without the re-thread,
+            //     `<input>` / `<textarea>` clicks would silently
+            //     lose the focus() call (the panel becomes key but
+            //     the webview never gets a real first-responder
+            //     assignment), while `<button>` clicks still work
+            //     because they fire `action:` directly without
+            //     responder handoff.
+            //
+            //     NOTE: the *primary* fix for the editor focus
+            //     symptom on the card is NOT this block — it's the
+            //     `swap_to_panel = false` opt-out at the call site
+            //     (see `configure_as_floating_panel_with` doc-
+            //     comment). Without the opt-out, AppKit never
+            //     promotes the NSPanel to key in the first place
+            //     because `canBecomeKeyWindow` is inherited from
+            //     NSPanel's default (NO) and the TaoWindow focusable
+            //     ivar set via `.focusable(true)` becomes dead
+            //     memory. This step-3b block matters only as a
+            //     belt-and-suspenders re-thread for the pet / bubble
+            //     case where the swap is desired for floating-overlay
+            //     behaviour and any future text-input element would
+            //     still need a working responder chain.
+            let content_view: *mut AnyObject = msg_send![raw_window, contentView];
+            if !content_view.is_null() {
+                // #diags responder-chain — log the BEFORE values so
+                // we can tell whether the fix was actually applied
+                // and whether subsequent run_on_main_thread calls
+                // are returning the expected result. Without these
+                // it is impossible to know from outside the process
+                // whether the chain is wired correctly.
+                let before_responder: *mut AnyObject = msg_send![raw_window, firstResponder];
+                let before_accepts: bool = msg_send![content_view, acceptsFirstResponder];
+                let _: () = msg_send![content_view, setAcceptsFirstResponder: true];
+                let fr_ok: bool = msg_send![raw_window, makeFirstResponder: content_view];
+                let after_responder: *mut AnyObject = msg_send![raw_window, firstResponder];
+                let after_accepts: bool = msg_send![content_view, acceptsFirstResponder];
+                log::info!(
+                    "[loop-pet] {label_on_main}: responder-chain diag → \
+content_view={:p} before_accepts={} before_responder={:p} makeFirstResponder_ret={} \
+after_accepts={} after_responder={:p} same_ptr={}",
+                    content_view,
+                    before_accepts,
+                    before_responder,
+                    fr_ok,
+                    after_accepts,
+                    after_responder,
+                    after_responder == content_view,
+                );
+                // #diags responder-chain (file sink) — also append a
+                // machine-parseable line to
+                // ~/.openloomi/pet/focus-diag.log so the user can
+                // `tail -f` or `cat` it from another shell (the
+                // terminal that runs `cargo tauri dev` is not always
+                // easy to keep an eye on). JSON-ish key=value for
+                // easy grep / awk. Best-effort — failures here must
+                // never panic the panel-config path.
+                if let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) {
+                    let path = home
+                        .join(".openloomi")
+                        .join("pet")
+                        .join("focus-diag.log");
+                    if let Some(parent) = path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis())
+                        .unwrap_or(0);
+                    let line = format!(
+                        "{now} label={label_on_main} stage=NSPanel \
+content_view={:p} before_accepts={before_accepts} before_responder={:p} \
+makeFirstResponder_ret={fr_ok} after_accepts={after_accepts} \
+after_responder={:p} same_ptr={}\n",
+                        content_view,
+                        before_responder,
+                        after_responder,
+                        after_responder == content_view,
+                    );
+                    use std::io::Write as _;
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&path)
+                    {
+                        let _ = f.write_all(line.as_bytes());
+                    }
+                }
+            } else {
+                log::warn!(
+                    "[loop-pet] {label_on_main}: responder-chain diag → \
+contentView is null, cannot re-thread first responder"
+                );
+                if let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) {
+                    let path = home
+                        .join(".openloomi")
+                        .join("pet")
+                        .join("focus-diag.log");
+                    if let Some(parent) = path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    use std::io::Write as _;
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&path)
+                    {
+                        let _ = f.write_all(
+                            format!(
+                                "{} label={label_on_main} stage=NSPanel contentView=NULL\n",
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_millis())
+                                    .unwrap_or(0)
+                            )
+                            .as_bytes(),
+                        );
+                    }
+                }
+            }
 
             // 4. Apply the full collectionBehavior bitmask (CanJoin
             //    AllSpaces + FullScreenAuxiliary + CanJoinAll
@@ -329,6 +513,9 @@ pub fn configure_as_floating_panel(window: &tauri::WebviewWindow) {
 
 #[cfg(not(target_os = "macos"))]
 pub fn configure_as_floating_panel(_window: &tauri::WebviewWindow) {}
+
+#[cfg(not(target_os = "macos"))]
+pub fn configure_as_floating_panel_with(_window: &tauri::WebviewWindow, _swap_to_panel: bool) {}
 
 #[cfg(test)]
 mod tests {

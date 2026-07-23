@@ -116,7 +116,24 @@ pub fn build_card_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow>
     .skip_taskbar(true)
     .shadow(false)
     .visible(false)
-    .focused(false);
+    .focused(false)
+    // `.focusable(true)` is still required: Tauri's `TaoWindow`
+    // overrides `canBecomeKeyWindow` to read this flag, and the
+    // card explicitly opts into the class-swap path
+    // (`configure_as_floating_panel_with(&w, false)`) so the
+    // underlying NSWindow stays a TaoWindow / NSWindow with
+    // `canBecomeKeyWindow` returning YES. Without this flag the
+    // window would silently refuse `becomeKeyWindow` and the
+    // Subject / Body inputs would never accept focus on click.
+    // See `configure_as_floating_panel_with` doc-comment for the
+    // full diagnosis of why the card skips the swap.
+    .focusable(true)
+    // Same rationale as the pet window — the very first click that
+    // lands inside the card (typically the "↗ Edit" button in the
+    // footer) has to be delivered to the webview before the window
+    // has had a chance to promote to key; without this opt-in the
+    // first click silently no-ops on cold launch.
+    .accept_first_mouse(true);
     // `drag_and_drop` is only present on the Windows webview builder, so
     // we gate the call to keep the build green everywhere. On macOS /
     // Linux the OS file-drop target still gets opted out via the
@@ -128,7 +145,14 @@ pub fn build_card_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow>
     let builder = base;
 
     let w = builder.build()?;
-    super::macos_window::configure_as_floating_panel(&w);
+    // Card: skip the NSPanel class swap. After the swap, AppKit
+    // dispatches `canBecomeKeyWindow` through NSPanel's default (NO),
+    // which silently rejects `becomeKeyWindow` and prevents
+    // `<textarea>` / `<input>` inside the webview from accepting
+    // focus. The card is a user-invoked surface, not a passive
+    // overlay, so it should accept keyboard input on click. See
+    // `configure_as_floating_panel_with` for the full diagnosis.
+    super::macos_window::configure_as_floating_panel_with(&w, false);
     super::macos_window::configure_for_all_spaces(&w);
     let app_handle = app.clone();
     let label = PET_CARD_LABEL.to_string();
@@ -196,10 +220,12 @@ fn show_card_window_with(app: &AppHandle, compact: bool) {
         let _ = w.set_focus();
         let _ = w.set_always_on_top(true);
         let _ = w.set_visible_on_all_workspaces(true);
-        // Re-apply the NSPanel conversion on every show so a
-        // transient rebuild of the underlying NSWindow doesn't
-        // quietly strip our non-activating-overlay behaviour.
-        super::macos_window::configure_as_floating_panel(&w);
+        // Re-apply the floating-panel configuration on every show so
+        // a transient rebuild of the underlying NSWindow doesn't
+        // quietly strip our overlay-level + collection-behavior
+        // setup. We deliberately do NOT swap the class to NSPanel
+        // here — see the doc-comment in `build_card_window`.
+        super::macos_window::configure_as_floating_panel_with(&w, false);
         super::macos_window::configure_for_all_spaces(&w);
         return;
     }
@@ -212,10 +238,13 @@ fn show_card_window_with(app: &AppHandle, compact: bool) {
         let _ = w.set_focus();
         let _ = w.set_always_on_top(true);
         let _ = w.set_visible_on_all_workspaces(true);
-        // Re-apply the NSPanel conversion on every show so a
-        // transient rebuild of the underlying NSWindow doesn't
-        // quietly strip our non-activating-overlay behaviour.
-        super::macos_window::configure_as_floating_panel(&w);
+        // Re-apply the floating-panel configuration on every show so
+        // a transient rebuild of the underlying NSWindow doesn't
+        // quietly strip our overlay-level + collection-behavior
+        // setup. Same rationale as the other branch — skip the
+        // NSPanel swap so Subject / Body inputs can accept keyboard
+        // focus.
+        super::macos_window::configure_as_floating_panel_with(&w, false);
         super::macos_window::configure_for_all_spaces(&w);
     }
 }

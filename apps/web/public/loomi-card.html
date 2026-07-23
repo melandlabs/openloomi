@@ -5104,6 +5104,15 @@
           const target =
             editable && rootEl.contains(editable) ? editable : body;
           if (!target) return;
+          // The actual root cause of "Subject / Body unclickable"
+          // was the NSPanel class-swap leaving the first-responder
+          // chain pointing at tao's content view without a real
+          // first-responder assignment. That's now fixed in
+          // `macos_window.rs::configure_as_floating_panel` step 3b
+          // (re-thread responder + makeFirstResponder:contentView).
+          // The focus ladder below is a JS-side safety net for
+          // cold-promote timing on macOS 14+, not a workaround for
+          // a missing responder chain.
           // Hard reset: ask the underlying NSPanel to become key BEFORE
           // any DOM focus() attempt. On macOS 14+ where
           // `setBecomesKeyOnlyOnOrderFront:` has been pruned and
@@ -5134,6 +5143,35 @@
           // Direct focus() — the click event has already been processed
           // by the OS, so the window should be ready to promote.
           target.focus({ preventScroll: true });
+          // #diags editor-focus — log the post-focus state to a
+          // bounded ring buffer (window.__loomiDiag) AND console.
+          // Goal: tell us, after the user has tried clicking the
+          // input, exactly where focus landed and whether the
+          // Tauri bridge existed when we tried setFocus(). Pull
+          // from devtools with `JSON.stringify(window.__loomiDiagTail())`
+          // (window.__loomiDiagTail is exposed right after this
+          // IIFE). Five fields per entry, capped at 50 entries.
+          try {
+            const active = document.activeElement;
+            const tag =
+              active && active.tagName ? active.tagName.toLowerCase() : "(none)";
+            const id = active && active.id ? `#${active.id}` : "";
+            const line =
+              `[loomi-card focus t=${Date.now()}] target=${target.id || target.tagName}` +
+              ` setFocusBridge=${typeof getCurrentWindow === "function" ? "yes" : "no"}` +
+              ` active=${tag}${id}` +
+              ` match=${active === target}` +
+              ` isContentEditable=${active && active.isContentEditable ? "yes" : "no"}` +
+              ` selStart=${active && "selectionStart" in active ? active.selectionStart : "n/a"}`;
+            console.log(line);
+            (window.__loomiDiag = window.__loomiDiag || []).push({
+              ts: Date.now(),
+              line,
+            });
+            if (window.__loomiDiag.length > 50) window.__loomiDiag.shift();
+          } catch (_) {
+            /* best-effort */
+          }
           if (document.activeElement === target) {
             if (target === body) {
               const len = body.value.length;
@@ -5195,6 +5233,24 @@
             focusOnEditorSurface(editorImRoot, e.target);
           });
         }
+        // #diags — expose a simple tail() helper so devtools or
+        // external probes can pull the ring buffer after the user
+        // has clicked the inputs. Returns { count, activeElement,
+        // lines } — call JSON.stringify(window.__loomiDiagTail())
+        // from the WebKit inspector / a side-channel textarea.
+        window.__loomiDiagTail = (n = 50) => {
+          const buf = window.__loomiDiag || [];
+          return {
+            count: buf.length,
+            activeElement: (() => {
+              const a = document.activeElement;
+              return a && a.tagName
+                ? `${a.tagName.toLowerCase()}${a.id ? "#" + a.id : ""}`
+                : "(none)";
+            })(),
+            lines: buf.slice(-n),
+          };
+        };
 
         // Keyboard shortcuts on the body textarea. The subject input
         // intentionally does NOT get the Cmd+Enter shortcut — pressing

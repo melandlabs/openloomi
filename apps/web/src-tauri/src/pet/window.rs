@@ -87,7 +87,11 @@ pub fn build_pet_window(app: &AppHandle) -> tauri::Result<()> {
             .focusable(true);
 
     let window = builder.build()?;
-    super::macos_window::configure_as_floating_panel(&window);
+    // Pet: keep the NSPanel class swap — the pet is a non-activating
+    // overlay and doesn't host text-input, so the focusable-ivar
+    // trade-off described in `configure_as_floating_panel_with`
+    // doesn't apply.
+    super::macos_window::configure_as_floating_panel_with(&window, true);
     super::macos_window::configure_for_all_spaces(&window);
     // Defensively re-apply the canonical inner size. The Pet window
     // label is shared between this build path and the
@@ -122,7 +126,7 @@ pub fn show_pet_window(app: &AppHandle) {
         // after certain screen-recording permission dialogs) the
         // class swap would otherwise be lost. Re-running the helper
         // is cheap and idempotent.
-        super::macos_window::configure_as_floating_panel(&w);
+        super::macos_window::configure_as_floating_panel_with(&w, true);
         super::macos_window::configure_for_all_spaces(&w);
     }
 }
