@@ -5154,7 +5154,9 @@
           try {
             const active = document.activeElement;
             const tag =
-              active && active.tagName ? active.tagName.toLowerCase() : "(none)";
+              active && active.tagName
+                ? active.tagName.toLowerCase()
+                : "(none)";
             const id = active && active.id ? `#${active.id}` : "";
             const line =
               `[loomi-card focus t=${Date.now()}] target=${target.id || target.tagName}` +
