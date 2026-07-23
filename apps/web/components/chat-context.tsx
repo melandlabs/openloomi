@@ -1330,8 +1330,13 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             }
           },
           onUpdate: async (data) => {
-            // Ensure state is true when receiving message
-            setIsAgentRunningFn(true);
+            // Ensure state is true when receiving message.
+            // Pass the captured chatIdForAbort so the running flag is set on the
+            // SAME chat that onDone/onError later clears. Without this, updates
+            // default to the current activeChatId, which can drift (e.g. when the
+            // user switches chats mid-stream), leaving the flag stuck true and the
+            // send button locked in the loading/stop state after completion.
+            setIsAgentRunningFn(true, chatIdForAbort ?? undefined);
 
             // Deduplicate based on messageId - avoid duplicate messages
             const messageId = (data as { messageId?: string }).messageId;
