@@ -1018,8 +1018,11 @@ setInterval(() => {}, 1000);
         message.message.startsWith("__CODEX_INTERRUPTED__"),
     );
     expect(error).toBeDefined();
-    expect(error?.message).toContain("__CODEX_INTERRUPTED__");
-    const interruption = parseCodexInterruptedError(error?.message);
+    if (!error?.message) {
+      throw new Error("Expected a structured Codex interruption message");
+    }
+    expect(error.message).toContain("__CODEX_INTERRUPTED__");
+    const interruption = parseCodexInterruptedError(error.message);
     expect(interruption).toMatchObject({
       workspacePath: workDir,
       completedArtifacts: ["report.md"],
