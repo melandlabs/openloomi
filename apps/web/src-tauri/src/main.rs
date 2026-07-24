@@ -254,6 +254,37 @@ fn install_panic_hook() {
     }));
 }
 
+fn handle_second_instance_launch(app: &tauri::AppHandle) {
+    eprintln!("[single-instance] second launch detected; restoring existing instance");
+
+    let app_for_main = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        tray::show_main_window(&app_for_main);
+        pet::show_pet_window(&app_for_main);
+    }) {
+        log::warn!("[single-instance] failed to restore existing instance: {error}");
+    }
+
+    // A very fast double-click can arrive while startup-created windows are
+    // still settling. Retry briefly so the existing process, not the second
+    // launch, owns the eventual foreground/visible state.
+    let app_for_retry = app.clone();
+    std::thread::spawn(move || {
+        for delay_ms in [250_u64, 1_000] {
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            let runner = app_for_retry.clone();
+            let app_for_main = app_for_retry.clone();
+            if let Err(error) = runner.run_on_main_thread(move || {
+                tray::show_main_window(&app_for_main);
+                pet::show_pet_window(&app_for_main);
+            }) {
+                log::warn!("[single-instance] restore retry failed: {error}");
+                break;
+            }
+        }
+    });
+}
+
 fn main() {
     env_logger::init();
 
@@ -273,10 +304,11 @@ fn main() {
 
     let context = tauri::generate_context!();
 
-    // Pre-start cleanup (production only)
+    // Prepare production server startup state. The port cleanup and Next.js
+    // sidecar spawn happen later in setup(), after the single-instance plugin
+    // has accepted this process as the primary instance.
     #[cfg(not(debug_assertions))]
     {
-        node::cleanup_before_start();
         // Create channel to deliver AppHandle to the background thread
         let (tx, rx) = std::sync::mpsc::channel();
         let mut rx_guard =
@@ -288,9 +320,9 @@ fn main() {
             panic_guard::lock_recovered(&node::APP_HANDLE_TX, "store app handle sender");
         *tx_guard = Some(tx);
         drop(tx_guard);
-        // Resolve the resource dir before the Tauri app is built: the Next.js
-        // server starts before an AppHandle exists, and on Linux resources are
-        // installed to /usr/lib/<app>, not next to the executable in /usr/bin.
+        // Resolve the resource dir from Tauri's package context instead of
+        // falling back to current_exe(): on Linux resources are installed to
+        // /usr/lib/<app>, not next to the executable in /usr/bin.
         match tauri::utils::platform::resource_dir(context.package_info(), &tauri::Env::default()) {
             Ok(dir) => {
                 let mut dir_guard =
@@ -303,7 +335,6 @@ fn main() {
                 e
             ),
         }
-        node::start_nextjs_server();
     }
 
     #[cfg(debug_assertions)]
@@ -315,6 +346,9 @@ fn main() {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            handle_second_instance_launch(app);
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
@@ -493,6 +527,8 @@ fn main() {
             // returns immediately and the WebView renders about:blank right away.
             #[cfg(not(debug_assertions))]
             {
+                node::cleanup_before_start();
+                node::start_nextjs_server();
                 render_runtime::ensure_render_engine_download_started();
                 let app = app.handle().clone();
                 std::thread::spawn(move || {
