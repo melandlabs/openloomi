@@ -723,6 +723,14 @@ const enUS = {
           "Contact support if the problem persists",
         ],
       },
+      codexCompatibilityError: {
+        title: "Codex setup needs attention",
+        suggestions: [
+          "Upgrade Codex, then restart OpenLoomi",
+          "Or choose a model supported by the installed Codex CLI",
+        ],
+        docsAction: "Open Codex installation guide",
+      },
       fileNotFoundError: {
         title: "File Not Found",
         description: "The specified file could not be found.",

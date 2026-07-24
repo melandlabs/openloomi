@@ -17,11 +17,16 @@ import {
   resolveCodexSandboxMode,
 } from "@/lib/ai/extensions/agent/codex/command";
 import { parseCodexJsonLine } from "@/lib/ai/extensions/agent/codex/parser";
+import {
+  clearCodexRuntimePreflightCache,
+  parseCodexVersion,
+} from "@/lib/ai/extensions/agent/codex/runtime-preflight";
 import { createCodexTransportStatusController } from "@/lib/ai/extensions/agent/codex/transport-status";
 
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  clearCodexRuntimePreflightCache();
   while (tempDirs.length > 0) {
     const tempDir = tempDirs.pop();
     if (tempDir) {
@@ -161,6 +166,112 @@ describe("Codex command builder", () => {
     expect(
       normalizeCodexProviderConfig({ timeoutMs: "nope" }).timeoutMs,
     ).toBeUndefined();
+  });
+});
+
+describe("Codex runtime preflight", () => {
+  it("parses current and prerelease Codex CLI version output", () => {
+    expect(parseCodexVersion("codex-cli 0.145.0")).toBe("0.145.0");
+    expect(parseCodexVersion("codex 1.2.3-beta.4")).toBe("1.2.3-beta.4");
+    expect(parseCodexVersion("not a version")).toBeUndefined();
+  });
+
+  it("blocks an unavailable model before codex exec starts", async () => {
+    const workDir = await createFakeCodexWorkDir(defaultFakeCodexScript());
+    await writeFakeCodexScript(
+      workDir,
+      fakeCodexAppServerScript(["gpt-compatible"]),
+      "app-server",
+    );
+    const agent = new CodexAgent({
+      provider: "codex",
+      model: "gpt-requires-newer-cli",
+      workDir,
+      providerConfig: { codexPath: process.execPath },
+    });
+
+    const messages = await collectMessages(agent.run("hello codex"));
+    const error = messages.find((message) => message.type === "error");
+
+    expect(error).toMatchObject({
+      type: "error",
+      message: expect.stringContaining(
+        'The selected model "gpt-requires-newer-cli" is not available',
+      ),
+    });
+    expect(error?.message).toContain("codex update");
+    expect(error?.message).toContain("gpt-compatible");
+    await expect(
+      readFile(join(workDir, "args.json"), "utf8"),
+    ).rejects.toThrow();
+
+    const requests = JSON.parse(
+      await readFile(join(workDir, "app-server-requests.json"), "utf8"),
+    ) as Array<{ method: string; params?: Record<string, unknown> }>;
+    expect(requests.map((request) => request.method)).toEqual([
+      "initialize",
+      "initialized",
+      "model/list",
+    ]);
+    expect(requests.at(-1)?.params).toMatchObject({
+      limit: 100,
+      includeHidden: true,
+    });
+  });
+
+  it("starts codex exec when the selected model is in the CLI catalog", async () => {
+    const workDir = await createFakeCodexWorkDir(defaultFakeCodexScript());
+    await writeFakeCodexScript(
+      workDir,
+      fakeCodexAppServerScript(["gpt-compatible"]),
+      "app-server",
+    );
+    const agent = new CodexAgent({
+      provider: "codex",
+      model: "gpt-compatible",
+      workDir,
+      providerConfig: { codexPath: process.execPath },
+    });
+
+    const messages = await collectMessages(agent.run("hello codex"));
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", content: "hello" }),
+        expect.objectContaining({ type: "result", content: "success" }),
+      ]),
+    );
+    const args = JSON.parse(
+      await readFile(join(workDir, "args.json"), "utf8"),
+    ) as string[];
+    expect(args).toContain("gpt-compatible");
+  });
+
+  it("falls back to codex exec when app-server model discovery is unavailable", async () => {
+    const workDir = await createFakeCodexWorkDir(defaultFakeCodexScript());
+    await writeFakeCodexScript(
+      workDir,
+      'process.stderr.write("model/list unavailable"); process.exit(2);',
+      "app-server",
+    );
+    const agent = new CodexAgent({
+      provider: "codex",
+      model: "custom-provider/model",
+      workDir,
+      providerConfig: { codexPath: process.execPath },
+    });
+
+    const messages = await collectMessages(agent.run("hello codex"));
+
+    expect(
+      messages.find((message) => message.type === "error"),
+    ).toBeUndefined();
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", content: "hello" }),
+        expect.objectContaining({ type: "result", content: "success" }),
+      ]),
+    );
   });
 });
 
@@ -1118,6 +1229,10 @@ function defaultFakeCodexScript() {
   return `
 const fs = require("node:fs");
 const args = process.argv.slice(2);
+if (args.includes("--version")) {
+  console.log("codex-cli 0.145.0");
+  process.exit(0);
+}
 fs.writeFileSync("args.json", JSON.stringify(args));
 let stdin = "";
 process.stdin.setEncoding("utf8");
@@ -1141,6 +1256,38 @@ process.stdin.on("end", () => {
     type: "turn.completed",
     usage: { input_tokens: 9, cached_input_tokens: 4, output_tokens: 4 }
   }));
+});
+`;
+}
+
+function fakeCodexAppServerScript(models: string[]) {
+  return `
+const fs = require("node:fs");
+const models = ${JSON.stringify(models)};
+const requests = [];
+let buffer = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  buffer += chunk;
+  const lines = buffer.split(/\\r?\\n/);
+  buffer = lines.pop() || "";
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const message = JSON.parse(line);
+    requests.push(message);
+    fs.writeFileSync("app-server-requests.json", JSON.stringify(requests));
+    if (message.method === "initialize") {
+      console.log(JSON.stringify({ id: message.id, result: { userAgent: "fake-codex" } }));
+    } else if (message.method === "model/list") {
+      console.log(JSON.stringify({
+        id: message.id,
+        result: {
+          data: models.map((model) => ({ id: model, model, displayName: model })),
+          nextCursor: null
+        }
+      }));
+    }
+  }
 });
 `;
 }

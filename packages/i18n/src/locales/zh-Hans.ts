@@ -680,6 +680,14 @@ const zhHans = {
         description: "处理请求时遇到问题。",
         suggestions: ["稍后重试", "如果问题持续存在，请联系支持"],
       },
+      codexCompatibilityError: {
+        title: "Codex 配置需要处理",
+        suggestions: [
+          "升级 Codex，然后重启 OpenLoomi",
+          "或选择当前 Codex CLI 支持的模型",
+        ],
+        docsAction: "打开 Codex 安装指南",
+      },
       fileNotFoundError: {
         title: "文件未找到",
         description: "找不到指定的文件。",

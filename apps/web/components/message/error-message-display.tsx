@@ -102,6 +102,35 @@ export function ErrorMessageDisplay({
   const getErrorDetails = (error: string) => {
     const lowerError = error.toLowerCase();
 
+    // Codex CLI/model compatibility errors are already actionable at the
+    // provider boundary. Preserve that original diagnostic instead of
+    // replacing it with the generic "try again later" copy (issue #437).
+    if (
+      lowerError.includes("codex") &&
+      (lowerError.includes("requires a newer") ||
+        lowerError.includes("not available in codex cli") ||
+        lowerError.includes("not supported") ||
+        lowerError.includes("unsupported model") ||
+        lowerError.includes("upgrade codex") ||
+        lowerError.includes("codex cli executable not found") ||
+        lowerError.includes("codex cli version check"))
+    ) {
+      const suggestions = t(
+        "common.errors.codexCompatibilityError.suggestions",
+        {
+          returnObjects: true,
+        },
+      );
+      return {
+        title: t("common.errors.codexCompatibilityError.title"),
+        description: sanitizeErrorForDisplay(error),
+        suggestions: Array.isArray(suggestions) ? suggestions : [],
+        icon: "alert_triangle",
+        severity: "warning" as const,
+        showCodexDocs: true,
+      };
+    }
+
     // IMPROVED: Handle special error markers from Claude Extension
     // Process crash errors (OOM, killed) - retryable
     if (
@@ -393,13 +422,7 @@ export function ErrorMessageDisplay({
       returnObjects: true,
     });
     // Remove log file paths and other sensitive info from error message
-    const cleanError = error
-      .replace(/\/Users\/[^/]+\/\.openloomi\/logs\/[^\s]+/g, "")
-      .replace(/\/home\/[^/]+\/\.openloomi\/logs\/[^\s]+/g, "")
-      .replace(/http:\/\/[^/]+\/[^/]+\/Users\/[^/]+\/[^\s]+/g, "")
-      .replace(/__CUSTOM_API_ERROR__\|[^|]+/g, "")
-      .trim()
-      .replace(/\s+/g, " ");
+    const cleanError = sanitizeErrorForDisplay(error);
     return {
       title: t("common.errors.genericError.title"),
       description: cleanError || t("common.errors.genericError.description"),
@@ -433,8 +456,12 @@ export function ErrorMessageDisplay({
           className="shrink-0 mt-0.5"
         />
 
-        <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-sm mb-1">{errorDetails.title}</h4>
+        <div className="flex-1 min-w-0 space-y-2">
+          <h4 className="font-semibold text-sm">{errorDetails.title}</h4>
+
+          <p className="text-xs opacity-90 whitespace-pre-wrap break-words">
+            {errorDetails.description}
+          </p>
 
           {/* Suggestions */}
           {errorDetails.suggestions.length > 0 && (
@@ -449,8 +476,31 @@ export function ErrorMessageDisplay({
               </ul>
             </div>
           )}
+
+          {"showCodexDocs" in errorDetails &&
+          errorDetails.showCodexDocs === true ? (
+            <Button asChild size="sm" variant="outline">
+              <a
+                href="https://github.com/openai/codex#installation"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t("common.errors.codexCompatibilityError.docsAction")}
+              </a>
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+function sanitizeErrorForDisplay(error: string): string {
+  return error
+    .replace(/\/Users\/[^/]+\/\.openloomi\/logs\/[^\s]+/g, "")
+    .replace(/\/home\/[^/]+\/\.openloomi\/logs\/[^\s]+/g, "")
+    .replace(/http:\/\/[^/]+\/[^/]+\/Users\/[^/]+\/[^\s]+/g, "")
+    .replace(/__CUSTOM_API_ERROR__\|[^|]+/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
 }

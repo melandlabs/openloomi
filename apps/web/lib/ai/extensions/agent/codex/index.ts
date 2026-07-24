@@ -36,6 +36,7 @@ import {
   parseCodexInterruptedError,
   type CodexInterruptedContext,
 } from "./interrupt-marker";
+import { preflightCodexRuntime } from "./runtime-preflight";
 
 // Re-exported from `./interrupt-marker` so legacy import paths
 // (`@/lib/ai/extensions/agent/codex`) keep working without pulling
@@ -270,6 +271,14 @@ export class CodexAgent extends BaseAgent {
       permissionMode: options?.permissionMode,
       mode,
       providerConfig: this.config.providerConfig,
+    });
+
+    await preflightCodexRuntime({
+      command: command.command,
+      cwd,
+      model: this.config.model,
+      providerConfig,
+      signal: signal ?? options?.abortController?.signal,
     });
 
     let closeEvent: Extract<CodexCliEvent, { type: "close" }> | undefined;
