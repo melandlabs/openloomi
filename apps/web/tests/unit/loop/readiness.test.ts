@@ -157,6 +157,15 @@ describe("deriveReadiness — email_reply", () => {
 });
 
 describe("deriveReadiness — fallback for unknown / custom types", () => {
+  it("marks quiet_digest cards as not_actionable", () => {
+    const r = deriveReadiness({
+      type: "quiet_digest",
+      action: { params: { module: "github-notifications" } },
+    });
+    expect(r.status).toBe("not_actionable");
+    expect(canExecute(r)).toBe(false);
+  });
+
   it("defaults to ready for unknown types so custom cards keep working", () => {
     const r = deriveReadiness({
       type: "my_custom_thing",

@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use std::fs;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Listener, Manager};
 
 use super::{
@@ -463,6 +463,8 @@ fn build_decision_payload(d: &DecItem) -> serde_json::Value {
         "source": source,
         "source_type": source_type,
         "source_ts": source_ts,
+        "action": d.action,
+        "context": d.context,
         "why": d.context.as_ref().and_then(|c| c.why.clone()).unwrap_or_default(),
         "status": "pending",
     })
@@ -917,6 +919,8 @@ pub struct DecItem {
     #[serde(default)]
     pub source_signal: Option<SourceSignal>,
     #[serde(default)]
+    pub action: Option<DecAction>,
+    #[serde(default)]
     pub context: Option<DecContext>,
     #[serde(default)]
     pub created_at: Option<String>,
@@ -929,7 +933,7 @@ pub struct DecItem {
     pub needs_user: Option<bool>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct SourceSignal {
     #[serde(default)]
     pub source: String,
@@ -939,10 +943,20 @@ pub struct SourceSignal {
     pub ts: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
+pub struct DecAction {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub params: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct DecContext {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub why: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Map a decision snapshot to `(pet_state, optional_monologue_hint)`.
@@ -1240,6 +1254,7 @@ mod tests {
                     dialogue: None,
                     confidence: Some(0.8),
                     source_signal: None,
+                    action: None,
                     context: None,
                     created_at: Some(format!("2026-01-01T00:00:0{i}Z")),
                     completed_at: None,
@@ -1254,6 +1269,7 @@ mod tests {
                     dialogue: None,
                     confidence: Some(0.8),
                     source_signal: None,
+                    action: None,
                     context: None,
                     created_at: None,
                     completed_at: Some(format!("2026-01-01T00:00:0{i}Z")),
@@ -1268,6 +1284,7 @@ mod tests {
                     dialogue: None,
                     confidence: Some(0.8),
                     source_signal: None,
+                    action: None,
                     context: None,
                     created_at: Some(format!("2026-01-01T00:00:0{i}Z")),
                     completed_at: None,
@@ -1336,6 +1353,7 @@ mod tests {
                     dialogue: None,
                     confidence: Some(0.8),
                     source_signal: None,
+                    action: None,
                     context: None,
                     created_at: None,
                     completed_at: Some(completed_at.into()),
@@ -1437,6 +1455,7 @@ mod tests {
             dialogue: Some("hello".into()),
             confidence: Some(0.8),
             source_signal: None,
+            action: None,
             context: None,
             created_at: None,
             completed_at: Some("2026-01-01T00:00:00Z".into()),
@@ -1493,6 +1512,69 @@ mod tests {
             "p2"
         };
         assert_eq!(p, expected, "priority must match confidence bucket");
+    }
+
+    #[test]
+    fn build_decision_payload_preserves_quiet_digest_action_and_items() {
+        let mut extra = serde_json::Map::new();
+        extra.insert("module".into(), serde_json::json!("github-notifications"));
+        extra.insert(
+            "items".into(),
+            serde_json::json!([
+                {
+                    "repo": "melandlabs/openloomi",
+                    "title": "Issue 447 repro",
+                    "summary": "You were mentioned",
+                    "url": "https://github.com/melandlabs/openloomi/issues/447"
+                }
+            ]),
+        );
+        let d = DecItem {
+            id: Some("gh_digest_repro".into()),
+            r#type: Some("quiet_digest".into()),
+            title: Some("GitHub has 1 update".into()),
+            dialogue: Some(
+                "1 unread GitHub notification across 1 repo: melandlabs/openloomi.".into(),
+            ),
+            confidence: Some(0.9),
+            source_signal: None,
+            action: Some(DecAction {
+                kind: Some("quiet_digest".into()),
+                params: Some(serde_json::json!({
+                    "module": "github-notifications"
+                })),
+            }),
+            context: Some(DecContext {
+                why: Some(vec![
+                    "Grouped 1 passive GitHub notification into one read-only summary".into(),
+                ]),
+                extra,
+            }),
+            created_at: None,
+            completed_at: None,
+            needs_user: None,
+        };
+
+        let v = build_decision_payload(&d);
+        assert_eq!(
+            v.pointer("/action/params/module").and_then(|m| m.as_str()),
+            Some("github-notifications"),
+            "pet card payload must keep the quiet digest module"
+        );
+        assert_eq!(
+            v.pointer("/context/items/0/url").and_then(|u| u.as_str()),
+            Some("https://github.com/melandlabs/openloomi/issues/447"),
+            "pet card payload must keep GitHub digest items for navigation"
+        );
+        assert_eq!(
+            v.pointer("/context/items/0/title").and_then(|t| t.as_str()),
+            Some("Issue 447 repro")
+        );
+        assert_eq!(
+            v.get("why").and_then(|w| w.as_array()).map(|w| w.len()),
+            Some(1),
+            "legacy top-level why remains populated for old card code"
+        );
     }
 
     #[test]

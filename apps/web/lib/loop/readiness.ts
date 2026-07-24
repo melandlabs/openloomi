@@ -134,6 +134,8 @@ export function deriveReadiness(decision: ReadableDecision): DecisionReadiness {
       }
       return { status: "ready" };
     }
+    case "quiet_digest":
+      return { status: "not_actionable" };
     default:
       return { status: "ready" };
   }

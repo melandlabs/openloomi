@@ -5684,7 +5684,13 @@
             (decision.action &&
               decision.action.params &&
               decision.action.params.module) ||
+            (decision.context && decision.context.module) ||
             null;
+          const isGithubDigest =
+            moduleId === "github-notifications" ||
+            /github notification|github has/i.test(
+              [decision.title, decision.dialogue].filter(Boolean).join(" "),
+            );
           const moduleLabel =
             moduleId === "ai-news-digest"
               ? "Last 24h in AI / tech"
@@ -5692,7 +5698,7 @@
                 ? "Weather + meetings"
                 : moduleId === "memory-resurface"
                   ? "From your memory"
-                  : moduleId === "github-notifications"
+                  : isGithubDigest
                     ? "GitHub updates"
                     : "Quiet day filler";
           tagEl.textContent = moduleLabel;
@@ -5702,8 +5708,7 @@
           // not an actionable ask. Other quiet_digest modules keep the
           // existing "Got it" copy that fits them.
           if (dismissBtn) {
-            dismissBtn.textContent =
-              moduleId === "github-notifications" ? "Mark as read" : "Got it";
+            dismissBtn.textContent = isGithubDigest ? "Mark as read" : "Got it";
           }
 
           // Bullets. The contract is `context.items: { title, summary, ref?, url? }[]`.
@@ -5717,8 +5722,16 @@
           if (items.length === 0) {
             const empty = document.createElement("div");
             empty.className = "brief-item";
-            empty.innerHTML =
-              '<span class="brief-priority p2">·</span><div><div class="bi-title">Nothing to read</div><div class="bi-sub">The filler ran but had nothing to surface.</div></div><span></span>';
+            if (isGithubDigest) {
+              empty.innerHTML =
+                '<span class="brief-priority p2">·</span>' +
+                '<div><div class="bi-title">GitHub notification details unavailable</div>' +
+                '<div class="bi-sub">OpenLoomi saw unread GitHub notifications, but this card did not receive the item details.</div></div>' +
+                '<span class="bi-link-cell"><a class="bi-link" href="https://github.com/notifications" target="_blank" rel="noopener noreferrer">Open notifications</a></span>';
+            } else {
+              empty.innerHTML =
+                '<span class="brief-priority p2">·</span><div><div class="bi-title">Nothing to read</div><div class="bi-sub">The filler ran but had nothing to surface.</div></div><span></span>';
+            }
             listEl.appendChild(empty);
             return;
           }
@@ -5730,7 +5743,7 @@
           // produces an executable `<a href="…">` for an unverified
           // origin. Other quiet_digest modules fall through to the
           // legacy generic rendering.
-          if (moduleId === "github-notifications") {
+          if (isGithubDigest) {
             for (const it of items) {
               const row = document.createElement("div");
               row.className = "brief-item";
@@ -5743,11 +5756,14 @@
                 urlRaw.startsWith("https://github.com/")
                   ? urlRaw
                   : null;
-              const linkHtml = url
-                ? '<a class="bi-link" href="' +
-                  esc(url) +
-                  '" target="_blank" rel="noopener noreferrer">Open on GitHub ↗</a>'
-                : "";
+              const href = url || "https://github.com/notifications";
+              const linkText = url ? "Open on GitHub" : "Open notifications";
+              const linkHtml =
+                '<a class="bi-link" href="' +
+                esc(href) +
+                '" target="_blank" rel="noopener noreferrer">' +
+                linkText +
+                "</a>";
               row.innerHTML =
                 '<span class="brief-priority p2">·</span>' +
                 '<div class="gh-row">' +

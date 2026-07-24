@@ -631,6 +631,15 @@ export function DecisionCard({
   const nextStep =
     decision.nextStep ??
     t("loop.nextStep.tapRun", "Tap Run to let the agent handle this decision.");
+  const quietDigestModule =
+    (decision.action?.params as Record<string, unknown> | undefined)?.module ??
+    (decision.context as Record<string, unknown> | undefined)?.module;
+  const quietDigestItems = Array.isArray(decision.context?.items)
+    ? (decision.context.items as Array<Record<string, unknown>>).slice(0, 20)
+    : [];
+  const isGithubQuietDigest =
+    quietDigestModule === "github-notifications" ||
+    /github notification|github has/i.test(`${decision.title} ${dialogue}`);
 
   // #363 — pre-resolve the decision context. RSVP renders the
   // time/organizer/attendance/location/conflict block; other types return
@@ -1106,89 +1115,105 @@ export function DecisionCard({
               mirrors the pet bubble's grouped GitHub summary. Each item
               shows repo, title, and (when derivable) a validated HTTPS
               link to the thread. */}
-          {Array.isArray(decision.context?.items) &&
-            (decision.context?.items as Array<Record<string, unknown>>).length >
-              0 && (
-              <ul className="flex flex-col gap-1.5 text-xs">
-                {(decision.context?.items as Array<Record<string, unknown>>)
-                  .slice(0, 20)
-                  .map((it, idx) => {
-                    const title =
-                      typeof it.title === "string" ? it.title : "GitHub update";
-                    const repo =
-                      typeof it.repo === "string" ? it.repo : "unknown";
-                    const summary =
-                      typeof it.summary === "string" ? it.summary : "";
-                    const url =
-                      typeof it.url === "string" &&
-                      it.url.startsWith("https://")
-                        ? it.url
-                        : null;
-                    const kindLabel = url
-                      ? /\/(issues|pull)\/\d+$/.test(url)
-                        ? t("loop.quietDigest.openIssue", "Open on GitHub")
-                        : t("loop.quietDigest.openIssue", "Open on GitHub")
-                      : null;
-                    return (
-                      <li
-                        key={`${repo}-${idx}-${title}`}
-                        className="flex flex-col gap-0.5 rounded-md border bg-muted/30 px-2 py-1.5"
-                      >
-                        <div className="flex flex-wrap items-baseline gap-2">
-                          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                            {repo}
-                          </span>
-                          <span className="text-sm font-medium leading-snug">
-                            {title}
-                          </span>
-                          {url && (
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="ml-auto text-[10px] font-medium text-primary hover:underline"
-                            >
-                              {kindLabel} ↗
-                            </a>
-                          )}
-                        </div>
-                        {summary && (
-                          <span className="text-xs text-muted-foreground">
-                            {summary}
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
-              </ul>
-            )}
+          {quietDigestItems.length > 0 ? (
+            <ul className="flex flex-col gap-1.5 text-xs">
+              {quietDigestItems.map((it, idx) => {
+                const title =
+                  typeof it.title === "string" ? it.title : "GitHub update";
+                const repo = typeof it.repo === "string" ? it.repo : "unknown";
+                const summary =
+                  typeof it.summary === "string" ? it.summary : "";
+                const rawUrl =
+                  typeof it.url === "string" && it.url.startsWith("https://")
+                    ? it.url
+                    : null;
+                const githubUrl = rawUrl?.startsWith("https://github.com/")
+                  ? rawUrl
+                  : null;
+                const href =
+                  githubUrl ??
+                  (isGithubQuietDigest
+                    ? "https://github.com/notifications"
+                    : rawUrl);
+                const kindLabel = githubUrl
+                  ? t("loop.quietDigest.openIssue", "Open on GitHub")
+                  : isGithubQuietDigest
+                    ? t(
+                        "loop.quietDigest.openNotifications",
+                        "Open notifications",
+                      )
+                    : t("loop.quietDigest.openLink", "Open");
+                return (
+                  <li
+                    key={`${repo}-${idx}-${title}`}
+                    className="flex flex-col gap-0.5 rounded-md border bg-muted/30 px-2 py-1.5"
+                  >
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {repo}
+                      </span>
+                      <span className="text-sm font-medium leading-snug">
+                        {title}
+                      </span>
+                      {href && (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-auto text-[10px] font-medium text-primary hover:underline"
+                        >
+                          {kindLabel} ↗
+                        </a>
+                      )}
+                    </div>
+                    {summary && (
+                      <span className="text-xs text-muted-foreground">
+                        {summary}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : isGithubQuietDigest ? (
+            <div className="flex flex-col gap-1 rounded-md border bg-muted/30 px-2 py-1.5 text-xs">
+              <span className="text-sm font-medium leading-snug">
+                {t(
+                  "loop.quietDigest.githubDetailsUnavailable",
+                  "GitHub notification details unavailable",
+                )}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {t(
+                  "loop.quietDigest.githubDetailsUnavailableBody",
+                  "OpenLoomi saw unread GitHub notifications, but this card did not receive the item details.",
+                )}
+              </span>
+              <a
+                href="https://github.com/notifications"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-medium text-primary hover:underline"
+              >
+                {t("loop.quietDigest.openNotifications", "Open notifications")}
+              </a>
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center justify-end gap-2">
             {/* #378 — github-notifications digest relabels Dismiss → "Mark
                 as read". Other quiet_digest modules keep the legacy
                 "Dismiss" label since the existing copy still fits. */}
-            {(() => {
-              const module =
-                (decision.action?.params as Record<string, unknown> | undefined)
-                  ?.module ??
-                (decision.context as Record<string, unknown> | undefined)
-                  ?.module;
-              const isGithub =
-                module === "github-notifications" ||
-                String(module ?? "") === "github-notifications";
-              return (
-                <ActionButton
-                  icon="ri-check-line"
-                  label={
-                    isGithub
-                      ? t("loop.quietDigest.markAsRead", "Mark as read")
-                      : t("loop.dismiss", "Dismiss")
-                  }
-                  variant="default"
-                  onClick={() => act("dismiss")}
-                  pending={pendingAction === "dismiss"}
-                />
-              );
-            })()}
+            <ActionButton
+              icon="ri-check-line"
+              label={
+                isGithubQuietDigest
+                  ? t("loop.quietDigest.markAsRead", "Mark as read")
+                  : t("loop.dismiss", "Dismiss")
+              }
+              variant="default"
+              onClick={() => act("dismiss")}
+              pending={pendingAction === "dismiss"}
+            />
           </div>
         </footer>
       )}

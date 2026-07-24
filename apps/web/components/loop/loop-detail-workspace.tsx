@@ -195,6 +195,9 @@ export function LoopDetailWorkspace({
   const state = readinessState(decision);
   const stateMeta = stateLabel(state);
   const executable = canExecute(readiness);
+  const isQuietDigest =
+    decision.type === "quiet_digest" ||
+    decision.action?.kind === "quiet_digest";
   const dryRunText =
     typeof decision.context?.dry_run === "string"
       ? decision.context.dry_run
@@ -429,7 +432,7 @@ export function LoopDetailWorkspace({
         )}
 
         {/* Status-dependent action block */}
-        {status === "pending" && (
+        {status === "pending" && !isQuietDigest && (
           <div className="flex flex-col gap-3">
             <DryRunPreview
               decisionId={decision.id}
