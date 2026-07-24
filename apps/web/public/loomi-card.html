@@ -3219,6 +3219,53 @@
         }
 
         // ---------- Helpers ----------
+        function getTauriInvoke() {
+          const t = window.__TAURI__;
+          if (!t) return null;
+          if (t.core && typeof t.core.invoke === "function") {
+            return t.core.invoke.bind(t.core);
+          }
+          if (t.tauri && typeof t.tauri.invoke === "function") {
+            return t.tauri.invoke.bind(t.tauri);
+          }
+          if (typeof t.invoke === "function") {
+            return t.invoke.bind(t);
+          }
+          return null;
+        }
+
+        function safeHttpsUrl(rawUrl) {
+          if (typeof rawUrl !== "string" || !rawUrl.trim()) return null;
+          try {
+            const url = new URL(rawUrl.trim());
+            if (url.protocol !== "https:") return null;
+            return url.href;
+          } catch (_) {
+            return null;
+          }
+        }
+
+        async function openExternalUrl(rawUrl) {
+          const url = safeHttpsUrl(rawUrl);
+          if (!url) {
+            showToast("Can't open an invalid link.", true);
+            return;
+          }
+          const invoke = getTauriInvoke();
+          if (invoke) {
+            try {
+              await invoke("open_url_custom", { url });
+              return;
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              showToast(`Open failed: ${msg}`, true);
+              return;
+            }
+          }
+          const opened = window.open(url, "_blank", "noopener,noreferrer");
+          if (!opened) window.location.href = url;
+        }
+
         function fmtTs(ts) {
           if (!ts) return "—";
           try {
@@ -5035,11 +5082,20 @@
           }
         }
 
-        // Lives on the card root (same delegation pattern as the rest
-        // of the card) and matches `[data-editor-action]`. Kept
-        // separate from the main click handler so the dispatch is
-        // trivial — no risk of the schedule-fall-through eating an
-        // editor click.
+        // Pet card webviews do not reliably hand target=_blank anchors
+        // to the OS browser. Route trusted external links through the
+        // same Tauri command the main window uses.
+        card.addEventListener("click", (e) => {
+          const link = e.target.closest("[data-external-url]");
+          if (!link) return;
+          e.preventDefault();
+          e.stopPropagation();
+          openExternalUrl(link.dataset.externalUrl || link.href);
+        });
+
+        // Lives on the card root and matches `[data-editor-action]`.
+        // Kept separate from the main action handler so editor clicks
+        // cannot fall through into scheduling.
         card.addEventListener("click", (e) => {
           const btn = e.target.closest("[data-editor-action]");
           if (!btn) return;
@@ -5727,7 +5783,7 @@
                 '<span class="brief-priority p2">·</span>' +
                 '<div><div class="bi-title">GitHub notification details unavailable</div>' +
                 '<div class="bi-sub">OpenLoomi saw unread GitHub notifications, but this card did not receive the item details.</div></div>' +
-                '<span class="bi-link-cell"><a class="bi-link" href="https://github.com/notifications" target="_blank" rel="noopener noreferrer">Open notifications</a></span>';
+                '<span class="bi-link-cell"><a class="bi-link" href="https://github.com/notifications" data-external-url="https://github.com/notifications" target="_blank" rel="noopener noreferrer">Open notifications</a></span>';
             } else {
               empty.innerHTML =
                 '<span class="brief-priority p2">·</span><div><div class="bi-title">Nothing to read</div><div class="bi-sub">The filler ran but had nothing to surface.</div></div><span></span>';
@@ -5760,6 +5816,8 @@
               const linkText = url ? "Open on GitHub" : "Open notifications";
               const linkHtml =
                 '<a class="bi-link" href="' +
+                esc(href) +
+                '" data-external-url="' +
                 esc(href) +
                 '" target="_blank" rel="noopener noreferrer">' +
                 linkText +
