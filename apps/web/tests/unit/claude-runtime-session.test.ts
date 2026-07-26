@@ -1,12 +1,12 @@
 import type {
   HookCallback,
-  Query,
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   RUNTIME_INSTRUCTION_SCHEMA_VERSION,
   RuntimeInstructionSchema,
+  type RuntimeInstructionTransportPort,
 } from "@openloomi/ai/agent/runtime-instructions";
 import { AgentSupplementalInputQueue } from "@openloomi/ai/agent/supplemental-input";
 import type { AgentSupplementalInputSource } from "@openloomi/ai/agent/types";
@@ -14,11 +14,16 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   ClaudeInputMultiplexer,
+  ClaudeGoalRuntimeRegistrationError,
   ClaudeRuntimeSession,
   createClaudeSupplementalInputHooks,
-  type ClaudeSdkQueryInput,
-  type ClaudeSdkTransport,
+  startClaudeGoalRuntimeSession,
 } from "@/lib/ai/extensions/agent/claude/runtime";
+import { createInMemoryAgentGoalRuntime } from "@/lib/ai/runtime-instructions/runtime";
+import {
+  createControlledClaudeQuery,
+  createFakeClaudeSdkTransport,
+} from "../helpers/claude-runtime";
 
 const SESSION_ID = "33333333-3333-4333-8333-333333333333";
 const INSTRUCTION_ID = "22222222-2222-4222-8222-222222222222";
@@ -26,71 +31,6 @@ const CREATED_AT = "2026-07-20T00:00:00.000Z";
 
 function logger() {
   return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
-}
-
-function controlledQuery() {
-  const pending: SDKMessage[] = [];
-  const waiters: Array<(result: IteratorResult<SDKMessage>) => void> = [];
-  let closed = false;
-
-  const finish = () => {
-    if (closed) return;
-    closed = true;
-    for (const waiter of waiters.splice(0)) {
-      waiter({ value: undefined, done: true });
-    }
-  };
-  const interrupt = vi.fn(async () => {});
-  const close = vi.fn(finish);
-  const iterator = {
-    next: () => {
-      const message = pending.shift();
-      if (message) return Promise.resolve({ value: message, done: false });
-      if (closed) {
-        return Promise.resolve({ value: undefined, done: true } as const);
-      }
-      return new Promise<IteratorResult<SDKMessage>>((resolve) => {
-        waiters.push(resolve);
-      });
-    },
-    return: async () => {
-      finish();
-      return { value: undefined, done: true } as const;
-    },
-    [Symbol.asyncIterator]() {
-      return this;
-    },
-    interrupt,
-    close,
-  } as unknown as Query;
-
-  return {
-    query: iterator,
-    interrupt,
-    close,
-    push(message: SDKMessage) {
-      if (closed) throw new Error("Fake Query is closed");
-      const waiter = waiters.shift();
-      if (waiter) waiter({ value: message, done: false });
-      else pending.push(message);
-    },
-  };
-}
-
-function fakeTransport(handle: ReturnType<typeof controlledQuery>) {
-  let queryInput: ClaudeSdkQueryInput | undefined;
-  const transport: ClaudeSdkTransport = {
-    startQuery(input) {
-      queryInput = input;
-      return handle.query;
-    },
-  };
-  return {
-    transport,
-    get queryInput() {
-      return queryInput;
-    },
-  };
 }
 
 function initMessage(): SDKMessage {
@@ -134,10 +74,180 @@ function runtimeInstruction(overrides: Record<string, unknown> = {}) {
   });
 }
 
+describe("Claude Goal runtime registration", () => {
+  it("registers, resolves, and releases an authenticated Claude runtime", async () => {
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
+    const runtime = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 0,
+      sdkTransport: sdk.transport,
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    const goalRuntime = createInMemoryAgentGoalRuntime();
+    const registration = await startClaudeGoalRuntimeSession({
+      session: { user: { id: "authenticated-owner" } },
+      runtime,
+      start: { initialPrompt: "initial request" },
+      goalRuntime,
+    });
+
+    expect(registration).toMatchObject({
+      ownerId: "authenticated-owner",
+      runtimeSessionId: SESSION_ID,
+    });
+    expect(runtime.state).toBe("running");
+    await expect(
+      goalRuntime.sessions.resolve("authenticated-owner", SESSION_ID),
+    ).resolves.toBe(runtime);
+
+    registration?.release();
+    await expect(
+      goalRuntime.sessions.resolve("authenticated-owner", SESSION_ID),
+    ).resolves.toBeNull();
+    await runtime.close();
+  });
+
+  it.each([
+    ["a missing session", undefined],
+    ["a blank owner ID", { user: { id: "   " } }],
+  ])("does not register %s", async (_case, agentSession) => {
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
+    const runtime = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 0,
+      sdkTransport: sdk.transport,
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    const goalRuntime = createInMemoryAgentGoalRuntime();
+    expect(
+      await startClaudeGoalRuntimeSession({
+        session: agentSession,
+        runtime,
+        start: { initialPrompt: "initial request" },
+        goalRuntime,
+      }),
+    ).toBeUndefined();
+    expect(goalRuntime.sessions.size).toBe(0);
+    await runtime.close();
+  });
+
+  it("never registers a Claude runtime whose SDK query fails to start", async () => {
+    const runtime = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 0,
+      sdkTransport: {
+        startQuery() {
+          throw new Error("SDK startup failed");
+        },
+      },
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    const goalRuntime = createInMemoryAgentGoalRuntime();
+
+    await expect(
+      startClaudeGoalRuntimeSession({
+        session: { user: { id: "authenticated-owner" } },
+        runtime,
+        start: { initialPrompt: "initial request" },
+        goalRuntime,
+      }),
+    ).rejects.toThrow("SDK startup failed");
+    expect(runtime.state).toBe("failed");
+    expect(goalRuntime.sessions.size).toBe(0);
+  });
+
+  it("does not start a Query when live-session registration conflicts", async () => {
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
+    const runtime = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 0,
+      sdkTransport: sdk.transport,
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    const goalRuntime = createInMemoryAgentGoalRuntime();
+    const occupiedTransport: RuntimeInstructionTransportPort = {
+      runtimeSessionId: SESSION_ID,
+      async deliver(instruction) {
+        return {
+          instructionId: instruction.id,
+          runtimeSessionId: SESSION_ID,
+          state: "queued",
+          recordedAt: CREATED_AT,
+        };
+      },
+      async interrupt() {},
+    };
+    const occupiedRegistration = goalRuntime.sessions.register({
+      ownerId: "authenticated-owner",
+      transport: occupiedTransport,
+    });
+
+    await expect(
+      startClaudeGoalRuntimeSession({
+        session: { user: { id: "authenticated-owner" } },
+        runtime,
+        start: { initialPrompt: "initial request" },
+        goalRuntime,
+      }),
+    ).rejects.toMatchObject({ code: "transport_conflict" });
+    expect(sdk.queryInput).toBeUndefined();
+    expect(handle.close).not.toHaveBeenCalled();
+    expect(runtime.state).toBe("closed");
+    await expect(
+      goalRuntime.sessions.resolve("authenticated-owner", SESSION_ID),
+    ).resolves.toBe(occupiedTransport);
+
+    occupiedRegistration.release();
+  });
+
+  it("closes the Query and releases registration when pending replay is rejected", async () => {
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
+    const runtime = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 0,
+      sdkTransport: sdk.transport,
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    const goalRuntime = createInMemoryAgentGoalRuntime();
+    vi.spyOn(goalRuntime.goals, "replayPendingInstructions").mockResolvedValue({
+      status: "rejected",
+      instructionId: INSTRUCTION_ID,
+      receipt: {
+        instructionId: INSTRUCTION_ID,
+        runtimeSessionId: SESSION_ID,
+        state: "rejected",
+        recordedAt: CREATED_AT,
+        reason: "runtime closed",
+      },
+    });
+
+    await expect(
+      startClaudeGoalRuntimeSession({
+        session: { user: { id: "authenticated-owner" } },
+        runtime,
+        start: { initialPrompt: "initial request" },
+        goalRuntime,
+      }),
+    ).rejects.toBeInstanceOf(ClaudeGoalRuntimeRegistrationError);
+    expect(handle.close).toHaveBeenCalledOnce();
+    expect(runtime.state).toBe("closed");
+    expect(goalRuntime.sessions.size).toBe(0);
+  });
+});
+
 describe("ClaudeRuntimeSession", () => {
   it("owns the SDK Query, captures the Claude session ID, and publishes AgentMessages", async () => {
-    const handle = controlledQuery();
-    const sdk = fakeTransport(handle);
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
     const session = new ClaudeRuntimeSession({
       runtimeSessionId: SESSION_ID,
       runEpoch: 0,
@@ -179,8 +289,8 @@ describe("ClaudeRuntimeSession", () => {
   });
 
   it("delivers formatted instructions through its live input channel and interrupts the Query", async () => {
-    const handle = controlledQuery();
-    const sdk = fakeTransport(handle);
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
     const session = new ClaudeRuntimeSession({
       runtimeSessionId: SESSION_ID,
       runEpoch: 2,
@@ -215,8 +325,8 @@ describe("ClaudeRuntimeSession", () => {
   });
 
   it("rejects stale run epochs and invalid state transitions", async () => {
-    const handle = controlledQuery();
-    const sdk = fakeTransport(handle);
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
     const session = new ClaudeRuntimeSession({
       runtimeSessionId: SESSION_ID,
       runEpoch: 4,

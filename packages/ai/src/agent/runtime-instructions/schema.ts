@@ -423,7 +423,9 @@ const instructionEnvelopeSchema = z
     goalId: z.uuid().optional(),
     goalRevision: z.int().positive().optional(),
     deliveryMode: RuntimeInstructionDeliveryModeSchema,
-    targetSessionId: z.uuid(),
+    // Runtime session IDs are opaque provider/application identifiers. The
+    // existing OpenLoomi agent runtime uses nanoid rather than UUID.
+    targetSessionId: identifierSchema,
     source: RuntimeInstructionSourceSchema,
     idempotencyKey: z
       .string()

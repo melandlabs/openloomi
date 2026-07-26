@@ -1,4 +1,5 @@
 export * from "./aggregate";
+export * from "./canonical-json";
 export * from "./constants";
 export * from "./formatter";
 export type * from "./ports";

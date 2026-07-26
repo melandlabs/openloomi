@@ -1,3 +1,4 @@
+export * from "./goal-registration";
 export * from "./input-multiplexer";
 export * from "./output-multiplexer";
 export * from "./sdk-transport";

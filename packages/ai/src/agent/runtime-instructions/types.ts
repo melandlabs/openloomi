@@ -50,6 +50,13 @@ export type RuntimeInstructionSource = z.infer<
   typeof RuntimeInstructionSourceSchema
 >;
 export type RuntimeInstruction = z.infer<typeof RuntimeInstructionSchema>;
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, Extract<keyof T, K>>
+  : never;
+export type RuntimeInstructionDraft = DistributiveOmit<
+  RuntimeInstruction,
+  "sequence"
+>;
 export type RuntimeProvider = z.infer<typeof RuntimeProviderSchema>;
 export type RuntimeSessionState = z.infer<typeof RuntimeSessionStateSchema>;
 export type GoalRunStatus = z.infer<typeof GoalRunStatusSchema>;

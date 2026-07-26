@@ -4,12 +4,12 @@
  * Implementation of the IAgent interface using @anthropic-ai/claude-agent-sdk
  */
 
-import { exec, execSync, spawn, type ChildProcess } from "node:child_process";
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { arch, homedir, platform } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   createSdkMcpServer,
   query,
@@ -79,16 +79,18 @@ import {
   createClaudeQueryOptions,
   DEFAULT_ALLOWED_TOOLS,
 } from "./query-options";
-import { claudeAgentSdkTransport, ClaudeRuntimeSession } from "./runtime";
+import {
+  claudeAgentSdkTransport,
+  ClaudeRuntimeSession,
+  startClaudeGoalRuntimeSession,
+} from "./runtime";
 import {
   buildClaudeSettingSources,
   clearSkillsForClaudeSession,
   syncSkillsForClaudeSession,
 } from "./skills";
-import {
-  createLineBufferedDiagnosticSink,
-  redactClaudeRuntimeDiagnostic,
-} from "./runtime-preflight";
+import { createClaudeCodeProcessSpawner } from "./process-spawner";
+import { redactClaudeRuntimeDiagnostic } from "./runtime-preflight";
 
 const logger = createLogger("ClaudeAgent");
 
@@ -100,191 +102,6 @@ const API_PORT =
   process.env.PORT || (isDev ? "2026" : String(DEFAULT_API_PORT));
 const SANDBOX_API_URL =
   process.env.SANDBOX_API_URL || `http://${DEFAULT_API_HOST}:${API_PORT}`;
-
-/**
- * Spawn Claude Code process with proper shell support
- * This ensures shell scripts (.sh, .cmd) are executed correctly
- */
-function spawnClaudeCodeProcess(
-  options: {
-    command: string;
-    args: string[];
-    cwd?: string;
-    env: Record<string, string | undefined>;
-    signal?: AbortSignal;
-  },
-  onStderr?: (data: string) => void,
-) {
-  const os = platform();
-
-  // Kill the entire process tree on Windows when abort is signaled.
-  // Node.js's AbortController only kills the immediate child, but on Windows
-  // cmd.exe does not propagate SIGTERM/SIGKILL to its children — the grandchild
-  // CLI process can outlive the abort. Using taskkill /F /T /PID ensures all
-  // descendants are terminated.
-  const registerWindowsTreeKill = (childProcess: ChildProcess) => {
-    if (os === "win32" && childProcess.pid) {
-      options.signal?.addEventListener("abort", () => {
-        exec(
-          `taskkill /F /T /PID ${childProcess.pid}`,
-          { windowsHide: true },
-          (err: Error | null) => {
-            // Ignore errors — process may already be dead
-          },
-        );
-      });
-    }
-  };
-  const registerChildProcess = (childProcess: ChildProcess) => {
-    registerChildProcess(childProcess);
-    if (onStderr && childProcess.stderr) {
-      // A credential can straddle arbitrary stream chunks. Reassemble bounded
-      // lines before forwarding them to the redacting diagnostic callback.
-      const stderrSink = createLineBufferedDiagnosticSink(onStderr);
-      childProcess.stderr.on("data", (data: Buffer | string) => {
-        stderrSink.write(data);
-      });
-      childProcess.stderr.once("end", () => stderrSink.end());
-      childProcess.stderr.once("close", () => stderrSink.end());
-    }
-  };
-  const asProcessEnv = (
-    env: Record<string, string | undefined>,
-  ): NodeJS.ProcessEnv => env as NodeJS.ProcessEnv;
-
-  // Resolve cwd to an absolute path on Windows to prevent spawn() from
-  // falling back to process.cwd() when given a relative or invalid path.
-  // On Windows, spawn() with a relative cwd uses the current process dir,
-  // which can cause the agent to run in the wrong directory (e.g. cli-bundle).
-  let resolvedCwd = options.cwd;
-  if (resolvedCwd) {
-    const isAbsolute =
-      os === "win32"
-        ? /^[a-zA-Z]:[\\/]/.test(resolvedCwd) // e.g. C:\ or C:/
-        : resolvedCwd.startsWith("/");
-    if (!isAbsolute) {
-      // Convert relative path to absolute
-      resolvedCwd = join(process.cwd(), resolvedCwd);
-    }
-  }
-
-  // For bundled Claude Code, execute cli.js directly with bundled node (or system node as fallback)
-  // This avoids shell issues and environment variable leaking
-  // Detect bundled Claude Code wrapper (both Unix .sh and Windows .cmd)
-  const isBundledClaude =
-    (options.command.endsWith(".sh") || options.command.endsWith(".cmd")) &&
-    options.command.includes("cli-bundle");
-
-  if (isBundledClaude) {
-    // Normalize path separators for cross-platform use
-    const normalizedCommand = options.command.replace(/\\/g, "/");
-    const wrapperDir = normalizedCommand.split("/").slice(0, -1).join("/");
-    // The wrapper script lives under ~/.openloomi/runtime/cli-bundle/<hash>/.
-    // The actual bundle (cli.js, vendor/, node) may be elsewhere — recover it
-    // via the `.bundle-path` marker file written by `getSidecarClaudeCodePath`.
-    // Fall back to the wrapper directory itself for legacy in-bundle wrappers.
-    const markerPath = join(wrapperDir, ".bundle-path");
-    let bundleDir = wrapperDir;
-    if (existsSync(markerPath)) {
-      try {
-        const marker = readFileSync(markerPath, "utf-8").trim();
-        if (marker && existsSync(marker)) {
-          bundleDir = marker;
-        }
-      } catch {
-        // ignore and fall through to legacy behavior
-      }
-    }
-    const cliJsPath = join(bundleDir, "cli.js");
-
-    let nodeToUse: string;
-    if (os === "win32") {
-      // On Windows, the bundled node is a Linux ELF binary (not usable).
-      // Try the Rust-downloaded .openloomi\node\node.exe first, then system PATH.
-      const openloomiNode = join(homedir(), ".openloomi", "node", "node.exe");
-      nodeToUse = existsSync(openloomiNode) ? openloomiNode : "node";
-    } else {
-      // Unix: use bundled node if it exists, otherwise system node
-      const nodeBinPath = join(bundleDir, "node");
-      nodeToUse = existsSync(nodeBinPath) ? nodeBinPath : "node";
-    }
-
-    const childProcess = spawn(nodeToUse, [cliJsPath, ...options.args], {
-      cwd: resolvedCwd,
-      env: asProcessEnv({ ...options.env, CLAUDECODE: "" }),
-      stdio: ["pipe", "pipe", "pipe"],
-      signal: options.signal,
-      windowsHide: true,
-    });
-    registerChildProcess(childProcess);
-
-    // CRITICAL: Also update global process.env immediately after spawn
-    // to ensure child process doesn't inherit CLAUDECODE from parent process
-    process.env.CLAUDECODE = "";
-
-    return childProcess;
-  }
-
-  // For other shell scripts, use the appropriate shell
-  const isShellScript =
-    options.command.endsWith(".sh") || options.command.endsWith(".cmd");
-
-  if (isShellScript) {
-    if (os === "win32") {
-      // Windows: use cmd.exe to execute .cmd files
-      const childProcess = spawn(
-        "cmd.exe",
-        ["/c", options.command, ...options.args],
-        {
-          cwd: resolvedCwd,
-          env: asProcessEnv(options.env),
-          stdio: ["pipe", "pipe", "pipe"],
-          signal: options.signal,
-          windowsHide: true,
-        },
-      );
-      registerChildProcess(childProcess);
-      return childProcess;
-    }
-
-    // Unix-like: use sh with full path to execute .sh files
-    // IMPORTANT: Use full path /bin/sh since PATH may not be set correctly in spawn
-    const childProcess = spawn(
-      "/bin/sh",
-      [
-        "-c",
-        `unset CLAUDECODE && exec "$0" "$@"`,
-        options.command,
-        ...options.args,
-      ],
-      {
-        cwd: resolvedCwd,
-        env: asProcessEnv(options.env),
-        stdio: ["pipe", "pipe", "pipe"],
-        signal: options.signal,
-        windowsHide: true,
-      },
-    );
-    registerChildProcess(childProcess);
-    return childProcess;
-  }
-
-  // Direct spawn for executables
-  const isBundledNativeClaude =
-    options.command.includes("cli-bundle") &&
-    ["claude", "claude.exe"].includes(basename(options.command).toLowerCase());
-  const childProcess = spawn(options.command, options.args, {
-    cwd: resolvedCwd,
-    env: isBundledNativeClaude
-      ? asProcessEnv({ ...options.env, CLAUDECODE: "" })
-      : asProcessEnv(options.env),
-    stdio: ["pipe", "pipe", "pipe"],
-    signal: options.signal,
-    windowsHide: true,
-  });
-  registerWindowsTreeKill(childProcess);
-  return childProcess;
-}
 
 /**
  * Check if running with administrator/elevated privileges
@@ -520,8 +337,8 @@ export function getTargetTriple(): string {
  * bundle location gets its own hashed runtime directory so multiple
  * installations don't share state.
  *
- * Downstream code (see `spawnClaudeCodeProcess`) recovers the actual bundle
- * directory by reading the `.bundle-path` marker next to the wrapper script.
+ * The downstream Claude process spawner recovers the actual bundle directory
+ * by reading the `.bundle-path` marker next to the wrapper script.
  */
 function getSidecarClaudeCodePath(): string | undefined {
   const os = platform();
@@ -615,9 +432,9 @@ function getSidecarClaudeCodePath(): string | undefined {
       // best-effort; downstream fallbacks handle failure
     }
 
-    // Record the actual bundle dir next to the wrapper so
-    // `spawnClaudeCodeProcess` can resolve bundled `cli.js` / `node` paths
-    // even though the wrapper itself lives outside the bundle.
+    // Record the actual bundle dir next to the wrapper so the Claude process
+    // spawner can resolve bundled `cli.js` / `node` paths even though the
+    // wrapper itself lives outside the bundle.
     try {
       const previousMarker = existsSync(bundleMarkerPath)
         ? readFileSync(bundleMarkerPath, "utf-8")
@@ -1954,8 +1771,7 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       isDev,
       debugFilePath: LOG_FILE_PATH,
       logger,
-      spawnClaudeCodeProcess: (spawnOptions) =>
-        spawnClaudeCodeProcess(spawnOptions, captureStderr),
+      spawnClaudeCodeProcess: createClaudeCodeProcessSpawner(captureStderr),
       systemPrompt: getBusinessToolsInstruction(options?.excludeTools),
       maxTurns: 1000,
       includePartialMessages: options?.stream ?? false,
@@ -1973,6 +1789,9 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       mode: "run",
     });
 
+    let goalRuntimeRegistration: Awaited<
+      ReturnType<typeof startClaudeGoalRuntimeSession>
+    >;
     try {
       // Determine whether to send images/PDFs directly or use text-only prompt
       const hasMedia = hasImages || hasPDFs;
@@ -1985,9 +1804,13 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
           )
         : basePrompt;
 
-      claudeRuntime.start({
-        initialPrompt: queryPrompt,
-        queryOptions,
+      goalRuntimeRegistration = await startClaudeGoalRuntimeSession({
+        session: options?.session,
+        runtime: claudeRuntime,
+        start: {
+          initialPrompt: queryPrompt,
+          queryOptions,
+        },
       });
 
       for await (const agentMessage of claudeRuntime.subscribe()) {
@@ -2138,6 +1961,7 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
         };
       }
     } finally {
+      goalRuntimeRegistration?.release();
       await claudeRuntime.close();
       this.sessions.delete(session.id);
       // Windows cleanup prevents skill files generated for this session from
@@ -2253,8 +2077,7 @@ If you need to create any files during planning, use this directory.
       isDev,
       debugFilePath: LOG_FILE_PATH,
       logger,
-      spawnClaudeCodeProcess: (spawnOptions) =>
-        spawnClaudeCodeProcess(spawnOptions, capturePlanStderr),
+      spawnClaudeCodeProcess: createClaudeCodeProcessSpawner(capturePlanStderr),
       systemPrompt: PLANNING_INSTRUCTION(options?.timezone ?? undefined),
       permissionLogMode: "run",
     });
@@ -2680,8 +2503,8 @@ If you need to create any files during planning, use this directory.
       isDev,
       debugFilePath: LOG_FILE_PATH,
       logger,
-      spawnClaudeCodeProcess: (spawnOptions) =>
-        spawnClaudeCodeProcess(spawnOptions, captureExecuteStderr),
+      spawnClaudeCodeProcess:
+        createClaudeCodeProcessSpawner(captureExecuteStderr),
       systemPrompt:
         "You are executing a pre-approved plan with full permissions to use all available tools.",
       maxTurns: 1000,

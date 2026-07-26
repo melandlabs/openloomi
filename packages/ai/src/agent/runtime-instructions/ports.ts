@@ -3,6 +3,7 @@ import type {
   PersistedAgentGoal,
   RuntimeDeliveryReceipt,
   RuntimeInstruction,
+  RuntimeInstructionDraft,
 } from "./types";
 
 export interface GoalInstructionCommit {
@@ -11,10 +12,17 @@ export interface GoalInstructionCommit {
   deduplicated: boolean;
 }
 
+export interface GoalCommandIdentity {
+  idempotencyKey: string;
+  requestFingerprint: string;
+}
+
 /**
  * Atomic persistence boundary for authoritative Goal state and its immutable
- * instruction outbox entry. Implementations must not commit one without the
- * other and must scope every lookup and mutation to ownerId.
+ * instruction outbox entry. The adapter assigns the session-monotonic
+ * instruction sequence in the same critical section as the Goal mutation.
+ * Implementations must not commit one without the other and must scope every
+ * lookup and mutation to ownerId.
  */
 export interface AgentGoalStatePort {
   getGoal(ownerId: string, goalId: string): Promise<PersistedAgentGoal | null>;
@@ -24,11 +32,23 @@ export interface AgentGoalStatePort {
     runtimeSessionId: string,
   ): Promise<PersistedAgentGoal | null>;
 
+  listInstructions(
+    ownerId: string,
+    runtimeSessionId: string,
+  ): Promise<RuntimeInstruction[]>;
+
+  findCommitByIdempotency(input: {
+    ownerId: string;
+    runtimeSessionId: string;
+    command: GoalCommandIdentity;
+  }): Promise<GoalInstructionCommit | null>;
+
   commitActivation(input: {
     ownerId: string;
     runtimeSessionId: string;
     goal: AgentGoal;
-    instruction: RuntimeInstruction;
+    instruction: RuntimeInstructionDraft;
+    command: GoalCommandIdentity;
   }): Promise<GoalInstructionCommit>;
 
   commitRevision(input: {
@@ -36,7 +56,8 @@ export interface AgentGoalStatePort {
     runtimeSessionId: string;
     expectedRevision: number;
     goal: AgentGoal;
-    instruction: RuntimeInstruction;
+    instruction: RuntimeInstructionDraft;
+    command: GoalCommandIdentity;
   }): Promise<GoalInstructionCommit>;
 }
 

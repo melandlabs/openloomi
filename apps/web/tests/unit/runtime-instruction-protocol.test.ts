@@ -11,6 +11,7 @@ import {
   assertDeliveryStateTransition,
   assertGoalRunStatusTransition,
   assertGoalStatusTransition,
+  canonicalJson,
   createAgentGoal,
   formatRuntimeInstruction,
   reviseAgentGoal,
@@ -486,5 +487,13 @@ describe("Runtime Instruction formatter", () => {
     expect(formatRuntimeInstruction(activationInstruction(firstGoal))).toBe(
       formatRuntimeInstruction(activationInstruction(secondGoal)),
     );
+  });
+
+  it("uses locale-independent ordinal ordering for canonical JSON", () => {
+    const first = { 中: 4, ä: 3, a: 2, Z: 1 };
+    const second = { Z: 1, a: 2, ä: 3, 中: 4 };
+
+    expect(canonicalJson(first)).toBe(canonicalJson(second));
+    expect(canonicalJson(first)).toBe('{"Z":1,"a":2,"ä":3,"中":4}');
   });
 });
