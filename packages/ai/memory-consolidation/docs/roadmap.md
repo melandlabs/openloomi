@@ -1,13 +1,15 @@
 # Memory Consolidation Roadmap
 
-For the proposed Dynamic Memory Cluster Evolution scope, use the
+Status: Historical package context, not an active execution plan.
+
+For active Dynamic Memory Cluster Evolution work, use the
 [requirements](./memory-graph-evolution-requirements.md),
 [architecture](./memory-graph-evolution-architecture.md),
 [ADR index](./adr/README.md), and
 [execution plan](./memory-graph-evolution-execution-plan.md). This roadmap
-provides broader package history and direction. The linked documents become
-authoritative when accepted and merged upstream, and then override this roadmap
-for Memory Graph Evolution decisions.
+preserves broader package history and direction. The linked documents are
+authoritative for the local integrated delivery track; do not derive scope,
+task order, or implementation authorization from this historical roadmap.
 
 ## Goal
 

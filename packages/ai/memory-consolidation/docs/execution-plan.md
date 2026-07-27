@@ -1,11 +1,15 @@
 # Memory Consolidation Execution Plan
 
-This file turns the roadmap into one-round implementation tasks. Each task should
-produce one small helper, report shape, or design note with focused tests or a
-format check. Runtime behavior must stay unchanged unless a task explicitly says
-otherwise.
+Status: Superseded for Dynamic Memory Cluster Evolution.
 
-## Rules
+This historical helper-first queue is retained only as package background. It is
+not an implementation authorization and must not be used to create new work.
+The active, integrated delivery plan is
+[memory-graph-evolution-execution-plan.md](./memory-graph-evolution-execution-plan.md).
+Only that plan and its linked requirements, architecture, ADRs, and governance
+documents may authorize current work.
+
+## Historical Rules
 
 - Package-local first; runtime integration later.
 - One task, one primary artifact.
@@ -14,7 +18,7 @@ otherwise.
 - Do not change production retrieval ranking by default.
 - Do not write storage unless the task is explicitly about a storage boundary.
 
-## Task Queue
+## Historical Task Queue
 
 | Task                                | Deliverable                                                                                                  | Verification                                              | Out of scope                                   |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ---------------------------------------------- |
@@ -29,7 +33,7 @@ otherwise.
 | G1 Storage Schema Design Note       | Short design note for raw traces, semantic drafts, consolidated memories, deprecated memories, rollback.     | Markdown format check.                                    | Migration, database writes.                    |
 | G2 Persistence Adapter Contract     | Interface-only adapter contract for future storage, preserving source ids and rollback metadata.             | TypeScript check and focused interface tests.             | Concrete DB implementation, default-on writes. |
 
-## Recommended Order
+## Historical Recommended Order
 
 ```text
 D1 -> D2 -> D3 -> D4 -> E1 -> E2 -> F1 -> F2 -> G1 -> G2
