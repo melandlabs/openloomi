@@ -4,20 +4,23 @@
  * Provides API endpoints for agent execution over HTTP/SSE.
  */
 
-import type { NextRequest } from "next/server";
-import type { Session } from "next-auth";
+import type { NativeAgentMemoryContextDiagnostic } from "@openloomi/ai/agent/native-runner";
 import type { AgentMessage } from "@openloomi/ai/agent/types";
+import type { MemoryApplicabilityContext } from "@openloomi/memory-consolidation/graph-contracts";
+import type { Session } from "next-auth";
+import type { NextRequest } from "next/server";
 
 import { auth } from "@/app/(auth)/auth";
-import { getAuthUser, type AuthUser } from "@/lib/auth/dual-auth";
+import { resolveNativeAgentProviderRequest } from "@/lib/ai/native-agent/provider-env";
 import {
-  NativeAgentRequestError,
-  runNativeAgentRequest,
   type AuthenticatedNativeAgentSession,
   type NativeAgentRequest,
+  NativeAgentRequestError,
+  runNativeAgentRequest,
 } from "@/lib/ai/native-agent/runner";
+import { type AuthUser, getAuthUser } from "@/lib/auth/dual-auth";
+import { getChatById } from "@/lib/db/queries";
 import { recordUsage } from "@/lib/llm-usage/recorder";
-import { resolveNativeAgentProviderRequest } from "@/lib/ai/native-agent/provider-env";
 
 // Set max duration for long-running agent tasks.
 // This prevents "TypeError: Load failed" when tool calls take a long time.
@@ -128,6 +131,42 @@ const SSE_HEADERS = {
   "X-Accel-Buffering": "no",
 };
 
+function createSseHeaders(
+  memoryContext: NativeAgentMemoryContextDiagnostic,
+): Headers {
+  const headers = new Headers(SSE_HEADERS);
+  headers.set("X-OpenLoomi-Memory-Context-Status", memoryContext.status);
+  headers.set(
+    "X-OpenLoomi-Memory-Context-Reasons",
+    memoryContext.reasonCodes.join(",").slice(0, 512),
+  );
+  headers.set(
+    "X-OpenLoomi-Memory-Context-Source-Count",
+    String(memoryContext.sourceCount),
+  );
+  if (memoryContext.requestedMode) {
+    headers.set(
+      "X-OpenLoomi-Memory-Retrieval-Mode",
+      memoryContext.requestedMode,
+    );
+  }
+  if (memoryContext.appliedMode) {
+    headers.set(
+      "X-OpenLoomi-Memory-Retrieval-Applied-Mode",
+      memoryContext.appliedMode,
+    );
+  }
+  headers.set(
+    "X-OpenLoomi-Memory-Context-Materialized-Node-Count",
+    String(memoryContext.materializedNodeIds?.length ?? 0),
+  );
+  headers.set(
+    "X-OpenLoomi-Memory-Context-Provenance-Count",
+    String(memoryContext.provenance?.length ?? 0),
+  );
+  return headers;
+}
+
 // Bearer-token callers, such as the one-shot CLI, do not have a full NextAuth
 // session object. Business tools still expect session.user.id/type, so provide
 // the smallest compatible shape here.
@@ -143,6 +182,27 @@ function createSessionFromAuthUser(
     },
     expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
   } as AuthenticatedNativeAgentSession;
+}
+
+async function resolveTrustedApplicabilityContexts(input: {
+  sessionId: unknown;
+  userId: string;
+}): Promise<MemoryApplicabilityContext[]> {
+  const sessionId =
+    typeof input.sessionId === "string" ? input.sessionId.trim() : "";
+  if (!sessionId) return [];
+
+  try {
+    const selectedChat = await getChatById({ id: sessionId });
+    if (!selectedChat || selectedChat.userId !== input.userId) return [];
+    return [
+      { scope: "conversation", key: selectedChat.id },
+      { scope: "task", key: selectedChat.id },
+    ];
+  } catch {
+    // The authenticated owner relationship could not be established.
+    return [];
+  }
 }
 
 // POST /api/native/agent - Run agent.
@@ -188,10 +248,15 @@ export async function POST(req: NextRequest) {
     }
 
     const resolvedProviderBody = resolveNativeAgentProviderRequest(body);
+    const applicabilityContexts = await resolveTrustedApplicabilityContexts({
+      sessionId: body.sessionId,
+      userId: authUser.id,
+    });
     const run = await runNativeAgentRequest(resolvedProviderBody, {
       session,
       userId: authUser.id,
       abortController,
+      applicabilityContexts,
     });
     const abortFromRequest = () => {
       if (!abortController.signal.aborted) {
@@ -245,7 +310,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return new Response(readable, { headers: SSE_HEADERS });
+    return new Response(readable, {
+      headers: createSseHeaders(run.memoryContext),
+    });
   } catch (error) {
     console.error("[AgentAPI] Error:", error);
 

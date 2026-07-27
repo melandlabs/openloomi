@@ -23,6 +23,7 @@ import {
   MEMORY_SUMMARY_WRITE_CONFLICT,
   queryMemoryWithFallback,
   runMemoryForgettingCycle,
+  runMemoryGraphRolloutEvaluation,
   storeRawMessagesWithGraphEvolution,
 } from "@openloomi/indexeddb";
 import { AppError } from "@openloomi/shared/errors";
@@ -516,6 +517,32 @@ export async function POST(request: NextRequest) {
             ],
           },
         });
+      }
+
+      case "graphRolloutEvaluation": {
+        const options = isRecord(body.options) ? body.options : {};
+        const result = await runMemoryGraphRolloutEvaluation({
+          storage: manager,
+          userId,
+          scenarioId:
+            typeof options.scenarioId === "string"
+              ? options.scenarioId
+              : "memory-graph-runtime-rollout",
+          workspaceId: undefined,
+          tenantId: undefined,
+          queryEmbedding: Array.isArray(options.queryEmbedding)
+            ? options.queryEmbedding.filter(
+                (value: unknown): value is number =>
+                  typeof value === "number" && Number.isFinite(value),
+              )
+            : undefined,
+          pollutedArtifactIds: Array.isArray(options.pollutedArtifactIds)
+            ? options.pollutedArtifactIds.filter(
+                (value: unknown): value is string => typeof value === "string",
+              )
+            : undefined,
+        });
+        return Response.json({ success: true, result });
       }
 
       default:

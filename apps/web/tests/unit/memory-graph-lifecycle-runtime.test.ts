@@ -5,12 +5,17 @@ import {
   type RawMessageQuery,
   createRawMessageMemoryGraphStore,
   isMemorySummaryPublicationPendingRecord,
+  materializeMemoryGraphNodeIds,
   memoryGraphLedgerMessageId,
   queryMemoryWithFallback,
   runMemoryForgettingCycle,
   storeRawMessagesWithGraphEvolution,
 } from "@openloomi/indexeddb";
-import type { OwnerScope } from "@openloomi/memory-consolidation";
+import {
+  type OwnerScope,
+  buildGraphAwareRetrievalDryRun,
+  createGraphAwareRetrievalDryRunRetriever,
+} from "@openloomi/memory-consolidation";
 import { describe, expect, it } from "vitest";
 
 const NOW = 1_700_000_000_000;
@@ -325,6 +330,30 @@ describe("memory graph lifecycle forgetting runtime", () => {
       ]),
     );
     const graph = await snapshot(manager);
+    const materialized = await materializeMemoryGraphNodeIds({
+      manager: manager as never,
+      ownerScope: OWNER,
+      snapshot: graph,
+      nodeIds: [storedSummary.summaryId, "zh-1"],
+    });
+    expect(materialized).toEqual([
+      expect.objectContaining({
+        sourceType: "summary",
+        summary: expect.objectContaining({
+          summaryId: storedSummary.summaryId,
+          sourceRecordIds: ["zh-1", "zh-2", "zh-3"],
+        }),
+      }),
+      expect.objectContaining({
+        sourceType: "raw",
+        record: expect.objectContaining({
+          id: "zh-1",
+          deprecatedAt: NOW + 3000,
+          deprecationReason: `summarized_into:${storedSummary.summaryId}`,
+          supersededBySummaryId: storedSummary.summaryId,
+        }),
+      }),
+    ]);
     expect(
       graph.nodes.find((node) => node.id === storedSummary.summaryId),
     ).toEqual(
@@ -456,6 +485,355 @@ describe("memory graph lifecycle forgetting runtime", () => {
       "replacement-5",
       "replacement-6",
     ]);
+  });
+
+  it("persists owner scope on summaries used for graph materialization", async () => {
+    const manager = new GraphLifecycleTestManager();
+    const ownerScope = {
+      userId: OWNER.userId,
+      workspaceId: "workspace-scoped",
+      tenantId: "tenant-scoped",
+    } satisfies OwnerScope;
+    for (let index = 0; index < 3; index += 1) {
+      await storeEvidence(
+        manager,
+        [
+          rawMessage(`scoped-${index + 1}`, {
+            timestamp: Math.floor(NOW / 1000) + index,
+          }),
+        ],
+        {
+          workspaceId: ownerScope.workspaceId,
+          tenantId: ownerScope.tenantId,
+          now: NOW + index * 1000,
+        },
+      );
+    }
+
+    const result = await runMemoryForgettingCycle(
+      manager as never,
+      ownerScope.userId,
+      {
+        now: NOW + 3000,
+        graphLifecycle: {
+          enabled: true,
+          workspaceId: ownerScope.workspaceId,
+          tenantId: ownerScope.tenantId,
+        },
+      },
+    );
+    expect(result.graphLifecycle?.status).toBe("applied");
+
+    const storedSummary = [...manager.summaries.values()][0];
+    if (!storedSummary) throw new Error("expected scoped summary");
+    expect(storedSummary.dimensions).toMatchObject({
+      workspaceId: ownerScope.workspaceId,
+      tenantId: ownerScope.tenantId,
+    });
+    const graph = await snapshot(manager, ownerScope);
+    await expect(
+      materializeMemoryGraphNodeIds({
+        manager: manager as never,
+        ownerScope,
+        snapshot: graph,
+        nodeIds: [storedSummary.summaryId],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        sourceType: "summary",
+        summary: expect.objectContaining({
+          summaryId: storedSummary.summaryId,
+          dimensions: expect.objectContaining({
+            workspaceId: ownerScope.workspaceId,
+            tenantId: ownerScope.tenantId,
+          }),
+        }),
+      }),
+    ]);
+  });
+  it("fails closed for missing, cross-scope, and pending persisted nodes", async () => {
+    const manager = new GraphLifecycleTestManager();
+    const ownerScope = {
+      userId: OWNER.userId,
+      workspaceId: "workspace-a",
+    } satisfies OwnerScope;
+    await storeEvidence(manager, [rawMessage("scope-checked")], {
+      workspaceId: ownerScope.workspaceId,
+    });
+    const graph = await snapshot(manager, ownerScope);
+    const sourceNode = graph.nodes.find((node) => node.id === "scope-checked");
+    if (!sourceNode) {
+      throw new Error("expected persisted source node");
+    }
+
+    await expect(
+      materializeMemoryGraphNodeIds({
+        manager: manager as never,
+        ownerScope,
+        snapshot: graph,
+        nodeIds: ["missing-node"],
+      }),
+    ).resolves.toBeUndefined();
+
+    manager.summaries.set("pending-summary", {
+      summaryId: "pending-summary",
+      userId: ownerScope.userId,
+      summaryTier: "L1",
+      sourceTier: "short",
+      startTimestamp: NOW,
+      endTimestamp: NOW,
+      messageCount: 1,
+      sourceRecordIds: ["scope-checked"],
+      keyPoints: ["pending"],
+      keywords: ["pending"],
+      keywordsText: "pending",
+      summaryText: "Pending representative",
+      dimensions: {
+        __openloomiMemoryPublication: "pending",
+      },
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    await expect(
+      materializeMemoryGraphNodeIds({
+        manager: manager as never,
+        ownerScope,
+        snapshot: {
+          ...graph,
+          nodes: [
+            ...graph.nodes,
+            {
+              ...sourceNode,
+              id: "pending-summary",
+              type: "summary",
+              sourceId: "scope-checked",
+              visibility: "default",
+            },
+          ],
+        },
+        nodeIds: ["pending-summary"],
+      }),
+    ).resolves.toBeUndefined();
+
+    const pendingSummary = manager.summaries.get("pending-summary");
+    if (!pendingSummary) throw new Error("expected pending summary fixture");
+    manager.summaries.set("cross-workspace-summary", {
+      ...pendingSummary,
+      summaryId: "cross-workspace-summary",
+      dimensions: { workspaceId: "workspace-b" },
+    });
+    const broadOwnerScope = { userId: ownerScope.userId } satisfies OwnerScope;
+    await expect(
+      materializeMemoryGraphNodeIds({
+        manager: manager as never,
+        ownerScope: broadOwnerScope,
+        snapshot: {
+          ownerScope: broadOwnerScope,
+          nodes: [
+            {
+              ...sourceNode,
+              id: "cross-workspace-summary",
+              type: "summary",
+              ownerScope: broadOwnerScope,
+              sourceId: "scope-checked",
+              visibility: "default",
+            },
+          ],
+          edges: [],
+          clusters: [],
+          capturedAt: NOW,
+        },
+        nodeIds: ["cross-workspace-summary"],
+      }),
+    ).resolves.toBeUndefined();
+
+    const visibleRaw = manager.messages.get("scope-checked");
+    if (!visibleRaw) throw new Error("expected visible persisted raw");
+    manager.messages.set("scope-checked", {
+      ...visibleRaw,
+      deprecatedAt: NOW,
+    });
+    await expect(
+      materializeMemoryGraphNodeIds({
+        manager: manager as never,
+        ownerScope,
+        snapshot: graph,
+        nodeIds: ["scope-checked"],
+      }),
+    ).resolves.toBeUndefined();
+    manager.messages.set("scope-checked", visibleRaw);
+
+    const storedRaw = manager.messages.get("scope-checked");
+    if (!storedRaw) {
+      throw new Error("expected persisted source raw");
+    }
+    manager.messages.set("scope-checked", {
+      ...storedRaw,
+      metadata: {
+        ...(storedRaw.metadata ?? {}),
+        memoryOwnerScope: {
+          userId: ownerScope.userId,
+          workspaceId: "workspace-b",
+        },
+      },
+    });
+    await expect(
+      materializeMemoryGraphNodeIds({
+        manager: manager as never,
+        ownerScope,
+        snapshot: graph,
+        nodeIds: ["scope-checked"],
+      }),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      materializeMemoryGraphNodeIds({
+        manager: manager as never,
+        ownerScope,
+        snapshot: {
+          ...graph,
+          nodes: graph.nodes.map((node) => ({
+            ...node,
+            ownerScope: {
+              userId: ownerScope.userId,
+              workspaceId: "workspace-b",
+            },
+          })),
+        },
+        nodeIds: ["scope-checked"],
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("materializes only exact-applicability competing alternatives", async () => {
+    const manager = new GraphLifecycleTestManager();
+    await storeEvidence(
+      manager,
+      [
+        rawMessage("global-en", {
+          relationValue: "en",
+          timestamp: Math.floor(NOW / 1000),
+        }),
+      ],
+      { now: NOW },
+    );
+    await storeEvidence(
+      manager,
+      [
+        rawMessage("global-zh", {
+          relationValue: "zh",
+          timestamp: Math.floor(NOW / 1000) + 1,
+        }),
+      ],
+      { now: NOW + 1000 },
+    );
+    const graph = await snapshot(manager);
+
+    const result = await queryMemoryWithFallback(
+      manager as never,
+      {
+        userId: OWNER.userId,
+        keywords: ["zh"],
+        pageSize: 3,
+        minRawResultsWithoutFallback: 2,
+        conflictSensitive: true,
+      },
+      {
+        graphRetrieval: {
+          enabled: true,
+          retriever: createGraphAwareRetrievalDryRunRetriever(),
+          ownerScope: OWNER,
+          snapshotProvider: async () => graph,
+          materializeNodeIds: ({ ownerScope, snapshot, nodeIds }) =>
+            materializeMemoryGraphNodeIds({
+              manager: manager as never,
+              ownerScope,
+              snapshot,
+              nodeIds,
+            }),
+        },
+      },
+    );
+
+    expect(result.graphRetrieval?.status).toBe("applied");
+    expect(result.graphRetrieval?.reasonCodes).toContain(
+      "competing_alternatives_exposed",
+    );
+    expect(
+      result.items.map((item) =>
+        item.sourceType === "raw" ? item.record.id : item.summary.summaryId,
+      ),
+    ).toEqual(expect.arrayContaining(["global-zh", "global-en"]));
+    expect(result.graphRetrieval?.result?.auditTrail).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: "global-en",
+          edgeIds: expect.arrayContaining([expect.any(String)]),
+          reasonCodes: expect.arrayContaining([
+            "competing_alternative_provenance",
+          ]),
+        }),
+      ]),
+    );
+
+    const alternativeCluster = graph.clusters.find((cluster) =>
+      cluster.nodeIds.includes("global-en"),
+    );
+    if (!alternativeCluster) {
+      throw new Error("expected competing alternative cluster");
+    }
+    const mismatched = buildGraphAwareRetrievalDryRun({
+      ownerScope: OWNER,
+      query: "language preference",
+      baselineNodeIds: ["global-zh"],
+      snapshot: {
+        ...graph,
+        clusters: graph.clusters.map((cluster) =>
+          cluster.clusterId === alternativeCluster.clusterId
+            ? {
+                ...cluster,
+                applicability: { scope: "task", key: "other-task" },
+              }
+            : cluster,
+        ),
+      },
+      visibilityMode: "conflict",
+    });
+    expect(mismatched.rankedNodeIds).not.toContain("global-en");
+    expect(mismatched.reasonCodes).not.toContain(
+      "competing_alternatives_exposed",
+    );
+
+    const conflictResultForEdges = (edges: typeof graph.edges) =>
+      buildGraphAwareRetrievalDryRun({
+        ownerScope: OWNER,
+        query: "language preference",
+        baselineNodeIds: ["global-zh"],
+        snapshot: { ...graph, edges },
+        visibilityMode: "conflict",
+      });
+    const inactiveCompetitionEdges = graph.edges.map((edge) =>
+      edge.kind === "compete"
+        ? { ...edge, metadata: { ...edge.metadata, inactive: true } }
+        : edge,
+    );
+    const rolledBackCompetitionEdges = graph.edges.map((edge) =>
+      edge.kind === "compete"
+        ? { ...edge, metadata: { ...edge.metadata, rolledBack: true } }
+        : edge,
+    );
+    for (const noActiveCompetition of [
+      conflictResultForEdges(
+        graph.edges.filter((edge) => edge.kind !== "compete"),
+      ),
+      conflictResultForEdges(inactiveCompetitionEdges),
+      conflictResultForEdges(rolledBackCompetitionEdges),
+    ]) {
+      expect(noActiveCompetition.rankedNodeIds).not.toContain("global-en");
+      expect(noActiveCompetition.reasonCodes).not.toContain(
+        "competing_alternatives_exposed",
+      );
+    }
   });
 
   it("keeps sources visible when summary persistence fails", async () => {

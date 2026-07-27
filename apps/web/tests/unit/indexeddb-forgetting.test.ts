@@ -6,6 +6,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createIndexedDBMemoryStorageAdapter,
+  materializeMemoryGraphNodeIds,
   queryMemoryWithFallback,
   runMemoryForgettingCycle,
 } from "../../../../packages/indexeddb/src/forgetting";
@@ -84,6 +85,13 @@ class InMemoryManager {
     return items.slice(offset, offset + pageSize);
   }
 
+  async getMessageById(messageId: string): Promise<RawMessage | null> {
+    return (
+      this.rawMessages.find((message) => message.messageId === messageId) ??
+      null
+    );
+  }
+
   async upsertSummaries(summaries: MemorySummaryRecord[]): Promise<void> {
     for (const summary of summaries) {
       const index = this.summaries.findIndex(
@@ -99,6 +107,7 @@ class InMemoryManager {
 
   async querySummaries(query: {
     userId: string;
+    summaryIds?: string[];
     keywords?: string[];
     startTime?: number;
     endTime?: number;
@@ -110,6 +119,10 @@ class InMemoryManager {
   }): Promise<MemorySummaryRecord[]> {
     let items = this.summaries.filter((item) => item.userId === query.userId);
 
+    if (query.summaryIds?.length) {
+      const summaryIds = new Set(query.summaryIds);
+      items = items.filter((item) => summaryIds.has(item.summaryId));
+    }
     if (query.summaryTiers?.length) {
       const tiers = new Set(query.summaryTiers);
       items = items.filter((item) => tiers.has(item.summaryTier));
@@ -689,6 +702,78 @@ describe("indexeddb forgetting bridge", () => {
     expect(manager.accessedIds).toContain("r1");
   });
 
+  it("materializes a non-first persisted summary by exact owner-scoped id", async () => {
+    const now = Date.now();
+    const manager = new InMemoryManager();
+    manager.summaries = [
+      {
+        summaryId: "target-summary",
+        userId: "u1",
+        summaryTier: "L1",
+        sourceTier: "short",
+        startTimestamp: now - 3 * DAY_MS,
+        endTimestamp: now - 2 * DAY_MS,
+        messageCount: 2,
+        sourceRecordIds: ["source-1", "source-2"],
+        keyPoints: ["target"],
+        keywords: ["target"],
+        keywordsText: "target",
+        summaryText: "Persisted target representative",
+        createdAt: now - 2 * DAY_MS,
+        updatedAt: now - 2 * DAY_MS,
+      },
+      {
+        summaryId: "newest-decoy",
+        userId: "u1",
+        summaryTier: "L1",
+        sourceTier: "short",
+        startTimestamp: now - DAY_MS,
+        endTimestamp: now,
+        messageCount: 1,
+        sourceRecordIds: ["decoy-source"],
+        keyPoints: ["decoy"],
+        keywords: ["decoy"],
+        keywordsText: "decoy",
+        summaryText: "Newer unrelated summary",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    const ownerScope = { userId: "u1" } satisfies OwnerScope;
+    const snapshot: MemoryGraphSnapshot = {
+      ownerScope,
+      nodes: [
+        {
+          id: "target-summary",
+          ownerScope,
+          type: "summary",
+          visibility: "default",
+          createdAt: now,
+        },
+      ],
+      edges: [],
+      clusters: [],
+      capturedAt: now,
+    };
+
+    await expect(
+      materializeMemoryGraphNodeIds({
+        manager: manager as unknown as IndexedDBManager,
+        ownerScope,
+        snapshot,
+        nodeIds: ["target-summary"],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        sourceType: "summary",
+        summary: expect.objectContaining({
+          summaryId: "target-summary",
+          summaryText: "Persisted target representative",
+        }),
+      }),
+    ]);
+  });
+
   it("passes graph-aware retrieval options through the fallback query wrapper", async () => {
     const now = Date.now();
     const manager = new InMemoryManager();
@@ -753,6 +838,7 @@ describe("indexeddb forgetting bridge", () => {
         stage: "short",
         timestampSec: 3000,
         text: "old language preference",
+        metadata: { memoryApplicability: { scope: "global" } },
         deprecatedAt: now,
         deprecationReason: "summarized_into:summary-language",
         supersededBySummaryId: "summary-language",
@@ -763,6 +849,7 @@ describe("indexeddb forgetting bridge", () => {
         stage: "short",
         timestampSec: 1000,
         text: "fresh project context",
+        metadata: { memoryApplicability: { scope: "global" } },
       }),
     ];
     manager.summaries = [
@@ -816,6 +903,65 @@ describe("indexeddb forgetting bridge", () => {
     expect(manager.accessedIds).toEqual(["r-fresh"]);
   });
 
+  it("filters raw and semantic recall by persisted workspace and tenant scope", async () => {
+    const manager = new InMemoryManager();
+    manager.rawMessages = [
+      createRaw({
+        messageId: "foreign-workspace",
+        userId: "u1",
+        stage: "short",
+        timestampSec: 3000,
+        text: "foreign workspace preference",
+        embedding: [1, 0],
+        metadata: {
+          memoryOwnerScope: {
+            userId: "u1",
+            workspaceId: "workspace-b",
+            tenantId: "tenant-1",
+          },
+        },
+      }),
+      createRaw({
+        messageId: "scoped-workspace",
+        userId: "u1",
+        stage: "short",
+        timestampSec: 2000,
+        text: "scoped workspace preference",
+        embedding: [1, 0],
+        metadata: {
+          memoryOwnerScope: {
+            userId: "u1",
+            workspaceId: "workspace-a",
+            tenantId: "tenant-1",
+          },
+        },
+      }),
+    ];
+    const storage = createIndexedDBMemoryStorageAdapter(
+      manager as unknown as IndexedDBManager,
+    );
+    const dimensions = {
+      workspaceId: "workspace-a",
+      tenantId: "tenant-1",
+    };
+
+    const raw = await storage.queryRaw({
+      userId: "u1",
+      dimensions,
+      pageSize: 10,
+    });
+    expect(raw.items.map((record) => record.id)).toEqual(["scoped-workspace"]);
+    expect(raw.items[0]?.dimensions).toMatchObject(dimensions);
+
+    const semantic = await storage.semanticRecallRaw?.({
+      userId: "u1",
+      queryEmbedding: [1, 0],
+      dimensions,
+      limit: 10,
+      threshold: 0.5,
+    });
+    expect(semantic?.map((hit) => hit.record.id)).toEqual(["scoped-workspace"]);
+  });
   it("includes soft-deprecated raw records only for audit queries", async () => {
     const now = Date.now();
     const manager = new InMemoryManager();
@@ -880,6 +1026,7 @@ describe("indexeddb forgetting bridge", () => {
         stage: "short",
         timestampSec: 3000,
         text: "old language preference",
+        metadata: { memoryApplicability: { scope: "global" } },
         deprecatedAt: now,
         deprecationReason: "summarized_into:summary-language",
         supersededBySummaryId: "summary-language",
@@ -890,6 +1037,7 @@ describe("indexeddb forgetting bridge", () => {
         stage: "short",
         timestampSec: 1000,
         text: "fresh project context",
+        metadata: { memoryApplicability: { scope: "global" } },
       }),
     ];
     manager.summaries = [
@@ -942,7 +1090,18 @@ describe("indexeddb forgetting bridge", () => {
         item.sourceType === "summary" ? item.summary.summaryId : item.record.id,
       ),
     ).toEqual(["summary-language", "r-old", "r-fresh"]);
-    expect(manager.accessedIds).toEqual(["r-old", "r-fresh"]);
+    const deprecatedRaw = result.items.find(
+      (item) => item.sourceType === "raw" && item.record.id === "r-old",
+    );
+    expect(deprecatedRaw).toMatchObject({
+      sourceType: "raw",
+      record: {
+        deprecatedAt: now,
+        deprecationReason: "summarized_into:summary-language",
+        supersededBySummaryId: "summary-language",
+      },
+    });
+    expect(manager.accessedIds).toEqual([]);
   });
 
   it("recalls raw memories semantically from stored MemoryRecord embeddings", async () => {
@@ -1023,5 +1182,12 @@ describe("indexeddb forgetting bridge", () => {
     expect(auditHits?.map((hit) => hit.record.id)).toEqual(
       expect.arrayContaining(["semantic-near", "semantic-deprecated"]),
     );
+    expect(
+      auditHits?.find((hit) => hit.record.id === "semantic-deprecated")?.record,
+    ).toMatchObject({
+      deprecatedAt: now,
+      deprecationReason: "summarized_into:semantic-summary",
+      supersededBySummaryId: "semantic-summary",
+    });
   });
 });

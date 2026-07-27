@@ -290,7 +290,7 @@ export interface MemoryGraphRolloutGovernanceReport {
     graphRetrievalPassedCount: number;
     semanticRetrievalScenarioCount: number;
     semanticRetrievalPassedCount: number;
-    dryRun: true;
+    dryRun: boolean;
   };
   gates: MemoryGraphRolloutGate[];
   graphRetrievalScenarios: MemoryGraphRolloutRetrievalScenarioResult[];
@@ -306,7 +306,25 @@ export interface BuildMemoryGraphRolloutGovernanceReportInput {
   semanticRetrievalScenarios?: MemorySemanticRetrievalEvalScenarioReport[];
   auditScenarioReport?: MemoryGovernanceAuditScenarioReport;
   commandReport?: MemoryGovernanceCommandDryRunReport;
+  runtimeEvidence?: MemoryGraphRolloutRuntimeEvidence;
   thresholds?: MemoryGraphRolloutGateThresholds;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryGraphRolloutRuntimeEvidence {
+  ownerScopeKey: string;
+  snapshotVersion?: string;
+  operationIds: string[];
+  correctionOperationIds: string[];
+  rollbackOperationIds: string[];
+  defaultRetrievedNodeIds: string[];
+  auditRetrievedNodeIds: string[];
+  semanticDefaultRecordIds: string[];
+  semanticAuditRecordIds: string[];
+  sourceRecordIds: string[];
+  summaryIds: string[];
+  pendingSummaryIds?: string[];
+  rawVisibilityMismatchNodeIds?: string[];
   metadata?: Record<string, unknown>;
 }
 
@@ -698,9 +716,11 @@ export function buildMemoryGraphRolloutGovernanceReport(
 
   if (thresholds.requireCorrectionCommand) {
     const validCorrectionCount =
+      input.runtimeEvidence?.correctionOperationIds.length ??
       input.commandReport?.commands.filter(
         (command) => command.type === "correct-content" && command.valid,
-      ).length ?? 0;
+      ).length ??
+      0;
     gates.push(
       buildGate({
         gateId: "governance.correction-command",
@@ -715,9 +735,11 @@ export function buildMemoryGraphRolloutGovernanceReport(
 
   if (thresholds.requireRollbackCommand) {
     const validRollbackCount =
+      input.runtimeEvidence?.rollbackOperationIds.length ??
       input.commandReport?.commands.filter(
         (command) => command.type === "rollback-artifact" && command.valid,
-      ).length ?? 0;
+      ).length ??
+      0;
     gates.push(
       buildGate({
         gateId: "governance.rollback-command",
@@ -726,6 +748,30 @@ export function buildMemoryGraphRolloutGovernanceReport(
         threshold: 1,
         passReasonCode: "rollback_command_gate_passed",
         failReasonCode: "rollback_command_gate_failed",
+      }),
+    );
+  }
+
+  if (input.runtimeEvidence) {
+    const pendingSummaryIds = input.runtimeEvidence.pendingSummaryIds ?? [];
+    const rawVisibilityMismatchNodeIds =
+      input.runtimeEvidence.rawVisibilityMismatchNodeIds ?? [];
+    const unresolvedPublicationIds = [
+      ...pendingSummaryIds,
+      ...rawVisibilityMismatchNodeIds,
+    ];
+    gates.push(
+      buildGate({
+        gateId: "runtime.publication-convergence",
+        passed: unresolvedPublicationIds.length === 0,
+        actual: unresolvedPublicationIds,
+        threshold: true,
+        passReasonCode: "publication_convergence_gate_passed",
+        failReasonCode: "publication_convergence_gate_failed",
+        metadata: {
+          pendingSummaryIds,
+          rawVisibilityMismatchNodeIds,
+        },
       }),
     );
   }
@@ -763,7 +809,29 @@ export function buildMemoryGraphRolloutGovernanceReport(
       ...(input.auditScenarioReport?.reasonCodes ?? []),
       ...(input.commandReport?.reasonCodes ?? []),
     ]),
-    metadata: copyMetadata(input.metadata),
+    metadata: {
+      ...(copyMetadata(input.metadata) ?? {}),
+      ...(input.runtimeEvidence
+        ? {
+            runtimeEvidence: {
+              ...input.runtimeEvidence,
+              operationIds: [...input.runtimeEvidence.operationIds],
+              correctionOperationIds: [
+                ...input.runtimeEvidence.correctionOperationIds,
+              ],
+              rollbackOperationIds: [
+                ...input.runtimeEvidence.rollbackOperationIds,
+              ],
+              pendingSummaryIds: [
+                ...(input.runtimeEvidence.pendingSummaryIds ?? []),
+              ],
+              rawVisibilityMismatchNodeIds: [
+                ...(input.runtimeEvidence.rawVisibilityMismatchNodeIds ?? []),
+              ],
+            },
+          }
+        : {}),
+    },
   };
 }
 

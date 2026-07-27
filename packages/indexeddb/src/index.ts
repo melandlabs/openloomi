@@ -5,5 +5,6 @@ export * from "./forgetting";
 export * from "./manager";
 export * from "./memory-graph-evolution";
 export * from "./memory-graph-lifecycle";
+export * from "./memory-graph-rollout-evaluation";
 export * from "./sqlite-client";
 export * from "./storage";

@@ -73,7 +73,11 @@ export function createMemoryQueryApi(
         timestamp: hit.record.timestamp,
       }));
 
-      if (markRawAccessOnRead && input.storage.markRecordsAccessed) {
+      if (
+        markRawAccessOnRead &&
+        recallInput.includeDeprecated !== true &&
+        input.storage.markRecordsAccessed
+      ) {
         const rawIds = items.map((hit) => hit.record.id);
         if (rawIds.length > 0) {
           await input.storage.markRecordsAccessed({
@@ -140,7 +144,12 @@ export function createMemoryQueryApi(
       });
       const items = graphApplication?.items ?? merged.slice(0, pageSize);
 
-      if (markRawAccessOnRead && input.storage.markRecordsAccessed) {
+      if (
+        markRawAccessOnRead &&
+        queryInput.includeDeprecated !== true &&
+        queryInput.conflictSensitive !== true &&
+        input.storage.markRecordsAccessed
+      ) {
         const rawIds = items
           .filter((hit) => hit.sourceType === "raw")
           .map((hit) => hit.record.id);

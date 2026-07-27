@@ -1,3 +1,13 @@
+import type {
+  MemoryApplicabilityContext,
+  MemoryGraphSnapshot,
+  OwnerScope,
+} from "../../ai/memory-consolidation/src/graph-contracts";
+import {
+  applicabilityEquivalent,
+  sameOwnerScope,
+} from "../../ai/memory-consolidation/src/graph-evolution";
+import { applicabilityMatchesTrustedContexts } from "../../ai/memory-consolidation/src/graph-retrieval";
 import type { MemoryConsolidationRuntimeRelationKeys } from "../../ai/memory-consolidation/src/runtime";
 import type {
   MemoryConsolidationShadowDiagnosticsRunResult,
@@ -10,6 +20,7 @@ import {
   type MemoryPageResult,
   type MemoryQueryGraphRetrievalOptions,
   type MemoryRecord,
+  type MemorySearchHit,
   type MemorySearchQuery,
   type MemorySearchWithFallbackResult,
   type MemorySemanticRecallHit,
@@ -24,7 +35,10 @@ import {
 import { isMemorySummaryPublicationPending } from "../../ai/src/memory/summary-publication";
 import { cosineSimilarity } from "./embedding";
 import type { MemoryStage, MemorySummaryRecord, RawMessage } from "./manager";
-import { ownerScopeFromMessage } from "./memory-graph-evolution";
+import {
+  applicabilityFromMessage,
+  ownerScopeFromMessage,
+} from "./memory-graph-evolution";
 import {
   type MemoryGraphLifecycleRuntimeResult,
   type RawMessageGraphLifecycleOptions,
@@ -156,6 +170,119 @@ function toMemorySummary(summary: MemorySummaryRecord): MemorySummary {
     createdAt: summary.createdAt,
     updatedAt: summary.updatedAt,
   };
+}
+
+function ownerScopeFromSummary(summary: MemorySummaryRecord): OwnerScope {
+  const workspaceId = summary.dimensions?.workspaceId;
+  const tenantId = summary.dimensions?.tenantId;
+  return {
+    userId: summary.userId,
+    workspaceId: typeof workspaceId === "string" ? workspaceId : undefined,
+    tenantId: typeof tenantId === "string" ? tenantId : undefined,
+  };
+}
+
+/** Materialize graph-selected nodes only through the persisted memory contract. */
+export async function materializeMemoryGraphNodeIds(input: {
+  manager: RawMessageStorage;
+  ownerScope: OwnerScope;
+  snapshot: MemoryGraphSnapshot;
+  nodeIds: string[];
+  applicabilityContexts?: MemoryApplicabilityContext[];
+}): Promise<MemorySearchHit[] | undefined> {
+  const nodeIds = [...new Set(input.nodeIds)];
+  const nodesById = new Map(
+    input.snapshot.nodes.map((node) => [node.id, node]),
+  );
+  const nodes = nodeIds.map((nodeId) => nodesById.get(nodeId));
+  const applicabilityNow = input.snapshot.capturedAt ?? Date.now();
+  if (
+    nodes.some(
+      (node) =>
+        node === undefined ||
+        !sameOwnerScope(node.ownerScope, input.ownerScope) ||
+        !applicabilityMatchesTrustedContexts(
+          node.applicability,
+          input.applicabilityContexts ?? [],
+          applicabilityNow,
+        ),
+    )
+  ) {
+    return undefined;
+  }
+
+  const rawIds = nodes.flatMap((node) =>
+    node?.type === "raw" ? [node.id] : [],
+  );
+  const summaryIds = nodes.flatMap((node) =>
+    node?.type === "summary" || node?.type === "artifact" ? [node.id] : [],
+  );
+  const raws = await Promise.all(
+    rawIds.map((nodeId) => input.manager.getMessageById(nodeId)),
+  );
+  const rawsById = new Map<string, RawMessage>();
+  for (const [index, raw] of raws.entries()) {
+    const rawId = rawIds[index];
+    const rawNode = rawId ? nodesById.get(rawId) : undefined;
+    if (
+      raw === null ||
+      rawId === undefined ||
+      raw.messageId !== rawId ||
+      !sameOwnerScope(ownerScopeFromMessage(raw), input.ownerScope) ||
+      rawNode?.type !== "raw" ||
+      !applicabilityEquivalent(
+        applicabilityFromMessage(raw),
+        rawNode.applicability,
+      ) ||
+      !applicabilityMatchesTrustedContexts(
+        applicabilityFromMessage(raw),
+        input.applicabilityContexts ?? [],
+        applicabilityNow,
+      ) ||
+      (rawNode.visibility !== "default") !== (raw.deprecatedAt !== undefined)
+    ) {
+      return undefined;
+    }
+    rawsById.set(rawId, raw);
+  }
+  const summaries =
+    summaryIds.length === 0
+      ? []
+      : await input.manager.querySummaries({
+          userId: input.ownerScope.userId,
+          summaryIds,
+          pageSize: summaryIds.length,
+        });
+  const summariesById = new Map(
+    summaries
+      .filter(
+        (summary) =>
+          sameOwnerScope(ownerScopeFromSummary(summary), input.ownerScope) &&
+          summaryIds.includes(summary.summaryId) &&
+          !isMemorySummaryPublicationPending(summary),
+      )
+      .map((summary) => [summary.summaryId, summary]),
+  );
+  if (summaryIds.some((summaryId) => !summariesById.has(summaryId))) {
+    return undefined;
+  }
+  return nodeIds.map((nodeId) => {
+    const raw = rawsById.get(nodeId);
+    if (raw) {
+      return {
+        sourceType: "raw" as const,
+        timestamp: normalizeTimestampToMs(raw.timestamp),
+        record: toMemoryRecord(raw),
+      };
+    }
+    const summary = summariesById.get(nodeId);
+    if (!summary) throw new Error("graph materialization invariant violated");
+    return {
+      sourceType: "summary" as const,
+      timestamp: summary.endTimestamp,
+      summary: toMemorySummary(summary),
+    };
+  });
 }
 
 function getPageSize(input: { pageSize?: number; limit?: number }): number {
@@ -755,6 +882,7 @@ export async function queryMemoryWithFallback(
   },
   options?: {
     graphRetrieval?: MemoryQueryGraphRetrievalOptions;
+    markRawAccessOnRead?: boolean;
   },
 ): Promise<MemorySearchWithFallbackResult> {
   // Unified read path: prefer raw hits; when insufficient, append summary hits.
@@ -762,6 +890,7 @@ export async function queryMemoryWithFallback(
   const api = createMemoryQueryApi({
     storage,
     graphRetrieval: options?.graphRetrieval,
+    markRawAccessOnRead: options?.markRawAccessOnRead,
   });
   return api.queryWithFallback(query);
 }

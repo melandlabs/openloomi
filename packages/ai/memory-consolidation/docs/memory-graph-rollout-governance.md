@@ -1,54 +1,65 @@
 # Memory Graph Rollout Governance
 
-This note defines the review gate for enabling Memory Graph Evolution beyond
-dry-run comparison. It is not a scheduler, UI, storage migration, or automatic
-mutation path.
+This note defines the future review gate for enabling Memory Graph Evolution
+beyond dry-run comparison. Phase 4 is deferred and is not part of the Phase 0–3
+Draft PR candidate.
 
-## Inputs
+## Current Authorization
 
-The rollout gate consumes already-built dry-run artifacts:
+The current evaluator produces artifact-only dry-run reports. A
+`ready-for-limited-rollout` dry-run is diagnostic output, not cohort
+enablement, rollout approval, or evidence that real-user value has been
+established.
+
+Graph mutation, retrieval, correction, and rollback remain default-off and
+server-gated. The Phase 0–3 candidate does not persist cohort comparison
+evidence, collect observations, or change rollout policy.
+
+## Future Phase 4 Inputs
+
+A separately authorized Phase 4 must define and collect:
 
 - consolidation evaluation metrics
-- graph-aware retrieval scenario results
-- semantic retrieval eval scenario reports
-- governance correction and rollback command dry-runs
-- polluted-memory audit scenario reports
+- graph-aware and semantic retrieval scenarios
+- labeled recall and error observations
+- polluted-memory audit scenarios
+- persisted correction and rollback operation identities
+- latency distribution and storage-cost observations
+- audit-completeness evidence
+- an authorized cohort, observation protocol, and acceptance budgets
 
-## Required Gates
+Synthetic fixtures may validate the collection mechanism but cannot substitute
+for cohort observations.
 
-- Consolidation must preserve expected stable clusters.
-- Duplicate or noisy clusters must not be promoted.
-- Temporary overrides must not leak into stable memory.
-- Contested clusters must remain visible for review.
-- Decay decisions must match expected stale clusters.
-- Default graph retrieval must hide superseded raw records.
-- Audit retrieval must recover the source chain.
-- No cross-scope node may appear in ranked, hidden, or audit results.
-- Polluted memory scenarios must be resolved by a valid dry-run command.
-- At least one correction command and one rollback command must be available
-  before limited rollout.
+## Required Functional Gates
 
-## Correction Model
+- Stable clusters and expected representatives are preserved.
+- Duplicate or noisy clusters are not promoted.
+- Temporary overrides do not leak into stable memory.
+- Contested clusters remain visible for review.
+- Decay decisions match expected stale clusters.
+- Default retrieval hides superseded raw evidence.
+- Audit retrieval recovers the complete source chain.
+- No cross-owner, workspace, tenant, or applicability result is exposed.
+- Pending summaries and raw/graph visibility mismatches block publication
+  convergence.
+- Polluted-memory scenarios are resolved.
+- At least one real correction and rollback operation is represented.
+- Missing required evidence keeps the decision `blocked`.
 
-Corrections are represented as dry-run governance commands. A correction command
-must target an explained artifact and include non-empty corrected content. The
-command report records the current revision status, affected source records, and
-reason codes without changing stored memory.
+## Correction and Rollback Requirements
 
-## Rollback Rules
+Corrections are explicit, owner-scoped, versioned commands. They may change
+membership, lifecycle, preferred representation, or corrected summary content
+while retaining prior nodes, edges, and operation history.
 
-Rollback is available only when rollback provenance exists on the target memory
-or the command provides explicit rollback metadata. Rollback commands are dry-run
-only at this phase. They prove that a polluted, stale, or wrongly consolidated
-memory can be reversed without deleting the raw audit chain.
+Rollback requires persisted provenance. It restores graph visibility and raw
+evidence before retiring representatives or supersession edges. Missing
+restoration capability or partial failure must remain observable and retryable.
 
-## Rollout Decision
+## Future Rollout Decision
 
-`buildMemoryGraphRolloutGovernanceReport` returns:
-
-- `ready-for-limited-rollout` when every gate passes
-- `blocked` when any gate fails
-
-The report is intentionally conservative. Failing gates should lead to more
-evaluation, corrected graph policy, or rollback/correction dry-runs before any
-broader runtime enablement.
+Phase 4 may recommend `ready-for-limited-rollout` only when every functional,
+quality, latency, storage, audit, and persistence gate passes. The project owner
+must then explicitly approve or reject limited rollout. A report never enables
+Phase 5 automatically.

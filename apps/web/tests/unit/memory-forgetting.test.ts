@@ -1,12 +1,14 @@
 import {
+  type MemoryApplicabilityContext,
   type MemoryGraphClusterSnapshot,
   type MemoryGraphEdge,
   type MemoryGraphNode,
   type MemoryGraphSnapshot,
   type OwnerScope,
+  buildGraphAwareRetrievalDryRun,
   createGraphAwareRetrievalDryRunRetriever,
 } from "@openloomi/memory-consolidation";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_MEMORY_FORGETTING_POLICY,
   DefaultMemoryRecordScorer,
@@ -227,12 +229,14 @@ function graphNode(
   id: string,
   type: MemoryGraphNode["type"],
   visibility: MemoryGraphNode["visibility"] = "default",
+  applicability?: MemoryApplicabilityContext,
 ): MemoryGraphNode {
   return {
     id,
     ownerScope: graphOwnerScope,
     type,
     visibility,
+    applicability,
     createdAt: GRAPH_NOW,
   };
 }
@@ -910,6 +914,40 @@ describe("memory query api", () => {
     ]);
   });
 
+  it("does not mark semantic audit hits as accessed", async () => {
+    const deprecated = createRecord({
+      id: "semantic-deprecated",
+      userId: "u1",
+      timestamp: 2000,
+      deprecatedAt: 1900,
+    });
+    const markRecordsAccessed = vi.fn();
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: [], hasMore: false }),
+      querySummaries: async () => ({ items: [], hasMore: false }),
+      semanticRecallRaw: async () => [{ record: deprecated, similarity: 0.95 }],
+      markRecordsAccessed,
+    };
+
+    const result = await createMemoryQueryApi({ storage }).semanticRecall({
+      userId: "u1",
+      queryEmbedding: [1, 0],
+      includeDeprecated: true,
+    });
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        sourceType: "raw",
+        record: deprecated,
+      }),
+    ]);
+    expect(markRecordsAccessed).not.toHaveBeenCalled();
+  });
   it("does not query summaries when raw results are sufficient", async () => {
     const rawRecords = [
       createRecord({ id: "r1", userId: "u1", timestamp: 2000 }),
@@ -1193,7 +1231,7 @@ describe("memory query api", () => {
         item.sourceType === "summary" ? item.summary.summaryId : item.record.id,
       ),
     ).toEqual(["summary-language", "r-old", "r-fresh"]);
-    expect(accessedIds).toEqual([["r-old", "r-fresh"]]);
+    expect(accessedIds).toEqual([]);
   });
 
   it("returns graph retrieval no-op diagnostics when graph capabilities are missing", async () => {
@@ -1291,6 +1329,239 @@ describe("memory query api", () => {
       status: "no-op",
       reasonCodes: ["graph_retrieval_owner_scope_mismatch"],
     });
+
+    const provenanceApi = createMemoryQueryApi({
+      storage,
+      graphRetrieval: {
+        enabled: true,
+        retriever: {
+          async compare() {
+            return {
+              ownerScope: graphOwnerScope,
+              rankedNodeIds: ["r2", "r1"],
+              hiddenDeprecatedNodeIds: [],
+              expandedClusterIds: [],
+              auditTrail: [
+                {
+                  ownerScope: { userId: "foreign-user" },
+                  nodeId: "r2",
+                  sourceNodeIds: ["r1"],
+                  edgeIds: ["foreign-edge"],
+                  operationIds: ["foreign-operation"],
+                  reasonCodes: ["foreign_provenance"],
+                },
+              ],
+              reasonCodes: ["ranked_with_foreign_provenance"],
+            };
+          },
+        },
+        snapshotProvider: async () => ({
+          ownerScope: graphOwnerScope,
+          nodes: [graphNode("r1", "raw"), graphNode("r2", "raw")],
+          edges: [],
+          clusters: [],
+          capturedAt: GRAPH_NOW,
+        }),
+      },
+    });
+    const provenanceResult = await provenanceApi.queryWithFallback({
+      userId: "u1",
+      pageSize: 2,
+      minRawResultsWithoutFallback: 2,
+    });
+    expect(provenanceResult.items.map((item) => item.timestamp)).toEqual([
+      2000, 1000,
+    ]);
+    expect(provenanceResult.graphRetrieval).toEqual({
+      status: "no-op",
+      reasonCodes: ["graph_retrieval_provenance_owner_scope_mismatch"],
+    });
+  });
+
+  it("fails closed when query dimensions mismatch the graph owner", async () => {
+    const raw = createRecord({ id: "r1", userId: "u1", timestamp: 2000 });
+    const compare = vi.fn();
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: [raw], hasMore: false }),
+      querySummaries: async () => ({ items: [], hasMore: false }),
+    };
+    const api = createMemoryQueryApi({
+      storage,
+      graphRetrieval: {
+        enabled: true,
+        ownerScope: { userId: "u1", workspaceId: "workspace-a" },
+        retriever: { compare },
+        snapshotProvider: async () => ({
+          ownerScope: { userId: "u1", workspaceId: "workspace-a" },
+          nodes: [
+            {
+              ...graphNode("r1", "raw"),
+              ownerScope: { userId: "u1", workspaceId: "workspace-a" },
+            },
+          ],
+          edges: [],
+          clusters: [],
+          capturedAt: GRAPH_NOW,
+        }),
+      },
+    });
+
+    const result = await api.queryWithFallback({
+      userId: "u1",
+      dimensions: { workspaceId: "workspace-b" },
+      pageSize: 1,
+    });
+
+    expect(result.items).toEqual([]);
+    expect(result.graphRetrieval).toEqual({
+      status: "no-op",
+      reasonCodes: ["graph_retrieval_query_owner_scope_mismatch"],
+    });
+    expect(compare).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "foreign-user",
+      summary: createSummary({
+        summaryId: "summary-materialized",
+        userId: "foreign-user",
+        dimensions: { workspaceId: "workspace-a" },
+      }),
+    },
+    {
+      label: "cross-workspace",
+      summary: createSummary({
+        summaryId: "summary-materialized",
+        userId: "u1",
+        dimensions: { workspaceId: "workspace-b" },
+      }),
+    },
+  ])(
+    "keeps baseline retrieval for $label materialized payloads",
+    async ({ summary }) => {
+      const ownerScope = { userId: "u1", workspaceId: "workspace-a" };
+      const raw = createRecord({
+        id: "r1",
+        userId: "u1",
+        timestamp: 2000,
+        dimensions: { workspaceId: "workspace-a" },
+      });
+      const storage: MemoryStorageAdapter = {
+        acquireLock: async () => null,
+        releaseLock: async () => {},
+        listCandidates: async () => [],
+        saveSummaries: async () => {},
+        transitionRecords: async () => {},
+        queryRaw: async () => ({ items: [raw], hasMore: false }),
+        querySummaries: async () => ({ items: [], hasMore: false }),
+      };
+      const api = createMemoryQueryApi({
+        storage,
+        graphRetrieval: {
+          enabled: true,
+          ownerScope,
+          retriever: {
+            async compare() {
+              return {
+                ownerScope,
+                rankedNodeIds: ["summary-materialized", "r1"],
+                hiddenDeprecatedNodeIds: [],
+                expandedClusterIds: ["cluster-1"],
+                reasonCodes: ["materialized_representative"],
+              };
+            },
+          },
+          snapshotProvider: async () => ({
+            ownerScope,
+            nodes: [
+              { ...graphNode("r1", "raw"), ownerScope },
+              {
+                ...graphNode("summary-materialized", "summary"),
+                ownerScope,
+              },
+            ],
+            edges: [],
+            clusters: [],
+            capturedAt: GRAPH_NOW,
+          }),
+          materializeNodeIds: async () => [
+            {
+              sourceType: "summary",
+              timestamp: summary.endTimestamp,
+              summary,
+            },
+          ],
+        },
+      });
+
+      const result = await api.queryWithFallback({
+        userId: "u1",
+        dimensions: { workspaceId: "workspace-a" },
+        pageSize: 2,
+        minRawResultsWithoutFallback: 1,
+      });
+
+      expect(result.items).toEqual([
+        expect.objectContaining({ sourceType: "raw", record: raw }),
+      ]);
+      expect(result.graphRetrieval).toEqual({
+        status: "no-op",
+        reasonCodes: ["graph_retrieval_materialization_invalid"],
+      });
+    },
+  );
+  it("keeps baseline retrieval when the persisted snapshot owner scope mismatches", async () => {
+    const rawRecords = [
+      createRecord({ id: "r1", userId: "u1", timestamp: 2000 }),
+    ];
+    const compare = vi.fn();
+    const storage: MemoryStorageAdapter = {
+      acquireLock: async () => null,
+      releaseLock: async () => {},
+      listCandidates: async () => [],
+      saveSummaries: async () => {},
+      transitionRecords: async () => {},
+      queryRaw: async () => ({ items: rawRecords, hasMore: false }),
+      querySummaries: async () => ({ items: [], hasMore: false }),
+      markRecordsAccessed: async () => {},
+    };
+    const api = createMemoryQueryApi({
+      storage,
+      graphRetrieval: {
+        enabled: true,
+        retriever: { compare },
+        snapshotProvider: async () => ({
+          ownerScope: { userId: "foreign-user" },
+          nodes: [graphNode("r1", "raw")],
+          edges: [],
+          clusters: [],
+          capturedAt: GRAPH_NOW,
+        }),
+      },
+    });
+
+    const result = await api.queryWithFallback({
+      userId: "u1",
+      pageSize: 1,
+    });
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        sourceType: "raw",
+        record: rawRecords[0],
+      }),
+    ]);
+    expect(result.graphRetrieval).toEqual({
+      status: "no-op",
+      reasonCodes: ["graph_retrieval_snapshot_owner_scope_mismatch"],
+    });
+    expect(compare).not.toHaveBeenCalled();
   });
 
   it("preserves non-hidden baseline hits when graph ranking is partial", async () => {

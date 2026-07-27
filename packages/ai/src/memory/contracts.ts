@@ -154,6 +154,8 @@ export interface MemorySearchQuery {
    * traversal back to the canonical summary).
    */
   includeDeprecated?: boolean;
+  /** Expose same-context competing alternatives when graph retrieval is enabled. */
+  conflictSensitive?: boolean;
 }
 
 export interface MemorySummarySearchQuery {
