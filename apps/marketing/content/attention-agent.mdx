@@ -335,6 +335,46 @@ Yes. Loomi ships with two built-in themes (`fox` and `capybara`) and a fully fil
 - **External edits auto-apply** — the config watcher listens for changes and re-paints within ~250 ms; no app restart needed.
 - **`presenting` state** — when a decision moves to `done` and you haven't reviewed it yet, Loomi shows the `presenting` sprite + bubble ("All wrapped up — ready when you are"). Click the bubble to flip back to `happy`.
 
+### Can local integrations add right-click actions?
+
+Yes. Trusted local tools can opt in by writing `~/.openloomi/pet-actions.json`. The full flow is:
+
+1. Run your local helper on a literal loopback address, for example `http://127.0.0.1:48173`.
+2. Create or update `~/.openloomi/pet-actions.json` with `enabled: true` and one entry per menu action.
+3. Right-click Loomi. OpenLoomi renders the sanitized action labels under the `Actions` section.
+4. Click an action. The widget sends only the action ID to Rust; Rust reloads the config, validates the target, and dispatches a bounded `POST`.
+5. To change menu state, such as "Start meeting recording" to "Stop meeting recording", have the helper rewrite this file. The watcher refreshes the menu without restarting OpenLoomi.
+6. To remove the custom menu, set `enabled` to `false`, remove the action, or delete the file.
+
+```json
+{
+  "version": 1,
+  "enabled": true,
+  "actions": [
+    {
+      "id": "meeting-recorder-toggle",
+      "label": "Start meeting recording",
+      "target": "http://127.0.0.1:48173/openloomi/pet/meeting/toggle",
+      "timeoutMs": 1500
+    }
+  ]
+}
+```
+
+OpenLoomi posts this payload to the configured target:
+
+```json
+{
+  "source": "openloomi-pet",
+  "version": 1,
+  "actionId": "meeting-recorder-toggle"
+}
+```
+
+Targets must use `http://127.0.0.1:...` or `http://[::1]:...`; OpenLoomi does not execute shell commands, does not allow remote hosts, does not expose the target URL to the widget, and isolates failures from the built-in Pet menu.
+
+This boundary applies only to user-defined Pet context actions. It does not change the existing plugin bridge or agent-runtime paths: when OpenLoomi is configured with `OPENLOOMI_AGENT_PROVIDER=codex`, native agent tasks can still use the existing Codex CLI runtime (`codex exec --json`) according to the agent runtime configuration. If a custom Pet action needs to trigger Codex work, point it at a trusted local helper or OpenLoomi API route; do not put an executable command in `pet-actions.json`.
+
 ### What's the difference between the Attention Agent and Loop?
 
 - **The Attention Agent** is the **little pet on your desktop**, gently reminding you in your line of sight.

@@ -199,8 +199,18 @@ describe("widget source sanity", () => {
     expect(widgetHtml).toMatch(/invoke\(\s*["']get_pet_config["']/);
   });
 
+  it("widget boots via get_pet_context_actions", () => {
+    expect(widgetHtml).toMatch(
+      /invoke\(\s*["']get_pet_context_actions["']/,
+    );
+  });
+
   it("widget listens for pet:config-changed", () => {
     expect(widgetHtml).toMatch(/listen\(\s*["']pet:config-changed["']/);
+  });
+
+  it("widget listens for pet:actions-changed", () => {
+    expect(widgetHtml).toMatch(/listen\(\s*["']pet:actions-changed["']/);
   });
 
   it("widget listens for pending-count badge updates", () => {
@@ -491,17 +501,29 @@ describe("pet menu interaction (#369)", () => {
     expect(handler).toMatch(/button\.dataset\.op/);
   });
 
-  it("menu wires every operation (open / settings / theme-* / quit)", () => {
+  it("menu wires every operation (open / settings / action / theme-* / quit)", () => {
     const handler = petMenuClickHandler();
     // Event-emit operations are dispatched on the host bridge; theme
-    // switches go through `invoke("set_active_theme", ...)`.
+    // switches and custom context actions go through `core.invoke`.
     expect(handler).toMatch(/emit\(\s*["']pet:open-dashboard["']/);
     expect(handler).toMatch(/emit\(\s*["']pet:open-settings["']/);
     expect(handler).toMatch(/emit\(\s*["']pet:quit["']/);
     expect(handler).toMatch(/invoke\(\s*["']set_active_theme["']/);
     expect(handler).toMatch(
+      /invoke\(\s*["']dispatch_pet_context_action["']/,
+    );
+    expect(handler).toMatch(/actionId:\s*actionId/);
+    expect(handler).toMatch(
       /theme-\$\{|op\.slice\(\s*["']theme-["']\.length\s*\)/,
     );
+  });
+
+  it("custom action buttons render text labels and carry only action ids", () => {
+    expect(stripped).toMatch(/id="pet-actions-section"/);
+    expect(stripped).toMatch(/id="pet-actions"/);
+    expect(stripped).toMatch(/btn\.dataset\.op\s*=\s*["']action["']/);
+    expect(stripped).toMatch(/btn\.dataset\.actionId\s*=\s*action\.id/);
+    expect(stripped).toMatch(/btn\.textContent\s*=\s*action\.label/);
   });
 
   it("theme buttons expose data-op so closest() can find them", () => {

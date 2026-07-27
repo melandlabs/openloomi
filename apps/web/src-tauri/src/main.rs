@@ -467,6 +467,8 @@ fn main() {
             // shortcuts. Registered unconditionally so the widget
             // always has a way to discover its theme on cold boot.
             pet::get_pet_config,
+            pet::get_pet_context_actions,
+            pet::dispatch_pet_context_action,
             pet::set_active_theme,
         ])
         .setup(|app| {

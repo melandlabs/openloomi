@@ -340,6 +340,8 @@
         position: fixed;
         z-index: 9999;
         min-width: 96px;
+        max-width: calc(100vw - 8px);
+        box-sizing: border-box;
         /* The pet window is 168×168 but the menu (theme picker + a
            few shortcuts) is ~250px tall, so we cap the height and let
            it scroll rather than clip the Quit button. `calc(100vh -
@@ -396,6 +398,8 @@
         border-radius: 6px;
         cursor: pointer;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       #pet-menu button:hover,
       #pet-menu button:focus-visible {
@@ -458,6 +462,10 @@
     <div id="pet-menu" role="menu" aria-hidden="true">
       <button type="button" data-op="open" role="menuitem">Open Loomi</button>
       <button type="button" data-op="settings" role="menuitem">Settings</button>
+      <div id="pet-actions-section" hidden>
+        <div class="menu-separator">Actions</div>
+        <div id="pet-actions"></div>
+      </div>
       <hr />
       <div class="menu-separator">Theme</div>
       <button type="button" data-op="theme-fox" role="menuitem">
@@ -534,6 +542,9 @@
         // `~/.openloomi/pet-custom/` directory. Refreshed on every
         // config event. The widget renders one menu button per entry.
         let customThemes = [];
+        // User-defined context actions. Rendered separately from the
+        // theme picker and hidden entirely when the action config is off.
+        let petContextActions = [];
 
         const fox = document.getElementById("fox");
         const pendingBadge = document.getElementById("pending-badge");
@@ -654,6 +665,54 @@
         }
 
         // Toggle the ✓ indicator on the active theme's button.
+        function rebuildActionButtons() {
+          const section = document.getElementById("pet-actions-section");
+          const container = document.getElementById("pet-actions");
+          if (!section || !container) return;
+          container.replaceChildren();
+          if (!petContextActions.length) {
+            section.hidden = true;
+            return;
+          }
+          section.hidden = false;
+          for (const action of petContextActions) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.setAttribute("role", "menuitem");
+            btn.dataset.op = "action";
+            btn.dataset.actionId = action.id;
+            btn.textContent = action.label;
+            container.appendChild(btn);
+          }
+        }
+
+        function applyActions(view) {
+          if (
+            !view ||
+            typeof view !== "object" ||
+            view.enabled !== true ||
+            !Array.isArray(view.actions)
+          ) {
+            petContextActions = [];
+            rebuildActionButtons();
+            return;
+          }
+          petContextActions = view.actions
+            .map((action) => {
+              if (!action || typeof action !== "object") return null;
+              if (typeof action.id !== "string" || !action.id) return null;
+              if (typeof action.label !== "string" || !action.label) {
+                return null;
+              }
+              return {
+                id: action.id,
+                label: action.label,
+              };
+            })
+            .filter(Boolean);
+          rebuildActionButtons();
+        }
+
         function updateThemeTicks() {
           document.querySelectorAll("[data-theme-tick]").forEach((el) => {
             el.classList.toggle(
@@ -867,6 +926,27 @@
                 })
                 .catch((err) => {
                   console.warn("[loomi] set_active_theme failed", err);
+                });
+            }
+            return;
+          }
+          if (op === "action") {
+            const actionId =
+              button && button.dataset ? button.dataset.actionId : null;
+            if (!actionId) return;
+            if (t.core && t.core.invoke) {
+              t.core
+                .invoke("dispatch_pet_context_action", { actionId: actionId })
+                .then((result) => {
+                  if (result && result.ok === false) {
+                    console.warn(
+                      "[loomi] dispatch_pet_context_action returned non-success",
+                      result,
+                    );
+                  }
+                })
+                .catch((err) => {
+                  console.warn("[loomi] dispatch_pet_context_action failed", err);
                 });
             }
             return;
@@ -1173,6 +1253,10 @@
             const p = (e && e.payload) || null;
             if (p) applyConfig(p);
           });
+          t.event.listen("pet:actions-changed", (e) => {
+            const p = (e && e.payload) || null;
+            applyActions(p);
+          });
         }
 
         // ---- Boot -------------------------------------------------------
@@ -1190,6 +1274,14 @@
             })
             .catch((err) => {
               console.warn("[loomi] get_pet_config failed", err);
+            });
+          t.core
+            .invoke("get_pet_context_actions")
+            .then((view) => {
+              applyActions(view);
+            })
+            .catch((err) => {
+              console.warn("[loomi] get_pet_context_actions failed", err);
             });
         }
       })();
