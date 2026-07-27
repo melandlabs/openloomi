@@ -6,6 +6,7 @@ import {
   type MemoryGraphOperation,
   type MemoryGraphSnapshot,
   type MemoryGraphStore,
+  type MemoryGraphStoreWithOperationHistory,
   type MemoryGraphUpdatePlan,
   type MemoryGraphUpdateResult,
   type OwnerScope,
@@ -24,6 +25,13 @@ const LEDGER_BOT_ID = "memory-graph";
 export interface RawMessageGraphEvolutionStorage {
   storeMessage(message: RawMessage): Promise<number>;
   storeMessages(messages: RawMessage[]): Promise<number[]>;
+  compareAndSwapGraphLedger?(
+    message: RawMessage,
+    input: {
+      expectedVersion: string;
+      metadataKey: string;
+    },
+  ): Promise<boolean>;
   getMessageById(messageId: string): Promise<RawMessage | null>;
   queryMessages(query: RawMessageQuery): Promise<RawMessage[]>;
 }
@@ -300,17 +308,15 @@ async function withOwnerGraphLock<T>(
 export function createRawMessageMemoryGraphStore(input: {
   storage: RawMessageGraphEvolutionStorage;
   ownerScope: OwnerScope;
+  botId?: string;
   now?: () => number;
-}): MemoryGraphStore {
+}): MemoryGraphStoreWithOperationHistory {
   const clock = input.now ?? Date.now;
-  const readLedger = async () =>
-    parseLedger(
-      await input.storage.getMessageById(
-        memoryGraphLedgerMessageId(input.ownerScope),
-      ),
-      input.ownerScope,
-      clock(),
-    );
+  const readLedgerMessage = async () =>
+    input.storage.getMessageById(memoryGraphLedgerMessageId(input.ownerScope));
+  const parseLedgerMessage = (message: RawMessage | null) =>
+    parseLedger(message, input.ownerScope, clock());
+  const readLedger = async () => parseLedgerMessage(await readLedgerMessage());
 
   return {
     async readSnapshot(query) {
@@ -332,8 +338,15 @@ export function createRawMessageMemoryGraphStore(input: {
         if (!plan.persistence.enabled || plan.persistence.mode !== "write") {
           return noMutationResult(plan, ["memory_graph_persistence_disabled"]);
         }
+        const compareAndSwap = input.storage.compareAndSwapGraphLedger;
+        if (typeof compareAndSwap !== "function") {
+          return noMutationResult(plan, [
+            "memory_graph_atomic_persistence_unavailable",
+          ]);
+        }
 
-        const ledger = await readLedger();
+        const ledgerMessage = await readLedgerMessage();
+        const ledger = parseLedgerMessage(ledgerMessage);
         const currentVersion = ledger.snapshot.version ?? "0";
         const appliedIds = new Set(
           ledger.appliedOperations.map((operation) => operation.operationId),
@@ -402,10 +415,10 @@ export function createRawMessageMemoryGraphStore(input: {
             ...pendingOperations,
           ],
         };
-        await input.storage.storeMessage({
+        const ledgerUpdate: RawMessage = {
           messageId: memoryGraphLedgerMessageId(input.ownerScope),
           platform: LEDGER_PLATFORM,
-          botId: LEDGER_BOT_ID,
+          botId: input.botId ?? ledgerMessage?.botId ?? LEDGER_BOT_ID,
           userId: input.ownerScope.userId,
           channel: input.ownerScope.workspaceId,
           timestamp: Math.floor(now / 1000),
@@ -416,7 +429,34 @@ export function createRawMessageMemoryGraphStore(input: {
           memoryStage: "long",
           archivedAt: Math.floor(now / 1000),
           isPinned: true,
+        };
+        const stored = await compareAndSwap.call(input.storage, ledgerUpdate, {
+          expectedVersion: currentVersion,
+          metadataKey: LEDGER_METADATA_KEY,
         });
+        if (!stored) {
+          const latestLedger = await readLedger();
+          const latestVersion = latestLedger.snapshot.version ?? "0";
+          const latestAppliedIds = new Set(
+            latestLedger.appliedOperations.map(
+              (operation) => operation.operationId,
+            ),
+          );
+          if (
+            plan.operations.every((operation) =>
+              latestAppliedIds.has(operation.operationId),
+            )
+          ) {
+            return noMutationResult(plan, ["memory_graph_operation_replayed"], {
+              replayed: true,
+              version: latestVersion,
+            });
+          }
+          return noMutationResult(plan, ["memory_graph_version_conflict"], {
+            conflict: true,
+            version: latestVersion,
+          });
+        }
 
         return {
           ownerScope: { ...input.ownerScope },
@@ -446,29 +486,98 @@ export function createRawMessageMemoryGraphStore(input: {
           reasonCodes: ["memory_graph_scope_mismatch"],
         };
       }
-      const node = ledger.snapshot.nodes.find(
-        (item) => item.id === query.nodeId,
+      const nodesById = new Map(
+        ledger.snapshot.nodes.map((node) => [node.id, node]),
       );
+      const root = nodesById.get(query.nodeId);
+      const visited = new Set<string>();
+      const queue = root ? [root.id] : [];
+      while (queue.length > 0) {
+        const nodeId = queue.shift();
+        if (!nodeId || visited.has(nodeId)) continue;
+        visited.add(nodeId);
+        const node = nodesById.get(nodeId);
+        const metadataSourceIds = Array.isArray(node?.metadata?.sourceNodeIds)
+          ? node.metadata.sourceNodeIds.filter(
+              (value): value is string => typeof value === "string",
+            )
+          : [];
+        const adjacentSourceIds = ledger.snapshot.edges
+          .filter(
+            (edge) =>
+              edge.kind === "supersede" &&
+              (edge.toNodeId === nodeId || edge.fromNodeId === nodeId),
+          )
+          .flatMap((edge) => [
+            edge.fromNodeId,
+            edge.toNodeId,
+            ...edge.evidenceNodeIds,
+          ]);
+        const linkedNodeIds = ledger.snapshot.nodes
+          .filter(
+            (candidate) =>
+              candidate.sourceId === nodeId ||
+              candidate.metadata?.supersededBySummaryId === nodeId ||
+              candidate.metadata?.correctedByRepresentativeId === nodeId,
+          )
+          .map((candidate) => candidate.id);
+        for (const candidateId of [
+          ...(node?.sourceId ? [node.sourceId] : []),
+          ...metadataSourceIds,
+          ...adjacentSourceIds,
+          ...linkedNodeIds,
+        ]) {
+          if (nodesById.has(candidateId) && !visited.has(candidateId)) {
+            queue.push(candidateId);
+          }
+        }
+      }
       const edges = ledger.snapshot.edges.filter(
-        (edge) =>
-          edge.fromNodeId === query.nodeId || edge.toNodeId === query.nodeId,
+        (edge) => visited.has(edge.fromNodeId) || visited.has(edge.toNodeId),
       );
-      const operations = ledger.appliedOperations.filter((operation) =>
-        operation.nodeIds.includes(query.nodeId),
+      const operations = ledger.appliedOperations.filter(
+        (operation) =>
+          operation.nodeIds.some((nodeId) => visited.has(nodeId)) ||
+          (operation.supersededByNodeId !== undefined &&
+            visited.has(operation.supersededByNodeId)),
       );
       return {
         ownerScope: { ...input.ownerScope },
         nodeId: query.nodeId,
-        sourceNodeIds: [
-          ...(node?.sourceId ? [node.sourceId] : []),
-          ...edges.flatMap((edge) => edge.evidenceNodeIds),
-        ].filter((value, index, values) => values.indexOf(value) === index),
+        sourceNodeIds: [...visited].filter(
+          (nodeId) =>
+            nodeId !== query.nodeId && nodesById.get(nodeId)?.type === "raw",
+        ),
         edgeIds: edges.map((edge) => edge.id),
         operationIds: operations.map((operation) => operation.operationId),
-        reasonCodes: node
+        reasonCodes: root
           ? ["memory_graph_audit_trail_available"]
           : ["memory_graph_node_not_found"],
+        metadata: {
+          traversalDepth: visited.size,
+          includeDeprecated: query.includeDeprecated === true,
+        },
       };
+    },
+
+    async readAppliedOperations(query) {
+      const ledger = await readLedger();
+      if (!sameOwnerScope(query.ownerScope, input.ownerScope)) return [];
+      return ledger.appliedOperations
+        .filter(
+          (operation) =>
+            query.nodeId === undefined ||
+            operation.nodeIds.includes(query.nodeId) ||
+            operation.supersededByNodeId === query.nodeId,
+        )
+        .map((operation) => ({
+          ...operation,
+          ownerScope: { ...operation.ownerScope },
+          nodeIds: [...operation.nodeIds],
+          edgeIds: operation.edgeIds ? [...operation.edgeIds] : undefined,
+          reasonCodes: [...operation.reasonCodes],
+          metadata: operation.metadata ? { ...operation.metadata } : undefined,
+        }));
     },
   };
 }
@@ -597,6 +706,9 @@ export async function storeRawMessagesWithGraphEvolution(
     }),
   );
   const ids = await input.storage.storeMessages(scopedMessages);
+  if (ids.length !== scopedMessages.length) {
+    throw new Error("raw_message_batch_write_incomplete");
+  }
   if (options.enabled !== true) {
     return { ids, graphEvolution: disabledResult(ownerScope) };
   }
@@ -637,6 +749,7 @@ export async function storeRawMessagesWithGraphEvolution(
   const store = createRawMessageMemoryGraphStore({
     storage: input.storage,
     ownerScope,
+    botId: scopedMessages[0].botId,
     now: () => input.now ?? Date.now(),
   });
   const graphEvolution = await runMemoryGraphEvolution({

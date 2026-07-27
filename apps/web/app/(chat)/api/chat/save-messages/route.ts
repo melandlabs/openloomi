@@ -1,13 +1,33 @@
 import { auth } from "@/app/(auth)/auth";
-import { saveMessages, saveChat, getChatById } from "@/lib/db/queries";
-import { NextResponse } from "next/server";
 import { generateTitleFromUserMessage } from "@/app/(chat)/actions";
-import { syncChatToFilesystem } from "@/lib/ai/memory/chat-sync";
-import { isTauriMode } from "@/lib/env";
-import { setAIUserContextFromRequest } from "@/lib/ai/request-context";
 import { clearAIUserContext } from "@/lib/ai";
+import { syncChatToFilesystem } from "@/lib/ai/memory/chat-sync";
+import { setAIUserContextFromRequest } from "@/lib/ai/request-context";
+import {
+  CHAT_OWNER_SCOPE_CONFLICT,
+  MESSAGE_ID_SCOPE_CONFLICT,
+  getChatById,
+  getMessageById,
+  saveChat,
+  saveMessages,
+} from "@/lib/db/queries";
+import { isTauriMode } from "@/lib/env";
+import {
+  type ChatMemoryWriteDiagnostics,
+  buildPersistedChatMemoryMetadata,
+  findChatMemoryRevisionConflict,
+  writeSavedChatMessagesToMemory,
+} from "@/lib/memory/chat-memory-write";
+import { resolveMemoryGraphWritePolicy } from "@/lib/memory/memory-graph-write-policy";
 import type { ChatMessage } from "@openloomi/shared";
 import type { Attachment } from "@openloomi/shared";
+import { NextResponse } from "next/server";
+
+async function getPersistedMessagesByIds(messageIds: string[]) {
+  return (
+    await Promise.all(messageIds.map((id) => getMessageById({ id })))
+  ).flat();
+}
 
 /**
  * Save Native Agent messages to database
@@ -71,6 +91,7 @@ export async function POST(request: Request) {
     };
 
     if (!chatId) {
+      clearAIUserContext();
       return NextResponse.json(
         { error: "chatId is required" },
         { status: 400 },
@@ -78,6 +99,7 @@ export async function POST(request: Request) {
     }
 
     if (!messages || !Array.isArray(messages)) {
+      clearAIUserContext();
       return NextResponse.json(
         { error: "messages is required" },
         { status: 400 },
@@ -86,6 +108,49 @@ export async function POST(request: Request) {
 
     // Check if chat exists, create if not
     let chat = await getChatById({ id: chatId });
+    if (chat && chat.userId !== session.user.id) {
+      clearAIUserContext();
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const requestMessageIds = [
+      ...new Set(
+        messages.flatMap((message) =>
+          typeof message?.id === "string" ? [message.id] : [],
+        ),
+      ),
+    ];
+    const existingMessageRows =
+      await getPersistedMessagesByIds(requestMessageIds);
+    if (existingMessageRows.some((row) => row.chatId !== chatId)) {
+      clearAIUserContext();
+      return NextResponse.json(
+        {
+          error: "Message ID already belongs to another chat",
+        },
+        { status: 409 },
+      );
+    }
+    const memoryRevisionConflict = await findChatMemoryRevisionConflict({
+      userId: session.user.id,
+      chatId,
+      existingMessages: existingMessageRows,
+      incomingMessages: messages,
+    });
+    if (memoryRevisionConflict) {
+      clearAIUserContext();
+      return NextResponse.json(
+        {
+          error: memoryRevisionConflict.retryable
+            ? "Message memory evidence revision check is unavailable"
+            : "Message memory evidence cannot be revised in place",
+          code: memoryRevisionConflict.reasonCode,
+          messageId: memoryRevisionConflict.messageId,
+        },
+        { status: memoryRevisionConflict.retryable ? 503 : 409 },
+      );
+    }
+
     if (!chat) {
       // Find first user message, use message content as temporary title
       const firstUserMessage = messages.find((msg) => msg.role === "user");
@@ -116,7 +181,20 @@ export async function POST(request: Request) {
         title: tempTitle,
       });
 
-      // Asynchronously generate better title and update
+      // Re-fetch and verify ownership after the create/upsert race window.
+      chat = await getChatById({ id: chatId });
+      if (!chat || chat.userId !== session.user.id) {
+        clearAIUserContext();
+        return NextResponse.json(
+          {
+            error: "Chat ID already belongs to another user",
+            code: "chat_owner_scope_conflict",
+          },
+          { status: 409 },
+        );
+      }
+
+      // Generate a better title only after ownership is confirmed.
       if (firstUserMessage) {
         generateTitleFromUserMessage({ message: firstUserMessage })
           .then(async (title) => {
@@ -130,9 +208,6 @@ export async function POST(request: Request) {
             console.error("[SaveMessages] Failed to generate title:", err);
           });
       }
-
-      // Re-fetch chat object
-      chat = await getChatById({ id: chatId });
     }
 
     // Save messages to database
@@ -142,40 +217,168 @@ export async function POST(request: Request) {
 
     // Skip empty message arrays to avoid Drizzle ORM errors
     if (messages.length === 0) {
-      return Response.json({ success: true, message: "No messages to save" });
+      const graphPolicy = resolveMemoryGraphWritePolicy(session.user.id);
+      const memoryWrite: ChatMemoryWriteDiagnostics = {
+        status: "no-op",
+        evidenceCount: 0,
+        storedCount: 0,
+        graphPolicy,
+        retryable: false,
+        reasonCodes: [
+          ...graphPolicy.reasonCodes,
+          "chat_memory_no_supported_evidence",
+        ],
+      };
+      clearAIUserContext();
+      return Response.json({
+        success: true,
+        message: "No messages to save",
+        memoryWrite,
+      });
     }
 
-    await saveMessages({
-      messages: messages.map(
-        (
-          msg: ChatMessage & {
-            attachments?: Attachment[];
-            createdAt?: string | Date;
-          },
-        ) => ({
-          chatId,
-          id: msg.id,
-          role: msg.role,
-          parts: msg.parts || [],
-          attachments: (msg.attachments || []).map((att: Attachment) => {
-            // If url is base64 and too large, clear it (keep other metadata)
-            if (
-              att.url &&
-              att.url.length > MAX_ATTACHMENT_SIZE &&
-              att.url.startsWith("data:")
-            ) {
-              return {
-                ...att,
-                url: "", // Clear large base64 data
-              };
-            }
-            return att;
+    try {
+      await saveMessages({
+        messages: messages.map(
+          (
+            msg: ChatMessage & {
+              attachments?: Attachment[];
+              createdAt?: string | Date;
+            },
+          ) => ({
+            chatId,
+            id: msg.id,
+            role: msg.role,
+            parts: msg.parts || [],
+            attachments: (msg.attachments || []).map((att: Attachment) => {
+              // If url is base64 and too large, clear it (keep other metadata)
+              if (
+                att.url &&
+                att.url.length > MAX_ATTACHMENT_SIZE &&
+                att.url.startsWith("data:")
+              ) {
+                return {
+                  ...att,
+                  url: "", // Clear large base64 data
+                };
+              }
+              return att;
+            }),
+            createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+            metadata: buildPersistedChatMemoryMetadata({
+              userId: session.user.id,
+              chatId,
+              message: msg,
+              metadata: msg.metadata,
+            }),
           }),
-          createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-          metadata: msg.metadata,
-        }),
-      ),
-    });
+        ),
+        expectedMessages: existingMessageRows.map((row) => ({
+          id: row.id,
+          chatId: row.chatId,
+          parts: row.parts,
+        })),
+        expectedUserId: session.user.id,
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === MESSAGE_ID_SCOPE_CONFLICT
+      ) {
+        clearAIUserContext();
+        return NextResponse.json(
+          {
+            error: "Message ID already belongs to another chat",
+            code: MESSAGE_ID_SCOPE_CONFLICT,
+          },
+          { status: 409 },
+        );
+      }
+      if (
+        error instanceof Error &&
+        error.message === CHAT_OWNER_SCOPE_CONFLICT
+      ) {
+        clearAIUserContext();
+        return NextResponse.json(
+          {
+            error: "Chat ID already belongs to another user",
+            code: CHAT_OWNER_SCOPE_CONFLICT,
+          },
+          { status: 409 },
+        );
+      }
+      throw error;
+    }
+
+    const persistedChat = await getChatById({ id: chatId });
+    if (!persistedChat || persistedChat.userId !== session.user.id) {
+      clearAIUserContext();
+      return NextResponse.json(
+        {
+          error: "Chat ID already belongs to another user",
+          code: CHAT_OWNER_SCOPE_CONFLICT,
+        },
+        { status: 409 },
+      );
+    }
+    chat = persistedChat;
+
+    let memoryWrite: ChatMemoryWriteDiagnostics;
+    try {
+      const persistedRequestMessages =
+        await getPersistedMessagesByIds(requestMessageIds);
+      if (persistedRequestMessages.some((row) => row.chatId !== chatId)) {
+        clearAIUserContext();
+        return NextResponse.json(
+          {
+            error: "Message ID already belongs to another chat",
+          },
+          { status: 409 },
+        );
+      }
+
+      const persistedUserMessages = persistedRequestMessages
+        .filter((row) => row.role === "user")
+        .map(
+          (row) =>
+            ({
+              id: row.id,
+              role: "user",
+              parts: Array.isArray(row.parts) ? row.parts : [],
+              createdAt:
+                row.createdAt instanceof Date
+                  ? row.createdAt
+                  : new Date(row.createdAt),
+            }) as ChatMessage & { createdAt: Date },
+        );
+      memoryWrite = await writeSavedChatMessagesToMemory({
+        userId: session.user.id,
+        chatId,
+        messages: persistedUserMessages,
+      });
+    } catch (memoryError) {
+      const graphPolicy = resolveMemoryGraphWritePolicy(session.user.id);
+      const error =
+        memoryError instanceof Error
+          ? { name: memoryError.name, message: memoryError.message }
+          : { name: "Error", message: String(memoryError) };
+      memoryWrite = {
+        status: "partial-failure",
+        evidenceCount: 0,
+        storedCount: 0,
+        graphPolicy,
+        retryable: true,
+        reasonCodes: [
+          ...graphPolicy.reasonCodes,
+          "chat_memory_write_unhandled_error",
+        ],
+        error,
+      };
+      console.error(
+        "[SaveMessages] Memory write error (non-fatal):",
+        memoryError,
+      );
+    }
 
     // Sync chat history to filesystem (skip during streaming to avoid per-chunk I/O)
     if (!skipSync) {
@@ -225,10 +428,10 @@ export async function POST(request: Request) {
         console.error("[SaveMessages] Sync error (non-fatal):", syncError);
       }
     }
-
     clearAIUserContext();
     return Response.json({
       success: true,
+      memoryWrite,
       chat: chat
         ? {
             id: chat.id,

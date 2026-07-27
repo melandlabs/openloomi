@@ -20,6 +20,11 @@ import {
   type ScoredMemoryRecord,
   deprecateMemoryRecords,
 } from "../../ai/src/memory";
+import {
+  memorySummaryPublicationRevision,
+  publishMemorySummary,
+  stageMemorySummaryPublication,
+} from "../../ai/src/memory/summary-publication";
 import type { RawMessage } from "./manager";
 import {
   createRawMessageMemoryGraphStore,
@@ -217,6 +222,11 @@ async function buildSummary(input: {
   const last = records.at(-1);
   if (!first || !last)
     throw new Error("Graph lifecycle summary has no source records");
+  const dimensions: MemoryDimensions = {
+    ...first.dimensions,
+    workspaceId: input.ownerScope.workspaceId,
+    tenantId: input.ownerScope.tenantId,
+  };
   const group: MemoryGroup = {
     groupId: input.clusterId,
     userId: input.ownerScope.userId,
@@ -226,7 +236,7 @@ async function buildSummary(input: {
     records,
     startTimestamp: first.timestamp,
     endTimestamp: last.timestamp,
-    dimensions: first.dimensions,
+    dimensions,
   };
   const draft = await new RuleBasedMemorySummarizer().summarizeGroup(group);
   return {
@@ -241,7 +251,7 @@ async function buildSummary(input: {
     keyPoints: draft.keyPoints,
     keywords: draft.keywords,
     summaryText: draft.summaryText,
-    dimensions: first.dimensions,
+    dimensions,
     qualityScore: draft.qualityScore,
     createdAt: input.now,
     updatedAt: input.now,
@@ -414,13 +424,35 @@ export async function runMemoryGraphLifecycleCycle(
       }
 
       try {
-        const summary = await buildSummary({
-          ownerScope,
-          clusterId: candidate.clusterId,
-          messages: sourceMessages,
-          now,
-        });
-        await input.storage.saveSummaries([summary]);
+        const summary = stageMemorySummaryPublication(
+          await buildSummary({
+            ownerScope,
+            clusterId: candidate.clusterId,
+            messages: sourceMessages,
+            now,
+          }),
+        );
+        const publicationRevision = memorySummaryPublicationRevision(summary);
+        const previousSummaryNode = snapshot.nodes.find(
+          (node) => node.id === summaryId && node.type === "summary",
+        );
+        const previousPublicationRevision =
+          previousSummaryNode?.metadata?.publicationRevision;
+        const stagedPreviousPublicationRevision =
+          previousSummaryNode?.metadata?.previousPublicationRevision;
+        const replacementRevision =
+          typeof previousPublicationRevision === "string" &&
+          previousPublicationRevision.length > 0 &&
+          previousPublicationRevision !== publicationRevision
+            ? previousPublicationRevision
+            : previousPublicationRevision === publicationRevision &&
+                typeof stagedPreviousPublicationRevision === "string" &&
+                stagedPreviousPublicationRevision.length > 0
+              ? stagedPreviousPublicationRevision
+              : undefined;
+        if (!replacementRevision) {
+          await input.storage.saveSummaries([summary]);
+        }
         createdSummaries += 1;
 
         const representativePlan = buildMemoryGraphRepresentativePlan({
@@ -428,6 +460,8 @@ export async function runMemoryGraphLifecycleCycle(
           snapshot,
           candidate,
           summaryId,
+          publicationRevision,
+          previousPublicationRevision: replacementRevision,
           now,
           persistence: { mode: "write", enabled: true },
         });
@@ -476,13 +510,37 @@ export async function runMemoryGraphLifecycleCycle(
         const persistedRepresentative = snapshot.clusters.find(
           (cluster) => cluster.clusterId === candidate.clusterId,
         );
+        const persistedSummaryNode = snapshot.nodes.find(
+          (node) => node.id === summaryId && node.type === "summary",
+        );
+        const persistedSourceNodeIds = Array.isArray(
+          persistedSummaryNode?.metadata?.sourceNodeIds,
+        )
+          ? persistedSummaryNode.metadata.sourceNodeIds.filter(
+              (nodeId): nodeId is string => typeof nodeId === "string",
+            )
+          : [];
+        const representativeSourcesMatch =
+          persistedSourceNodeIds.length === candidate.sourceNodeIds.length &&
+          candidate.sourceNodeIds.every((nodeId) =>
+            persistedSourceNodeIds.includes(nodeId),
+          );
+        const representativeRevisionMatches =
+          persistedSummaryNode?.metadata?.publicationRevision ===
+          publicationRevision;
         const representativeReady =
           persistedRepresentative?.representativeNodeId === summaryId &&
-          snapshot.nodes.some(
-            (node) => node.id === summaryId && node.type === "summary",
-          );
+          Boolean(persistedSummaryNode) &&
+          representativeSourcesMatch &&
+          representativeRevisionMatches;
         if (!representativeReady) {
           partialFailure = true;
+          const representativeReason =
+            persistedRepresentative?.representativeNodeId === summaryId &&
+            persistedSummaryNode &&
+            (!representativeSourcesMatch || !representativeRevisionMatches)
+              ? "memory_graph_representative_provenance_mismatch"
+              : "memory_graph_representative_not_persisted";
           candidateResults.push({
             clusterId: candidate.clusterId,
             summaryId,
@@ -490,11 +548,16 @@ export async function runMemoryGraphLifecycleCycle(
             sourceRecordIds: [...candidate.sourceNodeIds],
             supersededClusterIds: [...candidate.supersededClusterIds],
             deprecatedRecords: 0,
-            reasonCodes: ["memory_graph_representative_not_persisted"],
+            reasonCodes: [representativeReason],
           });
-          reasonCodes.add("memory_graph_representative_not_persisted");
+          reasonCodes.add(representativeReason);
           continue;
         }
+        await input.storage.saveSummaries([
+          publishMemorySummary(summary, {
+            expectedRevision: replacementRevision,
+          }),
+        ]);
         const supersededSourceGroups = sourceIdsForClusters(
           snapshot,
           candidate.supersededClusterIds,

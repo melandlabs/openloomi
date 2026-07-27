@@ -1,6 +1,6 @@
 # ADR-0002: Owner-scoped Graph Isolation
 
-Status: Proposed
+Status: Accepted
 
 Requirements: MR-1, MR-9, MR-10
 
@@ -22,6 +22,10 @@ product model.
 Default candidate discovery, graph mutation, lifecycle evaluation, and retrieval
 must reject cross-scope data. Shared memory requires a separate product decision
 and explicit authorization.
+
+At an untrusted route boundary, owner scope is derived from authenticated server
+context. Request data may not choose `workspaceId`, `tenantId`, or an
+operation identity that persists a representative.
 
 ## Consequences
 

@@ -21,8 +21,10 @@ import {
   createMemoryForgettingEngine,
   createMemoryQueryApi,
 } from "../../ai/src/memory";
+import { isMemorySummaryPublicationPending } from "../../ai/src/memory/summary-publication";
 import { cosineSimilarity } from "./embedding";
 import type { MemoryStage, MemorySummaryRecord, RawMessage } from "./manager";
+import { ownerScopeFromMessage } from "./memory-graph-evolution";
 import {
   type MemoryGraphLifecycleRuntimeResult,
   type RawMessageGraphLifecycleOptions,
@@ -76,6 +78,7 @@ function normalizeTimestampFromMs(value: number): number {
  * - Original raw record is preserved in metadata for lossless fallback-query responses.
  */
 function toMemoryRecord(message: RawMessage): MemoryRecord {
+  const ownerScope = ownerScopeFromMessage(message);
   return {
     id: message.messageId,
     userId: message.userId,
@@ -93,11 +96,16 @@ function toMemoryRecord(message: RawMessage): MemoryRecord {
     importanceScore: message.importanceScore ?? 0,
     isPinned: message.isPinned ?? false,
     archivedAt: message.archivedAt,
+    deprecatedAt: message.deprecatedAt,
+    deprecationReason: message.deprecationReason,
+    supersededBySummaryId: message.supersededBySummaryId,
     dimensions: {
       platform: message.platform,
       channel: message.channel,
       person: message.person,
       botId: message.botId,
+      workspaceId: ownerScope.workspaceId,
+      tenantId: ownerScope.tenantId,
     },
     metadata: {
       // Preserve the original raw record so fallback query can return full raw shape.
@@ -348,45 +356,66 @@ export function createIndexedDBMemoryStorageAdapter(
 
     async queryRaw(query: MemorySearchQuery) {
       const pageSize = getPageSize(query);
-      // Memory API uses ms timestamps; raw manager query uses seconds.
-      // `pageSize + 1` lets us infer hasMore without total-count queries.
-      const raw = await manager.queryMessages({
-        userId: query.userId,
-        keywords: query.keywords,
-        startTime:
-          query.startTime === undefined
-            ? undefined
-            : normalizeTimestampFromMs(query.startTime),
-        endTime:
-          query.endTime === undefined
-            ? undefined
-            : normalizeTimestampFromMs(query.endTime),
-        offset: query.offset,
-        pageSize: pageSize + 1,
-        reverse: query.reverse ?? true,
-        includeArchived: false,
-        includeDeprecated: query.includeDeprecated,
-        memoryStages: query.tiers as MemoryStage[] | undefined,
-        platform:
-          typeof query.dimensions?.platform === "string"
-            ? String(query.dimensions.platform)
-            : undefined,
-        channel:
-          typeof query.dimensions?.channel === "string"
-            ? String(query.dimensions.channel)
-            : undefined,
-        person:
-          typeof query.dimensions?.person === "string"
-            ? String(query.dimensions.person)
-            : undefined,
-        botId:
-          typeof query.dimensions?.botId === "string"
-            ? String(query.dimensions.botId)
-            : undefined,
-      });
-      return hasMoreByLength(raw.map(toMemoryRecord), pageSize);
-    },
+      const queryPage = (offset: number | undefined, batchSize: number) =>
+        manager.queryMessages({
+          userId: query.userId,
+          keywords: query.keywords,
+          startTime:
+            query.startTime === undefined
+              ? undefined
+              : normalizeTimestampFromMs(query.startTime),
+          endTime:
+            query.endTime === undefined
+              ? undefined
+              : normalizeTimestampFromMs(query.endTime),
+          offset,
+          pageSize: batchSize,
+          reverse: query.reverse ?? true,
+          includeArchived: false,
+          includeDeprecated: query.includeDeprecated,
+          memoryStages: query.tiers as MemoryStage[] | undefined,
+          platform:
+            typeof query.dimensions?.platform === "string"
+              ? String(query.dimensions.platform)
+              : undefined,
+          channel:
+            typeof query.dimensions?.channel === "string"
+              ? String(query.dimensions.channel)
+              : undefined,
+          person:
+            typeof query.dimensions?.person === "string"
+              ? String(query.dimensions.person)
+              : undefined,
+          botId:
+            typeof query.dimensions?.botId === "string"
+              ? String(query.dimensions.botId)
+              : undefined,
+        });
+      const filtersOwnerScope =
+        query.dimensions?.workspaceId !== undefined ||
+        query.dimensions?.tenantId !== undefined;
+      if (!filtersOwnerScope) {
+        const raw = await queryPage(query.offset, pageSize + 1);
+        return hasMoreByLength(raw.map(toMemoryRecord), pageSize);
+      }
 
+      const requestedOffset = query.offset ?? 0;
+      const targetCount = requestedOffset + pageSize + 1;
+      const storagePageSize = Math.max(pageSize + 1, 50);
+      const scopedRecords: MemoryRecord[] = [];
+      let storageOffset = 0;
+      while (scopedRecords.length < targetCount) {
+        const batch = await queryPage(storageOffset, storagePageSize);
+        scopedRecords.push(
+          ...batch
+            .map(toMemoryRecord)
+            .filter((record) => dimensionMatches(record, query.dimensions)),
+        );
+        if (batch.length < storagePageSize) break;
+        storageOffset += batch.length;
+      }
+      return hasMoreByLength(scopedRecords.slice(requestedOffset), pageSize);
+    },
     async semanticRecallRaw(query: MemorySemanticRecallQuery) {
       if (query.queryEmbedding.length === 0) {
         return [];
@@ -508,19 +537,38 @@ export function createIndexedDBMemoryStorageAdapter(
 
     async querySummaries(query: MemorySummarySearchQuery) {
       const pageSize = getPageSize(query);
-      // Same `+1` strategy as raw query for consistent pagination semantics.
-      const summaries = await manager.querySummaries({
-        userId: query.userId,
-        keywords: query.keywords,
-        startTime: query.startTime,
-        endTime: query.endTime,
-        offset: query.offset,
-        pageSize: pageSize + 1,
-        reverse: query.reverse ?? true,
-        summaryTiers: query.summaryTiers,
-        dimensions: query.dimensions,
-      });
-      return hasMoreByLength(summaries.map(toMemorySummary), pageSize);
+      const requestedOffset = query.offset ?? 0;
+      const targetCount = requestedOffset + pageSize + 1;
+      const storagePageSize = Math.max(pageSize + 1, 50);
+      const published = [] as MemorySummaryRecord[];
+      let storageOffset = 0;
+
+      // Pending summaries stay durable for retries but are never default recall.
+      while (published.length < targetCount) {
+        const batch = await manager.querySummaries({
+          userId: query.userId,
+          keywords: query.keywords,
+          startTime: query.startTime,
+          endTime: query.endTime,
+          offset: storageOffset,
+          pageSize: storagePageSize,
+          reverse: query.reverse ?? true,
+          summaryTiers: query.summaryTiers,
+          dimensions: query.dimensions,
+        });
+        published.push(
+          ...batch.filter(
+            (summary) => !isMemorySummaryPublicationPending(summary),
+          ),
+        );
+        if (batch.length < storagePageSize) break;
+        storageOffset += batch.length;
+      }
+
+      return hasMoreByLength(
+        published.slice(requestedOffset).map(toMemorySummary),
+        pageSize,
+      );
     },
 
     async markRecordsAccessed(input) {

@@ -1,5 +1,12 @@
 import { auth } from "@/app/(auth)/auth";
+import { botExists } from "@/lib/db/queries";
 import { upsertRawMessagesToChroma } from "@/lib/memory/chroma-memory-index";
+import {
+  isReservedChatMemoryEvidenceId,
+  isReservedMemoryGraphSummaryId,
+  resolveUntrustedRawMemoryGraphWritePolicy,
+  sanitizeUntrustedMemoryMetadata,
+} from "@/lib/memory/memory-graph-write-policy";
 import {
   getRawMessageManager,
   getRawMessageStorageBackend,
@@ -12,8 +19,8 @@ import type {
   RunMemoryForgettingCycleSerializableShadowDiagnosticsOptions,
 } from "@openloomi/indexeddb";
 import {
-  parseRawMessageGraphEvolutionOptions,
-  parseRawMessageGraphLifecycleOptions,
+  MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT,
+  MEMORY_SUMMARY_WRITE_CONFLICT,
   queryMemoryWithFallback,
   runMemoryForgettingCycle,
   storeRawMessagesWithGraphEvolution,
@@ -120,9 +127,6 @@ function parseForgettingCycleOptions(value: unknown) {
         ? options.hardDeleteArchivedOlderThan
         : undefined,
     shadowDiagnostics: parseShadowDiagnosticsOptions(options.shadowDiagnostics),
-    graphLifecycle: parseRawMessageGraphLifecycleOptions(
-      options.graphLifecycle,
-    ),
   };
 }
 
@@ -308,18 +312,77 @@ export async function POST(request: NextRequest) {
           ).toResponse();
         }
 
+        for (const message of messages as Array<Partial<RawMessage>>) {
+          if (
+            typeof message.messageId !== "string" ||
+            message.messageId.trim().length === 0 ||
+            typeof message.botId !== "string" ||
+            message.botId.trim().length === 0
+          ) {
+            return new AppError(
+              "bad_request:api",
+              "Each message must have a non-empty messageId and botId",
+            ).toResponse();
+          }
+          if (isReservedChatMemoryEvidenceId(message.messageId)) {
+            return Response.json(
+              { success: false, reason: "raw_message_reserved_id" },
+              { status: 409 },
+            );
+          }
+        }
+
+        const botIds = [
+          ...new Set(
+            (messages as Array<Partial<RawMessage>>).map(
+              (message) => message.botId as string,
+            ),
+          ),
+        ];
+        const ownedBots = await Promise.all(
+          botIds.map((id) => botExists({ id, userId })),
+        );
+        if (ownedBots.some((ownedBot) => !ownedBot)) {
+          return new AppError(
+            "forbidden:api",
+            "Raw messages may only reference bots owned by the current user",
+          ).toResponse();
+        }
+
+        const existingMessages = await Promise.all(
+          [
+            ...new Set(
+              (messages as Array<Partial<RawMessage>>).map(
+                (message) => message.messageId as string,
+              ),
+            ),
+          ].map((messageId) => manager.getMessageById(messageId)),
+        );
+        if (
+          existingMessages.some(
+            (existing) => existing !== null && existing.userId !== userId,
+          )
+        ) {
+          return Response.json(
+            { success: false, reason: "raw_message_scope_conflict" },
+            { status: 409 },
+          );
+        }
+
         const now = Math.floor(Date.now() / 1000);
-        const normalized = messages.map((message: Partial<RawMessage>) => ({
-          ...message,
-          userId,
-          createdAt: message.createdAt ?? now,
-        })) as RawMessage[];
+        const normalized = messages.map(
+          ({ metadata, ...message }: Partial<RawMessage>) => ({
+            ...message,
+            metadata: sanitizeUntrustedMemoryMetadata(metadata),
+            userId,
+            createdAt: message.createdAt ?? now,
+          }),
+        ) as RawMessage[];
+        const graphPolicy = resolveUntrustedRawMemoryGraphWritePolicy();
         const stored = await storeRawMessagesWithGraphEvolution({
           storage: manager,
           messages: normalized,
-          graphEvolution: parseRawMessageGraphEvolutionOptions(
-            body.graphEvolution,
-          ),
+          graphEvolution: { enabled: graphPolicy.enabled },
         });
         await upsertRawMessagesToChroma(normalized);
         return Response.json({
@@ -327,6 +390,11 @@ export async function POST(request: NextRequest) {
           stored: stored.ids.length,
           errors: 0,
           graphEvolution: stored.graphEvolution,
+          graphPolicy,
+          graphLifecycle: {
+            status: "disabled",
+            reasonCodes: ["memory_graph_lifecycle_untrusted_raw_baseline_only"],
+          },
         });
       }
 
@@ -410,6 +478,18 @@ export async function POST(request: NextRequest) {
 
       case "upsertSummaries": {
         const summaries = Array.isArray(body.summaries) ? body.summaries : [];
+        if (
+          summaries.some(
+            (summary: Partial<MemorySummaryRecord>) =>
+              typeof summary.summaryId === "string" &&
+              isReservedMemoryGraphSummaryId(summary.summaryId),
+          )
+        ) {
+          return Response.json(
+            { success: false, reason: "memory_summary_reserved_id" },
+            { status: 409 },
+          );
+        }
         await manager.upsertSummaries(
           summaries.map((summary: Partial<MemorySummaryRecord>) => ({
             ...summary,
@@ -425,7 +505,17 @@ export async function POST(request: NextRequest) {
           userId,
           parseForgettingCycleOptions(body.options),
         );
-        return Response.json({ success: true, result });
+        return Response.json({
+          success: true,
+          result,
+          graphLifecyclePolicy: {
+            enabled: false,
+            reasonCodes: [
+              "memory_graph_lifecycle_untrusted_action_disabled",
+              "memory_graph_lifecycle_scope_discarded",
+            ],
+          },
+        });
       }
 
       default:
@@ -435,6 +525,16 @@ export async function POST(request: NextRequest) {
         ).toResponse();
     }
   } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message === MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT ||
+        error.message === MEMORY_SUMMARY_WRITE_CONFLICT)
+    ) {
+      return Response.json(
+        { success: false, reason: error.message },
+        { status: 409 },
+      );
+    }
     console.error("[Raw Messages API] Error:", error);
     return new AppError(
       "bad_request:database",

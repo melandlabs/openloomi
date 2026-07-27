@@ -3,6 +3,14 @@
  * This allows AI tools to query original message content during insight generation
  */
 
+import {
+  MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT,
+  MEMORY_SUMMARY_WRITE_CONFLICT,
+  hasMemorySummaryPublicationRevisionConflict,
+  isMemorySummaryPublicationPendingRecord,
+  withoutMemorySummaryPublicationExpectedRevision,
+  mergeStoredChatMemoryEvidence,
+} from "./storage";
 import type {
   GroupByType,
   MemoryStage,
@@ -62,19 +70,21 @@ class IndexedDBManager implements RawMessageStorageManager {
   ): Promise<T> {
     try {
       return await operation();
-    } catch (error: any) {
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : undefined;
+      const errorMessage = error instanceof Error ? error.message : undefined;
       // Check if error is related to closed database connection
       if (
         maxRetries > 0 &&
-        (error.name === "InvalidStateError" ||
-          error.message?.includes("closing") ||
-          error.message?.includes("closed"))
+        (errorName === "InvalidStateError" ||
+          errorMessage?.includes("closing") ||
+          errorMessage?.includes("closed"))
       ) {
         // Close existing connection and reinitialize
         if (this.db) {
           try {
             this.db.close();
-          } catch (e) {
+          } catch {
             // Ignore close errors
           }
           this.db = null;
@@ -98,7 +108,7 @@ class IndexedDBManager implements RawMessageStorageManager {
         // Handle version mismatch (e.g., user has version 2 but code expects version 1)
         if (request.error?.name === "VersionError") {
           console.warn(
-            `[IndexedDB] Database version mismatch. Deleting and recreating database...`,
+            "[IndexedDB] Database version mismatch. Deleting and recreating database...",
           );
           const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
           deleteRequest.onsuccess = () => {
@@ -147,7 +157,9 @@ class IndexedDBManager implements RawMessageStorageManager {
     db: IDBDatabase,
     transaction?: IDBTransaction | null,
   ): void {
-    const tx = transaction || (db as any).transaction;
+    const tx =
+      transaction ??
+      (db as IDBDatabase & { transaction?: IDBTransaction | null }).transaction;
     if (!tx) {
       console.error("[IndexedDB] No transaction available for upgrade");
       return;
@@ -162,13 +174,13 @@ class IndexedDBManager implements RawMessageStorageManager {
     ) => {
       try {
         if (!objectStore.indexNames.contains(name)) {
-          objectStore.createIndex(name, keyPath as any, {
+          objectStore.createIndex(name, keyPath, {
             unique,
             ...(options ?? {}),
           });
           console.log(`[IndexedDB] Created missing index: ${name}`);
         }
-      } catch (error: any) {
+      } catch (error) {
         console.warn(`[IndexedDB] Warning with index ${name}:`, error);
       }
     };
@@ -257,28 +269,35 @@ class IndexedDBManager implements RawMessageStorageManager {
         const getRequest = index.get(message.messageId);
 
         getRequest.onsuccess = () => {
+          const existing = getRequest.result as RawMessage | undefined;
+          if (existing && existing.userId !== message.userId) {
+            transaction.abort();
+            reject(new Error("raw_message_scope_conflict"));
+            return;
+          }
+          const messageToStore = existing
+            ? mergeStoredChatMemoryEvidence(existing, message)
+            : message;
           const normalizedMessage: RawMessage = {
-            ...message,
-            memoryStage: message.memoryStage ?? "short",
-            accessCount: message.accessCount ?? 0,
-            lastAccessAt: message.lastAccessAt,
-            importanceScore: message.importanceScore ?? 0,
-            archivedAt: message.archivedAt,
-            isPinned: message.isPinned ?? false,
-            summaryRefId: message.summaryRefId,
+            ...messageToStore,
+            memoryStage: messageToStore.memoryStage ?? "short",
+            accessCount: messageToStore.accessCount ?? 0,
+            lastAccessAt: messageToStore.lastAccessAt,
+            importanceScore: messageToStore.importanceScore ?? 0,
+            archivedAt: messageToStore.archivedAt,
+            isPinned: messageToStore.isPinned ?? false,
+            summaryRefId: messageToStore.summaryRefId,
           };
 
-          if (getRequest.result) {
-            // Update existing message
+          if (existing) {
             const updateRequest = objectStore.put({
-              ...getRequest.result,
+              ...existing,
               ...normalizedMessage,
             });
             updateRequest.onsuccess = () =>
               resolve(updateRequest.result as number);
             updateRequest.onerror = () => reject(updateRequest.error);
           } else {
-            // Add new message
             normalizedMessage.createdAt = Date.now();
             const addRequest = objectStore.add(normalizedMessage);
             addRequest.onsuccess = () => resolve(addRequest.result as number);
@@ -300,12 +319,8 @@ class IndexedDBManager implements RawMessageStorageManager {
     const results: number[] = [];
 
     for (const message of messages) {
-      try {
-        const id = await this.storeMessage(message);
-        results.push(id);
-      } catch (error) {
-        console.error("[IndexedDB] Failed to store message:", error);
-      }
+      const id = await this.storeMessage(message);
+      results.push(id);
     }
 
     return results;
@@ -555,6 +570,19 @@ class IndexedDBManager implements RawMessageStorageManager {
   }
 
   async upsertSummaries(summaries: MemorySummaryRecord[]): Promise<void> {
+    const owners = new Map<string, string>();
+    for (const summary of summaries) {
+      const duplicateOwner = owners.get(summary.summaryId);
+      if (duplicateOwner !== undefined) {
+        throw new Error(
+          duplicateOwner === summary.userId
+            ? MEMORY_SUMMARY_WRITE_CONFLICT
+            : MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT,
+        );
+      }
+      owners.set(summary.summaryId, summary.userId);
+    }
+
     return this.withRetry(async () => {
       await this.ensureConnection();
 
@@ -574,14 +602,53 @@ class IndexedDBManager implements RawMessageStorageManager {
           "readwrite",
         );
         const objectStore = transaction.objectStore(SUMMARY_STORE_NAME);
+        let abortError: Error | undefined;
 
         for (const summary of summaries) {
-          objectStore.put(this.normalizeSummaryRecord(summary));
+          const request = objectStore.get(summary.summaryId);
+          request.onsuccess = () => {
+            const existing = request.result as MemorySummaryRecord | undefined;
+            if (existing && existing.userId !== summary.userId) {
+              abortError = new Error(MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT);
+              transaction.abort();
+              return;
+            }
+            if (
+              existing &&
+              hasMemorySummaryPublicationRevisionConflict(existing, summary)
+            ) {
+              abortError = new Error(MEMORY_SUMMARY_WRITE_CONFLICT);
+              transaction.abort();
+              return;
+            }
+            if (
+              existing &&
+              !isMemorySummaryPublicationPendingRecord(existing) &&
+              isMemorySummaryPublicationPendingRecord(summary)
+            ) {
+              return;
+            }
+            objectStore.put(
+              this.normalizeSummaryRecord(
+                withoutMemorySummaryPublicationExpectedRevision(summary),
+              ),
+            );
+          };
         }
 
         transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-        transaction.onabort = () => reject(transaction.error);
+        transaction.onerror = () =>
+          reject(
+            abortError ??
+              transaction.error ??
+              new Error("Summary write failed"),
+          );
+        transaction.onabort = () =>
+          reject(
+            abortError ??
+              transaction.error ??
+              new Error("Summary write aborted"),
+          );
       });
     });
   }
@@ -647,6 +714,15 @@ class IndexedDBManager implements RawMessageStorageManager {
           );
 
           if (summary.userId !== query.userId) {
+            cursor.continue();
+            return;
+          }
+
+          if (
+            query.summaryIds &&
+            query.summaryIds.length > 0 &&
+            !query.summaryIds.includes(summary.summaryId)
+          ) {
             cursor.continue();
             return;
           }
@@ -732,7 +808,7 @@ class IndexedDBManager implements RawMessageStorageManager {
 
   private async updateMessagesByMessageIds(
     messageIds: string[],
-    updater: (message: RawMessage) => RawMessage,
+    updater: (message: RawMessage) => RawMessage | undefined,
     userId?: string,
   ): Promise<number> {
     return this.withRetry(async () => {
@@ -766,7 +842,9 @@ class IndexedDBManager implements RawMessageStorageManager {
             if (userId && existing.userId !== userId) {
               return;
             }
-            objectStore.put(updater(existing));
+            const updated = updater(existing);
+            if (!updated) return;
+            objectStore.put(updated);
             updatedCount += 1;
           };
           getRequest.onerror = () => reject(getRequest.error);
@@ -832,6 +910,30 @@ class IndexedDBManager implements RawMessageStorageManager {
         archivedAt,
       }),
       userId,
+    );
+  }
+
+  async restoreDeprecatedMessages(
+    messageIds: string[],
+    input: { userId?: string; supersededBySummaryId?: string } = {},
+  ): Promise<number> {
+    return this.updateMessagesByMessageIds(
+      messageIds,
+      (message) => {
+        if (message.deprecatedAt === undefined) return undefined;
+        if (
+          input.supersededBySummaryId &&
+          message.supersededBySummaryId !== input.supersededBySummaryId
+        ) {
+          return undefined;
+        }
+        const restored = { ...message };
+        restored.deprecatedAt = undefined;
+        restored.deprecationReason = undefined;
+        restored.supersededBySummaryId = undefined;
+        return restored;
+      },
+      input.userId,
     );
   }
 
@@ -1072,19 +1174,21 @@ class IndexedDBManager implements RawMessageStorageManager {
         );
         if (dateOnly.getTime() === today.getTime()) {
           return "Today";
-        } else if (dateOnly.getTime() === yesterday.getTime()) {
-          return "Yesterday";
-        } else {
-          // Format: YYYY-MM-DD
-          return date.toISOString().split("T")[0];
         }
-      } else if (groupBy === "week") {
+        if (dateOnly.getTime() === yesterday.getTime()) {
+          return "Yesterday";
+        }
+        // Format: YYYY-MM-DD
+        return date.toISOString().split("T")[0];
+      }
+      if (groupBy === "week") {
         // Get the Monday of the week
         const dayOfWeek = date.getDay();
         const monday = new Date(date);
         monday.setDate(date.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
         return `Week of ${monday.toISOString().split("T")[0]}`;
-      } else if (groupBy === "month") {
+      }
+      if (groupBy === "month") {
         // Format: YYYY-MM (e.g., 2024-01)
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, "0");

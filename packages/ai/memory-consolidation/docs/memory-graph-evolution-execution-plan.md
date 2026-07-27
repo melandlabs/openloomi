@@ -1,162 +1,156 @@
-# Memory Graph Evolution Execution Plan
+# Dynamic Memory Cluster Evolution Execution Plan
 
-Status: Proposed delivery plan. It becomes active when the referenced
-requirements, architecture, and ADRs are accepted and merged upstream.
+Status: `PHASE_0_3_DRAFT_PR_STACK`
 
-This document defines delivery order only. It does not restate requirements,
-architecture, or decisions.
+## Objective
 
-Authoritative references:
-
-- [Requirements](./memory-graph-evolution-requirements.md)
-- [Architecture](./memory-graph-evolution-architecture.md)
-- [ADR index](./adr/README.md)
-
-## Current Baseline
-
-Already available in the runtime:
-
-- summary persistence and source soft-deprecation
-- default hiding of deprecated raw records
-- `includeDeprecated` audit retrieval
-- opt-in graph-aware ranking and filtering of baseline retrieval candidates
-- relation and competition-oriented diagnostics
-
-The remaining product gap is dynamic write-side evolution: new evidence must
-change graph relations, cluster state, lifecycle, and later consolidation in an
-explainable and reversible way.
+Prepare the accepted foundation and controlled write loop, controlled retrieval
+loop, and authorized correction loop as three serial, reviewable experimental
+Draft PR candidates. The stack remains disabled by default and does not
+authorize a runtime cohort or rollout.
 
 ## Delivery Rules
 
-- Deliver functional behavior, not isolated helper collections.
-- Every PR must identify requirement IDs, applicable ADRs, affected architecture
-  components, and user-visible acceptance scenarios.
-- Mutation remains controlled until its failure, no-op, audit, and rollback
-  behavior is verified.
-- A later PR must build on the accepted behavior of earlier PRs instead of
-  maintaining parallel implementations.
-- UI, scheduler, broad storage migration, and real-time LLM requirements remain
-  outside this sequence.
+- Requirements define product outcomes; architecture defines boundaries and
+  invariants; ADRs hold durable decisions; this plan defines authorization and
+  gates.
+- Keep graph mutation, retrieval, correction, and rollback server-gated.
+- Preserve source evidence, owner isolation, applicability, baseline fallback,
+  operation identity, and retryable recovery.
+- Do not add UI, scheduling, migration, shared memory, real-time LLM
+  dependencies, or default-on behavior.
+- A Draft PR stack may be published only after each candidate passes its own
+  focused gate and the integrated Phase 0-3 gate passes.
 
-## PR 1: New Evidence Evolves the Graph
+## Review Order
 
-### Functional Outcome
+| Candidate | Scope                                           | Dependency    |
+| --------- | ----------------------------------------------- | ------------- |
+| 1         | Phase 0-1 foundation and controlled write loop  | `origin/main` |
+| 2         | Phase 2 trusted retrieval loop                  | Candidate 1   |
+| 3         | Phase 3 authorized correction and rollback loop | Candidate 2   |
 
-New memory can interact with existing same-scope memory and produce a durable,
-auditable graph change when explicitly enabled.
+Later-phase imports, exports, route actions, tests, and status claims must not
+appear in an earlier candidate.
 
-The capability includes:
+## Candidate Scope
 
-- candidate discovery from existing memory
-- support, competition, related, or no-relation decisions
-- preservation of task, conversation, channel, project, and validity context
-- cluster join or new-cluster decisions
-- reinforcement without duplicate-source inflation
-- competition without immediate overwrite
-- dry-run and opt-in persistence using one evolution plan
-- an explanation of considered evidence and applied operations
+### Phase 0: control-plane foundation
 
-### References
+**Outcome.** Provide owner-scoped graph contracts, staged publication, and
+audit helpers.
 
-- Requirements: MR-1, MR-2, MR-3, MR-4, MR-9, MR-10
-- ADRs: ADR-0001, ADR-0002, ADR-0003, ADR-0005
-- Architecture: Candidate Discovery, Graph Interaction Engine, Memory Graph
-  Store, New Evidence Interaction
+**Gate.**
 
-### Acceptance Gate
+- Plans are deterministic, versioned, explainable, and safe to replay.
+- Publication preserves visible evidence across partial failures.
+- Audit can recover source nodes, edges, and operation identities.
 
-- Repeated compatible evidence reinforces one cluster.
-- Duplicate evidence does not create false independent support.
-- Replaying the same evolution operation does not duplicate reinforcement or
-  membership changes.
-- Unrelated evidence remains separate.
-- Contradictory evidence creates competition and preserves both alternatives.
-- Context-specific evidence does not become global through recency alone.
-- Cross-scope candidates cannot affect the plan or result.
-- Disabled or unavailable graph behavior preserves baseline memory behavior.
+### Phase 1: controlled real write loop
 
-## PR 2: Cluster Lifecycle Drives Consolidation and Forgetting
+**Outcome.** New saved-chat evidence can evolve durable long-term memory for a
+server-selected cohort.
 
-### Functional Outcome
+**Included.**
 
-Accumulated graph evidence changes cluster lifecycle, and lifecycle drives
-stable representation, weakening, supersession, and default visibility.
+- Persistent owner-scoped graph snapshots and applied-operation history.
+- Evidence accumulation, reinforcement, competition, cluster lifecycle, staged
+  summary publication, and source soft deprecation.
+- Server-resolved owner scope, write allowlist, kill switch, revision
+  protection, idempotent replay, and baseline fallback.
+- Postgres, SQLite, and IndexedDB-compatible storage boundaries used by the
+  existing raw-message runtime.
 
-The capability includes:
+**Gate.**
 
-- forming, active, stable, decaying, superseded, and audit-only transitions
-- competition-aware lifecycle decisions
-- stable cluster representative selection
-- summary or artifact persistence before source soft-deprecation
-- decay of weak isolated structures without weakening supported clusters
-- failure ordering that prevents partial visibility loss
+- Repetition, temporary override, scope isolation, failure, retry, disablement,
+  and kill-switch behavior pass focused runtime tests.
+- Untrusted raw writes cannot select graph scope or internal graph metadata.
 
-### References
+### Phase 2: controlled real retrieval loop
 
-- Requirements: MR-3, MR-4, MR-5, MR-6, MR-9, MR-10
-- ADRs: ADR-0002, ADR-0003, ADR-0004, ADR-0005
-- Architecture: Cluster Lifecycle Policy, Consolidation and Forgetting Planner,
-  Lifecycle and Consolidation
+**Outcome.** Graph judgments can change one authenticated native-agent memory
+context without weakening baseline safety.
 
-### Acceptance Gate
+**Included.**
 
-- Repeated support can move a cluster toward stable.
-- A temporary exception cannot supersede stable memory.
-- Sustained stronger competition can supersede an older cluster.
-- A representative is persisted before source visibility changes.
-- Failed representative persistence leaves source records normally retrievable.
-- Retrying a partially applied plan converges without duplicating lifecycle or
-  visibility changes.
-- Audit retrieval recovers all retained source evidence.
+- `default` retrieval suppresses superseded evidence when a usable
+  representative exists.
+- `audit` retrieval restores retained sources and provenance.
+- `conflict` retrieval exposes only active, applicable alternatives with usable
+  provenance.
+- Persisted raw and summary materialization, partial graph coverage, trusted
+  applicability, owner/workspace/tenant isolation, and prompt framing.
+- Artifact-only rollout evaluation reports retrieval and audit scenarios but
+  cannot enable a cohort.
 
-## PR 3: Correction, Evaluation, and Controlled Rollout
+**Gate.**
 
-### Functional Outcome
+- Default suppression, audit recovery, conflict explanation, representative
+  materialization, applicability, owner isolation, and baseline fallback pass.
+- Missing, stale, mismatched, or unmaterializable graph state produces an
+  explicit no-op or baseline result.
 
-Automatic evolution can be inspected, corrected, rolled back, evaluated, and
-enabled through explicit rollout gates.
+### Phase 3: authorized correction and rollback loop
 
-The capability includes:
+**Outcome.** An explicitly authorized operator can repair graph outcomes and
+recover evidence without direct storage surgery.
 
-- correction of content, status, membership, or preferred representative
-- rollback of persisted graph and visibility operations
-- conflict-sensitive and audit retrieval explanations
-- evaluation scenarios for false merge, false decay, contradiction handling,
-  noise suppression, scope isolation, and audit completeness
-- rollout decisions based on required evidence rather than feature presence
+**Included.**
 
-### References
+- Deterministic correction and rollback planning with reason codes and
+  preserved operation ordering.
+- Correction of summary content, cluster membership, lifecycle, and
+  representative choice.
+- Evidence-first rollback with status, reason codes, restored source IDs,
+  provenance, idempotence, version checks, and retry convergence.
+- Server-derived owner/requester identity, correction enablement, operator
+  allowlist, kill switch, and bounded command validation.
 
-- Requirements: MR-7, MR-8, MR-9, MR-10
-- ADRs: ADR-0002, ADR-0003, ADR-0004, ADR-0005
-- Architecture: Graph-aware Retriever, Evolution Report and Governance,
-  Correction and Audit
-- Rollout governance gate:
-  [memory-graph-rollout-governance.md](./memory-graph-rollout-governance.md)
+**Gate.**
 
-### Acceptance Gate
+- Wrong merge, wrong representative, lifecycle repair, rollback ordering,
+  partial failure, retry, history preservation, authorization, malformed input,
+  and scope isolation pass.
+- No unresolved high-severity finding remains after integrated review.
 
-- An incorrect automatic merge can be corrected without deleting history.
-- A persisted evolution can be rolled back or explicitly blocked.
-- Default retrieval suppresses superseded noise.
-- Audit retrieval exposes provenance and visibility decisions.
-- Conflict-sensitive retrieval can expose competing alternatives.
-- Missing required evaluation artifacts block broader rollout.
+## Draft PR Gate
 
-## Completion Gate
+The Phase 0-3 stack is ready only when:
 
-The feature is complete when the end-to-end loop defined in the requirements is
-demonstrated under controlled runtime evaluation:
+1. Phase 4 persisted comparison evidence and its route policy, metadata, tests,
+   and current-state documentation are absent.
+2. All feature policies remain default-off and fail closed.
+3. Focused write, retrieval, correction, rollback, route, and backend suites
+   pass.
+4. `apps/web` and memory-consolidation TypeScript checks pass.
+5. Formatting, targeted lint, `git diff --check`, and final diff review pass.
+6. The PR description references requirements, architecture, and applicable
+   ADRs without copying them.
 
-```text
-new evidence
-  -> graph evolution
-  -> cluster lifecycle
-  -> consolidation or weakening
-  -> retrieval
-  -> audit or correction
-```
+## Deferred Phases
 
-Completion requires all requirements to be mapped to accepted behavior and all
-accepted ADRs to remain satisfied. Documentation-only completion, isolated
-helpers, or dry-run reports without a validated runtime path are insufficient.
+### Phase 4: real evaluation
+
+Not authorized in this candidate. A later phase must define an authorized
+cohort, persistent runtime backend, observation protocol, recall/error labels,
+latency and storage budgets, audit completeness, and persisted comparison
+evidence. Tests and synthetic fixtures cannot substitute for that evidence.
+
+### Phase 5: gradual rollout
+
+May begin only after Phase 4 evidence passes its governance gate and the project
+owner explicitly approves a limited rollout. It must retain scope-based
+expansion, monitoring, kill-switch containment, and rollback.
+
+### Phase 6: maturation
+
+Product UX, scheduling, storage optimization, optional artifact generation, and
+shared-memory design require separate authorization after validated rollout.
+
+## Stop Line
+
+Stop at `PHASE_0_3_DRAFT_PR_STACK` or
+`PHASE_0_3_DRAFT_PR_SPLIT_BLOCKED`. Do not collect cohort observations,
+implement Phase 4 persistence, expand runtime exposure, merge a pull request,
+or enter the next phase without explicit approval.

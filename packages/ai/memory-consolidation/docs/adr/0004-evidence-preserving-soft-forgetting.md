@@ -1,6 +1,6 @@
 # ADR-0004: Evidence-preserving Soft Forgetting
 
-Status: Proposed
+Status: Accepted
 
 Requirements: MR-5, MR-6, MR-7, MR-8, MR-10
 
@@ -19,7 +19,16 @@ A summary or artifact may become the active representative only after successful
 persistence with provenance. Covered raw records may then be soft-deprecated and
 hidden from default retrieval while remaining available to audit and correction.
 
+Superseding a represented cluster also moves its previous representative out of
+default retrieval while retaining a provenance edge to the new representative.
+A rollback or membership correction restores the required raw evidence and any
+valid predecessor representative before retiring the invalid representative.
+
 Hard deletion is outside Memory Graph Evolution.
+
+The staged publication and cross-store recovery protocol is defined by
+[ADR-0006](./0006-staged-publication-and-recovery.md). It must not turn an
+unfinished representative publication into source-evidence loss.
 
 ## Consequences
 

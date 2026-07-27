@@ -1,7 +1,9 @@
 # Memory Graph Evolution Requirements
 
-Status: Proposed requirements for Dynamic Memory Cluster Evolution. They become
-authoritative when accepted and merged upstream.
+Status: Active requirements for Dynamic Memory Cluster Evolution. The Phase 0
+through Phase 3 implementation is an experimental, default-off Draft PR
+candidate. It does not authorize a runtime cohort, default-on behavior, or
+rollout; later behavior remains gated by the execution plan.
 
 Related documents:
 
@@ -22,16 +24,22 @@ representatives without destroying their source evidence.
 
 ## Current Baseline
 
-The following capabilities already exist and are not the purpose of this work:
+The accepted upstream foundation already provides:
 
 - summary persistence can soft-deprecate covered raw records
 - default retrieval can hide deprecated raw records
 - `includeDeprecated` can recover deprecated records for audit
-- graph-aware retrieval can reorder or filter baseline candidates when enabled
+- graph-aware retrieval can reorder or filter materialized baseline candidates when enabled
 - relation work can represent `support`, `compete`, and `related` observations
+- owner-scoped graph evolution and lifecycle-driven consolidation when explicitly
+  enabled
 
-The missing capability is the write-side evolution loop: new memory does not yet
-reliably change graph relations, cluster strength, competition, or lifecycle.
+The local integrated candidate retains correction, staged representative
+publication, rollback, and evaluation controls. It also wires a controlled
+saved-chat write loop with trusted server scope, cohort policy, kill switch,
+idempotent evidence replay, graph evolution, lifecycle, and soft deprecation.
+These local Phase 0 and Phase 1 behaviors must not be treated as permission to
+enable graph mutation for a wider cohort before the later delivery gates pass.
 
 ## Required User-visible Behavior
 
@@ -120,6 +128,11 @@ Source raw records may be hidden from default retrieval only after the
 representative is successfully persisted and provenance is available. Source
 records must remain recoverable through audit retrieval.
 
+A representative written to its summary store but not yet linked to a persisted
+graph representative is pending and must not appear in normal summary retrieval.
+If later source-deprecation or visibility work cannot converge, the outcome must
+remain observable and retryable without losing the raw evidence chain.
+
 ### MR-7: Retrieval Participation
 
 Retrieval must be able to use cluster representatives, lifecycle state,
@@ -130,6 +143,10 @@ Default retrieval should suppress superseded evidence noise. Audit or
 conflict-sensitive retrieval must be able to expose source and competing memory.
 Context-sensitive retrieval must prefer memory whose applicability matches the
 current request before considering broader or competing alternatives.
+A retriever must not report a representative or competing alternative as exposed
+unless it can materialize that node into returned context. Otherwise it preserves
+baseline results and emits a no-op diagnostic. Materializing graph-selected
+candidates in chat context is a Phase 2 responsibility.
 
 ### MR-8: Correction and Reversibility
 
@@ -139,6 +156,10 @@ representation through an explicit action.
 Corrections must preserve prior evidence and record why automatic evolution was
 overridden. A rollback path must exist for persisted graph and visibility
 changes before broad automatic rollout.
+
+When recovery crosses graph and raw-memory storage, it must restore evidence
+availability before retiring an invalid representative. A partial recovery must
+remain explicit and retryable rather than silently reporting success.
 
 ### MR-9: Scope Isolation
 
@@ -154,6 +175,12 @@ product model.
 
 Cross-user, cross-workspace, or cross-tenant relations are forbidden by default.
 Shared memory requires a separate product decision and explicit authorization.
+
+At an untrusted request boundary, `userId`, `workspaceId`, `tenantId`, and
+a corrected representative identity are derived by trusted server code or
+discarded. A client cannot select scope or storage identity. Current routed
+commands derive authenticated user scope server-side; any narrower scope also
+requires trusted server context.
 
 ### MR-10: Explainability and Evaluation
 
@@ -179,6 +206,15 @@ handling, retrieval noise, audit completeness, and runtime cost.
   lifecycle, consolidation, or visibility changes.
 - Partial persistence failures must remain observable and retryable until the
   intended plan converges or is explicitly rolled back.
+- Publication spanning a summary store, graph ledger, and raw-memory storage
+  must use ordered, observable steps rather than assume a global transaction.
+  A staged representative must fail closed against normal summary retrieval
+  until its graph relationship is persisted; recovery may prefer temporary
+  duplicate evidence over hidden or lost evidence.
+- A scope-specific rollout report may count a summary only when it is graph
+  linked or its source records are present in that snapshot. A semantic or raw
+  result outside the snapshot must be reported as cross-scope and block the
+  report rather than qualify as scoped evidence.
 - Missing graph capabilities must degrade to baseline memory behavior.
 - Automatic mutation must be optional until rollout gates are satisfied.
 - Real-time LLM judgment must not be required for every memory write.
@@ -199,20 +235,22 @@ handling, retrieval noise, audit completeness, and runtime cost.
 
 ## Acceptance Scenarios
 
-| Scenario                      | Required outcome                                                                                               |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Repeated language preference  | Consistent observations reinforce one cluster and improve its retrieval priority.                              |
-| Temporary language override   | A task-specific exception remains contextual and does not replace the stable preference.                       |
-| Repeated cross-context change | Consistent evidence across independent contexts can broaden applicability and challenge the stable preference. |
-| Sustained preference change   | Repeated contradictory evidence creates competition and can eventually supersede the old cluster.              |
-| Duplicate imported messages   | Duplicate sources do not inflate independent support.                                                          |
-| Unrelated project fact        | The evidence forms or joins a separate cluster.                                                                |
-| Stale isolated trace          | The trace can decay without weakening a supported stable cluster.                                              |
-| Stable cluster consolidation  | A representative is persisted before source records are soft-deprecated.                                       |
-| Retried evolution operation   | Replaying the same operation does not duplicate reinforcement or visibility changes.                           |
-| Audit retrieval               | The representative can be traced back to all retained source evidence.                                         |
-| Incorrect automatic merge     | A correction can separate or override the result while preserving history.                                     |
-| Cross-scope candidate         | The candidate cannot create an edge, join a cluster, or enter a retrieval result.                              |
+| Scenario                      | Required outcome                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Repeated language preference  | Consistent observations reinforce one cluster and improve its retrieval priority.                                               |
+| Temporary language override   | A task-specific exception remains contextual and does not replace the stable preference.                                        |
+| Repeated cross-context change | Consistent evidence across independent contexts can broaden applicability and challenge the stable preference.                  |
+| Sustained preference change   | Repeated contradictory evidence creates competition and can eventually supersede the old cluster.                               |
+| Duplicate imported messages   | Duplicate sources do not inflate independent support.                                                                           |
+| Unrelated project fact        | The evidence forms or joins a separate cluster.                                                                                 |
+| Stale isolated trace          | The trace can decay without weakening a supported stable cluster.                                                               |
+| Stable cluster consolidation  | A representative is persisted before source records are soft-deprecated.                                                        |
+| Interrupted publication       | A staged summary without a persisted graph representative is absent from normal retrieval and leaves source evidence available. |
+| Partial visibility failure    | The result remains observable and retryable; audit recovery is not lost because publication began.                              |
+| Retried evolution operation   | Replaying the same operation does not duplicate reinforcement or visibility changes.                                            |
+| Audit retrieval               | The representative can be traced back to all retained source evidence.                                                          |
+| Incorrect automatic merge     | A correction can separate or override the result while preserving history.                                                      |
+| Cross-scope candidate         | The candidate cannot create an edge, join a cluster, or enter a retrieval result.                                               |
 
 ## Completion Criteria
 

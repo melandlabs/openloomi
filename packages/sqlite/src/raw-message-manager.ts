@@ -1,5 +1,13 @@
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
+import {
+  MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT,
+  MEMORY_SUMMARY_WRITE_CONFLICT,
+  hasMemorySummaryPublicationRevisionConflict,
+  isMemorySummaryPublicationPendingRecord,
+  withoutMemorySummaryPublicationExpectedRevision,
+  mergeStoredChatMemoryEvidence,
+} from "../../indexeddb/src/storage";
 import type {
   MemoryStage,
   MemorySummaryQuery,
@@ -78,6 +86,7 @@ export interface SQLiteRawMessageSemanticSearchInput {
   scanLimit?: number;
   threshold?: number;
   includeArchived?: boolean;
+  includeDeprecated?: boolean;
   platform?: string;
   botId?: string;
   channel?: string;
@@ -295,93 +304,8 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
   }
 
   async storeMessage(message: RawMessage): Promise<number> {
-    await this.init();
-
-    const normalized = {
-      ...message,
-      memoryStage: message.memoryStage ?? "short",
-      accessCount: message.accessCount ?? 0,
-      importanceScore: message.importanceScore ?? 0,
-      isPinned: message.isPinned ?? false,
-      createdAt: message.createdAt ?? currentUnixSeconds(),
-    };
-
-    this.db
-      .prepare(
-        `
-          INSERT INTO raw_messages (
-            message_id, platform, bot_id, user_id, channel, person, timestamp,
-            content, attachments, embedding, embedding_model,
-            embedding_content_hash, embedding_dimensions, embedding_updated_at,
-            metadata, created_at, memory_stage, access_count, last_access_at,
-            importance_score, archived_at, is_pinned, summary_ref_id
-          )
-          VALUES (
-            @messageId, @platform, @botId, @userId, @channel, @person,
-            @timestamp, @content, @attachments, @embedding, @embeddingModel,
-            @embeddingContentHash, @embeddingDimensions, @embeddingUpdatedAt,
-            @metadata, @createdAt, @memoryStage, @accessCount, @lastAccessAt,
-            @importanceScore, @archivedAt, @isPinned, @summaryRefId
-          )
-          ON CONFLICT(message_id) DO UPDATE SET
-            platform = excluded.platform,
-            bot_id = excluded.bot_id,
-            user_id = excluded.user_id,
-            channel = excluded.channel,
-            person = excluded.person,
-            timestamp = excluded.timestamp,
-            content = excluded.content,
-            attachments = excluded.attachments,
-            embedding = excluded.embedding,
-            embedding_model = excluded.embedding_model,
-            embedding_content_hash = excluded.embedding_content_hash,
-            embedding_dimensions = excluded.embedding_dimensions,
-            embedding_updated_at = excluded.embedding_updated_at,
-            metadata = excluded.metadata,
-            created_at = excluded.created_at,
-            memory_stage = excluded.memory_stage,
-            access_count = excluded.access_count,
-            last_access_at = excluded.last_access_at,
-            importance_score = excluded.importance_score,
-            archived_at = excluded.archived_at,
-            is_pinned = excluded.is_pinned,
-            summary_ref_id = excluded.summary_ref_id
-        `,
-      )
-      .run({
-        messageId: normalized.messageId,
-        platform: normalized.platform,
-        botId: normalized.botId,
-        userId: normalized.userId,
-        channel: normalized.channel ?? null,
-        person: normalized.person ?? null,
-        timestamp: normalized.timestamp,
-        content: normalized.content,
-        attachments: stringifyJson(normalized.attachments),
-        embedding: floatArrayToBuffer(normalized.embedding),
-        embeddingModel: normalized.embeddingModel ?? null,
-        embeddingContentHash: normalized.embeddingContentHash ?? null,
-        embeddingDimensions:
-          normalized.embeddingDimensions ??
-          normalized.embedding?.length ??
-          null,
-        embeddingUpdatedAt: normalized.embeddingUpdatedAt ?? null,
-        metadata: stringifyJson(normalized.metadata),
-        createdAt: normalized.createdAt,
-        memoryStage: normalized.memoryStage,
-        accessCount: normalized.accessCount,
-        lastAccessAt: normalized.lastAccessAt ?? null,
-        importanceScore: normalized.importanceScore,
-        archivedAt: normalized.archivedAt ?? null,
-        isPinned: normalized.isPinned ? 1 : 0,
-        summaryRefId: normalized.summaryRefId ?? null,
-      });
-
-    const row = this.db
-      .prepare("SELECT id FROM raw_messages WHERE message_id = ?")
-      .get(normalized.messageId) as { id: number };
-    this.upsertVectorForMessage(normalized.messageId, normalized.embedding);
-    return row.id;
+    const ids = await this.storeMessages([message]);
+    return ids[0] ?? 0;
   }
 
   async storeMessages(messages: RawMessage[]): Promise<number[]> {
@@ -393,8 +317,42 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
         ids.push(existing);
       }
     });
-    insertMany(messages);
+    insertMany.immediate(messages);
     return ids;
+  }
+
+  async compareAndSwapGraphLedger(
+    message: RawMessage,
+    input: { expectedVersion: string; metadataKey: string },
+  ): Promise<boolean> {
+    await this.init();
+    const compareAndSwap = this.db.transaction(() => {
+      const existing = this.db
+        .prepare(
+          "SELECT user_id, metadata FROM raw_messages WHERE message_id = ?",
+        )
+        .get(message.messageId) as
+        | { user_id: string; metadata: string | null }
+        | undefined;
+      if (existing && existing.user_id !== message.userId) return false;
+
+      const metadata = parseJson<Record<string, unknown>>(
+        existing?.metadata,
+        {},
+      );
+      const ledger = metadata[input.metadataKey] as
+        | { snapshot?: { version?: unknown } }
+        | undefined;
+      const currentVersion =
+        typeof ledger?.snapshot?.version === "string"
+          ? ledger.snapshot.version
+          : "0";
+      if (currentVersion !== input.expectedVersion) return false;
+
+      this.storeMessageSync(message);
+      return true;
+    });
+    return compareAndSwap.immediate();
   }
 
   async queryMessages(query: RawMessageQuery): Promise<RawMessage[]> {
@@ -634,7 +592,6 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
         @updatedAt
       )
       ON CONFLICT(summary_id) DO UPDATE SET
-        user_id = excluded.user_id,
         summary_tier = excluded.summary_tier,
         source_tier = excluded.source_tier,
         start_timestamp = excluded.start_timestamp,
@@ -649,31 +606,84 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
         quality_score = excluded.quality_score,
         created_at = excluded.created_at,
         updated_at = excluded.updated_at
+      WHERE memory_summaries.user_id = excluded.user_id
     `);
+    const readExisting = this.db.prepare(
+      "SELECT user_id, dimensions FROM memory_summaries WHERE summary_id = ?",
+    );
 
     const upsertMany = this.db.transaction((items: MemorySummaryRecord[]) => {
+      const owners = new Map<string, string>();
       for (const summary of items) {
-        stmt.run({
-          summaryId: summary.summaryId,
-          userId: summary.userId,
-          summaryTier: summary.summaryTier,
-          sourceTier: summary.sourceTier,
-          startTimestamp: summary.startTimestamp,
-          endTimestamp: summary.endTimestamp,
-          messageCount: summary.messageCount,
-          sourceRecordIds: stringifyJson(summary.sourceRecordIds),
-          keyPoints: stringifyJson(summary.keyPoints),
-          keywords: stringifyJson(summary.keywords),
-          keywordsText: summary.keywordsText ?? summary.keywords.join(" "),
-          summaryText: summary.summaryText,
-          dimensions: stringifyJson(summary.dimensions),
-          qualityScore: summary.qualityScore ?? null,
-          createdAt: summary.createdAt,
-          updatedAt: summary.updatedAt,
+        const duplicateOwner = owners.get(summary.summaryId);
+        if (duplicateOwner !== undefined) {
+          throw new Error(
+            duplicateOwner === summary.userId
+              ? MEMORY_SUMMARY_WRITE_CONFLICT
+              : MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT,
+          );
+        }
+        owners.set(summary.summaryId, summary.userId);
+
+        const existing = readExisting.get(summary.summaryId) as
+          | { user_id: string; dimensions: string | null }
+          | undefined;
+        if (existing && existing.user_id !== summary.userId) {
+          throw new Error(MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT);
+        }
+        if (
+          existing &&
+          hasMemorySummaryPublicationRevisionConflict(
+            { dimensions: parseJson(existing.dimensions, {}) },
+            summary,
+          )
+        ) {
+          throw new Error(MEMORY_SUMMARY_WRITE_CONFLICT);
+        }
+        if (
+          existing &&
+          !isMemorySummaryPublicationPendingRecord({
+            dimensions: parseJson(existing.dimensions, {}),
+          }) &&
+          isMemorySummaryPublicationPendingRecord(summary)
+        ) {
+          continue;
+        }
+
+        const persistedSummary =
+          withoutMemorySummaryPublicationExpectedRevision(summary);
+        const result = stmt.run({
+          summaryId: persistedSummary.summaryId,
+          userId: persistedSummary.userId,
+          summaryTier: persistedSummary.summaryTier,
+          sourceTier: persistedSummary.sourceTier,
+          startTimestamp: persistedSummary.startTimestamp,
+          endTimestamp: persistedSummary.endTimestamp,
+          messageCount: persistedSummary.messageCount,
+          sourceRecordIds: stringifyJson(persistedSummary.sourceRecordIds),
+          keyPoints: stringifyJson(persistedSummary.keyPoints),
+          keywords: stringifyJson(persistedSummary.keywords),
+          keywordsText:
+            persistedSummary.keywordsText ??
+            persistedSummary.keywords.join(" "),
+          summaryText: persistedSummary.summaryText,
+          dimensions: stringifyJson(persistedSummary.dimensions),
+          qualityScore: persistedSummary.qualityScore ?? null,
+          createdAt: persistedSummary.createdAt,
+          updatedAt: persistedSummary.updatedAt,
         });
+        if (result.changes !== 1) {
+          const current = readExisting.get(summary.summaryId) as
+            | { user_id: string; dimensions: string | null }
+            | undefined;
+          if (current?.user_id !== summary.userId) {
+            throw new Error(MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT);
+          }
+          throw new Error(MEMORY_SUMMARY_WRITE_CONFLICT);
+        }
       }
     });
-    upsertMany(summaries);
+    upsertMany.immediate(summaries);
   }
 
   async querySummaries(
@@ -683,6 +693,17 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
 
     const where: string[] = ["user_id = @userId"];
     const params: Record<string, unknown> = { userId: query.userId };
+
+    if (query.summaryIds?.length) {
+      where.push(
+        `summary_id IN (${query.summaryIds
+          .map((_, index) => `@summaryId${index}`)
+          .join(", ")})`,
+      );
+      query.summaryIds.forEach((summaryId, index) => {
+        params[`summaryId${index}`] = summaryId;
+      });
+    }
 
     if (query.summaryTiers?.length) {
       where.push(
@@ -847,6 +868,36 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
     return result.changes;
   }
 
+  async restoreDeprecatedMessages(
+    messageIds: string[],
+    input: { userId?: string; supersededBySummaryId?: string } = {},
+  ): Promise<number> {
+    await this.init();
+    if (messageIds.length === 0) return 0;
+    const placeholders = messageIds.map(() => "?").join(",");
+    const userClause = input.userId ? "AND user_id = ?" : "";
+    const summaryClause = input.supersededBySummaryId
+      ? "AND superseded_by_summary_id = ?"
+      : "";
+    const result = this.db
+      .prepare(
+        `UPDATE raw_messages
+            SET deprecated_at = NULL,
+                deprecation_reason = NULL,
+                superseded_by_summary_id = NULL
+          WHERE message_id IN (${placeholders})
+            AND deprecated_at IS NOT NULL
+            ${userClause}
+            ${summaryClause}`,
+      )
+      .run(
+        ...messageIds,
+        ...(input.userId ? [input.userId] : []),
+        ...(input.supersededBySummaryId ? [input.supersededBySummaryId] : []),
+      );
+    return result.changes;
+  }
+
   async hardDeleteArchived(
     olderThan: number,
     userId?: string,
@@ -920,16 +971,26 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
   }
 
   private storeMessageSync(message: RawMessage): number {
+    const persistedRow = this.db
+      .prepare("SELECT * FROM raw_messages WHERE message_id = ?")
+      .get(message.messageId) as RawMessageRow | undefined;
+    if (persistedRow && persistedRow.user_id !== message.userId) {
+      throw new Error("raw_message_scope_conflict");
+    }
+    const persisted = persistedRow ? toRawMessage(persistedRow) : undefined;
+    const messageToStore = persisted
+      ? mergeStoredChatMemoryEvidence(persisted, message)
+      : message;
     const normalized = {
-      ...message,
-      memoryStage: message.memoryStage ?? "short",
-      accessCount: message.accessCount ?? 0,
-      importanceScore: message.importanceScore ?? 0,
-      isPinned: message.isPinned ?? false,
-      createdAt: message.createdAt ?? currentUnixSeconds(),
+      ...messageToStore,
+      memoryStage: messageToStore.memoryStage ?? "short",
+      accessCount: messageToStore.accessCount ?? 0,
+      importanceScore: messageToStore.importanceScore ?? 0,
+      isPinned: messageToStore.isPinned ?? false,
+      createdAt: messageToStore.createdAt ?? currentUnixSeconds(),
     };
 
-    this.db
+    const result = this.db
       .prepare(
         `
           INSERT INTO raw_messages (
@@ -969,6 +1030,7 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
             archived_at = excluded.archived_at,
             is_pinned = excluded.is_pinned,
             summary_ref_id = excluded.summary_ref_id
+          WHERE raw_messages.user_id = excluded.user_id
         `,
       )
       .run({
@@ -999,6 +1061,10 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
         isPinned: normalized.isPinned ? 1 : 0,
         summaryRefId: normalized.summaryRefId ?? null,
       });
+
+    if (result.changes === 0) {
+      throw new Error("raw_message_scope_conflict");
+    }
 
     const row = this.db
       .prepare("SELECT id FROM raw_messages WHERE message_id = ?")
@@ -1238,43 +1304,53 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
       Math.floor(input.scanLimit ?? limit * 10),
     );
     const threshold = input.threshold ?? 0.7;
-    const rows = this.db
-      .prepare(
-        `
-          SELECT message_id, distance
-          FROM ${this.getVectorTableName(input.queryEmbedding.length)}
-          WHERE embedding MATCH ?
-          ORDER BY distance
-          LIMIT ?
-        `,
+    let currentScanLimit = scanLimit;
+    while (true) {
+      const rows = this.db
+        .prepare(
+          `
+            SELECT message_id, distance
+            FROM ${this.getVectorTableName(input.queryEmbedding.length)}
+            WHERE embedding MATCH ?
+            ORDER BY distance
+            LIMIT ?
+          `,
+        )
+        .all(
+          floatArrayToBuffer(input.queryEmbedding),
+          currentScanLimit,
+        ) as Array<{
+        message_id: string;
+        distance: number;
+      }>;
+
+      const byDistance = new Map(
+        rows.map((row) => [row.message_id, row.distance]),
+      );
+      const results = this.getRowsByMessageIds(
+        rows.map((row) => row.message_id),
       )
-      .all(floatArrayToBuffer(input.queryEmbedding), scanLimit) as Array<{
-      message_id: string;
-      distance: number;
-    }>;
-
-    const byDistance = new Map(
-      rows.map((row) => [row.message_id, row.distance]),
-    );
-    const messages = this.getRowsByMessageIds(rows.map((row) => row.message_id))
-      .map(toRawMessage)
-      .filter((message) => this.matchesSemanticFilters(message, input));
-
-    return messages
-      .map((message) =>
-        this.toSemanticSearchResult(
-          message,
-          sqliteDistanceToScore(
-            byDistance.get(message.messageId) ?? Number.POSITIVE_INFINITY,
+        .map(toRawMessage)
+        .filter((message) => this.matchesSemanticFilters(message, input))
+        .map((message) =>
+          this.toSemanticSearchResult(
+            message,
+            sqliteDistanceToScore(
+              byDistance.get(message.messageId) ?? Number.POSITIVE_INFINITY,
+            ),
           ),
-        ),
-      )
-      .filter(
-        (result): result is SQLiteRawMessageSemanticSearchResult =>
-          result !== null && result.similarity >= threshold,
-      )
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, limit);
+        )
+        .filter(
+          (result): result is SQLiteRawMessageSemanticSearchResult =>
+            result !== null && result.similarity >= threshold,
+        )
+        .sort((a, b) => b.similarity - a.similarity);
+
+      if (results.length >= limit || rows.length < currentScanLimit) {
+        return results.slice(0, limit);
+      }
+      currentScanLimit *= 2;
+    }
   }
 
   private searchMessagesWithStoredEmbeddings(
@@ -1290,6 +1366,7 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
     return this.queryMessagesSync({
       userId: input.userId,
       includeArchived: input.includeArchived ?? false,
+      includeDeprecated: input.includeDeprecated ?? false,
       reverse: true,
       pageSize: scanLimit,
       platform: input.platform,
@@ -1334,6 +1411,9 @@ export class SQLiteRawMessageManager implements RawMessageStorageManager {
       return false;
     }
     if (!input.includeArchived && message.archivedAt !== undefined) {
+      return false;
+    }
+    if (!input.includeDeprecated && message.deprecatedAt !== undefined) {
       return false;
     }
     if (

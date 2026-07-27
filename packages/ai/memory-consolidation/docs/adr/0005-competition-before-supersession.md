@@ -1,6 +1,6 @@
 # ADR-0005: Competition Before Supersession
 
-Status: Proposed
+Status: Accepted
 
 Requirements: MR-3, MR-4, MR-5, MR-7, MR-8
 

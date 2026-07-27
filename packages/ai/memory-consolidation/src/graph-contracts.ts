@@ -97,7 +97,11 @@ export type MemoryGraphOperationKind =
   | "upsert-cluster"
   | "set-cluster-lifecycle"
   | "set-cluster-representative"
-  | "supersede-node";
+  | "supersede-node"
+  | "correct-node"
+  | "remove-cluster-member"
+  | "restore-node"
+  | "rollback-supersession";
 
 export interface MemoryGraphOperation {
   operationId: string;
@@ -174,6 +178,16 @@ export interface MemoryGraphStore {
   persistPlan(plan: MemoryGraphUpdatePlan): Promise<MemoryGraphUpdateResult>;
   readAuditTrail(query: MemoryGraphAuditQuery): Promise<MemoryGraphAuditTrail>;
 }
+
+export interface MemoryGraphOperationHistoryStore {
+  readAppliedOperations(query: {
+    ownerScope: OwnerScope;
+    nodeId?: string;
+  }): Promise<MemoryGraphOperation[]>;
+}
+
+export type MemoryGraphStoreWithOperationHistory = MemoryGraphStore &
+  MemoryGraphOperationHistoryStore;
 
 export interface GraphInteractionInput {
   ownerScope: OwnerScope;
@@ -261,13 +275,18 @@ export interface MemoryConsolidationPlanner {
   ): Promise<MemoryGraphConsolidationPlan>;
 }
 
-export type GraphRetrievalVisibilityMode = "default" | "audit";
+export type GraphRetrievalVisibilityMode = "default" | "audit" | "conflict";
 
 export interface GraphAwareRetrievalInput {
   ownerScope: OwnerScope;
   query: string;
   baselineNodeIds: string[];
   snapshot: MemoryGraphSnapshot;
+  /**
+   * Applicability scopes derived from trusted server-side request context.
+   * Missing or empty contexts deliberately mean global-only retrieval.
+   */
+  applicabilityContexts?: MemoryApplicabilityContext[];
   visibilityMode: GraphRetrievalVisibilityMode;
   includeDeprecated?: boolean;
   metadata?: Record<string, unknown>;

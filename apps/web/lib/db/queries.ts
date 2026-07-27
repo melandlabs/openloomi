@@ -676,6 +676,7 @@ export async function saveChat({
           title,
           visibility: "public",
         },
+        setWhere: eq(chat.userId, userId),
       });
 
     return result;
@@ -1077,10 +1078,23 @@ export async function getChatById({ id }: { id: string }) {
   }
 }
 
+export const MESSAGE_ID_SCOPE_CONFLICT = "message_id_scope_conflict";
+export const CHAT_OWNER_SCOPE_CONFLICT = "chat_owner_scope_conflict";
+
+interface ExpectedChatMessageState {
+  id: string;
+  chatId: string;
+  parts: unknown;
+}
+
 export async function saveMessages({
   messages,
+  expectedMessages,
+  expectedUserId,
 }: {
   messages: Array<DBMessage>;
+  expectedMessages?: ExpectedChatMessageState[];
+  expectedUserId?: string;
 }) {
   try {
     // Serialize parts and attachments (compatible with PostgreSQL and SQLite)
@@ -1105,23 +1119,222 @@ export async function saveMessages({
 
       return messageData;
     });
+    const expectedPartsById =
+      expectedMessages === undefined
+        ? undefined
+        : new Map(
+            expectedMessages.map((row) => [
+              row.id,
+              {
+                chatId: row.chatId,
+                parts: serializeJson(row.parts as any),
+              },
+            ]),
+          );
+    const chatIds = [
+      ...new Set(serializedMessages.map((row) => row.chatId as string)),
+    ];
 
-    // Batch insert to avoid SQLite parameter binding limit
-    for (let i = 0; i < serializedMessages.length; i += DB_INSERT_CHUNK_SIZE) {
-      const chunk = serializedMessages.slice(i, i + DB_INSERT_CHUNK_SIZE);
-      await db
-        .insert(message)
-        .values(chunk)
-        .onConflictDoUpdate({
-          target: message.id,
-          set: {
-            parts: sql`excluded.parts`,
-            attachments: sql`excluded.attachments`,
-            metadata: sql`excluded.metadata`,
-          },
-        });
+    if (isTauriMode()) {
+      type SqliteRawClient = {
+        transaction: <T>(callback: () => T) => {
+          (): T;
+          immediate(): T;
+        };
+        prepare: (statement: string) => {
+          get: (...params: unknown[]) => unknown;
+          run: (...params: unknown[]) => { changes: number };
+        };
+      };
+      const sqlite = (db as typeof db & { $client?: SqliteRawClient }).$client;
+      if (!sqlite) {
+        throw new Error("SQLite client is not available");
+      }
+
+      const getChatOwner = sqlite.prepare(
+        'SELECT "userId" AS "userId" FROM "Chat" WHERE "id" = ?',
+      );
+      const getMessageState = sqlite.prepare(
+        'SELECT "chatId" AS "chatId", "parts" AS "parts" FROM "Message_v2" WHERE "id" = ?',
+      );
+      const upsertMessage = sqlite.prepare(
+        'INSERT INTO "Message_v2" ("id", "chatId", "role", "parts", "attachments", "createdAt", "metadata") VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT("id") DO UPDATE SET "parts" = excluded."parts", "attachments" = excluded."attachments", "metadata" = excluded."metadata" WHERE "Message_v2"."chatId" = excluded."chatId"',
+      );
+
+      const storeAll = sqlite.transaction(() => {
+        if (expectedUserId) {
+          for (const chatId of chatIds) {
+            const owner = getChatOwner.get(chatId) as
+              | { userId: string }
+              | undefined;
+            if (owner?.userId !== expectedUserId) {
+              throw new Error(CHAT_OWNER_SCOPE_CONFLICT);
+            }
+          }
+        }
+
+        for (const row of serializedMessages) {
+          if (expectedPartsById !== undefined) {
+            const current = getMessageState.get(row.id) as
+              | { chatId: string; parts: unknown }
+              | undefined;
+            const expected = expectedPartsById.get(row.id);
+            if (
+              (current &&
+                (!expected ||
+                  current.chatId !== expected.chatId ||
+                  current.parts !== expected.parts)) ||
+              (!current && expected)
+            ) {
+              throw new Error(MESSAGE_ID_SCOPE_CONFLICT);
+            }
+          }
+
+          const result = upsertMessage.run(
+            row.id,
+            row.chatId,
+            row.role,
+            row.parts,
+            row.attachments,
+            Math.floor(row.createdAt.getTime() / 1000),
+            row.metadata ?? null,
+          );
+          if (result.changes !== 1) {
+            throw new Error(MESSAGE_ID_SCOPE_CONFLICT);
+          }
+        }
+      });
+
+      storeAll.immediate();
+      return;
     }
+
+    await executeTransaction(async (tx) => {
+      if (expectedUserId && chatIds.length > 0) {
+        const ownedChats = await (tx as any)
+          .select({ id: chat.id, userId: chat.userId })
+          .from(chat)
+          .where(inArray(chat.id, chatIds))
+          .for("update");
+        if (
+          ownedChats.length !== chatIds.length ||
+          ownedChats.some(
+            (ownedChat: { userId: string }) =>
+              ownedChat.userId !== expectedUserId,
+          )
+        ) {
+          throw new Error(CHAT_OWNER_SCOPE_CONFLICT);
+        }
+      }
+
+      // Batch insert to avoid the PostgreSQL parameter limit.
+      for (
+        let i = 0;
+        i < serializedMessages.length;
+        i += DB_INSERT_CHUNK_SIZE
+      ) {
+        const chunk = serializedMessages.slice(i, i + DB_INSERT_CHUNK_SIZE);
+
+        if (expectedPartsById !== undefined) {
+          const currentRows = await (tx as any)
+            .select({
+              id: message.id,
+              chatId: message.chatId,
+              parts: message.parts,
+            })
+            .from(message)
+            .where(
+              inArray(
+                message.id,
+                chunk.map((row) => row.id),
+              ),
+            )
+            .for("update");
+          const currentById = new Map<
+            string,
+            { id: string; chatId: string; parts: unknown }
+          >(
+            currentRows.map(
+              (row: {
+                id: string;
+                chatId: string;
+                parts: unknown;
+              }): [string, { id: string; chatId: string; parts: unknown }] => [
+                row.id,
+                row,
+              ],
+            ),
+          );
+          for (const row of chunk) {
+            const current = currentById.get(row.id);
+            const expected = expectedPartsById.get(row.id);
+            if (
+              (current &&
+                (!expected ||
+                  current.chatId !== expected.chatId ||
+                  JSON.stringify(current.parts) !==
+                    JSON.stringify(expected.parts))) ||
+              (!current && expected)
+            ) {
+              throw new Error(MESSAGE_ID_SCOPE_CONFLICT);
+            }
+          }
+        }
+
+        const expectedConditions =
+          expectedPartsById === undefined
+            ? []
+            : chunk.flatMap((row) => {
+                const expected = expectedPartsById.get(row.id);
+                return expected
+                  ? [
+                      and(
+                        eq(message.id, row.id),
+                        eq(message.chatId, expected.chatId),
+                        eq(message.parts, expected.parts as any),
+                      ),
+                    ]
+                  : [];
+              });
+        const expectedUpdateCondition =
+          expectedPartsById === undefined
+            ? undefined
+            : expectedConditions.length > 0
+              ? or(...expectedConditions)
+              : sql`false`;
+
+        const persisted = await tx
+          .insert(message)
+          .values(chunk)
+          .onConflictDoUpdate({
+            target: message.id,
+            set: {
+              parts: sql`excluded.parts`,
+              attachments: sql`excluded.attachments`,
+              metadata: sql`excluded.metadata`,
+            },
+            setWhere:
+              expectedUpdateCondition === undefined
+                ? sql`${message.chatId} = excluded."chatId"`
+                : and(
+                    sql`${message.chatId} = excluded."chatId"`,
+                    expectedUpdateCondition,
+                  ),
+          })
+          .returning({ id: message.id });
+        if (persisted.length !== chunk.length) {
+          throw new Error(MESSAGE_ID_SCOPE_CONFLICT);
+        }
+      }
+    });
   } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message === MESSAGE_ID_SCOPE_CONFLICT ||
+        error.message === CHAT_OWNER_SCOPE_CONFLICT)
+    ) {
+      throw error;
+    }
     console.error("[saveMessages] Error:", error);
     throw new AppError(
       "bad_request:database",

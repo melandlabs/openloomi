@@ -1,6 +1,35 @@
 import "server-only";
 
+import { getDb, initDb, isDbInitialized } from "@/lib/db/adapters";
 import {
+  type MemorySummaryRow,
+  type RawMessageRow,
+  memorySummaries,
+  rawMessages,
+} from "@/lib/db/schema.pg";
+import { isTauriMode } from "@/lib/env/constants";
+import {
+  CHAT_MEMORY_EVIDENCE_ID_PREFIX,
+  MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT,
+  MEMORY_SUMMARY_PUBLICATION_DIMENSION,
+  MEMORY_SUMMARY_WRITE_CONFLICT,
+  hasMemorySummaryPublicationRevisionConflict,
+  isMemorySummaryPublicationPendingRecord,
+  withoutMemorySummaryPublicationExpectedRevision,
+  mergeStoredChatMemoryEvidence,
+} from "@openloomi/indexeddb";
+import type {
+  MemoryStage,
+  MemorySummaryQuery,
+  MemorySummaryRecord,
+  RawMessage,
+  RawMessageEmbeddingUpdate,
+  RawMessageQuery,
+  RawMessageStats,
+  RawMessageStorageManager,
+} from "@openloomi/indexeddb/storage";
+import {
+  type SQL,
   and,
   asc,
   count,
@@ -15,26 +44,7 @@ import {
   min,
   or,
   sql,
-  type SQL,
 } from "drizzle-orm";
-import { getDb, initDb, isDbInitialized } from "@/lib/db/adapters";
-import {
-  memorySummaries,
-  rawMessages,
-  type MemorySummaryRow,
-  type RawMessageRow,
-} from "@/lib/db/schema.pg";
-import { isTauriMode } from "@/lib/env/constants";
-import type {
-  MemoryStage,
-  MemorySummaryQuery,
-  MemorySummaryRecord,
-  RawMessage,
-  RawMessageEmbeddingUpdate,
-  RawMessageQuery,
-  RawMessageStats,
-  RawMessageStorageManager,
-} from "@openloomi/indexeddb/storage";
 
 interface PostgresRawMessageSemanticSearchInput {
   userId: string;
@@ -44,6 +54,7 @@ interface PostgresRawMessageSemanticSearchInput {
   scanLimit?: number;
   threshold?: number;
   includeArchived?: boolean;
+  includeDeprecated?: boolean;
   platform?: string;
   botId?: string;
   channel?: string;
@@ -224,12 +235,15 @@ function buildMessageConditions(query: RawMessageQuery): SQL[] {
       conditions.push(keywordCondition);
     }
   }
-
   return conditions;
 }
 
 function buildSummaryConditions(query: MemorySummaryQuery): SQL[] {
   const conditions: SQL[] = [eq(memorySummaries.userId, query.userId)];
+
+  if (query.summaryIds?.length) {
+    conditions.push(inArray(memorySummaries.summaryId, query.summaryIds));
+  }
 
   if (query.summaryTiers?.length) {
     conditions.push(inArray(memorySummaries.summaryTier, query.summaryTiers));
@@ -253,6 +267,12 @@ function buildSummaryConditions(query: MemorySummaryQuery): SQL[] {
       conditions.push(or(...keywordConditions) as SQL);
     }
   }
+  for (const [key, value] of Object.entries(query.dimensions ?? {})) {
+    if (value === undefined) continue;
+    conditions.push(
+      sql`${memorySummaries.dimensions} ->> ${key} = ${String(value)}`,
+    );
+  }
 
   return conditions;
 }
@@ -268,6 +288,43 @@ function matchesSummaryDimensions(
   return Object.entries(dimensions).every(
     ([key, value]) => value === undefined || values[key] === value,
   );
+}
+
+function toRawMessageInsertRow(message: RawMessage) {
+  const normalized = {
+    ...message,
+    memoryStage: message.memoryStage ?? "short",
+    accessCount: message.accessCount ?? 0,
+    importanceScore: message.importanceScore ?? 0,
+    isPinned: message.isPinned ?? false,
+    createdAt: message.createdAt ?? currentUnixSeconds(),
+  };
+  return {
+    messageId: normalized.messageId,
+    platform: normalized.platform,
+    botId: normalized.botId,
+    userId: normalized.userId,
+    channel: normalized.channel ?? null,
+    person: normalized.person ?? null,
+    timestamp: normalized.timestamp,
+    content: normalized.content,
+    attachments: normalized.attachments ?? null,
+    embedding: embeddingToText(normalized.embedding),
+    embeddingModel: normalized.embeddingModel ?? null,
+    embeddingContentHash: normalized.embeddingContentHash ?? null,
+    embeddingDimensions:
+      normalized.embeddingDimensions ?? normalized.embedding?.length ?? null,
+    embeddingUpdatedAt: normalized.embeddingUpdatedAt ?? null,
+    metadata: normalized.metadata ?? null,
+    createdAt: normalized.createdAt,
+    memoryStage: normalized.memoryStage,
+    accessCount: normalized.accessCount,
+    lastAccessAt: normalized.lastAccessAt ?? null,
+    importanceScore: normalized.importanceScore,
+    archivedAt: normalized.archivedAt ?? null,
+    isPinned: normalized.isPinned,
+    summaryRefId: normalized.summaryRefId ?? null,
+  };
 }
 
 export class PostgresRawMessageManager implements RawMessageStorageManager {
@@ -315,78 +372,116 @@ export class PostgresRawMessageManager implements RawMessageStorageManager {
     }
 
     const db = await this.getDatabase();
-    const rows = messages.map((message) => {
-      const normalized = {
-        ...message,
-        memoryStage: message.memoryStage ?? "short",
-        accessCount: message.accessCount ?? 0,
-        importanceScore: message.importanceScore ?? 0,
-        isPinned: message.isPinned ?? false,
-        createdAt: message.createdAt ?? currentUnixSeconds(),
-      };
-      return {
-        messageId: normalized.messageId,
-        platform: normalized.platform,
-        botId: normalized.botId,
-        userId: normalized.userId,
-        channel: normalized.channel ?? null,
-        person: normalized.person ?? null,
-        timestamp: normalized.timestamp,
-        content: normalized.content,
-        attachments: normalized.attachments ?? null,
-        embedding: embeddingToText(normalized.embedding),
-        embeddingModel: normalized.embeddingModel ?? null,
-        embeddingContentHash: normalized.embeddingContentHash ?? null,
-        embeddingDimensions:
-          normalized.embeddingDimensions ??
-          normalized.embedding?.length ??
-          null,
-        embeddingUpdatedAt: normalized.embeddingUpdatedAt ?? null,
-        metadata: normalized.metadata ?? null,
-        createdAt: normalized.createdAt,
-        memoryStage: normalized.memoryStage,
-        accessCount: normalized.accessCount,
-        lastAccessAt: normalized.lastAccessAt ?? null,
-        importanceScore: normalized.importanceScore,
-        archivedAt: normalized.archivedAt ?? null,
-        isPinned: normalized.isPinned,
-        summaryRefId: normalized.summaryRefId ?? null,
-      };
+    const rows = messages.map(toRawMessageInsertRow);
+
+    const inserted = await db.transaction(async (tx) => {
+      const chatEvidenceIds = messages
+        .filter((message) =>
+          message.messageId.startsWith(CHAT_MEMORY_EVIDENCE_ID_PREFIX),
+        )
+        .map((message) => message.messageId)
+        .sort();
+      let rowsToWrite = rows;
+      if (chatEvidenceIds.length > 0) {
+        const persistedRows = (await tx
+          .select()
+          .from(rawMessages)
+          .where(inArray(rawMessages.messageId, chatEvidenceIds))
+          .for("update")) as RawMessageRow[];
+        const persistedById = new Map(
+          persistedRows.map((row) => [row.messageId, toRawMessage(row)]),
+        );
+        rowsToWrite = messages.map((message) => {
+          const persisted = persistedById.get(message.messageId);
+          if (persisted && persisted.userId !== message.userId) {
+            throw new Error("raw_message_scope_conflict");
+          }
+          return toRawMessageInsertRow(
+            persisted
+              ? mergeStoredChatMemoryEvidence(persisted, message)
+              : message,
+          );
+        });
+      }
+
+      const insertedRows = await tx
+        .insert(rawMessages)
+        .values(rowsToWrite)
+        .onConflictDoUpdate({
+          target: rawMessages.messageId,
+          set: {
+            platform: sql`excluded.platform`,
+            botId: sql`excluded.bot_id`,
+            userId: sql`excluded.user_id`,
+            channel: sql`excluded.channel`,
+            person: sql`excluded.person`,
+            timestamp: sql`excluded.timestamp`,
+            content: sql`excluded.content`,
+            attachments: sql`excluded.attachments`,
+            embedding: sql`excluded.embedding`,
+            embeddingModel: sql`excluded.embedding_model`,
+            embeddingContentHash: sql`excluded.embedding_content_hash`,
+            embeddingDimensions: sql`excluded.embedding_dimensions`,
+            embeddingUpdatedAt: sql`excluded.embedding_updated_at`,
+            metadata: sql`excluded.metadata`,
+            createdAt: sql`excluded.created_at`,
+            memoryStage: sql`excluded.memory_stage`,
+            accessCount: sql`excluded.access_count`,
+            lastAccessAt: sql`excluded.last_access_at`,
+            importanceScore: sql`excluded.importance_score`,
+            archivedAt: sql`excluded.archived_at`,
+            isPinned: sql`excluded.is_pinned`,
+            summaryRefId: sql`excluded.summary_ref_id`,
+          },
+          setWhere: sql`${rawMessages.userId} = excluded.user_id`,
+        })
+        .returning({ id: rawMessages.id });
+
+      if (insertedRows.length !== rowsToWrite.length) {
+        throw new Error("raw_message_scope_conflict");
+      }
+
+      return insertedRows;
     });
 
-    const inserted = await db
-      .insert(rawMessages)
-      .values(rows)
-      .onConflictDoUpdate({
-        target: rawMessages.messageId,
-        set: {
-          platform: sql`excluded.platform`,
-          botId: sql`excluded.bot_id`,
-          userId: sql`excluded.user_id`,
-          channel: sql`excluded.channel`,
-          person: sql`excluded.person`,
-          timestamp: sql`excluded.timestamp`,
-          content: sql`excluded.content`,
-          attachments: sql`excluded.attachments`,
-          embedding: sql`excluded.embedding`,
-          embeddingModel: sql`excluded.embedding_model`,
-          embeddingContentHash: sql`excluded.embedding_content_hash`,
-          embeddingDimensions: sql`excluded.embedding_dimensions`,
-          embeddingUpdatedAt: sql`excluded.embedding_updated_at`,
-          metadata: sql`excluded.metadata`,
-          createdAt: sql`excluded.created_at`,
-          memoryStage: sql`excluded.memory_stage`,
-          accessCount: sql`excluded.access_count`,
-          lastAccessAt: sql`excluded.last_access_at`,
-          importanceScore: sql`excluded.importance_score`,
-          archivedAt: sql`excluded.archived_at`,
-          isPinned: sql`excluded.is_pinned`,
-          summaryRefId: sql`excluded.summary_ref_id`,
-        },
-      })
-      .returning({ id: rawMessages.id });
-
     return inserted.map((row: { id: number }) => row.id);
+  }
+
+  async compareAndSwapGraphLedger(
+    message: RawMessage,
+    input: { expectedVersion: string; metadataKey: string },
+  ): Promise<boolean> {
+    const db = await this.getDatabase();
+    const row = toRawMessageInsertRow(message);
+    const { messageId: _messageId, ...updateValues } = row;
+    const versionMatches = sql`COALESCE(${rawMessages.metadata} -> ${input.metadataKey} -> 'snapshot' ->> 'version', '0') = ${input.expectedVersion}`;
+    const ownerMatches = eq(rawMessages.userId, message.userId);
+
+    if (input.expectedVersion === "0") {
+      const inserted = await db
+        .insert(rawMessages)
+        .values(row)
+        .onConflictDoUpdate({
+          target: rawMessages.messageId,
+          set: updateValues,
+          setWhere: and(ownerMatches, versionMatches),
+        })
+        .returning({ id: rawMessages.id });
+      return inserted.length === 1;
+    }
+
+    const updated = await db
+      .update(rawMessages)
+      .set(updateValues)
+      .where(
+        and(
+          eq(rawMessages.messageId, message.messageId),
+          ownerMatches,
+          versionMatches,
+        ),
+      )
+      .returning({ id: rawMessages.id });
+    return updated.length === 1;
   }
 
   async queryMessages(query: RawMessageQuery): Promise<RawMessage[]> {
@@ -528,8 +623,21 @@ export class PostgresRawMessageManager implements RawMessageStorageManager {
     if (summaries.length === 0) {
       return;
     }
+    const uniqueSummaries = new Map<string, MemorySummaryRecord>();
+    for (const summary of summaries) {
+      const duplicate = uniqueSummaries.get(summary.summaryId);
+      if (duplicate) {
+        throw new Error(
+          duplicate.userId === summary.userId
+            ? MEMORY_SUMMARY_WRITE_CONFLICT
+            : MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT,
+        );
+      }
+      uniqueSummaries.set(summary.summaryId, summary);
+    }
+
     const db = await this.getDatabase();
-    const rows = summaries.map((summary) => ({
+    const rows = [...uniqueSummaries.values()].map((summary) => ({
       summaryId: summary.summaryId,
       userId: summary.userId,
       summaryTier: summary.summaryTier,
@@ -547,30 +655,112 @@ export class PostgresRawMessageManager implements RawMessageStorageManager {
       createdAt: summary.createdAt,
       updatedAt: summary.updatedAt,
     }));
+    type SummaryOwnerRow = {
+      summaryId: string;
+      userId: string;
+      dimensions: MemorySummaryRecord["dimensions"] | null;
+    };
 
-    await db
-      .insert(memorySummaries)
-      .values(rows)
-      .onConflictDoUpdate({
-        target: memorySummaries.summaryId,
-        set: {
-          userId: sql`excluded.user_id`,
-          summaryTier: sql`excluded.summary_tier`,
-          sourceTier: sql`excluded.source_tier`,
-          startTimestamp: sql`excluded.start_timestamp`,
-          endTimestamp: sql`excluded.end_timestamp`,
-          messageCount: sql`excluded.message_count`,
-          sourceRecordIds: sql`excluded.source_record_ids`,
-          keyPoints: sql`excluded.key_points`,
-          keywords: sql`excluded.keywords`,
-          keywordsText: sql`excluded.keywords_text`,
-          summaryText: sql`excluded.summary_text`,
-          dimensions: sql`excluded.dimensions`,
-          qualityScore: sql`excluded.quality_score`,
-          createdAt: sql`excluded.created_at`,
-          updatedAt: sql`excluded.updated_at`,
-        },
-      });
+    await db.transaction(async (tx) => {
+      const readSummaryOwners = async (
+        summaryIds: string[],
+      ): Promise<SummaryOwnerRow[]> =>
+        tx
+          .select({
+            summaryId: memorySummaries.summaryId,
+            userId: memorySummaries.userId,
+            dimensions: memorySummaries.dimensions,
+          })
+          .from(memorySummaries)
+          .where(inArray(memorySummaries.summaryId, summaryIds))
+          .for("update");
+      const existingRows = await readSummaryOwners(
+        rows.map((row) => row.summaryId),
+      );
+      const existingById = new Map(
+        existingRows.map((row) => [row.summaryId, row]),
+      );
+      for (const row of rows) {
+        const existing = existingById.get(row.summaryId);
+        if (existing && existing.userId !== row.userId) {
+          throw new Error(MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT);
+        }
+        if (
+          existing &&
+          hasMemorySummaryPublicationRevisionConflict(existing, row)
+        ) {
+          throw new Error(MEMORY_SUMMARY_WRITE_CONFLICT);
+        }
+      }
+
+      const rowsToWrite = rows
+        .filter((row) => {
+          const existing = existingById.get(row.summaryId);
+          return !(
+            existing &&
+            !isMemorySummaryPublicationPendingRecord(existing) &&
+            isMemorySummaryPublicationPendingRecord(row)
+          );
+        })
+        .map(withoutMemorySummaryPublicationExpectedRevision);
+      if (rowsToWrite.length === 0) return;
+
+      const persisted = await tx
+        .insert(memorySummaries)
+        .values(rowsToWrite)
+        .onConflictDoUpdate({
+          target: memorySummaries.summaryId,
+          set: {
+            summaryTier: sql`excluded.summary_tier`,
+            sourceTier: sql`excluded.source_tier`,
+            startTimestamp: sql`excluded.start_timestamp`,
+            endTimestamp: sql`excluded.end_timestamp`,
+            messageCount: sql`excluded.message_count`,
+            sourceRecordIds: sql`excluded.source_record_ids`,
+            keyPoints: sql`excluded.key_points`,
+            keywords: sql`excluded.keywords`,
+            keywordsText: sql`excluded.keywords_text`,
+            summaryText: sql`excluded.summary_text`,
+            dimensions: sql`excluded.dimensions`,
+            qualityScore: sql`excluded.quality_score`,
+            createdAt: sql`excluded.created_at`,
+            updatedAt: sql`excluded.updated_at`,
+          },
+          setWhere: and(
+            sql`${memorySummaries.userId} = excluded.user_id`,
+            sql`NOT (
+              COALESCE(${memorySummaries.dimensions} ->> ${MEMORY_SUMMARY_PUBLICATION_DIMENSION}, '') <> 'pending'
+              AND COALESCE(excluded.dimensions ->> ${MEMORY_SUMMARY_PUBLICATION_DIMENSION}, '') = 'pending'
+            )`,
+          ),
+        })
+        .returning({ summaryId: memorySummaries.summaryId });
+      if (persisted.length === rowsToWrite.length) return;
+
+      const currentRows = await readSummaryOwners(
+        rowsToWrite.map((row) => row.summaryId),
+      );
+      const currentById = new Map(
+        currentRows.map((row) => [row.summaryId, row]),
+      );
+      const persistedIds = new Set(
+        persisted.map((row: { summaryId: string }) => row.summaryId),
+      );
+      for (const row of rowsToWrite) {
+        if (persistedIds.has(row.summaryId)) continue;
+        const current = currentById.get(row.summaryId);
+        if (current?.userId !== row.userId) {
+          throw new Error(MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT);
+        }
+        if (
+          !current ||
+          isMemorySummaryPublicationPendingRecord(current) ||
+          !isMemorySummaryPublicationPendingRecord(row)
+        ) {
+          throw new Error(MEMORY_SUMMARY_WRITE_CONFLICT);
+        }
+      }
+    });
   }
 
   async querySummaries(
@@ -587,9 +777,9 @@ export class PostgresRawMessageManager implements RawMessageStorageManager {
       .limit(query.pageSize ?? query.limit ?? 50)
       .offset(query.offset ?? 0)) as MemorySummaryRow[];
 
-    return rows.map(toSummaryRecord).filter((summary) => {
-      return matchesSummaryDimensions(summary, query.dimensions);
-    });
+    return rows
+      .map(toSummaryRecord)
+      .filter((summary) => matchesSummaryDimensions(summary, query.dimensions));
   }
 
   async markMessagesAccessed(
@@ -712,6 +902,34 @@ export class PostgresRawMessageManager implements RawMessageStorageManager {
     return rows.length;
   }
 
+  async restoreDeprecatedMessages(
+    messageIds: string[],
+    input: { userId?: string; supersededBySummaryId?: string } = {},
+  ): Promise<number> {
+    if (messageIds.length === 0) return 0;
+    const db = await this.getDatabase();
+    const conditions = [
+      inArray(rawMessages.messageId, messageIds),
+      isNotNull(rawMessages.deprecatedAt),
+    ];
+    if (input.userId) conditions.push(eq(rawMessages.userId, input.userId));
+    if (input.supersededBySummaryId) {
+      conditions.push(
+        eq(rawMessages.supersededBySummaryId, input.supersededBySummaryId),
+      );
+    }
+    const rows = await db
+      .update(rawMessages)
+      .set({
+        deprecatedAt: null,
+        deprecationReason: null,
+        supersededBySummaryId: null,
+      })
+      .where(and(...conditions))
+      .returning({ id: rawMessages.id });
+    return rows.length;
+  }
+
   async hardDeleteArchived(
     olderThan: number,
     userId?: string,
@@ -786,6 +1004,7 @@ export class PostgresRawMessageManager implements RawMessageStorageManager {
       startTime: input.startTime,
       endTime: input.endTime,
       includeArchived: input.includeArchived,
+      includeDeprecated: input.includeDeprecated,
     });
     conditions.push(isNotNull(rawMessages.embedding));
     if (input.embeddingModel) {

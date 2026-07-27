@@ -73,17 +73,25 @@ function unique(values: string[]): string[] {
 }
 
 function stablePart(value: string): string {
-  return encodeURIComponent(value).replaceAll("%", "_");
+  return encodeURIComponent(value);
 }
 
 export function ownerScopeKey(scope: OwnerScope): string {
-  return [scope.tenantId ?? "", scope.workspaceId ?? "", scope.userId]
-    .map(stablePart)
-    .join(":");
+  return encodeURIComponent(
+    JSON.stringify([
+      scope.tenantId ?? null,
+      scope.workspaceId ?? null,
+      scope.userId,
+    ]),
+  );
 }
 
 export function sameOwnerScope(left: OwnerScope, right: OwnerScope): boolean {
-  return ownerScopeKey(left) === ownerScopeKey(right);
+  return (
+    left.userId === right.userId &&
+    left.workspaceId === right.workspaceId &&
+    left.tenantId === right.tenantId
+  );
 }
 
 function applicabilityKey(

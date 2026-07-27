@@ -56,6 +56,8 @@ export interface BuildMemoryGraphRepresentativePlanInput {
   snapshot: MemoryGraphSnapshot;
   candidate: MemoryGraphLifecycleConsolidationCandidate;
   summaryId: string;
+  publicationRevision: string;
+  previousPublicationRevision?: string;
   now: number;
   persistence: MemoryGraphPersistenceMode;
 }
@@ -492,6 +494,8 @@ export function buildMemoryGraphRepresentativePlan(
       : undefined,
     metadata: {
       clusterId: winner.clusterId,
+      publicationRevision: input.publicationRevision,
+      previousPublicationRevision: input.previousPublicationRevision,
       sourceNodeIds: [...input.candidate.sourceNodeIds],
       supersededClusterIds: supersededClusters.map(
         (cluster) => cluster.clusterId,
@@ -590,7 +594,7 @@ export function buildMemoryGraphRepresentativePlan(
       supersededByNodeId: input.summaryId,
       reasonCodes: ["stable_cluster_representative_persisted"],
     },
-    ...updatedLosers.map(
+    ...supersededClusters.map(
       (cluster): MemoryGraphOperation => ({
         operationId: operationId(
           "supersede-cluster",
@@ -623,6 +627,7 @@ export function buildMemoryGraphRepresentativePlan(
     ]),
     metadata: {
       summaryId: input.summaryId,
+      publicationRevision: input.publicationRevision,
       sourceNodeIds: [...input.candidate.sourceNodeIds],
       coveredSourceNodeIds,
     },

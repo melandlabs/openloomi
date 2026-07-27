@@ -8,8 +8,11 @@ import {
 } from "@openloomi/indexeddb";
 import {
   type MemoryGraphSnapshot,
+  type MemoryGraphStore,
   type OwnerScope,
   buildMemoryGraphEvolutionPlan,
+  ownerScopeKey,
+  sameOwnerScope,
 } from "@openloomi/memory-consolidation";
 import { describe, expect, it } from "vitest";
 
@@ -40,6 +43,23 @@ class InMemoryRawMessageStorage implements RawMessageGraphEvolutionStorage {
     const ids: number[] = [];
     for (const message of messages) ids.push(await this.storeMessage(message));
     return ids;
+  }
+
+  async compareAndSwapGraphLedger(
+    message: RawMessage,
+    input: { expectedVersion: string; metadataKey: string },
+  ): Promise<boolean> {
+    const current = this.messages.get(message.messageId);
+    const ledger = current?.metadata?.[input.metadataKey] as
+      | { snapshot?: { version?: unknown } }
+      | undefined;
+    const currentVersion =
+      typeof ledger?.snapshot?.version === "string"
+        ? ledger.snapshot.version
+        : "0";
+    if (currentVersion !== input.expectedVersion) return false;
+    await this.storeMessage(message);
+    return true;
   }
 
   async getMessageById(messageId: string): Promise<RawMessage | null> {
@@ -112,6 +132,27 @@ async function readSnapshot(
 }
 
 describe("raw-message memory graph evolution runtime", () => {
+  it("keeps encoded owner scopes distinct in durable keys and equality checks", () => {
+    const encodedSlash = { userId: "a/b" } satisfies OwnerScope;
+    const literalEscape = { userId: "a_2Fb" } satisfies OwnerScope;
+
+    expect(ownerScopeKey(encodedSlash)).not.toBe(ownerScopeKey(literalEscape));
+    expect(sameOwnerScope(encodedSlash, literalEscape)).toBe(false);
+    expect(
+      ownerScopeKey({
+        userId: "user",
+        workspaceId: "workspace:tenant",
+        tenantId: "tenant",
+      }),
+    ).not.toBe(
+      ownerScopeKey({
+        userId: "user",
+        workspaceId: "workspace",
+        tenantId: "tenant:tenant",
+      }),
+    );
+  });
+
   it("preserves baseline storage when graph evolution is disabled or dry-run", async () => {
     const storage = new InMemoryRawMessageStorage();
 
@@ -140,6 +181,128 @@ describe("raw-message memory graph evolution runtime", () => {
       enabled: false,
     });
     expect(storage.messages.has(memoryGraphLedgerMessageId(OWNER))).toBe(false);
+  });
+
+  it("does not evolve the graph after an incomplete raw batch write", async () => {
+    const storage = new InMemoryRawMessageStorage();
+    storage.storeMessages = async (messages) => {
+      await storage.storeMessage(messages[0]);
+      return [1];
+    };
+
+    await expect(
+      storeRawMessagesWithGraphEvolution({
+        storage,
+        messages: [rawMessage("partial-1"), rawMessage("partial-2")],
+        graphEvolution: { enabled: true },
+        now: NOW,
+      }),
+    ).rejects.toThrow("raw_message_batch_write_incomplete");
+    expect(storage.messages.has(memoryGraphLedgerMessageId(OWNER))).toBe(false);
+  });
+
+  it("uses the scoped evidence bot for the first ledger write", async () => {
+    const storage = new InMemoryRawMessageStorage();
+    const botId = "00000000-0000-4000-8000-000000000001";
+    const message = rawMessage("real-bot-initial", {
+      relationGroup: "language",
+      relationValue: "zh",
+      applicability: { scope: "global" },
+    });
+    message.botId = botId;
+
+    const result = await storeRawMessagesWithGraphEvolution({
+      storage,
+      messages: [message],
+      graphEvolution: { enabled: true },
+      now: NOW,
+    });
+
+    expect(result.graphEvolution.status).toBe("applied");
+    expect(storage.messages.get(memoryGraphLedgerMessageId(OWNER))?.botId).toBe(
+      botId,
+    );
+  });
+
+  it("preserves the existing ledger bot when a later store omits it", async () => {
+    const storage = new InMemoryRawMessageStorage();
+    const botId = "00000000-0000-4000-8000-000000000002";
+    const message = rawMessage("real-bot-existing", {
+      relationGroup: "language",
+      relationValue: "zh",
+      applicability: { scope: "global" },
+    });
+    message.botId = botId;
+    await storeRawMessagesWithGraphEvolution({
+      storage,
+      messages: [message],
+      graphEvolution: { enabled: true },
+      now: NOW,
+    });
+
+    const snapshot = await readSnapshot(storage);
+    const store = createRawMessageMemoryGraphStore({
+      storage,
+      ownerScope: OWNER,
+      now: () => NOW + 1000,
+    });
+    const plan = buildMemoryGraphEvolutionPlan({
+      ownerScope: OWNER,
+      newEvidence: [
+        {
+          id: "later-store",
+          ownerScope: OWNER,
+          timestamp: NOW + 1000,
+          relationGroup: "response-style",
+          relationValue: "concise",
+          applicability: { scope: "global" },
+        },
+      ],
+      candidateEvidence: [],
+      snapshot,
+      now: NOW + 1000,
+      persistence: { mode: "write", enabled: true },
+    });
+
+    expect((await store.persistPlan(plan)).mutatesGraph).toBe(true);
+    expect(storage.messages.get(memoryGraphLedgerMessageId(OWNER))?.botId).toBe(
+      botId,
+    );
+  });
+
+  it("keeps the legacy ledger bot fallback without a bot or existing ledger", async () => {
+    const storage = new InMemoryRawMessageStorage();
+    const store = createRawMessageMemoryGraphStore({
+      storage,
+      ownerScope: OWNER,
+      now: () => NOW,
+    });
+    const snapshot = await store.readSnapshot({
+      ownerScope: OWNER,
+      includeAuditOnly: true,
+    });
+    const plan = buildMemoryGraphEvolutionPlan({
+      ownerScope: OWNER,
+      newEvidence: [
+        {
+          id: "legacy-adapter",
+          ownerScope: OWNER,
+          timestamp: NOW,
+          relationGroup: "language",
+          relationValue: "zh",
+          applicability: { scope: "global" },
+        },
+      ],
+      candidateEvidence: [],
+      snapshot,
+      now: NOW,
+      persistence: { mode: "write", enabled: true },
+    });
+
+    expect((await store.persistPlan(plan)).mutatesGraph).toBe(true);
+    expect(storage.messages.get(memoryGraphLedgerMessageId(OWNER))?.botId).toBe(
+      "memory-graph",
+    );
   });
 
   it("protects the internal graph ledger namespace from raw-message writes", async () => {
@@ -614,6 +777,43 @@ describe("raw-message memory graph evolution runtime", () => {
     ]);
   });
 
+  it("rejects a plan when the durable ledger compare-and-swap loses", async () => {
+    const storage = new InMemoryRawMessageStorage();
+    storage.compareAndSwapGraphLedger = async () => false;
+    const store = createRawMessageMemoryGraphStore({
+      storage,
+      ownerScope: OWNER,
+      now: () => NOW,
+    });
+    const snapshot = await store.readSnapshot({
+      ownerScope: OWNER,
+      includeAuditOnly: true,
+    });
+    const plan = buildMemoryGraphEvolutionPlan({
+      ownerScope: OWNER,
+      newEvidence: [
+        {
+          id: "cas-loser",
+          ownerScope: OWNER,
+          timestamp: NOW,
+          relationGroup: "language",
+          relationValue: "en",
+          applicability: { scope: "global" },
+        },
+      ],
+      candidateEvidence: [],
+      snapshot,
+      now: NOW,
+      persistence: { mode: "write", enabled: true },
+    });
+
+    const result = await store.persistPlan(plan);
+
+    expect(result.conflict).toBe(true);
+    expect(result.diagnostics).toContain("memory_graph_version_conflict");
+    expect((await readSnapshot(storage)).nodes).toEqual([]);
+  });
+
   it("serializes same-owner writes so concurrent stale plans cannot both apply", async () => {
     const storage = new InMemoryRawMessageStorage();
     const store = createRawMessageMemoryGraphStore({
@@ -651,5 +851,34 @@ describe("raw-message memory graph evolution runtime", () => {
     expect(results.filter((result) => result.mutatesGraph)).toHaveLength(1);
     expect(results.filter((result) => result.conflict)).toHaveLength(1);
     expect((await readSnapshot(storage)).nodes).toHaveLength(1);
+  });
+  it("keeps the base graph store contract usable without operation history", async () => {
+    const legacyStore = {
+      readSnapshot: async () => ({
+        ownerScope: OWNER,
+        nodes: [],
+        edges: [],
+        clusters: [],
+        capturedAt: NOW,
+      }),
+      persistPlan: async () => ({
+        ownerScope: OWNER,
+        appliedOperations: [],
+        skippedOperations: [],
+        mutatesGraph: false,
+        diagnostics: [],
+      }),
+      readAuditTrail: async () => ({
+        ownerScope: OWNER,
+        nodeId: "legacy-node",
+        sourceNodeIds: [],
+        edgeIds: [],
+        operationIds: [],
+        reasonCodes: [],
+      }),
+    } satisfies MemoryGraphStore;
+
+    expect((await legacyStore.readSnapshot()).nodes).toEqual([]);
+    expect("readAppliedOperations" in legacyStore).toBe(false);
   });
 });

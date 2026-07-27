@@ -1,6 +1,6 @@
 # ADR-0001: Graph Is the Durable Evolution Model
 
-Status: Proposed
+Status: Accepted
 
 Requirements: MR-1, MR-2, MR-3, MR-4, MR-5, MR-7
 

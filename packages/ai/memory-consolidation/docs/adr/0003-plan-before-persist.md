@@ -1,6 +1,6 @@
 # ADR-0003: Plan Before Persist
 
-Status: Proposed
+Status: Accepted
 
 Requirements: MR-1, MR-3, MR-4, MR-5, MR-8, MR-10
 
@@ -20,9 +20,15 @@ Plans include owner scope, affected identities, evidence, reason codes, intended
 operations, expected mutation domains, stable operation identity, expected graph
 version or equivalent concurrency guard, and no-op or rollback information.
 
-Replaying a completed operation is idempotent. Retrying a partially applied plan
-continues only unapplied operations. A version conflict rejects persistence and
-requires the plan to be rebuilt from a current graph snapshot.
+An untrusted route may request a correction but cannot select the persisted
+representative identity. Trusted orchestration can provide that identity only
+after owner-scope validation.
+
+Replaying a completed graph operation is idempotent. A retry may finish a failed
+ordered external step, such as publication of a staged summary, and report
+`replayed`; it must not repeat graph mutation. A partially applied plan continues
+only unapplied operations. A version conflict rejects persistence and requires
+the plan to be rebuilt from a current graph snapshot.
 
 Persistence remains explicitly enabled until rollout criteria authorize broader
 automatic behavior.

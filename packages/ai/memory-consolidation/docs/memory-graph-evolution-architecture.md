@@ -1,8 +1,10 @@
 # Memory Graph Evolution Architecture
 
-Status: Proposed target architecture for
+Status: Active target architecture for
 [Memory Graph Evolution Requirements](./memory-graph-evolution-requirements.md).
-It becomes binding when accepted and merged upstream.
+The graph-evolution and lifecycle foundation is accepted upstream. Phases 0
+through 3 form one experimental, default-off Draft PR candidate and do not
+authorize a runtime cohort or broader rollout.
 
 Decision records: [ADR index](./adr/README.md).
 
@@ -46,6 +48,12 @@ Every graph object belongs to a composite owner scope:
 The complete tuple is part of identity and authorization, not optional metadata.
 Workspace or tenant identity does not replace user identity in the current
 product model.
+
+### Request Ownership Boundary
+
+At an HTTP boundary, session-derived `userId` is authoritative. Client input
+cannot select `workspaceId`, `tenantId`, or a corrected representative identity.
+Phase 1 must add a trusted server resolver before enabling narrower cohort scope.
 
 ### Applicability Context
 
@@ -103,6 +111,11 @@ relations. It owns:
 Related evidence does not automatically become cluster membership. Competing
 clusters remain distinct.
 
+The effective competition group is the connected component formed by active
+`compete` edges within the same owner scope and exact applicability identity.
+The single `competitionKey` field is diagnostic metadata, not the authoritative
+grouping model.
+
 ### Cluster Lifecycle
 
 The lifecycle states are:
@@ -145,6 +158,20 @@ changes.
 
 Version conflicts return an observable conflict result and require the plan to
 be rebuilt against a current snapshot.
+
+### Staged Publication Across Stores
+
+The summary store, graph ledger, and raw-memory store do not share a global
+transaction. A lifecycle runtime therefore stages a new summary as pending,
+persists the graph representative and provenance, then publishes the summary.
+Source soft-deprecation and graph visibility follow as separate, observable
+steps.
+
+A pending summary is excluded from normal summary retrieval. If the graph
+representative cannot be persisted, raw evidence remains normally retrievable.
+If a later source-deprecation or visibility step fails, the result is a
+retryable partial failure; temporary duplication is preferable to hidden or lost
+evidence. Recovery order is defined by ADR-0006.
 
 ### No Immediate Overwrite
 
@@ -242,6 +269,11 @@ Responsibility:
 - preserve contested clusters
 - plan weakening, supersession, archive, or audit-only actions
 
+The runtime that executes this plan stages a representative before graph
+publication, publishes it only after representative provenance exists, and then
+applies source deprecation and visibility. It does not claim a cross-store
+transaction or hide raw evidence merely because staging began.
+
 It consumes lifecycle decisions and does not re-judge all source relations.
 
 ### Graph-aware Retriever
@@ -253,6 +285,8 @@ Responsibility:
 - prefer candidates whose applicability matches the current request
 - apply lifecycle, competition, relation strength, and visibility signals
 - expand source evidence in audit mode
+- apply graph ranking only when every selected node can be materialized from
+  baseline results; otherwise preserve baseline with a no-op diagnostic
 - explain ranking and filtering changes
 
 It does not replace baseline candidate search or mutate the graph by default.
@@ -315,12 +349,25 @@ affected cluster snapshot
   -> lifecycle policy
   -> stable / contested / decaying decision
   -> consolidation and forgetting plan
-  -> persist representative
+  -> stage representative (not normally retrievable)
+  -> persist graph representative and provenance
+  -> publish representative
   -> soft-deprecate covered source records
-  -> update representative and visibility
+  -> update graph visibility
 ```
 
 Source visibility changes occur only after representative persistence succeeds.
+When one represented cluster supersedes another, the previous representative
+becomes audit-only and links to the new representative through a `supersede`
+edge. Rollback retires the new representative only after raw visibility and raw
+storage deprecation have been restored, then restores any predecessor
+representative.
+
+If representative persistence fails, the staged summary remains excluded from
+normal retrieval and raw evidence remains available. A later deprecation or
+visibility failure may leave duplicate evidence temporarily visible, but it must
+return a partial-failure diagnostic that can be retried or explicitly rolled
+back.
 
 ### Retrieval
 
@@ -353,6 +400,15 @@ memory or cluster
 A correction adds an authoritative operation; it does not rewrite historical
 evidence.
 
+A corrected summary must already be a summary node in the target owner-scoped
+cluster before a replacement is staged. An unrelated stored summary cannot
+become a representative through a correction command.
+
+Removing an incorrectly merged member invalidates a representative that covered
+that member. The representative becomes audit-only, its covered raw evidence is
+restored, predecessor representatives are restored when present, and affected
+support or supersession edges become inactive without being deleted.
+
 ## Failure and Degradation Rules
 
 - Missing graph snapshot: keep baseline behavior and report a no-op.
@@ -362,14 +418,20 @@ evidence.
   support or competition.
 - Version conflict: reject persistence and rebuild the plan from a current graph
   snapshot.
-- Replayed completed operation: return the prior result without applying the
-  mutation again.
+- Replayed graph operation: do not apply graph mutation twice. A retry may finish
+  a failed ordered external step, such as summary publication, and report `replayed`.
 - Graph persistence failure: do not apply dependent lifecycle or visibility
   changes.
+- Pending representative: exclude it from normal summary retrieval until graph
+  provenance and representative membership are persisted.
 - Representative persistence failure: do not soft-deprecate source records.
+- Source-deprecation or visibility failure: preserve audit recovery, return a
+  retryable partial failure, and do not report the publication as fully applied.
 - Partial persistence failure: retain applied-operation records and retry only
   unapplied operations or execute an explicit rollback plan.
 - Partial candidate coverage: preserve non-hidden baseline retrieval hits.
+- Unmaterialized graph candidate: preserve baseline retrieval and return a no-op;
+  result materialization belongs to the real retrieval loop.
 - Missing audit provenance: block consolidation or rollout when provenance is
   required by policy.
 - Correction conflict: preserve both the automatic result and correction record
@@ -377,23 +439,43 @@ evidence.
 
 ## Current Capability Mapping
 
-Already available:
+Accepted upstream foundation:
 
 - summary persistence and source soft-deprecation
 - deprecated-record filtering and `includeDeprecated` audit retrieval
 - graph-aware filtering and ranking of baseline retrieval candidates
 - relation observations and competition-oriented diagnostics
+- persisted owner-scoped graph evolution and cluster lifecycle decisions
+- lifecycle-driven summary persistence and source soft-deprecation
 
-Next architecture gap:
+Local integrated delivery candidate, not yet externally published:
 
-- ingest-time interaction that updates durable graph relations and clusters
-- lifecycle decisions driven by accumulated graph evidence
-- consolidation and weakening driven by lifecycle state
-- explicit correction and rollback of graph evolution
+- explicit correction, rollback, recursive audit, and dry-run governance reports
+- staged summary publication and evidence-first cross-store recovery
+- controlled saved-chat evidence writes through graph evolution, lifecycle, and
+  soft deprecation
+- trusted server scope, cohort policy, kill switch, revision protection, and
+  idempotent replay for the real write path
 
-## PR Reference Contract
+Current authorization boundary:
 
-Every Memory Graph Evolution PR must state:
+- Phase 2 has passed its scoped local gate. Controlled default, audit, and
+  conflict retrieval materialize graph-selected evidence into the native-agent
+  context with owner-scope isolation and baseline fallback.
+- Phase 3 has passed its scoped local gate. Correction and rollback commands
+  reach the existing runtime only for authenticated users explicitly enabled by
+  the server-side operator policy; requester and owner scope remain
+  session-derived.
+- Rollback restores graph visibility and raw evidence before retiring the
+  representative, exposes retry and audit outcomes, and rejects stale,
+  colliding, or cross-scope commands without dependent recovery.
+- broader automatic enablement remains blocked until required runtime evaluation
+  artifacts pass the rollout governance gates and the relevant later phase gate
+  passes
+
+## Integration Release Reference Contract
+
+The eventual integrated release PR must state:
 
 - requirement identifiers from
   [memory-graph-evolution-requirements.md](./memory-graph-evolution-requirements.md)
@@ -404,4 +486,4 @@ Every Memory Graph Evolution PR must state:
 - no-op, failure, and rollback behavior
 - focused acceptance scenarios and verification
 
-PR descriptions must reference these documents instead of copying them.
+The release description must reference these documents instead of copying them.

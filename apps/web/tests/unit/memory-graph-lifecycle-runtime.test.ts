@@ -1,8 +1,10 @@
 import {
+  MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT,
   type MemorySummaryRecord,
   type RawMessage,
   type RawMessageQuery,
   createRawMessageMemoryGraphStore,
+  isMemorySummaryPublicationPendingRecord,
   memoryGraphLedgerMessageId,
   queryMemoryWithFallback,
   runMemoryForgettingCycle,
@@ -19,6 +21,8 @@ class GraphLifecycleTestManager {
   readonly summaries = new Map<string, MemorySummaryRecord>();
   nextId = 1;
   failSummaryWrites = 0;
+  summaryWriteCount = 0;
+  readonly failSummaryWriteNumbers = new Set<number>();
   failDeprecationWrites = 0;
   ledgerWriteCount = 0;
   readonly failLedgerWriteNumbers = new Set<number>();
@@ -80,6 +84,23 @@ class GraphLifecycleTestManager {
     return Promise.all(messages.map((message) => this.storeMessage(message)));
   }
 
+  async compareAndSwapGraphLedger(
+    message: RawMessage,
+    input: { expectedVersion: string; metadataKey: string },
+  ): Promise<boolean> {
+    const current = this.messages.get(message.messageId);
+    const ledger = current?.metadata?.[input.metadataKey] as
+      | { snapshot?: { version?: unknown } }
+      | undefined;
+    const currentVersion =
+      typeof ledger?.snapshot?.version === "string"
+        ? ledger.snapshot.version
+        : "0";
+    if (currentVersion !== input.expectedVersion) return false;
+    await this.storeMessage(message);
+    return true;
+  }
+
   async getMessageById(messageId: string): Promise<RawMessage | null> {
     return this.messages.get(messageId) ?? null;
   }
@@ -115,12 +136,26 @@ class GraphLifecycleTestManager {
   }
 
   async upsertSummaries(summaries: MemorySummaryRecord[]): Promise<void> {
+    this.summaryWriteCount += 1;
+    if (this.failSummaryWriteNumbers.has(this.summaryWriteCount)) {
+      throw new Error("summary write failed");
+    }
     if (this.failSummaryWrites > 0) {
       this.failSummaryWrites -= 1;
       throw new Error("summary write failed");
     }
     for (const summary of summaries) {
       const existing = this.summaries.get(summary.summaryId);
+      if (existing && existing.userId !== summary.userId) {
+        throw new Error(MEMORY_SUMMARY_OWNER_SCOPE_CONFLICT);
+      }
+      if (
+        existing &&
+        !isMemorySummaryPublicationPendingRecord(existing) &&
+        isMemorySummaryPublicationPendingRecord(summary)
+      ) {
+        continue;
+      }
       this.summaries.set(summary.summaryId, {
         ...summary,
         createdAt: existing?.createdAt ?? summary.createdAt,
@@ -130,11 +165,22 @@ class GraphLifecycleTestManager {
 
   async querySummaries(input: {
     userId?: string;
+    summaryIds?: string[];
     pageSize?: number;
   }): Promise<MemorySummaryRecord[]> {
-    return [...this.summaries.values()]
-      .filter((summary) => !input.userId || summary.userId === input.userId)
-      .slice(0, input.pageSize);
+    let summaries = [...this.summaries.values()].filter(
+      (summary) => !input.userId || summary.userId === input.userId,
+    );
+    if (input.summaryIds?.length) {
+      summaries = summaries.filter((summary) =>
+        input.summaryIds?.includes(summary.summaryId),
+      );
+    }
+    return summaries.slice(0, input.pageSize);
+  }
+
+  async markMessagesAccessed(): Promise<number> {
+    return 0;
   }
 
   async hardDeleteArchived(): Promise<number> {
@@ -173,12 +219,16 @@ function rawMessage(
 async function storeEvidence(
   manager: GraphLifecycleTestManager,
   messages: RawMessage[],
-  input: { workspaceId?: string; now?: number } = {},
+  input: { workspaceId?: string; tenantId?: string; now?: number } = {},
 ) {
   return storeRawMessagesWithGraphEvolution({
     storage: manager,
     messages,
-    graphEvolution: { enabled: true, workspaceId: input.workspaceId },
+    graphEvolution: {
+      enabled: true,
+      workspaceId: input.workspaceId,
+      tenantId: input.tenantId,
+    },
     now: input.now ?? NOW,
   });
 }
@@ -227,6 +277,9 @@ describe("memory graph lifecycle forgetting runtime", () => {
       }),
     );
     const storedSummary = [...manager.summaries.values()][0];
+    if (!storedSummary) {
+      throw new Error("expected a persisted graph representative summary");
+    }
     expect(storedSummary).toEqual(
       expect.objectContaining({
         sourceRecordIds: ["zh-1", "zh-2", "zh-3"],
@@ -273,7 +326,7 @@ describe("memory graph lifecycle forgetting runtime", () => {
     );
     const graph = await snapshot(manager);
     expect(
-      graph.nodes.find((node) => node.id === storedSummary?.summaryId),
+      graph.nodes.find((node) => node.id === storedSummary.summaryId),
     ).toEqual(
       expect.objectContaining({ type: "summary", visibility: "default" }),
     );
@@ -299,6 +352,110 @@ describe("memory graph lifecycle forgetting runtime", () => {
     expect(audit.sourceNodeIds).toEqual(
       expect.arrayContaining(["zh-1", "zh-2", "zh-3"]),
     );
+    expect(audit.operationIds.length).toBeGreaterThan(0);
+  });
+
+  it("publishes a new revision when a summarized cluster becomes stable again", async () => {
+    const manager = new GraphLifecycleTestManager();
+    await storeEvidence(manager, [rawMessage("revision-1")], { now: NOW });
+    await storeEvidence(manager, [rawMessage("revision-2")], {
+      now: NOW + 1000,
+    });
+    await storeEvidence(manager, [rawMessage("revision-3")], {
+      now: NOW + 2000,
+    });
+
+    const first = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 3000, graphLifecycle: { enabled: true } },
+    );
+    expect(first.graphLifecycle?.status).toBe("applied");
+    const firstSummary = [...manager.summaries.values()][0];
+    expect(firstSummary?.sourceRecordIds).toHaveLength(3);
+
+    await storeEvidence(
+      manager,
+      [
+        rawMessage("revision-4", { timestamp: Math.floor(NOW / 1000) + 4 }),
+        rawMessage("revision-5", { timestamp: Math.floor(NOW / 1000) + 5 }),
+        rawMessage("revision-6", { timestamp: Math.floor(NOW / 1000) + 6 }),
+      ],
+      { now: NOW + 4000 },
+    );
+    const second = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 5000, graphLifecycle: { enabled: true } },
+    );
+
+    expect(second.graphLifecycle?.status).toBe("applied");
+    expect(manager.summaries.size).toBe(1);
+    const revisedSummary = [...manager.summaries.values()][0];
+    expect(revisedSummary?.sourceRecordIds).toEqual([
+      "revision-4",
+      "revision-5",
+      "revision-6",
+    ]);
+    const graph = await snapshot(manager);
+    const summaryNode = graph.nodes.find(
+      (node) => node.id === revisedSummary?.summaryId,
+    );
+    expect(summaryNode?.metadata?.publicationRevision).toBe(
+      revisedSummary?.dimensions?.__openloomiMemoryPublicationRevision,
+    );
+  });
+
+  it("converges when replacement publication fails after graph persistence", async () => {
+    const manager = new GraphLifecycleTestManager();
+    await storeEvidence(manager, [rawMessage("replacement-1")], { now: NOW });
+    await storeEvidence(manager, [rawMessage("replacement-2")], {
+      now: NOW + 1000,
+    });
+    await storeEvidence(manager, [rawMessage("replacement-3")], {
+      now: NOW + 2000,
+    });
+    await runMemoryForgettingCycle(manager as never, OWNER.userId, {
+      now: NOW + 3000,
+      graphLifecycle: { enabled: true },
+    });
+    const original = [...manager.summaries.values()][0];
+
+    await storeEvidence(
+      manager,
+      [
+        rawMessage("replacement-4", {
+          timestamp: Math.floor(NOW / 1000) + 4,
+        }),
+        rawMessage("replacement-5", {
+          timestamp: Math.floor(NOW / 1000) + 5,
+        }),
+        rawMessage("replacement-6", {
+          timestamp: Math.floor(NOW / 1000) + 6,
+        }),
+      ],
+      { now: NOW + 4000 },
+    );
+    manager.failSummaryWriteNumbers.add(manager.summaryWriteCount + 1);
+    const failed = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 5000, graphLifecycle: { enabled: true } },
+    );
+    expect(failed.graphLifecycle?.status).toBe("partial-failure");
+    expect([...manager.summaries.values()][0]).toEqual(original);
+
+    const retried = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 6000, graphLifecycle: { enabled: true } },
+    );
+    expect(retried.graphLifecycle?.status).toBe("applied");
+    expect([...manager.summaries.values()][0]?.sourceRecordIds).toEqual([
+      "replacement-4",
+      "replacement-5",
+      "replacement-6",
+    ]);
   });
 
   it("keeps sources visible when summary persistence fails", async () => {
@@ -349,12 +506,104 @@ describe("memory graph lifecycle forgetting runtime", () => {
 
     expect(result.graphLifecycle?.status).toBe("partial-failure");
     expect(manager.summaries.size).toBe(1);
+    const pendingRecall = await queryMemoryWithFallback(manager as never, {
+      userId: OWNER.userId,
+      limit: 10,
+      minRawResultsWithoutFallback: 10,
+    });
+    expect(pendingRecall.items.map((item) => item.sourceType)).toEqual([
+      "raw",
+      "raw",
+      "raw",
+    ]);
     expect(
       manager.messages.get("representative-fail-1")?.deprecatedAt,
     ).toBeUndefined();
     expect(
       (await snapshot(manager)).clusters[0].representativeNodeId,
     ).toBeUndefined();
+
+    const retried = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 4000, graphLifecycle: { enabled: true } },
+    );
+    expect(retried.graphLifecycle?.status).toBe("applied");
+    const publishedRecall = await queryMemoryWithFallback(manager as never, {
+      userId: OWNER.userId,
+      limit: 10,
+      minRawResultsWithoutFallback: 10,
+    });
+    expect(publishedRecall.items).toEqual([
+      expect.objectContaining({
+        sourceType: "summary",
+        summary: expect.objectContaining({ summaryId: expect.any(String) }),
+      }),
+    ]);
+  });
+
+  it("retries a final summary publication failure before deprecating sources", async () => {
+    const manager = new GraphLifecycleTestManager();
+    await storeEvidence(manager, [rawMessage("publication-fail-1")]);
+    await storeEvidence(manager, [rawMessage("publication-fail-2")], {
+      now: NOW + 1000,
+    });
+    await storeEvidence(manager, [rawMessage("publication-fail-3")], {
+      now: NOW + 2000,
+    });
+    // The staged write succeeds; the publish write after graph persistence fails.
+    manager.failSummaryWriteNumbers.add(2);
+
+    const failed = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 3000, graphLifecycle: { enabled: true } },
+    );
+
+    expect(failed.graphLifecycle?.status).toBe("partial-failure");
+    const pendingSummary = [...manager.summaries.values()][0];
+    expect(pendingSummary?.dimensions).toEqual(
+      expect.objectContaining({ __openloomiMemoryPublication: "pending" }),
+    );
+    expect(
+      manager.messages.get("publication-fail-1")?.deprecatedAt,
+    ).toBeUndefined();
+    const pendingRecall = await queryMemoryWithFallback(manager as never, {
+      userId: OWNER.userId,
+      limit: 10,
+      minRawResultsWithoutFallback: 10,
+    });
+    expect(pendingRecall.items.map((item) => item.sourceType)).toEqual([
+      "raw",
+      "raw",
+      "raw",
+    ]);
+
+    const retried = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 4000, graphLifecycle: { enabled: true } },
+    );
+
+    expect(retried.graphLifecycle?.status).toBe("applied");
+    expect(manager.summaries.size).toBe(1);
+    expect([...manager.summaries.values()][0]?.dimensions).not.toEqual(
+      expect.objectContaining({ __openloomiMemoryPublication: "pending" }),
+    );
+    expect(manager.messages.get("publication-fail-1")?.deprecatedAt).toBe(
+      NOW + 4000,
+    );
+    const publishedRecall = await queryMemoryWithFallback(manager as never, {
+      userId: OWNER.userId,
+      limit: 10,
+      minRawResultsWithoutFallback: 10,
+    });
+    expect(publishedRecall.items).toEqual([
+      expect.objectContaining({
+        sourceType: "summary",
+        summary: expect.objectContaining({ summaryId: expect.any(String) }),
+      }),
+    ]);
   });
 
   it("retries a partial deprecation failure without duplicating the summary", async () => {
@@ -389,6 +638,144 @@ describe("memory graph lifecycle forgetting runtime", () => {
     );
     expect(replay.graphLifecycle?.status).toBe("no-op");
     expect(manager.messages.get("retry-1")?.deprecatedAt).toBe(NOW + 4000);
+  });
+
+  it("reconciles graph visibility after it fails following raw deprecation", async () => {
+    const manager = new GraphLifecycleTestManager();
+    await storeEvidence(manager, [rawMessage("visibility-retry-1")]);
+    await storeEvidence(manager, [rawMessage("visibility-retry-2")], {
+      now: NOW + 1000,
+    });
+    await storeEvidence(manager, [rawMessage("visibility-retry-3")], {
+      now: NOW + 2000,
+    });
+    // Lifecycle transition and representative persistence consume the first
+    // two writes; fail only the subsequent graph visibility update.
+    manager.failLedgerWriteNumbers.add(manager.ledgerWriteCount + 3);
+
+    const failed = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 3000, graphLifecycle: { enabled: true } },
+    );
+
+    expect(failed.graphLifecycle?.status).toBe("partial-failure");
+    expect(manager.messages.get("visibility-retry-1")?.deprecatedAt).toBe(
+      NOW + 3000,
+    );
+    expect(
+      (await snapshot(manager)).nodes.find(
+        (node) => node.id === "visibility-retry-1",
+      )?.visibility,
+    ).toBe("default");
+
+    const publishedSummary = [...manager.summaries.values()][0];
+    expect(publishedSummary?.dimensions).not.toEqual(
+      expect.objectContaining({ __openloomiMemoryPublication: "pending" }),
+    );
+
+    // A retry must not downgrade the published summary while it is staging.
+    // Fail the publish call after that stage to model an interrupted retry.
+    manager.failSummaryWriteNumbers.add(manager.summaryWriteCount + 2);
+    const interruptedRetry = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 4000, graphLifecycle: { enabled: true } },
+    );
+    expect(interruptedRetry.graphLifecycle?.status).toBe("partial-failure");
+    expect([...manager.summaries.values()][0]).toEqual(publishedSummary);
+    const recallDuringRetry = await queryMemoryWithFallback(manager as never, {
+      userId: OWNER.userId,
+      limit: 10,
+      minRawResultsWithoutFallback: 10,
+    });
+    expect(recallDuringRetry.items).toEqual([
+      expect.objectContaining({ sourceType: "summary" }),
+    ]);
+
+    const retried = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 5000, graphLifecycle: { enabled: true } },
+    );
+
+    expect(retried.graphLifecycle?.status).toBe("applied");
+    expect(manager.summaries.size).toBe(1);
+    expect(
+      (await snapshot(manager)).nodes
+        .filter((node) => node.id.startsWith("visibility-retry-"))
+        .every((node) => node.visibility === "audit-only"),
+    ).toBe(true);
+  });
+
+  it("does not publish a stale summary when graph provenance differs", async () => {
+    const manager = new GraphLifecycleTestManager();
+    await storeEvidence(manager, [rawMessage("provenance-retry-1")]);
+    await storeEvidence(manager, [rawMessage("provenance-retry-2")], {
+      now: NOW + 1000,
+    });
+    await storeEvidence(manager, [rawMessage("provenance-retry-3")], {
+      now: NOW + 2000,
+    });
+    manager.failLedgerWriteNumbers.add(manager.ledgerWriteCount + 3);
+
+    const failed = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 3000, graphLifecycle: { enabled: true } },
+    );
+    expect(failed.graphLifecycle?.status).toBe("partial-failure");
+    const publishedSummary = [...manager.summaries.values()][0];
+    const ledgerId = memoryGraphLedgerMessageId(OWNER);
+    const ledger = manager.messages.get(ledgerId);
+    const payload = ledger?.metadata?.memoryGraphLedger as
+      | {
+          snapshot?: {
+            nodes?: Array<{
+              id: string;
+              metadata?: Record<string, unknown>;
+            }>;
+          };
+        }
+      | undefined;
+    if (!ledger || !payload?.snapshot?.nodes || !publishedSummary) {
+      throw new Error("expected published graph summary");
+    }
+    payload.snapshot.nodes = payload.snapshot.nodes.map((node) =>
+      node.id === publishedSummary.summaryId
+        ? {
+            ...node,
+            metadata: {
+              ...(node.metadata ?? {}),
+              publicationRevision: "stale-revision",
+            },
+          }
+        : node,
+    );
+    manager.messages.set(ledgerId, {
+      ...ledger,
+      metadata: { ...ledger.metadata, memoryGraphLedger: payload },
+    });
+
+    const retried = await runMemoryForgettingCycle(
+      manager as never,
+      OWNER.userId,
+      { now: NOW + 4000, graphLifecycle: { enabled: true } },
+    );
+
+    expect(retried.graphLifecycle?.status).toBe("partial-failure");
+    expect(retried.graphLifecycle?.reasonCodes).toContain(
+      "memory_graph_representative_provenance_mismatch",
+    );
+    expect([...manager.summaries.values()][0]).toEqual(publishedSummary);
+    const recall = await queryMemoryWithFallback(manager as never, {
+      userId: OWNER.userId,
+      limit: 10,
+      minRawResultsWithoutFallback: 10,
+    });
+    expect(recall.items).toEqual([
+      expect.objectContaining({ sourceType: "summary" }),
+    ]);
   });
 
   it("keeps summaries and raw visibility when the adapter cannot deprecate", async () => {
