@@ -200,9 +200,7 @@ describe("widget source sanity", () => {
   });
 
   it("widget boots via get_pet_context_actions", () => {
-    expect(widgetHtml).toMatch(
-      /invoke\(\s*["']get_pet_context_actions["']/,
-    );
+    expect(widgetHtml).toMatch(/invoke\(\s*["']get_pet_context_actions["']/);
   });
 
   it("widget listens for pet:config-changed", () => {
@@ -509,9 +507,7 @@ describe("pet menu interaction (#369)", () => {
     expect(handler).toMatch(/emit\(\s*["']pet:open-settings["']/);
     expect(handler).toMatch(/emit\(\s*["']pet:quit["']/);
     expect(handler).toMatch(/invoke\(\s*["']set_active_theme["']/);
-    expect(handler).toMatch(
-      /invoke\(\s*["']dispatch_pet_context_action["']/,
-    );
+    expect(handler).toMatch(/invoke\(\s*["']dispatch_pet_context_action["']/);
     expect(handler).toMatch(/actionId:\s*actionId/);
     expect(handler).toMatch(
       /theme-\$\{|op\.slice\(\s*["']theme-["']\.length\s*\)/,
