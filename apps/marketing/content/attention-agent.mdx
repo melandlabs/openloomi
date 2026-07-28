@@ -337,14 +337,14 @@ Yes. Loomi ships with two built-in themes (`fox` and `capybara`) and a fully fil
 
 ### Can the right-click menu start agentic tasks?
 
-Yes. Loomi's right-click menu includes a fixed **Ask Loomi...** action that opens chat and starts an agentic task prompt. The Pet menu is intentionally a shortcut into the existing Loomi agent runtime, not a user-defined menu plugin system.
+Yes. Loomi's right-click menu includes a fixed **Ask Loomi...** action that opens chat and pre-fills a task prompt draft. The Pet menu is intentionally a shortcut into the existing Loomi agent runtime, not a user-defined menu plugin system.
 
 The flow is:
 
 1. Right-click Loomi and choose **Ask Loomi...**.
-2. OpenLoomi opens the chat surface and sends a short task-start prompt.
-3. The agent asks what you want help with, such as cleaning disk space, recording a meeting, organizing files, or connecting more tools.
-4. Once you answer, the normal Loomi agent runtime decides which available tools, skills, connectors, or local helpers to use.
+2. OpenLoomi opens the chat surface and pre-fills a short task-start draft.
+3. You review, edit, and send the prompt with the concrete task you want help with, such as cleaning disk space, recording a meeting, organizing files, or connecting more tools.
+4. Once you send it, the normal Loomi agent runtime decides which available tools, skills, connectors, or local helpers to use.
 5. Privacy-sensitive or destructive actions should still require confirmation inside the agent workflow.
 
 Meeting recording is only one possible task. If a local recorder, cleanup tool, or other helper exists, expose it to the agent through an appropriate tool surface such as a skill, connector, MCP server, CLI, OpenLoomi API route, or trusted loopback helper. The right-click menu itself does not execute shell commands, does not render arbitrary user-defined action lists, and does not directly call remote services.

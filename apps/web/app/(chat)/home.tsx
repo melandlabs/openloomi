@@ -96,6 +96,11 @@ export function Home() {
   const urlSendMessage = searchParams.get("send");
   const initialMessageToSend =
     urlSendMessage != null ? decodeURIComponent(urlSendMessage) : undefined;
+  /** Chat page reads input parameter from URL, pre-fills the composer, and waits for user confirmation */
+  const urlInitialInput = searchParams.get("input");
+  const initialInput =
+    urlInitialInput != null ? decodeURIComponent(urlInitialInput) : undefined;
+  const prefillToken = searchParams.get("prefillToken") ?? undefined;
 
   /** Inbox page (/inbox) and Focus page (/) are distinguished by pathname, no longer use panel parameter */
   const isInboxPage = pathname === "/inbox";
@@ -734,7 +739,11 @@ export function Home() {
                   isMobile && "pb-[80px]",
                 )}
               >
-                <AgentChatPanel initialMessageToSend={initialMessageToSend} />
+                <AgentChatPanel
+                  initialInput={initialInput}
+                  prefillToken={prefillToken}
+                  initialMessageToSend={initialMessageToSend}
+                />
               </div>
             </div>
           );
@@ -750,7 +759,11 @@ export function Home() {
                   isMobile && "pb-[80px]",
                 )}
               >
-                <AgentChatPanel initialMessageToSend={initialMessageToSend} />
+                <AgentChatPanel
+                  initialInput={initialInput}
+                  prefillToken={prefillToken}
+                  initialMessageToSend={initialMessageToSend}
+                />
               </div>
             </div>
           );
@@ -807,6 +820,8 @@ export function Home() {
                   <AgentChatPanel
                     key={effectiveChatId}
                     chatId={effectiveChatId}
+                    initialInput={initialInput}
+                    prefillToken={prefillToken}
                     initialMessageToSend={initialMessageToSend}
                   />
                 </div>

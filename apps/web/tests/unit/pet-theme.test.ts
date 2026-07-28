@@ -551,3 +551,100 @@ describe("pet menu interaction (#369)", () => {
     }
   });
 });
+
+describe("pet agent quick action bridge (#444)", () => {
+  const mainPath = path.resolve(__dirname, "../../src-tauri/src/main.rs");
+  const bridgePath = path.resolve(
+    __dirname,
+    "../../components/pet/pet-chat-bridge.tsx",
+  );
+  const homePath = path.resolve(__dirname, "../../app/(chat)/home.tsx");
+  const chatPanelPath = path.resolve(
+    __dirname,
+    "../../components/agent/chat-panel.tsx",
+  );
+
+  const mainRs = readFileSync(mainPath, "utf8");
+  const bridgeSource = readFileSync(bridgePath, "utf8");
+  const homeSource = readFileSync(homePath, "utf8");
+  const chatPanelSource = readFileSync(chatPanelPath, "utf8");
+
+  it("prefills the Ask Loomi draft instead of auto-sending it", () => {
+    const agentActionStart = mainRs.indexOf('listen("pet:agent-action"');
+    const guideStart = mainRs.indexOf('listen("pet:guide-connect-more"');
+
+    expect(
+      agentActionStart,
+      "pet:agent-action listener not found",
+    ).toBeGreaterThan(-1);
+    expect(
+      guideStart,
+      "pet:guide-connect-more listener not found",
+    ).toBeGreaterThan(agentActionStart);
+
+    const agentActionListener = mainRs.slice(agentActionStart, guideStart);
+    expect(agentActionListener).toMatch(/prefill_pet_prompt_in_chat\(/);
+    expect(agentActionListener).toMatch(/PET_AGENT_ACTION_DRAFT/);
+    expect(agentActionListener).not.toMatch(/send_pet_prompt_to_chat\(/);
+  });
+
+  it("keeps connector guidance on the existing send bridge", () => {
+    const guideStart = mainRs.indexOf('listen("pet:guide-connect-more"');
+    const briefStart = mainRs.indexOf('listen("pet:open-brief"', guideStart);
+
+    expect(
+      guideStart,
+      "pet:guide-connect-more listener not found",
+    ).toBeGreaterThan(-1);
+    expect(briefStart, "pet:open-brief listener not found").toBeGreaterThan(
+      guideStart,
+    );
+
+    const guideListener = mainRs.slice(guideStart, briefStart);
+    expect(guideListener).toMatch(/send_pet_prompt_to_chat\(/);
+    expect(guideListener).not.toMatch(/prefill_pet_prompt_in_chat\(/);
+  });
+
+  it("registers a prefill chat bridge alongside the send bridge", () => {
+    expect(bridgeSource).toMatch(
+      /PREFILL_GLOBAL_KEY\s*=\s*["']__petChatBridgePrefill["']/,
+    );
+    expect(bridgeSource).toMatch(/window\[PREFILL_GLOBAL_KEY\]\s*=/);
+    expect(bridgeSource).toMatch(/prefillToken=\$\{Date\.now\(\)\}/);
+    expect(bridgeSource).toMatch(/window\[SEND_GLOBAL_KEY\]\s*=/);
+  });
+
+  it("routes prefilled input through Home into AgentChatPanel", () => {
+    expect(homeSource).toMatch(
+      /const prefillToken = searchParams\.get\(["']prefillToken["']\)/,
+    );
+    expect(homeSource).toMatch(/initialInput=\{initialInput\}/);
+    expect(homeSource).toMatch(/prefillToken=\{prefillToken\}/);
+  });
+
+  it("applies prefillToken as editable input without invoking send", () => {
+    const prefillEffectStart = chatPanelSource.indexOf(
+      "lastAppliedPrefillTokenRef",
+    );
+    const inputRefStart = chatPanelSource.indexOf(
+      "// Keep inputRef in sync with input state",
+      prefillEffectStart,
+    );
+
+    expect(prefillEffectStart, "prefillToken effect not found").toBeGreaterThan(
+      -1,
+    );
+    expect(inputRefStart, "inputRef section not found").toBeGreaterThan(
+      prefillEffectStart,
+    );
+
+    const prefillEffect = chatPanelSource.slice(
+      prefillEffectStart,
+      inputRefStart,
+    );
+    expect(prefillEffect).toMatch(/setInput\(initialInput\)/);
+    expect(prefillEffect).toMatch(/localStorage\.setItem/);
+    expect(prefillEffect).toMatch(/next\.delete\(["']prefillToken["']\)/);
+    expect(prefillEffect).not.toMatch(/sendMessage/);
+  });
+});

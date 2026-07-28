@@ -34,12 +34,7 @@ mod workspace_artifacts;
 mod permissions;
 mod telegram;
 
-const PET_AGENT_ACTION_PROMPT: &str = "The user invoked Loomi's Pet quick action. \
-Start an agentic task from the chat surface. Ask one concise question about what \
-they want help with. After the user answers, use the available OpenLoomi tools, \
-skills, connectors, and agent runtime to help. Do not assume a meeting recorder; \
-meeting recording is only one example. Ask for confirmation before destructive \
-or privacy-sensitive actions.";
+const PET_AGENT_ACTION_DRAFT: &str = "Help me with this task:\n\n";
 
 fn escape_js_string(raw: &str) -> String {
     raw.replace('\\', "\\\\")
@@ -48,7 +43,12 @@ fn escape_js_string(raw: &str) -> String {
         .replace('\r', "\\r")
 }
 
-fn send_pet_prompt_to_chat(app: &tauri::AppHandle, event_name: &str, prompt: &str) {
+fn deliver_pet_prompt_to_chat(
+    app: &tauri::AppHandle,
+    event_name: &str,
+    bridge_global: &str,
+    prompt: &str,
+) {
     eprintln!("[{event_name}] listener fired");
     tray::show_main_window(app);
     let Some(window) = app.get_webview_window("main") else {
@@ -58,13 +58,22 @@ fn send_pet_prompt_to_chat(app: &tauri::AppHandle, event_name: &str, prompt: &st
 
     let escaped = escape_js_string(prompt);
     let js = format!(
-        "(function(){{console.log('[Tauri] pet prompt eval landed, polling for bridge...');var n=0;var t=setInterval(function(){{n++;if(typeof window.__petChatBridgeSend==='function'){{clearInterval(t);console.log('[Tauri] pet prompt bridge found after '+n+' ticks');window.__petChatBridgeSend(\"{}\");}}else if(n>25){{clearInterval(t);console.warn('[Tauri] pet prompt bridge not ready after 5s, prompt dropped');}}}},200);}})()",
+        "(function(){{console.log('[Tauri] pet prompt eval landed, polling for bridge...');var n=0;var bridge=\"{}\";var t=setInterval(function(){{n++;if(typeof window[bridge]==='function'){{clearInterval(t);console.log('[Tauri] pet prompt bridge found after '+n+' ticks');window[bridge](\"{}\");}}else if(n>25){{clearInterval(t);console.warn('[Tauri] pet prompt bridge not ready after 5s, prompt dropped');}}}},200);}})()",
+        bridge_global,
         escaped
     );
     match window.eval(&js) {
         Ok(_) => eprintln!("[{event_name}] eval ok"),
         Err(e) => eprintln!("[{event_name}] eval err: {e}"),
     }
+}
+
+fn prefill_pet_prompt_in_chat(app: &tauri::AppHandle, event_name: &str, prompt: &str) {
+    deliver_pet_prompt_to_chat(app, event_name, "__petChatBridgePrefill", prompt);
+}
+
+fn send_pet_prompt_to_chat(app: &tauri::AppHandle, event_name: &str, prompt: &str) {
+    deliver_pet_prompt_to_chat(app, event_name, "__petChatBridgeSend", prompt);
 }
 
 #[cfg(not(debug_assertions))]
@@ -898,32 +907,22 @@ fn main() {
                 }
             });
 
-            // Pet card "Add more connectors" CTA → show the main
-            // window and dispatch a new openloomi:send-chat-message
-            // DOM event with the chat prompt. The new PetChatBridge
-            // mounted in the (chat) layout listens for this event and
-            // forwards it to the chat composer via
-            // useChatContext().sendMessage(). Mirrors the
-            // `pet:open-decision` event-payload pattern (same escape
-            // helper for the JS literal so backslashes / quotes /
-            // newlines can't break the eval). English prompt by
-            // design — loomi-card.html is a static asset with no
-            // runtime i18n, and the agent can translate the response
-            // server-side.
             // Pet right-click "Ask Loomi..." quick action -> open
-            // chat and let the agent ask what task the user wants to
-            // run. This keeps the Pet menu as a shortcut into the
-            // existing agent runtime rather than a standalone action
-            // execution surface.
+            // chat with a task prompt draft. This keeps the Pet menu
+            // as a shortcut into the existing agent runtime rather
+            // than a standalone action execution surface.
             let pet_agent_action_app = app_handle.clone();
             app_handle.listen("pet:agent-action", move |_event| {
-                send_pet_prompt_to_chat(
+                prefill_pet_prompt_in_chat(
                     &pet_agent_action_app,
                     "pet:agent-action",
-                    PET_AGENT_ACTION_PROMPT,
+                    PET_AGENT_ACTION_DRAFT,
                 );
             });
 
+            // Pet card "Add more connectors" CTA -> show the main
+            // window and send a connector-focused prompt through the
+            // existing chat bridge.
             let guide_app = app_handle.clone();
             app_handle.listen("pet:guide-connect-more", move |_event| {
                 let prompt = "Please help me connect more available connectors via Composio \

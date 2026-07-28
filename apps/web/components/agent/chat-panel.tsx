@@ -87,38 +87,6 @@ export function AgentChatPanel({
     [setVaultOpen],
   );
 
-  // Apply initialInput (e.g., from skill page /?input=/skill-creator navigation) and clear URL params (runs only once)
-  const initialInputAppliedRef = useRef(false);
-  useEffect(() => {
-    if (
-      initialInput == null ||
-      initialInput === "" ||
-      initialInputAppliedRef.current
-    )
-      return;
-    initialInputAppliedRef.current = true;
-    setInput(initialInput);
-    const next = new URLSearchParams(searchParams.toString());
-    next.delete("input");
-    next.delete("preset");
-    const qs = next.toString();
-    const url = qs ? `${pathname}?${qs}` : (pathname ?? "/");
-    router.replace(url, { scroll: false });
-  }, [initialInput, pathname, router, searchParams]);
-
-  const lastAppliedPrefillTokenRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (!prefillToken || !initialInput?.trim()) return;
-    if (lastAppliedPrefillTokenRef.current === prefillToken) return;
-
-    lastAppliedPrefillTokenRef.current = prefillToken;
-    setInput(initialInput);
-
-    if (typeof window !== "undefined" && chatInputKeyRef.current) {
-      localStorage.setItem(chatInputKeyRef.current, initialInput);
-    }
-  }, [initialInput, prefillToken]);
-
   // Use externally provided chatId, or generate a new one if not provided
   const chatId = useMemo(() => {
     return externalChatId || contextActiveChatId || generateUUID();
@@ -130,8 +98,58 @@ export function AgentChatPanel({
 
   // Per-chat input persistence: track previous chat for saving input on switch
   const prevChatIdForInputRef = useRef<string | null>(null);
-  const chatInputKeyRef = useRef<string>("");
+  const chatInputKey = `openloomi:chat-input-${chatId}`;
+  const chatInputKeyRef = useRef<string>(chatInputKey);
+  chatInputKeyRef.current = chatInputKey;
   const inputRef = useRef(input);
+
+  // Apply initialInput (e.g., from skill page /?input=/skill-creator navigation) and clear URL params (runs only once)
+  const initialInputAppliedRef = useRef(false);
+  useEffect(() => {
+    if (
+      initialInput == null ||
+      initialInput === "" ||
+      prefillToken != null ||
+      initialInputAppliedRef.current
+    )
+      return;
+    initialInputAppliedRef.current = true;
+    setInput(initialInput);
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("input");
+    next.delete("preset");
+    next.delete("prefillToken");
+    const qs = next.toString();
+    const url = qs ? `${pathname}?${qs}` : (pathname ?? "/");
+    router.replace(url, { scroll: false });
+  }, [initialInput, pathname, prefillToken, router, searchParams]);
+
+  const lastAppliedPrefillTokenRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!prefillToken || !initialInput?.trim()) return;
+    if (lastAppliedPrefillTokenRef.current === prefillToken) return;
+
+    lastAppliedPrefillTokenRef.current = prefillToken;
+    setInput(initialInput);
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(chatInputKey, initialInput);
+    }
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("input");
+    next.delete("preset");
+    next.delete("prefillToken");
+    const qs = next.toString();
+    const url = qs ? `${pathname}?${qs}` : (pathname ?? "/");
+    router.replace(url, { scroll: false });
+  }, [
+    chatInputKey,
+    initialInput,
+    pathname,
+    prefillToken,
+    router,
+    searchParams,
+  ]);
 
   // Keep inputRef in sync with input state
   useEffect(() => {
@@ -143,18 +161,11 @@ export function AgentChatPanel({
     (targetChatId: string, initial?: string) => {
       if (typeof window === "undefined") return initial ?? "";
       const key = `openloomi:chat-input-${targetChatId}`;
-      chatInputKeyRef.current = key;
       const saved = localStorage.getItem(key);
       return saved ?? initial ?? "";
     },
     [],
   );
-
-  // Update chatInputKeyRef when chatId changes (for new chats that don't trigger switch)
-  useEffect(() => {
-    const key = `openloomi:chat-input-${chatId}`;
-    chatInputKeyRef.current = key;
-  }, [chatId]);
 
   // Handle chat switch: save previous chat's input, load new chat's input
   useEffect(() => {

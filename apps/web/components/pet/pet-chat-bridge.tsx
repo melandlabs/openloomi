@@ -4,9 +4,10 @@
  * Bridge between Tauri DOM events (dispatched by the Rust host on the
  * main webview) and the chat composer. The Rust
  * `pet:guide-connect-more` listener in main.rs evaluates JS in the
- * main webview that calls `window.__petChatBridgeSend(text)` directly.
- * We register that global function on mount and forward the text into
- * the chat composer via useChatContext().sendMessage(...).
+ * main webview that calls `window.__petChatBridgeSend(text)` or
+ * `window.__petChatBridgePrefill(text)` directly. We register those
+ * global functions on mount and forward the text into the chat
+ * composer.
  *
  * Why a global function (and not a CustomEvent + addEventListener):
  *   The previous CustomEvent approach was silent — the Rust eval
@@ -28,11 +29,13 @@ import { useRouter } from "next/navigation";
 import { useChatContext } from "@/components/chat-context";
 
 const TAG = "[PetChatBridge]";
-const GLOBAL_KEY = "__petChatBridgeSend";
+const SEND_GLOBAL_KEY = "__petChatBridgeSend";
+const PREFILL_GLOBAL_KEY = "__petChatBridgePrefill";
 
 declare global {
   interface Window {
-    [GLOBAL_KEY]?: (text: string) => void;
+    [SEND_GLOBAL_KEY]?: (text: string) => void;
+    [PREFILL_GLOBAL_KEY]?: (text: string) => void;
   }
 }
 
@@ -51,10 +54,23 @@ export function PetChatBridge() {
   routerRef.current = router;
 
   useEffect(() => {
-    console.log(`${TAG} mounted, registering window.${GLOBAL_KEY}`);
-    window[GLOBAL_KEY] = (text: string) => {
+    console.log(
+      `${TAG} mounted, registering window.${SEND_GLOBAL_KEY} and window.${PREFILL_GLOBAL_KEY}`,
+    );
+    window[PREFILL_GLOBAL_KEY] = (text: string) => {
       const trimmed = text?.trim();
-      console.log(`${TAG} called, text length:`, trimmed?.length);
+      console.log(`${TAG} prefill called, text length:`, trimmed?.length);
+      if (!trimmed) return;
+      console.log(`${TAG} switchChatId(null)`);
+      void switchRef.current(null);
+      console.log(`${TAG} navigating to /?page=chat with input prefill`);
+      routerRef.current.push(
+        `/?page=chat&input=${encodeURIComponent(trimmed)}&prefillToken=${Date.now()}`,
+      );
+    };
+    window[SEND_GLOBAL_KEY] = (text: string) => {
+      const trimmed = text?.trim();
+      console.log(`${TAG} send called, text length:`, trimmed?.length);
       if (!trimmed) return;
       // Always navigate to the chat page so the AgentChatPanel
       // composer is mounted. If the user is already on /?page=chat
@@ -85,8 +101,11 @@ export function PetChatBridge() {
       }, 1000);
     };
     return () => {
-      console.log(`${TAG} unmounting, removing window.${GLOBAL_KEY}`);
-      delete window[GLOBAL_KEY];
+      console.log(
+        `${TAG} unmounting, removing window.${SEND_GLOBAL_KEY} and window.${PREFILL_GLOBAL_KEY}`,
+      );
+      delete window[SEND_GLOBAL_KEY];
+      delete window[PREFILL_GLOBAL_KEY];
     };
   }, []);
   return null;
