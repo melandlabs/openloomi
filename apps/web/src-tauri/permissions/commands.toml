@@ -274,6 +274,11 @@ description = "Allow the get_pet_config command (read theme + overrides)"
 commands.allow = ["get_pet_config"]
 
 [[permission]]
+identifier = "allow-get-pet-context-actions"
+description = "Allow the get_pet_context_actions command (read sanitized Pet action menu metadata)"
+commands.allow = ["get_pet_context_actions"]
+
+[[permission]]
 identifier = "allow-set-active-theme"
 description = "Allow the set_active_theme command (right-click theme switcher)"
 commands.allow = ["set_active_theme"]

@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 use notify::{EventKind, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter};
 
+use super::actions;
 use super::theme;
 use super::PET_LABEL;
 
@@ -46,6 +47,7 @@ pub fn spawn_config_watcher(app: AppHandle) {
 
 fn watch_loop(app: &AppHandle) {
     let config_path = theme::config_path(app);
+    let actions_config_path = actions::actions_config_path(app);
     let config_dir = config_path
         .parent()
         .map(|p| p.to_path_buf())
@@ -93,8 +95,16 @@ fn watch_loop(app: &AppHandle) {
         }
     }
 
+    if let Err(e) = watcher.watch(&actions_config_path, RecursiveMode::NonRecursive) {
+        eprintln!(
+            "[loomi-pet/config-watcher] failed to watch actions config {}: {e}",
+            actions_config_path.display()
+        );
+    }
+
     let mut current_themes_dir: Option<PathBuf> = None;
-    let mut last_emit = Instant::now() - Duration::from_millis(DEBOUNCE_MS * 2);
+    let mut last_config_emit = Instant::now() - Duration::from_millis(DEBOUNCE_MS * 2);
+    let mut last_actions_emit = Instant::now() - Duration::from_millis(DEBOUNCE_MS * 2);
     let mut primed = false;
 
     loop {
@@ -127,7 +137,10 @@ fn watch_loop(app: &AppHandle) {
                 if !primed {
                     primed = true;
                     emit_config_changed(app, &cfg);
-                    last_emit = Instant::now();
+                    emit_actions_changed(app);
+                    let now = Instant::now();
+                    last_config_emit = now;
+                    last_actions_emit = now;
                 }
                 continue;
             }
@@ -154,11 +167,12 @@ fn watch_loop(app: &AppHandle) {
         // after the transition. Anything else is dropped here so the
         // debounced emit isn't drowned by unrelated directory churn.
         let touches_config_file = event_touches_file(&event, &config_path);
+        let touches_actions_config_file = event_touches_file(&event, &actions_config_path);
         let touches_theme_dir = current_themes_dir
             .as_ref()
             .map(|dir| event_touches_dir(&event, dir))
             .unwrap_or(false);
-        if !touches_config_file && !touches_theme_dir {
+        if !touches_config_file && !touches_actions_config_file && !touches_theme_dir {
             continue;
         }
         if matches!(event.kind, EventKind::Create(_)) && touches_config_file {
@@ -174,14 +188,32 @@ fn watch_loop(app: &AppHandle) {
                 );
             }
         }
-        // Debounce: skip events that arrive within 250 ms of the
-        // previous emit so a single editor save fires one event.
-        if last_emit.elapsed() < Duration::from_millis(DEBOUNCE_MS) {
+        if matches!(event.kind, EventKind::Create(_)) && touches_actions_config_file {
+            if let Err(e) = watcher.watch(&actions_config_path, RecursiveMode::NonRecursive) {
+                eprintln!(
+                    "[loomi-pet/config-watcher] failed to (re-)watch actions config {}: {e}",
+                    actions_config_path.display()
+                );
+            }
+        }
+        // Debounce independently per logical payload. A theme config
+        // save should not suppress a near-simultaneous action config
+        // save, or vice versa.
+        let should_emit_config = (touches_config_file || touches_theme_dir)
+            && last_config_emit.elapsed() >= Duration::from_millis(DEBOUNCE_MS);
+        let should_emit_actions = touches_actions_config_file
+            && last_actions_emit.elapsed() >= Duration::from_millis(DEBOUNCE_MS);
+        if !should_emit_config && !should_emit_actions {
             continue;
         }
-        last_emit = Instant::now();
-        if touches_config_file || touches_theme_dir {
+        let now = Instant::now();
+        if should_emit_config {
+            last_config_emit = now;
             emit_config_changed(app, &theme::read_config(app));
+        }
+        if should_emit_actions {
+            last_actions_emit = now;
+            emit_actions_changed(app);
         }
     }
 }
@@ -213,6 +245,19 @@ fn emit_config_changed(app: &AppHandle, cfg: &theme::PetConfig) {
         }
     };
     let _ = app.emit_to(PET_LABEL, "pet:config-changed", payload);
+}
+
+fn emit_actions_changed(app: &AppHandle) {
+    let cfg = actions::read_config(app);
+    let view = actions::build_view(&cfg);
+    let payload = match serde_json::to_value(&view) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[loomi-pet/config-watcher] failed to serialize PetContextActionsView: {e}");
+            return;
+        }
+    };
+    let _ = app.emit_to(PET_LABEL, "pet:actions-changed", payload);
 }
 
 // Real coverage for the parent-dir watch + create-transition path
