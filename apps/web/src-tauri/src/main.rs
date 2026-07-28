@@ -34,7 +34,8 @@ mod workspace_artifacts;
 mod permissions;
 mod telegram;
 
-const PET_AGENT_ACTION_DRAFT: &str = "Help me with this task:\n\n";
+const PET_AGENT_ACTION_DRAFT: &str = "Help me with this task:\n\n\
+Before taking privacy-sensitive or destructive actions, ask me to confirm.";
 
 fn escape_js_string(raw: &str) -> String {
     raw.replace('\\', "\\\\")

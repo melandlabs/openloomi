@@ -111,7 +111,9 @@ The install skill auto-chains install → launch → wait API → guest login. W
 
 ### 6. Right-click the Pet to open the context menu
 
-The pet's context menu exposes **Open Loomi / Settings / THEME (Fox ✓, Capybara) / Quit**. The theme switch is hot-reload — the file watcher picks up `activeTheme` in `pet-config.json` within ~250 ms, and the bridge never writes these files.
+The pet's context menu exposes **Open Loomi / Settings / Ask Loomi... / THEME (Fox ✓, Capybara) / Quit**. **Ask Loomi...** opens the main chat with an editable task draft; it does not execute plugin commands or user-defined menu actions directly. The theme switch is hot-reload — the file watcher picks up `activeTheme` in `pet-config.json` within ~250 ms, and the bridge never writes these files.
+
+To give that draft real external abilities, expose the ability to the agent runtime: install or build a skill, connect an MCP server, add a connector, or provide a trusted local API/CLI helper. The Codex plugin remains a thin bridge into OpenLoomi-owned runtime surfaces, so the Pet menu stays fixed while the agent decides which available capability to call after the user sends the draft.
 
 ### 7. Pick **Capybara** — the theme hot-reloads in place
 

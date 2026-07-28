@@ -349,6 +349,8 @@ The flow is:
 
 Meeting recording is only one possible task. If a local recorder, cleanup tool, or other helper exists, expose it to the agent through an appropriate tool surface such as a skill, connector, MCP server, CLI, OpenLoomi API route, or trusted loopback helper. The right-click menu itself does not execute shell commands, does not render arbitrary user-defined action lists, and does not directly call remote services.
 
+So the configuration model is: add capabilities to the agent runtime, not to the Pet menu. For example, a meeting recorder can be packaged as a skill, a local MCP server, a tiny authenticated loopback service, or an OpenLoomi API route. When you launch **Ask Loomi...**, the agent receives the user's task in chat and decides which available capability to call, subject to the same confirmation and permission rules as any other chat-driven action.
+
 ### What's the difference between the Attention Agent and Loop?
 
 - **The Attention Agent** is the **little pet on your desktop**, gently reminding you in your line of sight.

@@ -588,6 +588,21 @@ describe("pet agent quick action bridge (#444)", () => {
     expect(agentActionListener).not.toMatch(/send_pet_prompt_to_chat\(/);
   });
 
+  it("frames the default Ask Loomi draft as a confirmable agentic task", () => {
+    const draftStart = mainRs.indexOf("const PET_AGENT_ACTION_DRAFT");
+    const escapeHelperStart = mainRs.indexOf("fn escape_js_string", draftStart);
+
+    expect(draftStart, "PET_AGENT_ACTION_DRAFT not found").toBeGreaterThan(-1);
+    expect(escapeHelperStart, "escape helper not found").toBeGreaterThan(
+      draftStart,
+    );
+
+    const draftSource = mainRs.slice(draftStart, escapeHelperStart);
+    expect(draftSource).toMatch(/Help me with this task/);
+    expect(draftSource).toMatch(/privacy-sensitive or destructive actions/);
+    expect(draftSource).toMatch(/ask me to confirm/);
+  });
+
   it("keeps connector guidance on the existing send bridge", () => {
     const guideStart = mainRs.indexOf('listen("pet:guide-connect-more"');
     const briefStart = mainRs.indexOf('listen("pet:open-brief"', guideStart);
