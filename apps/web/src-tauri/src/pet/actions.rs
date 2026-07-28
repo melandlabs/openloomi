@@ -1,8 +1,7 @@
 // User-defined Pet menu actions are prompt templates, not executable
 // endpoints. The widget receives only sanitized menu metadata
-// (`id`, `label`, `enabled`). When a later phase wires execution, Rust
-// resolves the prompt by id and hands it to the normal Loomi agent
-// runtime through Chat.
+// (`id`, `label`, `enabled`). On click, Rust resolves the prompt by id
+// and hands it to the normal Loomi agent runtime through Chat.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -103,16 +102,20 @@ pub fn read_config(app: &AppHandle) -> PetActionsConfig {
 
 fn read_config_at(path: &Path) -> PetActionsConfig {
     match std::fs::read(path) {
-        Ok(bytes) => match serde_json::from_slice::<PetActionsConfig>(&bytes) {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                eprintln!(
-                    "[loomi-pet/actions] failed to parse {}: {e}; using defaults",
-                    path.display()
-                );
-                PetActionsConfig::default()
+        Ok(bytes) => {
+            let raw = bytes.as_slice();
+            let json = raw.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(raw);
+            match serde_json::from_slice::<PetActionsConfig>(json) {
+                Ok(cfg) => cfg,
+                Err(e) => {
+                    eprintln!(
+                        "[loomi-pet/actions] failed to parse {}: {e}; using defaults",
+                        path.display()
+                    );
+                    PetActionsConfig::default()
+                }
             }
-        },
+        }
         Err(_) => PetActionsConfig::default(),
     }
 }
@@ -249,8 +252,8 @@ mod tests {
 
     fn sample_action(prompt: &str) -> PetActionDefinition {
         PetActionDefinition {
-            id: "meeting-notes".into(),
-            label: "Record meeting".into(),
+            id: "daily-brief".into(),
+            label: "Prepare daily brief".into(),
             prompt: prompt.into(),
             enabled: None,
         }
@@ -270,7 +273,7 @@ mod tests {
             version: 1,
             enabled: true,
             actions: vec![
-                sample_action("Summarize the current meeting."),
+                sample_action("Prepare a concise daily brief."),
                 PetActionDefinition {
                     id: "bad action".into(),
                     label: "Bad".into(),
@@ -290,7 +293,7 @@ mod tests {
                     enabled: Some(false),
                 },
                 PetActionDefinition {
-                    id: "meeting-notes".into(),
+                    id: "daily-brief".into(),
                     label: "Duplicate".into(),
                     prompt: "Duplicate should be skipped".into(),
                     enabled: None,
@@ -302,8 +305,8 @@ mod tests {
         let view = build_view(&cfg);
         assert!(view.enabled);
         assert_eq!(view.actions.len(), 1);
-        assert_eq!(view.actions[0].id, "meeting-notes");
-        assert_eq!(view.actions[0].label, "Record meeting");
+        assert_eq!(view.actions[0].id, "daily-brief");
+        assert_eq!(view.actions[0].label, "Prepare daily brief");
         assert!(view.actions[0].enabled);
 
         let json = serde_json::to_value(&view).unwrap();
@@ -316,32 +319,32 @@ mod tests {
             version: 1,
             enabled: true,
             actions: vec![sample_action(
-                "  Help me record this meeting.\r\nAsk before recording.  ",
+                "  Prepare my daily brief.\r\nAsk before changing data.  ",
             )],
             updated_at: None,
         };
 
-        let resolved = resolve_action_prompt(&cfg, "meeting-notes").unwrap();
-        assert_eq!(resolved.action_id, "meeting-notes");
-        assert_eq!(resolved.label, "Record meeting");
+        let resolved = resolve_action_prompt(&cfg, "daily-brief").unwrap();
+        assert_eq!(resolved.action_id, "daily-brief");
+        assert_eq!(resolved.label, "Prepare daily brief");
         assert_eq!(
             resolved.prompt,
-            "Help me record this meeting.\nAsk before recording."
+            "Prepare my daily brief.\nAsk before changing data."
         );
     }
 
     #[test]
     fn build_agent_prompt_frames_action_for_runtime() {
         let action = PetContextActionPrompt {
-            action_id: "clean-disk".into(),
-            label: "Clean disk space".into(),
-            prompt: "Find safe cleanup candidates.".into(),
+            action_id: "workspace-summary".into(),
+            label: "Summarize workspace".into(),
+            prompt: "Identify goals, blockers, and next safe steps.".into(),
         };
 
         let prompt = build_agent_prompt(&action);
         assert!(prompt.contains("The user selected this Loomi Pet action"));
-        assert!(prompt.contains("Clean disk space"));
-        assert!(prompt.contains("Find safe cleanup candidates."));
+        assert!(prompt.contains("Summarize workspace"));
+        assert!(prompt.contains("Identify goals, blockers, and next safe steps."));
         assert!(prompt.contains("OpenLoomi agent runtime"));
         assert!(prompt.contains("Ask for confirmation"));
     }
@@ -376,6 +379,36 @@ mod tests {
         let cfg = read_config_at(&path);
         assert!(!cfg.enabled);
         assert!(cfg.actions.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_utf8_bom_config() {
+        let dir =
+            std::env::temp_dir().join(format!("loomi-pet-actions-bom-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("pet-actions.json");
+        let mut bytes = b"\xEF\xBB\xBF".to_vec();
+        bytes.extend_from_slice(
+            br#"{
+              "version": 1,
+              "enabled": true,
+              "actions": [
+                {
+                  "id": "daily-brief",
+                  "label": "Prepare daily brief",
+                  "prompt": "Prepare my daily brief."
+                }
+              ]
+            }"#,
+        );
+        std::fs::write(&path, bytes).unwrap();
+
+        let cfg = read_config_at(&path);
+        let view = build_view(&cfg);
+        assert_eq!(view.actions.len(), 1);
+        assert_eq!(view.actions[0].id, "daily-brief");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

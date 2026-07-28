@@ -122,7 +122,9 @@ The wizard auto-chains install → launch → wait API → guest login. When it 
 
 ### 6. Right-click the Pet to open the context menu
 
-The pet's context menu exposes **Open Loomi / Settings / THEME (Fox ✓, Capybara) / Quit**. The theme switch is hot-reload — the file watcher picks up `activeTheme` in `pet-config.json` within ~250 ms, and the bridge never writes these files.
+The pet's context menu exposes **Open Loomi / Settings / Ask Loomi... / Actions (if configured) / THEME (Fox ✓, Capybara) / Quit**. **Ask Loomi...** opens the main chat with an editable task draft. Configured prompt actions from `~/.openloomi/pet-actions.json` send a named task prompt into the same Loomi agent runtime. The theme switch is hot-reload — the file watcher picks up `activeTheme` in `pet-config.json` within ~250 ms, and the bridge never writes these files.
+
+Prompt actions do not execute shell commands or call endpoints directly. To give a shortcut real external ability, expose that ability to the agent runtime through a skill, MCP server, connector, OpenLoomi API route, or trusted local helper. See [Attention Agent](/docs/attention-agent#can-the-right-click-menu-start-agentic-tasks) for the local config schema.
 
 ![Step 6 — Right-click the Pet to open the context menu (Fox is currently active)](/img/openloomi/plugins/claude/06-pet-context-menu.png)
 

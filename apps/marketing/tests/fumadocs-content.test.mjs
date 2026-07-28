@@ -88,13 +88,11 @@ function hasTailSection(source, headings) {
     .replace(/```[\s\S]*?```/g, "");
 
   const headingSet = new Set(headings);
-  return stripped
-    .split(/\r?\n/)
-    .some((line) => {
-      const match = line.match(/^##\s+(.+?)\s*$/);
-      if (!match) return false;
-      return headingSet.has(match[1].replace(/[\[\]\(\)]/g, "").trim());
-    });
+  return stripped.split(/\r?\n/).some((line) => {
+    const match = line.match(/^##\s+(.+?)\s*$/);
+    if (!match) return false;
+    return headingSet.has(match[1].replace(/[\[\]\(\)]/g, "").trim());
+  });
 }
 
 function listMdxFiles(dir) {
@@ -153,8 +151,7 @@ function extractInternalDocsLinks(source) {
 
   while ((match = linkRegex.exec(stripped)) !== null) {
     const url = match[1];
-    const lineNumber =
-      stripped.substring(0, match.index).split(/\r?\n/).length;
+    const lineNumber = stripped.substring(0, match.index).split(/\r?\n/).length;
     links.push({ url, lineNumber });
   }
 
@@ -219,6 +216,27 @@ for (const filePath of collectAllMdxFiles(docsDir)) {
     );
   }
 }
+
+const attentionAgentSource = fs.readFileSync(
+  path.join(docsDir, "attention-agent.mdx"),
+  "utf8",
+);
+
+assert.match(
+  attentionAgentSource,
+  /~\/\.openloomi\/pet-actions\.json/,
+  "Attention Agent docs must describe the local prompt action config path",
+);
+assert.match(
+  attentionAgentSource,
+  /Configured prompt actions follow the same model/,
+  "Attention Agent docs must describe prompt actions as agent runtime shortcuts",
+);
+assert.doesNotMatch(
+  attentionAgentSource,
+  /does not render arbitrary user-defined action lists|Pet menu stays fixed/,
+  "Attention Agent docs must not claim prompt action menus are fixed or unsupported",
+);
 
 for (const fileName of fs
   .readdirSync(blogsDir)
