@@ -77,6 +77,55 @@ fn send_pet_prompt_to_chat(app: &tauri::AppHandle, event_name: &str, prompt: &st
     deliver_pet_prompt_to_chat(app, event_name, "__petChatBridgeSend", prompt);
 }
 
+fn parse_pet_context_action_id(payload: &str) -> Option<String> {
+    let value = serde_json::from_str::<serde_json::Value>(payload).ok()?;
+    let action_id = value.get("actionId")?.as_str()?.trim();
+    if action_id.is_empty() {
+        None
+    } else {
+        Some(action_id.to_string())
+    }
+}
+
+fn send_pet_context_action_to_chat(app: &tauri::AppHandle, action_id: &str) {
+    let cfg = pet::actions::read_config(app);
+    let action = match pet::actions::resolve_action_prompt(&cfg, action_id) {
+        Ok(action) => action,
+        Err(e) => {
+            eprintln!("[pet:context-action] ignored action '{action_id}': {e}");
+            return;
+        }
+    };
+    let prompt = pet::actions::build_agent_prompt(&action);
+    send_pet_prompt_to_chat(app, "pet:context-action", &prompt);
+}
+
+#[cfg(test)]
+mod pet_context_action_payload_tests {
+    use super::*;
+
+    #[test]
+    fn parses_action_id_payload() {
+        assert_eq!(
+            parse_pet_context_action_id(r#"{ "actionId": " clean-disk " }"#),
+            Some("clean-disk".into())
+        );
+    }
+
+    #[test]
+    fn rejects_missing_or_empty_action_id_payload() {
+        assert_eq!(
+            parse_pet_context_action_id(r#"{ "id": "clean-disk" }"#),
+            None
+        );
+        assert_eq!(
+            parse_pet_context_action_id(r#"{ "actionId": "   " }"#),
+            None
+        );
+        assert_eq!(parse_pet_context_action_id("not json"), None);
+    }
+}
+
 #[cfg(not(debug_assertions))]
 fn resolve_resource_file(
     app: &tauri::AppHandle,
@@ -920,6 +969,20 @@ fn main() {
                     "pet:agent-action",
                     PET_AGENT_ACTION_DRAFT,
                 );
+            });
+
+            // User-defined Pet context actions are prompt templates.
+            // The widget sends only an action id; the host re-reads
+            // `pet-actions.json`, resolves the prompt, frames it as an
+            // agent task, then submits it through the same chat bridge
+            // used by existing Pet-triggered agent flows.
+            let pet_context_action_app = app_handle.clone();
+            app_handle.listen("pet:context-action", move |event| {
+                let Some(action_id) = parse_pet_context_action_id(event.payload()) else {
+                    eprintln!("[pet:context-action] missing actionId payload");
+                    return;
+                };
+                send_pet_context_action_to_chat(&pet_context_action_app, &action_id);
             });
 
             // Pet card "Add more connectors" CTA -> show the main

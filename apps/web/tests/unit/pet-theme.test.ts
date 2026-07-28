@@ -592,18 +592,21 @@ describe("pet agent quick action bridge (#444)", () => {
 
   it("prefills the Ask Loomi draft instead of auto-sending it", () => {
     const agentActionStart = mainRs.indexOf('listen("pet:agent-action"');
-    const guideStart = mainRs.indexOf('listen("pet:guide-connect-more"');
+    const contextActionStart = mainRs.indexOf('listen("pet:context-action"');
 
     expect(
       agentActionStart,
       "pet:agent-action listener not found",
     ).toBeGreaterThan(-1);
     expect(
-      guideStart,
-      "pet:guide-connect-more listener not found",
+      contextActionStart,
+      "pet:context-action listener not found",
     ).toBeGreaterThan(agentActionStart);
 
-    const agentActionListener = mainRs.slice(agentActionStart, guideStart);
+    const agentActionListener = mainRs.slice(
+      agentActionStart,
+      contextActionStart,
+    );
     expect(agentActionListener).toMatch(/prefill_pet_prompt_in_chat\(/);
     expect(agentActionListener).toMatch(/PET_AGENT_ACTION_DRAFT/);
     expect(agentActionListener).not.toMatch(/send_pet_prompt_to_chat\(/);
@@ -622,6 +625,32 @@ describe("pet agent quick action bridge (#444)", () => {
     expect(draftSource).toMatch(/Help me with this task/);
     expect(draftSource).toMatch(/privacy-sensitive or destructive actions/);
     expect(draftSource).toMatch(/ask me to confirm/);
+  });
+
+  it("sends custom context actions through the agent chat bridge", () => {
+    const contextActionStart = mainRs.indexOf('listen("pet:context-action"');
+    const guideStart = mainRs.indexOf('listen("pet:guide-connect-more"');
+
+    expect(
+      contextActionStart,
+      "pet:context-action listener not found",
+    ).toBeGreaterThan(-1);
+    expect(
+      guideStart,
+      "pet:guide-connect-more listener not found",
+    ).toBeGreaterThan(contextActionStart);
+
+    const contextActionListener = mainRs.slice(contextActionStart, guideStart);
+    expect(contextActionListener).toMatch(/parse_pet_context_action_id\(/);
+    expect(contextActionListener).toMatch(/send_pet_context_action_to_chat\(/);
+    expect(contextActionListener).not.toMatch(/prefill_pet_prompt_in_chat\(/);
+
+    expect(mainRs).toMatch(/pet::actions::read_config\(/);
+    expect(mainRs).toMatch(/pet::actions::resolve_action_prompt\(/);
+    expect(mainRs).toMatch(/pet::actions::build_agent_prompt\(/);
+    expect(mainRs).toMatch(
+      /send_pet_prompt_to_chat\(app,\s*["']pet:context-action["']/,
+    );
   });
 
   it("keeps connector guidance on the existing send bridge", () => {

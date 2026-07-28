@@ -40,4 +40,16 @@ describe("pet actions host wiring (#444)", () => {
     expect(configWatcherRs).toMatch(/emit_actions_changed\(app\)/);
     expect(configWatcherRs).toMatch(/pet:actions-changed/);
   });
+
+  it("routes selected context actions through the agent prompt bridge", () => {
+    expect(mainRs).toMatch(/listen\(\s*["']pet:context-action["']/);
+    expect(mainRs).toMatch(/parse_pet_context_action_id\(event\.payload\(\)\)/);
+    expect(mainRs).toMatch(/pet::actions::read_config\(/);
+    expect(mainRs).toMatch(/pet::actions::resolve_action_prompt\(/);
+    expect(mainRs).toMatch(/pet::actions::build_agent_prompt\(/);
+    expect(mainRs).toMatch(
+      /send_pet_prompt_to_chat\(app,\s*["']pet:context-action["']/,
+    );
+    expect(mainRs).not.toMatch(/reqwest::/);
+  });
 });
