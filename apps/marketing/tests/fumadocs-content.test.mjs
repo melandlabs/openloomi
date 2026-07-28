@@ -229,8 +229,13 @@ assert.match(
 );
 assert.match(
   attentionAgentSource,
-  /Configured prompt actions follow the same model/,
+  /local prompt action shortcuts/,
   "Attention Agent docs must describe prompt actions as agent runtime shortcuts",
+);
+assert.match(
+  attentionAgentSource,
+  /Missing, empty, malformed, disabled, or unsupported configs render no prompt shortcuts/,
+  "Attention Agent docs must document the invalid-config fallback",
 );
 assert.doesNotMatch(
   attentionAgentSource,

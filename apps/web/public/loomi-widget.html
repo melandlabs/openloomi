@@ -462,9 +462,6 @@
     <div id="pet-menu" role="menu" aria-hidden="true">
       <button type="button" data-op="open" role="menuitem">Open Loomi</button>
       <button type="button" data-op="settings" role="menuitem">Settings</button>
-      <button type="button" data-op="agent-action" role="menuitem">
-        Ask Loomi...
-      </button>
       <!-- User-defined prompt action buttons injected by applyContextActions(view). -->
       <hr />
       <div class="menu-separator">Theme</div>
@@ -664,7 +661,7 @@
             heading.textContent = "Actions";
             section.appendChild(rule);
             section.appendChild(heading);
-            const anchor = menu.querySelector("[data-op='agent-action']");
+            const anchor = menu.querySelector("[data-op='settings']");
             if (anchor) {
               anchor.insertAdjacentElement("afterend", section);
             } else {
@@ -947,7 +944,6 @@
           }
           if (op === "open") t.event.emit("pet:open-dashboard");
           else if (op === "settings") t.event.emit("pet:open-settings");
-          else if (op === "agent-action") t.event.emit("pet:agent-action");
           else if (op === "quit") t.event.emit("pet:quit");
         });
 

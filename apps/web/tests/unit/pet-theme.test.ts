@@ -499,25 +499,24 @@ describe("pet menu interaction (#369)", () => {
     expect(handler).toMatch(/button\.dataset\.op/);
   });
 
-  it("menu wires every operation (open / settings / agent action / context action / theme-* / quit)", () => {
+  it("menu wires every operation (open / settings / context action / theme-* / quit)", () => {
     const handler = petMenuClickHandler();
     // Event-emit operations are dispatched on the host bridge; theme
     // switches go through `invoke("set_active_theme", ...)`.
     expect(handler).toMatch(/emit\(\s*["']pet:open-dashboard["']/);
     expect(handler).toMatch(/emit\(\s*["']pet:open-settings["']/);
-    expect(handler).toMatch(/emit\(\s*["']pet:agent-action["']/);
     expect(handler).toMatch(/emit\(\s*["']pet:context-action["']/);
     expect(handler).toMatch(/button\.dataset\.actionId/);
     expect(handler).toMatch(/emit\(\s*["']pet:quit["']/);
+    expect(handler).not.toMatch(/pet:agent-action/);
     expect(handler).toMatch(/invoke\(\s*["']set_active_theme["']/);
     expect(handler).toMatch(
       /theme-\$\{|op\.slice\(\s*["']theme-["']\.length\s*\)/,
     );
   });
 
-  it("keeps the fixed Ask Loomi action and renders dynamic prompt actions", () => {
-    expect(stripped).toMatch(/data-op="agent-action"/);
-    expect(stripped).toMatch(/Ask Loomi\.\.\./);
+  it("renders dynamic prompt actions without a fixed fallback", () => {
+    expect(stripped).not.toMatch(/data-op="agent-action"/);
     expect(stripped).toMatch(/pet-actions-section/);
     expect(stripped).toMatch(/function applyContextActions\(view\)/);
     expect(stripped).toMatch(/function rebuildContextActionButtons\(\)/);
@@ -527,6 +526,7 @@ describe("pet menu interaction (#369)", () => {
     expect(stripped).toMatch(/btn\.dataset\.actionId = action\.id/);
     expect(stripped).toMatch(/btn\.textContent = action\.label/);
     expect(stripped).not.toMatch(/dispatch_pet_context_action/);
+    expect(stripped).not.toMatch(/pet:agent-action/);
   });
 
   it("does not read prompt bodies into the widget action menu", () => {
@@ -573,7 +573,7 @@ describe("pet menu interaction (#369)", () => {
   });
 });
 
-describe("pet agent quick action bridge (#444)", () => {
+describe("pet context action bridge (#444)", () => {
   const mainPath = path.resolve(__dirname, "../../src-tauri/src/main.rs");
   const bridgePath = path.resolve(
     __dirname,
@@ -589,43 +589,6 @@ describe("pet agent quick action bridge (#444)", () => {
   const bridgeSource = readFileSync(bridgePath, "utf8");
   const homeSource = readFileSync(homePath, "utf8");
   const chatPanelSource = readFileSync(chatPanelPath, "utf8");
-
-  it("prefills the Ask Loomi draft instead of auto-sending it", () => {
-    const agentActionStart = mainRs.indexOf('listen("pet:agent-action"');
-    const contextActionStart = mainRs.indexOf('listen("pet:context-action"');
-
-    expect(
-      agentActionStart,
-      "pet:agent-action listener not found",
-    ).toBeGreaterThan(-1);
-    expect(
-      contextActionStart,
-      "pet:context-action listener not found",
-    ).toBeGreaterThan(agentActionStart);
-
-    const agentActionListener = mainRs.slice(
-      agentActionStart,
-      contextActionStart,
-    );
-    expect(agentActionListener).toMatch(/prefill_pet_prompt_in_chat\(/);
-    expect(agentActionListener).toMatch(/PET_AGENT_ACTION_DRAFT/);
-    expect(agentActionListener).not.toMatch(/send_pet_prompt_to_chat\(/);
-  });
-
-  it("frames the default Ask Loomi draft as a confirmable agentic task", () => {
-    const draftStart = mainRs.indexOf("const PET_AGENT_ACTION_DRAFT");
-    const escapeHelperStart = mainRs.indexOf("fn escape_js_string", draftStart);
-
-    expect(draftStart, "PET_AGENT_ACTION_DRAFT not found").toBeGreaterThan(-1);
-    expect(escapeHelperStart, "escape helper not found").toBeGreaterThan(
-      draftStart,
-    );
-
-    const draftSource = mainRs.slice(draftStart, escapeHelperStart);
-    expect(draftSource).toMatch(/Help me with this task/);
-    expect(draftSource).toMatch(/privacy-sensitive or destructive actions/);
-    expect(draftSource).toMatch(/ask me to confirm/);
-  });
 
   it("sends custom context actions through the agent chat bridge", () => {
     const contextActionStart = mainRs.indexOf('listen("pet:context-action"');
@@ -643,7 +606,6 @@ describe("pet agent quick action bridge (#444)", () => {
     const contextActionListener = mainRs.slice(contextActionStart, guideStart);
     expect(contextActionListener).toMatch(/parse_pet_context_action_id\(/);
     expect(contextActionListener).toMatch(/send_pet_context_action_to_chat\(/);
-    expect(contextActionListener).not.toMatch(/prefill_pet_prompt_in_chat\(/);
 
     expect(mainRs).toMatch(/pet::actions::read_config\(/);
     expect(mainRs).toMatch(/pet::actions::resolve_action_prompt\(/);
@@ -651,6 +613,8 @@ describe("pet agent quick action bridge (#444)", () => {
     expect(mainRs).toMatch(
       /send_pet_prompt_to_chat\(app,\s*["']pet:context-action["']/,
     );
+    expect(mainRs).not.toMatch(/listen\(\s*["']pet:agent-action["']/);
+    expect(mainRs).not.toMatch(/PET_AGENT_ACTION_DRAFT/);
   });
 
   it("keeps connector guidance on the existing send bridge", () => {
@@ -667,7 +631,6 @@ describe("pet agent quick action bridge (#444)", () => {
 
     const guideListener = mainRs.slice(guideStart, briefStart);
     expect(guideListener).toMatch(/send_pet_prompt_to_chat\(/);
-    expect(guideListener).not.toMatch(/prefill_pet_prompt_in_chat\(/);
   });
 
   it("registers a prefill chat bridge alongside the send bridge", () => {

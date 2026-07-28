@@ -105,6 +105,9 @@ fn read_config_at(path: &Path) -> PetActionsConfig {
         Ok(bytes) => {
             let raw = bytes.as_slice();
             let json = raw.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(raw);
+            if json.iter().all(|byte| byte.is_ascii_whitespace()) {
+                return PetActionsConfig::default();
+            }
             match serde_json::from_slice::<PetActionsConfig>(json) {
                 Ok(cfg) => cfg,
                 Err(e) => {
@@ -375,6 +378,23 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("pet-actions.json");
         std::fs::write(&path, b"{ nope").unwrap();
+
+        let cfg = read_config_at(&path);
+        assert!(!cfg.enabled);
+        assert!(cfg.actions.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_empty_config_as_default() {
+        let dir = std::env::temp_dir().join(format!(
+            "loomi-pet-actions-empty-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("pet-actions.json");
+        std::fs::write(&path, b"\xEF\xBB\xBF  \r\n\t").unwrap();
 
         let cfg = read_config_at(&path);
         assert!(!cfg.enabled);

@@ -34,9 +34,6 @@ mod workspace_artifacts;
 mod permissions;
 mod telegram;
 
-const PET_AGENT_ACTION_DRAFT: &str = "Help me with this task:\n\n\
-Before taking privacy-sensitive or destructive actions, ask me to confirm.";
-
 fn escape_js_string(raw: &str) -> String {
     raw.replace('\\', "\\\\")
         .replace('"', "\\\"")
@@ -60,17 +57,12 @@ fn deliver_pet_prompt_to_chat(
     let escaped = escape_js_string(prompt);
     let js = format!(
         "(function(){{console.log('[Tauri] pet prompt eval landed, polling for bridge...');var n=0;var bridge=\"{}\";var t=setInterval(function(){{n++;if(typeof window[bridge]==='function'){{clearInterval(t);console.log('[Tauri] pet prompt bridge found after '+n+' ticks');window[bridge](\"{}\");}}else if(n>25){{clearInterval(t);console.warn('[Tauri] pet prompt bridge not ready after 5s, prompt dropped');}}}},200);}})()",
-        bridge_global,
-        escaped
+        bridge_global, escaped
     );
     match window.eval(&js) {
         Ok(_) => eprintln!("[{event_name}] eval ok"),
         Err(e) => eprintln!("[{event_name}] eval err: {e}"),
     }
-}
-
-fn prefill_pet_prompt_in_chat(app: &tauri::AppHandle, event_name: &str, prompt: &str) {
-    deliver_pet_prompt_to_chat(app, event_name, "__petChatBridgePrefill", prompt);
 }
 
 fn send_pet_prompt_to_chat(app: &tauri::AppHandle, event_name: &str, prompt: &str) {
@@ -956,19 +948,6 @@ fn main() {
                         let _ = window.eval(&js);
                     }
                 }
-            });
-
-            // Pet right-click "Ask Loomi..." quick action -> open
-            // chat with a task prompt draft. This keeps the Pet menu
-            // as a shortcut into the existing agent runtime rather
-            // than a standalone action execution surface.
-            let pet_agent_action_app = app_handle.clone();
-            app_handle.listen("pet:agent-action", move |_event| {
-                prefill_pet_prompt_in_chat(
-                    &pet_agent_action_app,
-                    "pet:agent-action",
-                    PET_AGENT_ACTION_DRAFT,
-                );
             });
 
             // User-defined Pet context actions are prompt templates.

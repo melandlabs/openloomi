@@ -337,17 +337,18 @@ Yes. Loomi ships with two built-in themes (`fox` and `capybara`) and a fully fil
 
 ### Can the right-click menu start agentic tasks?
 
-Yes. Loomi's right-click menu includes a fixed **Ask Loomi...** action that opens chat and pre-fills an editable task draft. It can also show local prompt action shortcuts from `~/.openloomi/pet-actions.json`.
+Yes. Loomi's right-click menu can show local prompt action shortcuts from `~/.openloomi/pet-actions.json`. Each shortcut is a named task prompt that routes into the normal Loomi agent runtime.
 
 The flow is:
 
-1. Right-click Loomi and choose **Ask Loomi...**.
-2. OpenLoomi opens the chat surface and pre-fills a short task-start draft.
-3. You review, edit, and send the prompt with the concrete task you want help with, such as preparing a daily brief, summarizing the current workspace, organizing files, or connecting more tools.
-4. Once you send it, the normal Loomi agent runtime decides which available tools, skills, connectors, or local helpers to use.
-5. Privacy-sensitive or destructive actions should still require confirmation inside the agent workflow.
+1. Define one or more enabled prompt actions in `~/.openloomi/pet-actions.json`.
+2. Right-click Loomi and choose the named shortcut from the **Actions** section.
+3. The widget emits only the selected action id.
+4. Rust re-reads the local config, resolves the matching prompt, frames it as an agent task, and sends it into chat.
+5. The normal Loomi agent runtime decides which available tools, skills, connectors, or local helpers to use.
+6. Privacy-sensitive or destructive actions should still require confirmation inside the agent workflow.
 
-Configured prompt actions follow the same model, except the user chooses a named shortcut from the menu and OpenLoomi sends the matching task prompt directly into chat. The widget only receives `id` and `label`; the prompt body stays host-side until Rust resolves the selected `actionId`.
+The widget only receives `id` and `label`; the prompt body stays host-side until Rust resolves the selected `actionId`.
 
 Local prompt actions are configured in `~/.openloomi/pet-actions.json`:
 
@@ -372,7 +373,7 @@ Local prompt actions are configured in `~/.openloomi/pet-actions.json`:
 }
 ```
 
-The supported schema is intentionally small: top-level `version` and `enabled`, plus up to 8 valid `actions[]` entries with `id`, `label`, `prompt`, and optional `enabled`. Invalid ids, empty labels, empty prompts, duplicates, disabled actions, malformed JSON, unsupported versions, and target-only entries are ignored.
+The supported schema is intentionally small: top-level `version` and `enabled`, plus up to 8 valid `actions[]` entries with `id`, `label`, `prompt`, and optional `enabled`. Invalid ids, empty labels, empty prompts, duplicates, disabled actions, and target-only entries are ignored. Missing, empty, malformed, disabled, or unsupported configs render no prompt shortcuts; the Pet falls back to the base menu: **Open Loomi / Settings / Theme / Quit**.
 
 If a shortcut needs real external capability, expose it to the agent through an appropriate tool surface such as a skill, connector, MCP server, CLI, OpenLoomi API route, or trusted loopback helper. The right-click menu itself does not execute shell commands and does not directly call remote services. Fields like `target`, `url`, `method`, or command strings are not executable action definitions for this menu.
 

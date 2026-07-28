@@ -43,6 +43,7 @@ describe("pet actions host wiring (#444)", () => {
 
   it("routes selected context actions through the agent prompt bridge", () => {
     expect(mainRs).toMatch(/listen\(\s*["']pet:context-action["']/);
+    expect(mainRs).not.toMatch(/listen\(\s*["']pet:agent-action["']/);
     expect(mainRs).toMatch(/parse_pet_context_action_id\(event\.payload\(\)\)/);
     expect(mainRs).toMatch(/pet::actions::read_config\(/);
     expect(mainRs).toMatch(/pet::actions::resolve_action_prompt\(/);
