@@ -199,8 +199,16 @@ describe("widget source sanity", () => {
     expect(widgetHtml).toMatch(/invoke\(\s*["']get_pet_config["']/);
   });
 
+  it("widget boots prompt action metadata via get_pet_context_actions", () => {
+    expect(widgetHtml).toMatch(/invoke\(\s*["']get_pet_context_actions["']/);
+  });
+
   it("widget listens for pet:config-changed", () => {
     expect(widgetHtml).toMatch(/listen\(\s*["']pet:config-changed["']/);
+  });
+
+  it("widget listens for pet:actions-changed", () => {
+    expect(widgetHtml).toMatch(/listen\(\s*["']pet:actions-changed["']/);
   });
 
   it("widget listens for pending-count badge updates", () => {
@@ -491,13 +499,15 @@ describe("pet menu interaction (#369)", () => {
     expect(handler).toMatch(/button\.dataset\.op/);
   });
 
-  it("menu wires every operation (open / settings / agent action / theme-* / quit)", () => {
+  it("menu wires every operation (open / settings / agent action / context action / theme-* / quit)", () => {
     const handler = petMenuClickHandler();
     // Event-emit operations are dispatched on the host bridge; theme
     // switches go through `invoke("set_active_theme", ...)`.
     expect(handler).toMatch(/emit\(\s*["']pet:open-dashboard["']/);
     expect(handler).toMatch(/emit\(\s*["']pet:open-settings["']/);
     expect(handler).toMatch(/emit\(\s*["']pet:agent-action["']/);
+    expect(handler).toMatch(/emit\(\s*["']pet:context-action["']/);
+    expect(handler).toMatch(/button\.dataset\.actionId/);
     expect(handler).toMatch(/emit\(\s*["']pet:quit["']/);
     expect(handler).toMatch(/invoke\(\s*["']set_active_theme["']/);
     expect(handler).toMatch(
@@ -505,12 +515,23 @@ describe("pet menu interaction (#369)", () => {
     );
   });
 
-  it("renders one fixed agent action instead of dynamic custom actions", () => {
+  it("keeps the fixed Ask Loomi action and renders dynamic prompt actions", () => {
     expect(stripped).toMatch(/data-op="agent-action"/);
     expect(stripped).toMatch(/Ask Loomi\.\.\./);
-    expect(stripped).not.toMatch(/id="pet-actions-section"/);
-    expect(stripped).not.toMatch(/get_pet_context_actions/);
+    expect(stripped).toMatch(/pet-actions-section/);
+    expect(stripped).toMatch(/function applyContextActions\(view\)/);
+    expect(stripped).toMatch(/function rebuildContextActionButtons\(\)/);
+    expect(stripped).toMatch(/view\.enabled/);
+    expect(stripped).toMatch(/action\.enabled === false/);
+    expect(stripped).toMatch(/btn\.dataset\.op = "context-action"/);
+    expect(stripped).toMatch(/btn\.dataset\.actionId = action\.id/);
+    expect(stripped).toMatch(/btn\.textContent = action\.label/);
     expect(stripped).not.toMatch(/dispatch_pet_context_action/);
+  });
+
+  it("does not read prompt bodies into the widget action menu", () => {
+    expect(stripped).not.toMatch(/action\.prompt/);
+    expect(stripped).not.toMatch(/dataset\.prompt/);
   });
 
   it("theme buttons expose data-op so closest() can find them", () => {

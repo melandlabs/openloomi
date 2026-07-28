@@ -465,6 +465,7 @@
       <button type="button" data-op="agent-action" role="menuitem">
         Ask Loomi...
       </button>
+      <!-- User-defined prompt action buttons injected by applyContextActions(view). -->
       <hr />
       <div class="menu-separator">Theme</div>
       <button type="button" data-op="theme-fox" role="menuitem">
@@ -541,6 +542,9 @@
         // `~/.openloomi/pet-custom/` directory. Refreshed on every
         // config event. The widget renders one menu button per entry.
         let customThemes = [];
+        // Prompt-based context actions loaded from the host. The
+        // widget keeps only display metadata; prompts stay host-side.
+        let contextActions = [];
 
         const fox = document.getElementById("fox");
         const pendingBadge = document.getElementById("pending-badge");
@@ -621,6 +625,64 @@
           // Re-paint with the current state under the new theme so
           // the user sees the change immediately.
           if (currentState) setState(currentState);
+        }
+
+        function normalizeContextAction(action) {
+          if (!action || typeof action !== "object") return null;
+          const id = typeof action.id === "string" ? action.id.trim() : "";
+          const label =
+            typeof action.label === "string"
+              ? action.label.replace(/\s+/g, " ").trim()
+              : "";
+          if (!id || !label || action.enabled === false) return null;
+          return { id: id, label: label };
+        }
+
+        function applyContextActions(view) {
+          contextActions =
+            view && view.enabled && Array.isArray(view.actions)
+              ? view.actions.map(normalizeContextAction).filter(Boolean)
+              : [];
+          rebuildContextActionButtons();
+        }
+
+        function rebuildContextActionButtons() {
+          const menu = document.getElementById("pet-menu");
+          if (!menu) return;
+          let section = document.getElementById("pet-actions-section");
+          if (!contextActions.length) {
+            if (section) section.remove();
+            return;
+          }
+          if (!section) {
+            section = document.createElement("div");
+            section.id = "pet-actions-section";
+            section.setAttribute("role", "none");
+            const rule = document.createElement("hr");
+            const heading = document.createElement("div");
+            heading.className = "menu-separator";
+            heading.textContent = "Actions";
+            section.appendChild(rule);
+            section.appendChild(heading);
+            const anchor = menu.querySelector("[data-op='agent-action']");
+            if (anchor) {
+              anchor.insertAdjacentElement("afterend", section);
+            } else {
+              menu.insertBefore(section, menu.firstChild);
+            }
+          }
+          section
+            .querySelectorAll("button[data-op='context-action']")
+            .forEach((el) => el.remove());
+          for (const action of contextActions) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.setAttribute("role", "menuitem");
+            btn.dataset.op = "context-action";
+            btn.dataset.actionId = action.id;
+            btn.textContent = action.label;
+            section.appendChild(btn);
+          }
         }
 
         // Add menu buttons for any custom theme names not already
@@ -858,12 +920,9 @@
           closePetMenu();
           const t = window.__TAURI__;
           if (!t) return;
-          // Theme switcher + custom shortcuts go through core.invoke
-          // (commands) rather than event.emit — the host writes the
-          // new theme to disk and broadcasts the change back via
-          // `pet:config-changed`. Open / Settings / Quit remain event
-          // emits because they are transient UI gestures, not state
-          // changes.
+          // Theme switching is persisted by a host command. Prompt
+          // context actions only emit their id; the host resolves the
+          // prompt later so task contents never live in the widget DOM.
           if (op.startsWith("theme-")) {
             const themeName = op.slice("theme-".length);
             if (t.core && t.core.invoke) {
@@ -879,6 +938,13 @@
             return;
           }
           if (!t.event || !t.event.emit) return;
+          if (op === "context-action") {
+            const actionId = button.dataset ? button.dataset.actionId : "";
+            if (actionId) {
+              t.event.emit("pet:context-action", { actionId: actionId });
+            }
+            return;
+          }
           if (op === "open") t.event.emit("pet:open-dashboard");
           else if (op === "settings") t.event.emit("pet:open-settings");
           else if (op === "agent-action") t.event.emit("pet:agent-action");
@@ -1181,6 +1247,10 @@
             const p = (e && e.payload) || null;
             if (p) applyConfig(p);
           });
+          t.event.listen("pet:actions-changed", (e) => {
+            const p = (e && e.payload) || null;
+            if (p) applyContextActions(p);
+          });
         }
 
         // ---- Boot -------------------------------------------------------
@@ -1198,6 +1268,14 @@
             })
             .catch((err) => {
               console.warn("[loomi] get_pet_config failed", err);
+            });
+          t.core
+            .invoke("get_pet_context_actions")
+            .then((view) => {
+              if (view) applyContextActions(view);
+            })
+            .catch((err) => {
+              console.warn("[loomi] get_pet_context_actions failed", err);
             });
         }
       })();
