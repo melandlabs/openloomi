@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 
 use tauri::Emitter;
 use tauri::Manager;
+pub mod actions;
 mod aux_position;
 mod bubble;
 mod card;
