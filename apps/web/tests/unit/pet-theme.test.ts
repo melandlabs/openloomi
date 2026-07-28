@@ -637,6 +637,12 @@ describe("pet agent quick action bridge (#444)", () => {
     expect(homeSource).toMatch(/prefillToken=\{prefillToken\}/);
   });
 
+  it("decodes chat query drafts through the safe helper", () => {
+    expect(homeSource).toMatch(/decodeSearchParamText\(urlSendMessage\)/);
+    expect(homeSource).toMatch(/decodeSearchParamText\(urlInitialInput\)/);
+    expect(homeSource).not.toMatch(/decodeURIComponent\(urlInitialInput\)/);
+  });
+
   it("applies prefillToken as editable input without invoking send", () => {
     const prefillEffectStart = chatPanelSource.indexOf(
       "lastAppliedPrefillTokenRef",
