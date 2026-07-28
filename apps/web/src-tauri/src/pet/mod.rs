@@ -8,8 +8,6 @@ use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 
 use tauri::Emitter;
 use tauri::Manager;
-
-pub mod actions;
 mod aux_position;
 mod bubble;
 mod card;
@@ -23,7 +21,6 @@ pub mod theme;
 mod watcher;
 mod window;
 
-pub use actions::{PetActionDispatchResult, PetContextActionsView};
 pub use aux_position::{
     clear_card_manual_position, reposition_bubble_to_pet, reposition_card_to_pet,
     set_card_manual_position, spawn_position_poller,
@@ -187,26 +184,6 @@ pub fn get_pet_config(app: tauri::AppHandle) -> PetConfigView {
     let cfg = theme::read_config(&app);
     let custom = theme::list_custom_themes(&cfg);
     theme::build_view(cfg, custom)
-}
-
-/// Returns sanitized, user-defined context actions for the Pet menu.
-/// The widget only receives IDs + labels; loopback targets remain
-/// host-side and are re-read on dispatch.
-#[tauri::command]
-pub fn get_pet_context_actions(app: tauri::AppHandle) -> PetContextActionsView {
-    let cfg = actions::read_config(&app);
-    actions::build_view(&cfg)
-}
-
-/// Dispatches one configured Pet context action by ID. The target URL
-/// never comes from the widget; Rust reloads the config, validates the
-/// ID and target, then performs a bounded loopback POST.
-#[tauri::command(rename_all = "camelCase")]
-pub fn dispatch_pet_context_action(
-    app: tauri::AppHandle,
-    action_id: String,
-) -> Result<PetActionDispatchResult, String> {
-    actions::dispatch_action(&app, &action_id)
 }
 
 /// Updates only `activeTheme` (called by the right-click menu).

@@ -34,6 +34,39 @@ mod workspace_artifacts;
 mod permissions;
 mod telegram;
 
+const PET_AGENT_ACTION_PROMPT: &str = "The user invoked Loomi's Pet quick action. \
+Start an agentic task from the chat surface. Ask one concise question about what \
+they want help with. After the user answers, use the available OpenLoomi tools, \
+skills, connectors, and agent runtime to help. Do not assume a meeting recorder; \
+meeting recording is only one example. Ask for confirmation before destructive \
+or privacy-sensitive actions.";
+
+fn escape_js_string(raw: &str) -> String {
+    raw.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+}
+
+fn send_pet_prompt_to_chat(app: &tauri::AppHandle, event_name: &str, prompt: &str) {
+    eprintln!("[{event_name}] listener fired");
+    tray::show_main_window(app);
+    let Some(window) = app.get_webview_window("main") else {
+        eprintln!("[{event_name}] no main webview window");
+        return;
+    };
+
+    let escaped = escape_js_string(prompt);
+    let js = format!(
+        "(function(){{console.log('[Tauri] pet prompt eval landed, polling for bridge...');var n=0;var t=setInterval(function(){{n++;if(typeof window.__petChatBridgeSend==='function'){{clearInterval(t);console.log('[Tauri] pet prompt bridge found after '+n+' ticks');window.__petChatBridgeSend(\"{}\");}}else if(n>25){{clearInterval(t);console.warn('[Tauri] pet prompt bridge not ready after 5s, prompt dropped');}}}},200);}})()",
+        escaped
+    );
+    match window.eval(&js) {
+        Ok(_) => eprintln!("[{event_name}] eval ok"),
+        Err(e) => eprintln!("[{event_name}] eval err: {e}"),
+    }
+}
+
 #[cfg(not(debug_assertions))]
 fn resolve_resource_file(
     app: &tauri::AppHandle,
@@ -467,8 +500,6 @@ fn main() {
             // shortcuts. Registered unconditionally so the widget
             // always has a way to discover its theme on cold boot.
             pet::get_pet_config,
-            pet::get_pet_context_actions,
-            pet::dispatch_pet_context_action,
             pet::set_active_theme,
         ])
         .setup(|app| {
@@ -879,45 +910,27 @@ fn main() {
             // design — loomi-card.html is a static asset with no
             // runtime i18n, and the agent can translate the response
             // server-side.
+            // Pet right-click "Ask Loomi..." quick action -> open
+            // chat and let the agent ask what task the user wants to
+            // run. This keeps the Pet menu as a shortcut into the
+            // existing agent runtime rather than a standalone action
+            // execution surface.
+            let pet_agent_action_app = app_handle.clone();
+            app_handle.listen("pet:agent-action", move |_event| {
+                send_pet_prompt_to_chat(
+                    &pet_agent_action_app,
+                    "pet:agent-action",
+                    PET_AGENT_ACTION_PROMPT,
+                );
+            });
+
             let guide_app = app_handle.clone();
             app_handle.listen("pet:guide-connect-more", move |_event| {
-                eprintln!("[pet:guide-connect-more] listener fired");
-                tray::show_main_window(&guide_app);
-                if let Some(window) = guide_app.get_webview_window("main") {
-                    let prompt = "Please help me connect more available connectors via Composio \
+                let prompt = "Please help me connect more available connectors via Composio \
 (Gmail, Slack, Google Calendar, GitHub, Linear, Obsidian, etc.). \
 List the platforms I haven't connected yet, then walk me through \
 authorizing each one. Begin with Gmail if it's not connected.";
-                    // Escape the prompt for embedding in a JS string literal.
-                    // (No backslashes / quotes / newlines in this prompt in
-                    // practice, but the helper is copy-pasted from the
-                    // pet:open-decision block for consistency / defense in
-                    // depth.)
-                    let escaped = prompt
-                        .replace('\\', "\\\\")
-                        .replace('"', "\\\"")
-                        .replace('\n', "\\n");
-                    // Call window.__petChatBridgeSend(text) directly,
-                    // retrying every 200ms for up to 5s. We can't use a
-                    // one-shot CustomEvent because the React bridge
-                    // component might not be mounted yet when the eval
-                    // lands (events with no listener are silently lost).
-                    // A global function can be polled until the bridge
-                    // registers it. The leading console.log + title
-                    // change are diagnostic so we can confirm the eval
-                    // is actually executing on the main webview (vs
-                    // silently swallowed).
-                    let js = format!(
-                        "(function(){{console.log('[Tauri] eval landed, polling for bridge...');document.title='[pet] '+document.title;var n=0;var t=setInterval(function(){{n++;if(typeof window.__petChatBridgeSend==='function'){{clearInterval(t);console.log('[Tauri] bridge found after '+n+' ticks');window.__petChatBridgeSend(\"{}\");}}else if(n>25){{clearInterval(t);console.warn('[Tauri] bridge not ready after 5s, prompt dropped');}}}},200);}})()",
-                        escaped
-                    );
-                    match window.eval(&js) {
-                        Ok(_) => eprintln!("[pet:guide-connect-more] eval ok"),
-                        Err(e) => eprintln!("[pet:guide-connect-more] eval err: {e}"),
-                    }
-                } else {
-                    eprintln!("[pet:guide-connect-more] no main webview window");
-                }
+                send_pet_prompt_to_chat(&guide_app, "pet:guide-connect-more", prompt);
             });
 
             // B2b: "Open brief" / "Open wrap" inside the card. Brief and

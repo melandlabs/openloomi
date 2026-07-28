@@ -6,8 +6,7 @@
 // and emit `pet:config-changed` so the widget can swap sprites
 // without a restart.
 //
-// Watches:
-//   * `pet-actions.json` (non-recursive) - user-defined context actions.
+// Two watches:
 //   * `pet-config.json` (non-recursive) — the single config file.
 //   * `pet-custom/`      (recursive)    — every subdirectory the
 //                                         user might drop a custom
@@ -25,7 +24,6 @@ use std::time::{Duration, Instant};
 use notify::{EventKind, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter};
 
-use super::actions;
 use super::theme;
 use super::PET_LABEL;
 
@@ -48,7 +46,6 @@ pub fn spawn_config_watcher(app: AppHandle) {
 
 fn watch_loop(app: &AppHandle) {
     let config_path = theme::config_path(app);
-    let actions_path = actions::actions_config_path(app);
     let config_dir = config_path
         .parent()
         .map(|p| p.to_path_buf())
@@ -77,13 +74,6 @@ fn watch_loop(app: &AppHandle) {
         eprintln!(
             "[loomi-pet/config-watcher] failed to watch config {}: {e}",
             config_path.display()
-        );
-    }
-
-    if let Err(e) = watcher.watch(&actions_path, RecursiveMode::NonRecursive) {
-        eprintln!(
-            "[loomi-pet/config-watcher] failed to watch actions config {}: {e}",
-            actions_path.display()
         );
     }
 
@@ -137,7 +127,6 @@ fn watch_loop(app: &AppHandle) {
                 if !primed {
                     primed = true;
                     emit_config_changed(app, &cfg);
-                    emit_actions_changed(app);
                     last_emit = Instant::now();
                 }
                 continue;
@@ -165,12 +154,11 @@ fn watch_loop(app: &AppHandle) {
         // after the transition. Anything else is dropped here so the
         // debounced emit isn't drowned by unrelated directory churn.
         let touches_config_file = event_touches_file(&event, &config_path);
-        let touches_actions_file = event_touches_file(&event, &actions_path);
         let touches_theme_dir = current_themes_dir
             .as_ref()
             .map(|dir| event_touches_dir(&event, dir))
             .unwrap_or(false);
-        if !touches_config_file && !touches_actions_file && !touches_theme_dir {
+        if !touches_config_file && !touches_theme_dir {
             continue;
         }
         if matches!(event.kind, EventKind::Create(_)) && touches_config_file {
@@ -186,14 +174,6 @@ fn watch_loop(app: &AppHandle) {
                 );
             }
         }
-        if matches!(event.kind, EventKind::Create(_)) && touches_actions_file {
-            if let Err(e) = watcher.watch(&actions_path, RecursiveMode::NonRecursive) {
-                eprintln!(
-                    "[loomi-pet/config-watcher] failed to (re-)watch actions config {}: {e}",
-                    actions_path.display()
-                );
-            }
-        }
         // Debounce: skip events that arrive within 250 ms of the
         // previous emit so a single editor save fires one event.
         if last_emit.elapsed() < Duration::from_millis(DEBOUNCE_MS) {
@@ -202,9 +182,6 @@ fn watch_loop(app: &AppHandle) {
         last_emit = Instant::now();
         if touches_config_file || touches_theme_dir {
             emit_config_changed(app, &theme::read_config(app));
-        }
-        if touches_actions_file {
-            emit_actions_changed(app);
         }
     }
 }
@@ -236,19 +213,6 @@ fn emit_config_changed(app: &AppHandle, cfg: &theme::PetConfig) {
         }
     };
     let _ = app.emit_to(PET_LABEL, "pet:config-changed", payload);
-}
-
-fn emit_actions_changed(app: &AppHandle) {
-    let cfg = actions::read_config(app);
-    let view = actions::build_view(&cfg);
-    let payload = match serde_json::to_value(&view) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("[loomi-pet/config-watcher] failed to serialize PetContextActionsView: {e}");
-            return;
-        }
-    };
-    let _ = app.emit_to(PET_LABEL, "pet:actions-changed", payload);
 }
 
 // Real coverage for the parent-dir watch + create-transition path

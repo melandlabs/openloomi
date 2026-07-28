@@ -462,10 +462,9 @@
     <div id="pet-menu" role="menu" aria-hidden="true">
       <button type="button" data-op="open" role="menuitem">Open Loomi</button>
       <button type="button" data-op="settings" role="menuitem">Settings</button>
-      <div id="pet-actions-section" hidden>
-        <div class="menu-separator">Actions</div>
-        <div id="pet-actions"></div>
-      </div>
+      <button type="button" data-op="agent-action" role="menuitem">
+        Ask Loomi...
+      </button>
       <hr />
       <div class="menu-separator">Theme</div>
       <button type="button" data-op="theme-fox" role="menuitem">
@@ -542,9 +541,6 @@
         // `~/.openloomi/pet-custom/` directory. Refreshed on every
         // config event. The widget renders one menu button per entry.
         let customThemes = [];
-        // User-defined context actions. Rendered separately from the
-        // theme picker and hidden entirely when the action config is off.
-        let petContextActions = [];
 
         const fox = document.getElementById("fox");
         const pendingBadge = document.getElementById("pending-badge");
@@ -665,54 +661,6 @@
         }
 
         // Toggle the ✓ indicator on the active theme's button.
-        function rebuildActionButtons() {
-          const section = document.getElementById("pet-actions-section");
-          const container = document.getElementById("pet-actions");
-          if (!section || !container) return;
-          container.replaceChildren();
-          if (!petContextActions.length) {
-            section.hidden = true;
-            return;
-          }
-          section.hidden = false;
-          for (const action of petContextActions) {
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.setAttribute("role", "menuitem");
-            btn.dataset.op = "action";
-            btn.dataset.actionId = action.id;
-            btn.textContent = action.label;
-            container.appendChild(btn);
-          }
-        }
-
-        function applyActions(view) {
-          if (
-            !view ||
-            typeof view !== "object" ||
-            view.enabled !== true ||
-            !Array.isArray(view.actions)
-          ) {
-            petContextActions = [];
-            rebuildActionButtons();
-            return;
-          }
-          petContextActions = view.actions
-            .map((action) => {
-              if (!action || typeof action !== "object") return null;
-              if (typeof action.id !== "string" || !action.id) return null;
-              if (typeof action.label !== "string" || !action.label) {
-                return null;
-              }
-              return {
-                id: action.id,
-                label: action.label,
-              };
-            })
-            .filter(Boolean);
-          rebuildActionButtons();
-        }
-
         function updateThemeTicks() {
           document.querySelectorAll("[data-theme-tick]").forEach((el) => {
             el.classList.toggle(
@@ -930,33 +878,10 @@
             }
             return;
           }
-          if (op === "action") {
-            const actionId =
-              button && button.dataset ? button.dataset.actionId : null;
-            if (!actionId) return;
-            if (t.core && t.core.invoke) {
-              t.core
-                .invoke("dispatch_pet_context_action", { actionId: actionId })
-                .then((result) => {
-                  if (result && result.ok === false) {
-                    console.warn(
-                      "[loomi] dispatch_pet_context_action returned non-success",
-                      result,
-                    );
-                  }
-                })
-                .catch((err) => {
-                  console.warn(
-                    "[loomi] dispatch_pet_context_action failed",
-                    err,
-                  );
-                });
-            }
-            return;
-          }
           if (!t.event || !t.event.emit) return;
           if (op === "open") t.event.emit("pet:open-dashboard");
           else if (op === "settings") t.event.emit("pet:open-settings");
+          else if (op === "agent-action") t.event.emit("pet:agent-action");
           else if (op === "quit") t.event.emit("pet:quit");
         });
 
@@ -1256,10 +1181,6 @@
             const p = (e && e.payload) || null;
             if (p) applyConfig(p);
           });
-          t.event.listen("pet:actions-changed", (e) => {
-            const p = (e && e.payload) || null;
-            applyActions(p);
-          });
         }
 
         // ---- Boot -------------------------------------------------------
@@ -1277,14 +1198,6 @@
             })
             .catch((err) => {
               console.warn("[loomi] get_pet_config failed", err);
-            });
-          t.core
-            .invoke("get_pet_context_actions")
-            .then((view) => {
-              applyActions(view);
-            })
-            .catch((err) => {
-              console.warn("[loomi] get_pet_context_actions failed", err);
             });
         }
       })();
