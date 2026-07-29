@@ -225,7 +225,15 @@ fn watch_loop(app: &AppHandle, setup_emitted: std::sync::Arc<std::sync::Mutex<bo
             .filter_map(|d| d.completed_at.clone().or(d.created_at.clone()))
             .max();
         let needs_user = snap.pending.iter().any(|d| d.needs_user.unwrap_or(false));
-        let top_pending_id = snap.pending.first().and_then(|d| d.id.clone());
+        // SP-1 — project `pending` through `rank_pending` once so the
+        // bubble/card surfaces the most-urgent card, not the FIFO
+        // first. The same ranked slice backs the top-id snapshot, the
+        // `loop:decision` emit, and the top-5 pending list. We clone
+        // to a `Vec<&DecItem>` (cheap — pointer array) because the
+        // rest of the watch loop needs to keep using `snap` for the
+        // terminal-transition diff and other reads.
+        let ranked = rank_pending(&snap.pending);
+        let top_pending_id = ranked.first().and_then(|d| d.id.clone());
         // Snapshot the current pending ids so the transition-diff below
         // can compare against the previous poll. We clone rather than
         // borrow because `snap.pending` is moved through several helpers
@@ -310,7 +318,7 @@ fn watch_loop(app: &AppHandle, setup_emitted: std::sync::Arc<std::sync::Mutex<bo
         // (so the user immediately sees the decision + connector dots)
         // and otherwise leave its visibility alone (the × / click
         // handlers drive subsequent toggles).
-        if let Some(top) = snap.pending.first() {
+        if let Some(top) = ranked.first() {
             let decision_payload = build_decision_payload(top);
             let _ = app.emit_to(PET_BUBBLE_LABEL, "loop:decision", decision_payload.clone());
             let _ = app.emit_to(PET_CARD_LABEL, "loop:decision", decision_payload);
@@ -400,8 +408,11 @@ fn watch_loop(app: &AppHandle, setup_emitted: std::sync::Arc<std::sync::Mutex<bo
         // (Form 1) and any layout that wants to render a queue can
         // subscribe. Top 5 entries is plenty for a 360×420 window —
         // the user can dismiss / open to see more in the dashboard.
+        // SP-1 — slice the *ranked* projection, not the raw FIFO
+        // `snap.pending`, so the top-5 list mirrors the bubble's
+        // #1 (P0 surfaces first).
         let pending_list = serde_json::json!({
-            "items": snap.pending.iter().take(5).map(|d| {
+            "items": ranked.iter().take(5).map(|d| {
                 serde_json::json!({
                     "id": d.id,
                     "type": d.r#type,
@@ -431,6 +442,63 @@ fn should_emit_update(
     data_changed || review_changed || last_state != Some(next_state)
 }
 
+/// Resolve the card-display priority for a single decision.
+///
+/// SP-2 contract: priority is TS-precomputed and persisted at
+/// `context.priority` (set by `lib/loop/store.ts::normalizeDecision`
+/// using `readiness.ts::derivePriority`). The pet/bubble/card chip
+/// reads that precomputed value, NOT `confidence` — the historical
+/// `confidence → priority` mapping in this file violated the
+/// `derivePriority — never derived from confidence` invariant and
+/// made `quiet_digest` (confidence 0.9) surface as p0. The TS layer
+/// is the single source of truth; Rust is a pure reader.
+///
+/// Returns the literal "p0" | "p1" | "p2" string for direct
+/// `serde_json::json!({...})` interpolation. Falls back to "p2"
+/// when the field is missing, malformed, or carries an unknown
+/// value — under-prioritising a card the TS layer never classified
+/// is the safer failure mode (the user can still open the card and
+/// see it in the queue).
+fn dec_priority(d: &DecItem) -> &'static str {
+    let raw = d
+        .context
+        .as_ref()
+        .and_then(|c| c.extra.get("priority"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_ascii_lowercase());
+    match raw.as_deref() {
+        Some("p0") => "p0",
+        Some("p1") => "p1",
+        _ => "p2",
+    }
+}
+
+/// Numeric rank used by the `rank_pending` projector: p0=0 (top),
+/// p1=1, p2=2 (default fallback). The watcher sorts by this rank
+/// so the bubble surfaces the most urgent card, not the oldest
+/// arrival — see SP-1.
+fn priority_rank(d: &DecItem) -> u8 {
+    match dec_priority(d) {
+        "p0" => 0,
+        "p1" => 1,
+        _ => 2,
+    }
+}
+
+/// Project `snap.pending` into priority order. SP-1 contract: the
+/// pet bubble + card must show the most-urgent pending card, not
+/// the FIFO first. TS pre-computes the priority and persists it;
+/// Rust re-projects the snapshot on every poll (2 s, cheap — just
+/// pointer Vec<u8>+&DecItem). Returns borrowed references so the
+/// caller can keep using `snap` for the rest of the watch loop
+/// without cloning every item.
+fn rank_pending(items: &[DecItem]) -> Vec<&DecItem> {
+    let mut indexed: Vec<(u8, &DecItem)> =
+        items.iter().map(|d| (priority_rank(d), d)).collect();
+    indexed.sort_by_key(|(rank, _)| *rank);
+    indexed.into_iter().map(|(_, d)| d).collect()
+}
+
 /// Build the `loop:decision` payload that the bubble + card webviews
 /// listen for. Mirrors the shape consumed by `loomi-bubble.html` /
 /// `loomi-card.html` (id, type, title, dialogue, priority, confidence,
@@ -441,14 +509,11 @@ fn should_emit_update(
 /// "no payload yet" from "still pending". Note: `confidence` is
 /// emitted as-is (`Option<f32>` → `null` if missing) so the card's
 /// meta-node row can render `Math.round(c * 100) + "%"` directly;
-/// priority is derived from the same value upstream so card and
-/// payload stay consistent.
+/// priority comes from `context.priority` (TS-precomputed via
+/// `readiness.ts::derivePriority`) so the chip and the dashboard's
+/// `derivePriority(decision)` always render the same bucket.
 fn build_decision_payload(d: &DecItem) -> serde_json::Value {
-    let priority = match d.confidence {
-        Some(c) if c >= 0.85 => "p0",
-        Some(c) if c >= 0.75 => "p1",
-        _ => "p2",
-    };
+    let priority = dec_priority(d);
     let (source, source_type, source_ts) = match d.source_signal.as_ref() {
         Some(s) => (Some(s.source.clone()), Some(s.r#type.clone()), s.ts.clone()),
         None => (None, None, None),
@@ -1483,10 +1548,11 @@ mod tests {
         // The card's meta-node row renders `Math.round(confidence * 100) +
         // "%"`. The top-pending emit (`loop:decision`) is the only event
         // that drives that row, so it must carry confidence too — the
-        // priority chip is derived from the same value upstream so the
-        // raw number on the card matches the chip. Without this test the
-        // field was forgotten and the card rendered "—" even for a
-        // decision with confidence=0.92 (bug surfaced via the
+        // priority chip is TS-precomputed (see `readiness.ts::derivePriority`)
+        // and stored at `context.priority`, so the raw number on the card
+        // matches the chip independently. Without this test the
+        // `confidence` field was forgotten and the card rendered "—"
+        // even for a decision with confidence=0.92 (bug surfaced via the
         // birthday_wish demo screenshot, 2026-07-14).
         let d = dec_with_id("dec_y");
         let v = build_decision_payload(&d);
@@ -1501,17 +1567,193 @@ mod tests {
             (0.0..=1.0).contains(&conf),
             "confidence must be in [0,1]; got {conf}"
         );
-        // The priority field is derived from confidence upstream, so the
-        // two values must agree on the chip bucket (0.92 → p0).
+        // SP-2: priority is TS-precomputed and persisted at
+        // `context.priority`. `build_decision_payload` reads that
+        // value verbatim, so a decision with no priority on disk
+        // falls back to p2 (the safer default — under-prioritising a
+        // card the TS layer never classified is preferable to the
+        // historical confidence-bucket mapping, which labelled
+        // `quiet_digest` (confidence 0.9, readiness=not_actionable)
+        // as p0). The dec_with_id helper above doesn't stamp
+        // `context.priority`, so the expected bucket is the p2
+        // fallback.
         let p = v.get("priority").and_then(|s| s.as_str()).unwrap_or("");
-        let expected = if conf >= 0.85 {
-            "p0"
-        } else if conf >= 0.75 {
-            "p1"
-        } else {
-            "p2"
+        assert_eq!(
+            p, "p2",
+            "priority must derive from context.priority (defaulting to p2 when absent)"
+        );
+    }
+
+    #[test]
+    fn build_decision_payload_reads_priority_from_context() {
+        // SP-2 contract: the chip on the pet/bubble/card always
+        // matches the TS-computed `derivePriority(decision)`. A
+        // decision with a high-confidence `quiet_digest` (which
+        // `readiness.ts` would resolve to P2 because readiness is
+        // `not_actionable`) MUST surface as p2 even though
+        // `confidence: 0.92` would have hit the old confidence
+        // bucket. This is the regression test for the priority
+        // invariant the old `match d.confidence` block violated.
+        let mut extra = serde_json::Map::new();
+        extra.insert("priority".into(), serde_json::json!("p0"));
+        extra.insert(
+            "deadlineAt".into(),
+            serde_json::json!("2030-01-01T00:00:00Z"),
+        );
+        let d_low_conf_p0 = DecItem {
+            id: Some("dec_low_conf_p0".into()),
+            r#type: Some("deadline_reminder".into()),
+            title: Some("Low confidence but urgent".into()),
+            dialogue: None,
+            // confidence 0.5 would have hit the p2 bucket under the
+            // old code; with context.priority = "p0" the new code
+            // honours the TS-computed value.
+            confidence: Some(0.5),
+            source_signal: None,
+            action: None,
+            context: Some(DecContext {
+                why: None,
+                extra,
+            }),
+            created_at: None,
+            completed_at: None,
+            needs_user: None,
         };
-        assert_eq!(p, expected, "priority must match confidence bucket");
+        let v = build_decision_payload(&d_low_conf_p0);
+        assert_eq!(
+            v.get("priority").and_then(|s| s.as_str()),
+            Some("p0"),
+            "context.priority must override any confidence-based bucket"
+        );
+
+        // Symmetric case: a high-confidence quiet_digest with
+        // context.priority = "p2" (readiness=not_actionable →
+        // derivePriority always P2) must surface as p2.
+        let mut extra2 = serde_json::Map::new();
+        extra2.insert("priority".into(), serde_json::json!("p2"));
+        let d_high_conf_p2 = DecItem {
+            id: Some("dec_quiet_digest".into()),
+            r#type: Some("quiet_digest".into()),
+            title: Some("AI news digest".into()),
+            dialogue: None,
+            confidence: Some(0.92),
+            source_signal: None,
+            action: None,
+            context: Some(DecContext {
+                why: None,
+                extra: extra2,
+            }),
+            created_at: None,
+            completed_at: None,
+            needs_user: None,
+        };
+        let v2 = build_decision_payload(&d_high_conf_p2);
+        assert_eq!(
+            v2.get("priority").and_then(|s| s.as_str()),
+            Some("p2"),
+            "quiet_digest (readiness=not_actionable) must always be p2"
+        );
+
+        // Garbage / missing values fall back to p2.
+        let mut extra3 = serde_json::Map::new();
+        extra3.insert("priority".into(), serde_json::json!("banana"));
+        let d_garbage = DecItem {
+            id: Some("dec_garbage".into()),
+            r#type: Some("todo".into()),
+            title: Some("garbage".into()),
+            dialogue: None,
+            confidence: Some(0.9),
+            source_signal: None,
+            action: None,
+            context: Some(DecContext {
+                why: None,
+                extra: extra3,
+            }),
+            created_at: None,
+            completed_at: None,
+            needs_user: None,
+        };
+        assert_eq!(
+            build_decision_payload(&d_garbage)
+                .get("priority")
+                .and_then(|s| s.as_str()),
+            Some("p2"),
+            "unknown priority values must fall back to p2"
+        );
+    }
+
+    #[test]
+    fn rank_pending_orders_by_priority_then_keeps_diversity() {
+        // SP-1 contract: the bubble + card must surface the most
+        // urgent pending card, not the FIFO first. `rank_pending`
+        // is the only sanctioned projection — every read of
+        // `snap.pending.first()` / `snap.pending.iter().take(5)`
+        // funnels through this helper.
+        let mk = |id: &str, prio: &str, conf: f32| DecItem {
+            id: Some(id.into()),
+            r#type: Some("todo".into()),
+            title: Some(id.into()),
+            dialogue: None,
+            confidence: Some(conf),
+            source_signal: None,
+            action: None,
+            context: Some(DecContext {
+                why: None,
+                extra: {
+                    let mut m = serde_json::Map::new();
+                    m.insert("priority".into(), serde_json::json!(prio));
+                    m
+                },
+            }),
+            created_at: None,
+            completed_at: None,
+            needs_user: None,
+        };
+        // P2 oldest, P1 middle, P0 newest — rank should put P0 first.
+        let items = vec![
+            mk("dec_p2", "p2", 0.9),
+            mk("dec_p1", "p1", 0.8),
+            mk("dec_p0", "p0", 0.7),
+        ];
+        let ranked = rank_pending(&items);
+        let ids: Vec<&str> = ranked.iter().filter_map(|d| d.id.as_deref()).collect();
+        assert_eq!(ids, vec!["dec_p0", "dec_p1", "dec_p2"]);
+
+        // Two P0 + one P2: P0s first (stable order preserved among
+        // the tied bucket), P2 last.
+        let items2 = vec![
+            mk("dec_p2_again", "p2", 0.9),
+            mk("dec_p0_a", "p0", 0.7),
+            mk("dec_p0_b", "p0", 0.7),
+        ];
+        let ranked2 = rank_pending(&items2);
+        let ids2: Vec<&str> = ranked2.iter().filter_map(|d| d.id.as_deref()).collect();
+        assert_eq!(ids2, vec!["dec_p0_a", "dec_p0_b", "dec_p2_again"]);
+
+        // Missing / invalid priority falls back to p2.
+        let items3 = vec![
+            DecItem {
+                id: Some("dec_unclassified".into()),
+                r#type: Some("todo".into()),
+                title: Some("unclassified".into()),
+                dialogue: None,
+                confidence: Some(0.5),
+                source_signal: None,
+                action: None,
+                context: None,
+                created_at: None,
+                completed_at: None,
+                needs_user: None,
+            },
+            mk("dec_p0_only", "p0", 0.7),
+        ];
+        let ranked3 = rank_pending(&items3);
+        let ids3: Vec<&str> = ranked3.iter().filter_map(|d| d.id.as_deref()).collect();
+        assert_eq!(ids3, vec!["dec_p0_only", "dec_unclassified"]);
+
+        // Empty input → empty output.
+        let empty: Vec<DecItem> = vec![];
+        assert!(rank_pending(&empty).is_empty());
     }
 
     #[test]

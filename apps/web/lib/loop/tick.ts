@@ -264,6 +264,53 @@ async function runAgentic(opts: TickOptions): Promise<LoopTickResult> {
     );
   }
 
+  // SP-3 — aggregate email bursts from the same sender into ONE
+  // read-only `email_burst_digest` per tick. Runs over the same
+  // recent signal window + current decision buckets as the GitHub
+  // digest above so it can dedupe cross-source, skip threadIds
+  // already covered by a typed `email_reply` decision or a prior
+  // digest, and merge new items into an existing pending digest
+  // instead of spawning a second summary card. Best-effort: a
+  // failure here must not poison the tick.
+  try {
+    const { signals } = await import("./store");
+    const { aggregateEmailBursts } = await import("./email-bursts");
+    const sinceIso = new Date(
+      Date.now() - (opts.sinceMs ?? TICK_LOOKBACK_MS),
+    ).toISOString();
+    const recentSignals = signals.list({ since: sinceIso, limit: 500 });
+    const allDecisions = decisions.list();
+    const agg = aggregateEmailBursts({
+      signals: recentSignals,
+      decisions: allDecisions,
+    });
+    if (agg.kind === "create" && agg.decision) {
+      const added = decisions.add(agg.decision);
+      if (added) {
+        log(
+          `tick (agentic): created email burst digest ${added.id} (${agg.newKeys.length} item(s))`,
+        );
+      }
+    } else if (agg.kind === "merge" && agg.decision) {
+      decisions.update(agg.decision.id, {
+        title: agg.decision.title,
+        dialogue: agg.decision.dialogue,
+        nextStep: agg.decision.nextStep,
+        context: agg.decision.context,
+        ts: agg.decision.ts,
+      });
+      log(
+        `tick (agentic): merged ${agg.newKeys.length} item(s) into email burst digest ${agg.decision.id}`,
+      );
+    }
+  } catch (e) {
+    log(
+      `tick (agentic): email burst aggregation failed: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+  }
+
   // Derive the surfaced count + returned decisions from ACTUAL persisted
   // pending state (post-aggregation) so rejected `unknown` records are not
   // reported as surfaced and the freshly-created digest is included.

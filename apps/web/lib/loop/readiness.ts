@@ -239,6 +239,99 @@ export function derivePriority(
 }
 
 // ---------------------------------------------------------------------------
+// Ranking (SP-1) — pure projector over a list of decisions
+// ---------------------------------------------------------------------------
+//
+// `derivePriority` is a per-decision bucketing function. The pet bubble
+// and the pet card need a *list* projection: given the current pending
+// bucket, return the same decisions in priority order so the user sees
+// the most urgent card first, not the oldest. The order is:
+//
+//   1. P0 > P1 > P2
+//   2. Ties broken by `action.params.deadlineAt` (or `start` for
+//      RSVPs) ascending — sooner deadlines float up. Missing timestamp
+//      sorts last within its bucket.
+//   3. Final tie-break by `ts` ascending — older arrivals surface first
+//      among equally-deadlined cards (stable for the FIFO-sensitive
+//      dismiss → re-surface flow).
+//
+// Pure: no clock, no IO, no store. The caller injects `now` so the
+// same projector works for the pet watcher poll loop and for unit
+// tests with a frozen clock.
+
+/** Narrow decision shape that the ranker needs to sort a pending
+ *  list. Mirrors the structural subset of `LoopDecision` the
+ *  projector actually reads. */
+export interface RankableDecision {
+  ts: string;
+  type: string;
+  action?: Pick<LoopAction, "params"> | null;
+  /** Pre-computed priority (set by `normalizeDecision`). When absent
+   *  the ranker derives it on the fly using `derivePriority(decision, now)`. */
+  priority?: LoopPriority;
+}
+
+function rankParams(d: RankableDecision): Record<string, unknown> {
+  return d.action?.params ?? {};
+}
+
+function readDeadlineMs(d: RankableDecision): number | null {
+  const p = rankParams(d);
+  const when = parseTimestamp(p.deadlineAt) ?? parseTimestamp(p.start);
+  return when?.getTime() ?? null;
+}
+
+function toRank(p: LoopPriority | undefined): number {
+  if (p === "P0") return 0;
+  if (p === "P1") return 1;
+  return 2;
+}
+
+/**
+ * Project a list of decisions into priority order. The original list
+ * is NOT mutated — the projector returns a new array. Caller-supplied
+ * `now` is forwarded to `derivePriority` for any decisions that
+ * haven't been pre-classified (legacy `priority` field absent).
+ *
+ * Sort order:
+ *   1. P0 > P1 > P2
+ *   2. Ties broken by `action.params.deadlineAt` (or `start` for
+ *      RSVPs) ascending — sooner deadlines float up. Missing
+ *      timestamp sorts last within its bucket.
+ *   3. Final tie-break by `ts` ascending — older arrivals surface
+ *      first among equally-deadlined cards.
+ */
+export function rankByPriority<T extends RankableDecision>(
+  decisions: T[],
+  now: Date = new Date(),
+): T[] {
+  const indexed = decisions.map((d) => {
+    const p = d.priority ?? derivePriority(d, now);
+    const deadline = readDeadlineMs(d);
+    return { d, p, deadline };
+  });
+  indexed.sort((a, b) => {
+    const pa = toRank(a.p);
+    const pb = toRank(b.p);
+    if (pa !== pb) return pa - pb;
+    // P0/P1/P2 tie — sooner deadline first. `null` deadline sorts
+    // AFTER a non-null deadline (so a typed-but-undated decision
+    // doesn't out-shove a dated one).
+    if (a.deadline !== b.deadline) {
+      if (a.deadline === null) return 1;
+      if (b.deadline === null) return -1;
+      return a.deadline - b.deadline;
+    }
+    // Final tie-break: `ts` ascending. Older arrivals surface first
+    // among equally-deadlined cards. ISO-8601 strings sort
+    // chronologically with plain `localeCompare`, no need to parse.
+    if (a.d.ts !== b.d.ts) return a.d.ts.localeCompare(b.d.ts);
+    return 0;
+  });
+  return indexed.map((x) => x.d);
+}
+
+// ---------------------------------------------------------------------------
 // Plain-language state for the card surface
 // ---------------------------------------------------------------------------
 

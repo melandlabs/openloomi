@@ -30,6 +30,8 @@ vi.mock("@/lib/loop/paths", async () => {
     log: join(LOOP_HOME, "loop.log"),
     inbox: join(LOOP_HOME, "inbox"),
     syncState: join(LOOP_HOME, "sync-state.json"),
+    // SP-4 — daily attention counter
+    attention: join(LOOP_HOME, "attention.json"),
   });
   const pathsProxy = new Proxy(
     {},
@@ -54,11 +56,18 @@ vi.mock("@/lib/loop/paths", async () => {
   };
 });
 
-const { filterActionable, notifyForDecisions } =
-  await import("@/lib/loop/notifications");
+const {
+  filterActionable,
+  notifyForDecisions,
+  getAttentionCount,
+  bumpAttentionCount,
+  isOverBudget,
+  localDayKey,
+} = await import("@/lib/loop/notifications");
 const { sendNotification } = await import("@/lib/tauri");
 const { writePreferences, readPreferences } =
   await import("@/lib/loop/preferences");
+const { mutes } = await import("@/lib/loop/store");
 
 let tmp: string;
 
@@ -143,5 +152,165 @@ describe("notifyForDecisions", () => {
       expect.stringContaining("Reply to Alice"),
       expect.anything(),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SP-4 — daily attention budget + per-source cooldown
+// ---------------------------------------------------------------------------
+
+const p0Dec = {
+  id: "p0_1",
+  ts: new Date().toISOString(),
+  status: "pending" as const,
+  type: "rsvp" as const,
+  title: "P0 RSVP",
+  action: { kind: "rsvp" as const, params: {} },
+  priority: "P0" as const,
+};
+
+const p1Dec = {
+  id: "p1_1",
+  ts: new Date().toISOString(),
+  status: "pending" as const,
+  type: "todo" as const,
+  title: "P1 todo",
+  action: { kind: "todo" as const, params: {} },
+  priority: "P1" as const,
+};
+
+describe("localDayKey", () => {
+  it("returns YYYY-MM-DD for a Date in the user's locale", () => {
+    const k = localDayKey(new Date("2026-07-17T12:34:56Z"));
+    expect(k).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe("bumpAttentionCount / getAttentionCount", () => {
+  it("starts at 0 when no file exists", () => {
+    expect(getAttentionCount()).toBe(0);
+  });
+  it("increments monotonically within the same day", () => {
+    bumpAttentionCount();
+    bumpAttentionCount();
+    expect(getAttentionCount()).toBe(2);
+  });
+  it("resets when the day rolls over", () => {
+    bumpAttentionCount(new Date("2026-07-16T12:00:00Z"));
+    bumpAttentionCount(new Date("2026-07-17T12:00:00Z"));
+    expect(getAttentionCount(new Date("2026-07-17T12:00:00Z"))).toBe(1);
+    expect(getAttentionCount(new Date("2026-07-16T12:00:00Z"))).toBe(0);
+  });
+});
+
+describe("isOverBudget", () => {
+  it("returns false when under the cap", () => {
+    expect(isOverBudget({ attentionBudget: { daily: 3 } })).toBe(false);
+  });
+  it("returns true once the cap is reached", () => {
+    bumpAttentionCount();
+    bumpAttentionCount();
+    bumpAttentionCount();
+    expect(isOverBudget({ attentionBudget: { daily: 3 } })).toBe(true);
+  });
+  it("uses the default daily=3 when no budget is supplied", () => {
+    bumpAttentionCount();
+    bumpAttentionCount();
+    bumpAttentionCount();
+    expect(isOverBudget({})).toBe(true);
+  });
+});
+
+describe("notifyForDecisions — SP-4 budget + cooldown", () => {
+  beforeEach(() => {
+    // Reset mutes between tests so cooldowns don't leak.
+    mutes.invalidate();
+  });
+  it("respects the daily cap, dropping P1+ after the threshold", async () => {
+    writePreferences({
+      desktopNotifications: true,
+      attentionBudget: { daily: 2, p0BypassBudget: false },
+    });
+    const a = { ...p1Dec, id: "a" };
+    const b = { ...p1Dec, id: "b" };
+    const c = { ...p1Dec, id: "c" };
+    const r = await notifyForDecisions([a, b, c]);
+    expect(r.sent).toBe(2);
+    expect(r.budgetSuppressed).toBe(1);
+    expect(sendNotification).toHaveBeenCalledTimes(2);
+  });
+  it("lets P0 bypass the budget by default", async () => {
+    writePreferences({
+      desktopNotifications: true,
+      attentionBudget: { daily: 1, p0BypassBudget: true },
+    });
+    // Burn the one P1 slot, then a P0 must still go through.
+    const r1 = await notifyForDecisions([{ ...p1Dec, id: "x" }]);
+    expect(r1.sent).toBe(1);
+    const r2 = await notifyForDecisions([{ ...p0Dec, id: "y" }]);
+    expect(r2.sent).toBe(1);
+    expect(r2.sentP0Bypass).toBe(1);
+    expect(sendNotification).toHaveBeenCalledTimes(2);
+  });
+  it("p0BypassBudget=false also caps P0", async () => {
+    writePreferences({
+      desktopNotifications: true,
+      attentionBudget: { daily: 1, p0BypassBudget: false },
+    });
+    const r = await notifyForDecisions([
+      { ...p1Dec, id: "x" },
+      { ...p0Dec, id: "y" },
+    ]);
+    expect(r.sent).toBe(1);
+    expect(r.budgetSuppressed).toBe(1);
+    expect(r.sentP0Bypass).toBe(0);
+  });
+  it("suppresses notifications when the source is in cooldown", async () => {
+    writePreferences({ desktopNotifications: true });
+    // Arm a cooldown for the same email sender.
+    mutes.add({
+      key: "email:alice@example.com",
+      scope: { kind: "email", from: "alice@example.com" },
+      createdAt: new Date().toISOString(),
+      cooldown_until: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const decWithSource = {
+      ...p1Dec,
+      id: "z",
+      source_signal: {
+        id: "sig1",
+        ts: new Date().toISOString(),
+        source: "gmail",
+        type: "email" as const,
+        payload: { from: "alice@example.com" },
+      },
+    };
+    const r = await notifyForDecisions([decWithSource]);
+    expect(r.sent).toBe(0);
+    expect(r.cooldownSuppressed).toBe(1);
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+  it("cooldown does not block when the source is different", async () => {
+    writePreferences({ desktopNotifications: true });
+    mutes.add({
+      key: "email:bob@example.com",
+      scope: { kind: "email", from: "bob@example.com" },
+      createdAt: new Date().toISOString(),
+      cooldown_until: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const decWithSource = {
+      ...p1Dec,
+      id: "z",
+      source_signal: {
+        id: "sig1",
+        ts: new Date().toISOString(),
+        source: "gmail",
+        type: "email" as const,
+        payload: { from: "alice@example.com" },
+      },
+    };
+    const r = await notifyForDecisions([decWithSource]);
+    expect(r.sent).toBe(1);
+    expect(r.cooldownSuppressed).toBe(0);
   });
 });

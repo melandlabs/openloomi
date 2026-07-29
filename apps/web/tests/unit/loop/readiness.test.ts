@@ -24,8 +24,10 @@ import {
   deriveReadiness,
   deriveRelationship,
   deriveUrgency,
+  rankByPriority,
   readinessState,
   stateLabel,
+  type RankableDecision,
 } from "@/lib/loop/readiness";
 
 beforeEach(() => {
@@ -495,5 +497,139 @@ describe("stateLabel", () => {
       key: "loop.readiness.confirm",
       fallback: "Confirm carefully",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rankByPriority — SP-1 projector
+// ---------------------------------------------------------------------------
+//
+// Pin the ranking contract that backs the pet bubble + card "most-urgent
+// first" behaviour. The projector must:
+//   1. Order P0 → P1 → P2
+//   2. Break ties by `action.params.deadlineAt` (or `start`) ascending
+//   3. Break remaining ties by `ts` ascending (older arrivals first)
+//   4. Treat missing deadlines as "after a non-null deadline" within
+//      the same priority bucket
+//   5. Honour pre-computed `priority` field when present (TS source of
+//      truth; the projector must not re-derive on top of a stored value)
+
+function mk(
+  id: string,
+  type: string,
+  ts: string,
+  params: Record<string, unknown> = {},
+  priority?: "P0" | "P1" | "P2",
+): RankableDecision & { id: string } {
+  return {
+    id,
+    ts,
+    type,
+    action: { params },
+    ...(priority ? { priority } : {}),
+  };
+}
+
+describe("rankByPriority — SP-1", () => {
+  it("orders P0 before P1 before P2", () => {
+    // Use plain `todo` with explicit priorities via pre-computed field
+    // so the test doesn't depend on the rsvp read-side readiness
+    // semantics (which require attendees / my_response to be set).
+    const ranked = rankByPriority([
+      mk("p2", "todo", "2026-07-16T10:00:00Z", {}, "P2"),
+      mk("p0", "todo", "2026-07-16T11:00:00Z", {}, "P0"),
+      mk("p1", "todo", "2026-07-16T11:30:00Z", {}, "P1"),
+    ]);
+    expect(ranked.map((d) => d.id)).toEqual(["p0", "p1", "p2"]);
+  });
+
+  it("breaks priority ties by deadline ascending", () => {
+    const ranked = rankByPriority([
+      mk("late", "rsvp", "2026-07-16T11:00:00Z", {
+        start: "2026-07-18T12:00:00Z", // later deadline
+      }),
+      mk("early", "rsvp", "2026-07-16T11:00:00Z", {
+        start: "2026-07-17T12:00:00Z", // sooner deadline
+      }),
+    ]);
+    expect(ranked.map((d) => d.id)).toEqual(["early", "late"]);
+  });
+
+  it("places missing-deadline decisions last within their priority bucket", () => {
+    const ranked = rankByPriority([
+      mk("no-date", "todo", "2026-07-16T08:00:00Z"), // no params
+      mk("with-date", "todo", "2026-07-16T11:00:00Z", {
+        deadlineAt: "2026-07-18T12:00:00Z",
+      }),
+    ]);
+    expect(ranked.map((d) => d.id)).toEqual(["with-date", "no-date"]);
+  });
+
+  it("breaks remaining ties by ts ascending (older first)", () => {
+    // Same priority, same deadline — only ts differs.
+    const ranked = rankByPriority([
+      mk("newer", "rsvp", "2026-07-16T11:00:00Z", {
+        start: "2026-07-17T12:00:00Z",
+      }),
+      mk("older", "rsvp", "2026-07-16T08:00:00Z", {
+        start: "2026-07-17T12:00:00Z",
+      }),
+    ]);
+    expect(ranked.map((d) => d.id)).toEqual(["older", "newer"]);
+  });
+
+  it("honours pre-computed priority field without re-deriving", () => {
+    // Pre-computed P2 wins over what `derivePriority` would have
+    // produced (the rsvp has `start` in <24h → would normally be
+    // P0). The pre-computed value is the TS source of truth — the
+    // projector trusts it verbatim so the pet bubble stays in
+    // lockstep with the dashboard.
+    const now = new Date("2026-07-16T12:00:00Z");
+    const ranked = rankByPriority(
+      [
+        mk(
+          "stamped-p2",
+          "rsvp",
+          "2026-07-16T10:00:00Z",
+          {
+            start: "2026-07-16T18:00:00Z", // <24h → would derive P0
+            organizer: "alice@x.com",
+          },
+          "P2",
+        ),
+        mk(
+          "stamped-p0",
+          "todo",
+          "2026-07-16T10:00:00Z",
+          {
+            deadlineAt: "2026-07-20T12:00:00Z", // >72h → would derive P2
+          },
+          "P0",
+        ),
+      ],
+      now,
+    );
+    // The pre-computed values invert the natural derivation order:
+    // stamped-p2 (urgent source, but explicitly demoted to P2) lands
+    // LAST; stamped-p0 (stale source, but explicitly promoted to P0)
+    // lands FIRST. This is the SP-1 contract: TS is source of truth,
+    // the projector doesn't second-guess it.
+    expect(ranked.map((d) => d.id)).toEqual(["stamped-p0", "stamped-p2"]);
+  });
+
+  it("returns the same array reference count for an empty list", () => {
+    expect(rankByPriority([])).toEqual([]);
+  });
+
+  it("does not mutate the input array", () => {
+    const input = [
+      mk("p2", "todo", "2026-07-16T10:00:00Z"),
+      mk("p0", "rsvp", "2026-07-16T11:00:00Z", {
+        start: "2026-07-16T18:00:00Z",
+      }),
+    ];
+    const before = input.map((d) => d.id);
+    rankByPriority(input);
+    expect(input.map((d) => d.id)).toEqual(before);
   });
 });

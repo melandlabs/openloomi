@@ -28,6 +28,7 @@ export type DecisionType =
   | "noop" // NEW — non-actionable; filtered at decisions.add()
   | "tick_summary" // NEW — explicit per-tick summary; filtered at decisions.add()
   | "quiet_digest" // NEW — filler content for empty brief/wrap days; read-only
+  | "email_burst_digest" // NEW (SP-3) — burst of N emails from same sender
   | "unknown";
 
 export type DecisionStatus = "pending" | "done" | "dismissed";
@@ -47,6 +48,7 @@ export type ActionKind =
   | "brief"
   | "wrap"
   | "quiet_digest" // NEW — filler content for empty brief/wrap days
+  | "email_burst_digest" // NEW (SP-3) — burst digest action kind
   | string; // open form for agent-emitted kinds
 
 export interface LoopAction {
@@ -200,6 +202,22 @@ export interface LoopDecision {
    */
   relationship?: DecisionRelationship;
   source_signal?: LoopSignal;
+  /**
+   * SP-1 — pre-computed card-display priority, set by
+   * `store.ts::normalizeDecision` via `readiness.ts::derivePriority`.
+   * Independent of `confidence` (per #359) and independent of
+   * `readiness.status` — a `not_actionable` decision is P2 regardless
+   * of how urgent its source signal looked. Persisted under
+   * `context.priority` for the Rust watcher to read verbatim, and
+   * mirrored at the top level for clean TS consumers. When absent
+   * (legacy rows pre-SP-1) consumers should re-derive via
+   * `readiness.ts::derivePriority(decision, now)`.
+   *
+   * Typed inline (not as `LoopPriority` from `./readiness`) to avoid
+   * the `types ↔ readiness` circular import — the union is identical
+   * and structurally compatible.
+   */
+  priority?: "P0" | "P1" | "P2";
   result?: unknown;
   completed_at?: string;
   /** Card-flavored dialogue/next step for the pet and web UI. */
@@ -351,6 +369,47 @@ export interface LoopPreferences {
    */
   cronCompletionPetNotify?: boolean;
   /**
+   * SP-4 — daily OS-notification budget. Caps the number of native
+   * desktop notifications fired by `notifyForDecisions` per
+   * user-local day, so a slack flood can't bury the user.
+   *
+   * `daily`         — max notifications per day. Default `3`.
+   * `p0BypassBudget`— when `true` (default), P0-priority decisions
+   *                   always notify regardless of the daily count.
+   *                   Set to `false` to enforce the budget
+   *                   uniformly.
+   *
+   * Lives on `LoopPreferences` (next to `desktopNotifications`,
+   * which gates the same fan-out) rather than as a new top-level
+   * setting, so the same PUT body that opts the user in also
+   * shapes how often they want to be pestered. The counter itself
+   * is persisted to `~/.openloomi/loop/attention.json` (NOT
+   * `config.json`) to avoid a write-race on the preferences path.
+   */
+  attentionBudget?: {
+    daily: number;
+    p0BypassBudget?: boolean;
+  };
+  /**
+   * SP-4 — per-source cooldown. When a user dismisses a notification,
+   * the dismiss writes a `cooldown_until` onto the matching mute
+   * rule. `notifyForDecisions` consults this window before firing
+   * another OS notification for the same source, suppressing
+   * repeated pings of an action the user already swiped away.
+   *
+   * `windowSec` — seconds to suppress after a dismiss. Default
+   *               `1800` (30 min). Set to `0` to disable.
+   *
+   * Shared storage with `MuteRule` so dismiss-driven cooldowns
+   * inherit the existing on-disk shape + cache-invalidation
+   * discipline. Cooldown is additive: it does NOT replace
+   * `mutes.has()` — a muted rule still blocks; a cooldown-only
+   * rule just throttles the next nudge.
+   */
+  cooldown?: {
+    windowSec: number;
+  };
+  /**
    * When the brief or wrap snapshot is empty (no surfaced items /
    * highlights), skip the templated "nothing to do" card entirely.
    * Snapshot still gets persisted to `~/.openloomi/loop/{brief,wrap}.json`
@@ -398,6 +457,16 @@ export interface MuteRule {
   createdAt: string;
   /** Provenance — which dismiss produced this rule. */
   source?: { decisionId?: string; signalType?: SignalType };
+  /**
+   * SP-4 — optional ISO timestamp until which the rule is treated
+   * as "in cooldown" by `mutes.cooldownActive(key, now)`. Distinct
+   * from the rule being absent: a rule with `cooldown_until` in
+   * the future still allows the decision to land in `pending` (the
+   * pet bubble surfaces it) but suppresses the OS-notification
+   * fan-out for the same source. After `cooldown_until` passes the
+   * rule degrades to a regular mute (still blocks per `mutes.has`).
+   */
+  cooldown_until?: string;
 }
 
 export interface LoopMutes {
@@ -419,6 +488,20 @@ export const DEFAULT_LOOP_PREFERENCES: LoopPreferences = {
   cronCompletionPetNotify: false, // NEW — opt-in transient pet bubble
   quietWhenEmpty: true, // NEW (#316) — opt-out via prefs
   quietDayFiller: "none", // NEW (#316) — opt into a module
+  // SP-4 — daily OS-notification budget. Three notifications per
+  // user-local day is enough for a typical "morning brief + a
+  // urgent PR + an evening wrap" flow; anything beyond that almost
+  // always indicates either a stuck watcher or a sender that
+  // shouldn't have hit Loop at all. P0 still bypasses by default
+  // so a real urgent signal (RSVP in <1h, hard deadline) never
+  // gets dropped.
+  attentionBudget: { daily: 3, p0BypassBudget: true },
+  // SP-4 — 30-minute per-source cooldown after a dismiss. Long
+  // enough to ride out a "boss said something, then said it again
+  // in a thread reply" pattern, short enough that an actually
+  // distinct follow-up from the same sender still reaches the
+  // user before EOD.
+  cooldown: { windowSec: 1800 },
 };
 
 /**

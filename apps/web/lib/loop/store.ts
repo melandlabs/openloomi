@@ -13,6 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { ensureDirs, ensureParent, LOOP_PATHS } from "./paths";
+import { derivePriority, rankByPriority } from "./readiness";
 import type {
   DecisionStatus,
   DecisionType,
@@ -89,8 +90,15 @@ function appendJsonl(p: string, obj: unknown): void {
 // payload, run-prompt builder, web UI) sees one consistent shape regardless
 // of how the decision was originally emitted. Mutates and returns the same
 // object — callers can chain or assign. Idempotent: no-op when already nested.
+//
+// SP-1: also stamps `context.priority` (and the top-level `dec.priority`
+// mirror) via `readiness.ts::derivePriority`. The Rust watcher reads
+// `context.priority` verbatim to render the chip; the TS side reads
+// either field, preferring the top-level when present. `dec.priority`
+// is set whenever `derivePriority` runs, so the two stay in lockstep.
 function normalizeDecision(
   dec: LoopDecision | null | undefined,
+  now: Date = new Date(),
 ): LoopDecision | null | undefined {
   if (!dec || typeof dec !== "object") return dec;
   if (!dec.context || typeof dec.context !== "object") dec.context = {};
@@ -107,6 +115,25 @@ function normalizeDecision(
       ctx[k] = bucket;
       delete (dec as unknown as Record<string, unknown>)[k];
     }
+  }
+  // SP-1: compute the priority once and persist it under `context.priority`
+  // (Rust source of truth) AND mirror at the top level (TS consumers).
+  // The Rust watcher reads `context.priority` via `dec_priority(d)`; the
+  // pet bubble + dashboard both rely on the persisted value, so a record
+  // missing it would silently fall back to "p2" — which is the safer
+  // default but masks the real ranking. The dual-write keeps both worlds
+  // happy without recomputing on every read.
+  if (ctx.priority === undefined) {
+    const computed = derivePriority(
+      dec as unknown as { type: string; action: LoopDecision["action"] },
+      now,
+    );
+    ctx.priority = computed;
+    (dec as unknown as Record<string, unknown>).priority = computed;
+  } else if (dec.priority === undefined) {
+    // Legacy record that already has `context.priority` (written by an
+    // earlier patch or the migration) but no top-level mirror. Sync up.
+    dec.priority = ctx.priority as LoopDecision["priority"];
   }
   return dec;
 }
@@ -218,7 +245,15 @@ export function isNoopDecision(input: {
 
 function readDecisions(): LoopDecisionBuckets {
   ensureDirs();
-  const d = readJson<LoopDecisionBuckets>(LOOP_PATHS.decisions, emptyBuckets());
+  const raw = readJson<LoopDecisionBuckets & { version?: number }>(
+    LOOP_PATHS.decisions,
+    emptyBuckets(),
+  );
+  const d: LoopDecisionBuckets = {
+    pending: Array.isArray(raw.pending) ? raw.pending : [],
+    done: Array.isArray(raw.done) ? raw.done : [],
+    dismissed: Array.isArray(raw.dismissed) ? raw.dismissed : [],
+  };
   for (const bucket of ["pending", "done", "dismissed"] as const) {
     if (!Array.isArray(d[bucket])) d[bucket] = [];
     for (const dec of d[bucket]) normalizeDecision(dec);
@@ -252,16 +287,39 @@ function readDecisions(): LoopDecisionBuckets {
     d.pending = survivors;
     d.dismissed = [...migrated, ...d.dismissed];
     trimBucket(d.dismissed);
-    writeDecisions(d);
     log(
       `[decisions.read] migrated ${migrated.length} non-actionable pending card(s) → dismissed`,
+    );
+  }
+  // SP-1 — one-shot backfill of `context.priority` (and top-level
+  // `dec.priority` mirror) for legacy rows. `normalizeDecision` above
+  // already stamped priority for every record on the first read
+  // after this gate fires; the only question is whether to persist
+  // the backfill or rely on the read-time computation.
+  //
+  // Persist once, gate by `version: 2`. Without the gate, every poll
+  // would re-write the file (mtime churn → watcher wakes → re-write)
+  // because `normalizeDecision` mutates in place. The Rust watcher
+  // depends on mtime/contents-based transition diffs to drive its
+  // `loop:state` / `loop:decision` emissions; if the backfill re-wrote
+  // the file indefinitely, the bubble would re-fire on every poll.
+  // Once `version: 2` lands, future reads see the gate and no-op.
+  if ((raw as { version?: number }).version !== 2) {
+    writeDecisions(d);
+    log(
+      `[decisions.read] stamped version:2 — SP-1 priority backfill persisted`,
     );
   }
   return d;
 }
 
 function writeDecisions(d: LoopDecisionBuckets): void {
-  writeJsonAtomic(LOOP_PATHS.decisions, d);
+  // SP-1 — stamp `version: 2` on every write so the readDecisions
+  // migration gate is sticky. The migration fires once on the first
+  // read after upgrade; every subsequent write keeps the flag set,
+  // so the gate is idempotent.
+  const stamped = { version: 2 as const, ...d };
+  writeJsonAtomic(LOOP_PATHS.decisions, stamped);
 }
 
 function trimBucket(
@@ -465,21 +523,25 @@ const MAX_MUTES = 1000;
 /** Decision types eligible for auto-muting on dismiss. brief / wrap are
  *  explicitly excluded — those are scheduled and must resurface each day.
  *  `quiet_digest` (#316) is INCLUDED — a digest the user dismisses should
- *  not auto-resurface on the next tick. */
-export const MUTABLE_DECISION_TYPES: ReadonlySet<DecisionType> = new Set([
-  "rsvp",
-  "email_reply",
-  "im_reply",
-  "review_pr",
-  "todo",
-  "deadline_reminder",
-  "release_plan",
-  "requirement_synthesis",
-  "linear_review",
-  "contact_update",
-  "doc_update",
-  "quiet_digest",
-]);
+ *  not auto-resurface on the next tick. `email_burst_digest` (SP-3) is
+ *  also INCLUDED — a burst digest the user dismisses should suppress the
+ *  next burst from the same sender, paired with the SP-4 cooldown. */
+export const MUTABLE_DECISION_TYPES: ReadonlySet<DecisionType> =
+  new Set<DecisionType>([
+    "rsvp",
+    "email_reply",
+    "im_reply",
+    "review_pr",
+    "todo",
+    "deadline_reminder",
+    "release_plan",
+    "requirement_synthesis",
+    "linear_review",
+    "contact_update",
+    "doc_update",
+    "quiet_digest",
+    "email_burst_digest",
+  ]);
 
 function emptyMutes(): LoopMutes {
   return { version: 1, rules: [], keys: [] };
@@ -631,19 +693,69 @@ export const mutes = {
   has(key: string): boolean {
     return readMutes().keys.includes(key);
   },
+  /**
+   * SP-4 — true when the rule for `key` carries a `cooldown_until`
+   * strictly in the future. Returns `false` for rules without
+   * `cooldown_until` (so the existing mute behaviour is preserved
+   * bit-for-bit — cooldowns are additive, not replacement).
+   *
+   * Used by `notifyForDecisions` to suppress the OS-notification
+   * fan-out for a source the user just dismissed, while still
+   * letting the bubble surface the underlying decision.
+   */
+  cooldownActive(key: string, now: Date = new Date()): boolean {
+    const rule = readMutes().rules.find((r) => r.key === key);
+    if (!rule || !rule.cooldown_until) return false;
+    const until = Date.parse(rule.cooldown_until);
+    if (Number.isNaN(until)) return false;
+    return until > now.getTime();
+  },
   /** List rules, newest first. */
   list(): MuteRule[] {
     return [...readMutes().rules].sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt),
     );
   },
-  /** Idempotent add — same key returns the existing rule unchanged.
-   *  Caps `rules.length` at `MAX_MUTES` by dropping the oldest half of
-   *  unique-key entries when the limit is exceeded. */
+  /**
+   * Idempotent add — same key returns the existing rule unchanged.
+   * Caps `rules.length` at `MAX_MUTES` by dropping the oldest half of
+   * unique-key entries when the limit is exceeded.
+   *
+   * SP-4: accepts an optional `cooldown_until` ISO string. When set,
+   * the rule is persisted with the cooldown timestamp and the
+   * `notifyForDecisions` fan-out consults `cooldownActive` to
+   * throttle the OS-notification path. A rule carrying a past
+   * `cooldown_until` degrades to a regular mute (still blocks per
+   * `mutes.has`). Callers should pass an ISO timestamp strictly in
+   * the future — the function does not validate that the value is
+   * sensible, so a misconfigured cooldown_until that's already past
+   * simply no-ops.
+   */
   add(rule: Omit<MuteRule, "createdAt"> & { createdAt?: string }): MuteRule {
     const cur = readMutes();
     const existing = cur.rules.find((r) => r.key === rule.key);
     if (existing) {
+      // Refresh the cooldown_until if the caller is bumping an
+      // existing rule. This is the "second dismiss within an hour
+      // extends the window" semantics — without the refresh, a
+      // second dismiss would land on the same already-existing rule
+      // and the cooldown wouldn't extend.
+      if (
+        rule.cooldown_until &&
+        rule.cooldown_until !== existing.cooldown_until
+      ) {
+        const updated: MuteRule = {
+          ...existing,
+          cooldown_until: rule.cooldown_until,
+        };
+        const rules = cur.rules.map((r) => (r.key === rule.key ? updated : r));
+        writeMutes({
+          version: 1,
+          rules,
+          keys: rules.map((r) => r.key),
+        });
+        return updated;
+      }
       mutesCache = null;
       return existing;
     }
@@ -653,6 +765,7 @@ export const mutes = {
       scope: rule.scope,
       createdAt,
       ...(rule.source ? { source: rule.source } : {}),
+      ...(rule.cooldown_until ? { cooldown_until: rule.cooldown_until } : {}),
     };
     const rules = [...cur.rules, next];
     if (rules.length > MAX_MUTES) {
