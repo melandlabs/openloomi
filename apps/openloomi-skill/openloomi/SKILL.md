@@ -13,7 +13,7 @@ Use this skill when the user wants a skill-hosted agent runtime to work through 
 
 Start with a status check when the user asks to use OpenLoomi for the first time in a session, when the local runtime may be stopped, or when a command fails with a network or authentication error.
 
-The wrapper command contract is documented in [references/tool-surface.md](references/tool-surface.md). The implementation lives at `scripts/openloomi.cjs` once the wrapper phase is complete.
+The wrapper command contract is documented in [references/tool-surface.md](references/tool-surface.md). The implementation lives at `scripts/openloomi.cjs`.
 
 ## Reuse Notes
 
@@ -53,4 +53,4 @@ Read [references/examples.md](references/examples.md) for worked patterns:
 
 If the local API is unreachable, tell the user to open OpenLoomi Desktop and retry the status check. If authentication is missing, tell the user to complete OpenLoomi Desktop setup so the home directory's `.openloomi/token` file is created. Do not invent memory or connector data when OpenLoomi is unavailable.
 
-If the wrapper command is unavailable or returns `NOT_IMPLEMENTED`, report that the skill bundle skeleton is installed but the OpenLoomi wrapper implementation is pending.
+If the wrapper command is unavailable, report that the skill bundle is installed incorrectly or incompletely and ask the user to reinstall the uploaded bundle.

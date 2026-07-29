@@ -2,6 +2,8 @@
 
 This reference defines the Option B skill-bundle command contract. The wrapper implementation should stay thin and call the local OpenLoomi Desktop API; OpenLoomi remains the owner of memory, connector credentials, agent execution, and side effects.
 
+The command implementation lives at `scripts/openloomi.cjs`.
+
 ## Runtime Discovery
 
 Resolve the local API base URL in this order:
@@ -64,6 +66,10 @@ Preferred API path:
 
 - `GET /api/integrations/accounts`
 
+Optional filter:
+
+- `--platform=gmail` returns only matching accounts while preserving the full API result under `result`.
+
 ### agent-run
 
 Trigger the local OpenLoomi native agent for complex cross-app work, drafts, summaries, and actions that should remain inside OpenLoomi-owned runtime logic.
@@ -77,6 +83,13 @@ Preferred API path:
 - `POST /api/native/agent`
 
 The wrapper should collect the final SSE result into a concise JSON object. It should not stream raw internal events unless a debug flag is explicitly added later.
+
+Default request policy:
+
+- `platform: "workbuddy"` unless `--platform=<name>` is passed.
+- `permissionMode: "dontAsk"`.
+- `Edit`, `Write`, `Bash`, `Agent`, and `Task` are explicitly disallowed.
+- `Read`, `Glob`, `Grep`, `WebSearch`, `WebFetch`, `Skill`, `LSP`, and `TodoWrite` remain allowed for read, retrieval, planning, and skill-driven draft workflows.
 
 ## Side-Effect Policy
 
