@@ -21,6 +21,7 @@ import {
   ownerScopeFromMessage,
 } from "./memory-graph-evolution";
 import type {
+  MemorySummaryQuery,
   MemorySummaryRecord,
   RawMessage,
   RawMessageQuery,
@@ -81,10 +82,7 @@ interface SemanticSearchInput {
 export interface RawMessageGraphGovernanceStorage extends RawMessageGraphEvolutionStorage {
   queryMessages(query: RawMessageQuery): Promise<RawMessage[]>;
   upsertSummaries(summaries: MemorySummaryRecord[]): Promise<void>;
-  querySummaries(query: {
-    userId?: string;
-    pageSize?: number;
-  }): Promise<MemorySummaryRecord[]>;
+  querySummaries(query: MemorySummaryQuery): Promise<MemorySummaryRecord[]>;
   restoreDeprecatedMessages?: (
     messageIds: string[],
     input: { userId?: string; supersededBySummaryId?: string },
@@ -389,9 +387,17 @@ export async function runMemoryGraphCorrection(input: {
     let memberMessage: RawMessage | null = null;
     if (input.command.action.type === "correct-summary") {
       const correction = input.command.action;
+      const targetCorrectedSummaryId =
+        correction.correctedSummaryId ??
+        correctedSummaryId(scope, input.command.commandId);
+      const summaryIds = unique([
+        correction.summaryId,
+        targetCorrectedSummaryId,
+      ]);
       const oldSummaries = await input.storage.querySummaries({
         userId: scope.userId,
-        pageSize: 1000,
+        summaryIds,
+        pageSize: summaryIds.length,
       });
       const oldSummary = oldSummaries.find(
         (summary) => summary.summaryId === correction.summaryId,
@@ -430,9 +436,7 @@ export async function runMemoryGraphCorrection(input: {
         });
       }
       previousSummary = oldSummary;
-      summaryId =
-        correction.correctedSummaryId ??
-        correctedSummaryId(scope, input.command.commandId);
+      summaryId = targetCorrectedSummaryId;
       const storedSummaryWithCorrectedId = oldSummaries.find(
         (summary) => summary.summaryId === summaryId,
       );

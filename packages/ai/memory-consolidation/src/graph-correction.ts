@@ -9,7 +9,7 @@ import type {
   MemoryGraphUpdatePlan,
   OwnerScope,
 } from "./graph-contracts";
-import { applicabilityEquivalent } from "./graph-evolution";
+import { applicabilityEquivalent, sameOwnerScope } from "./graph-evolution";
 
 export type MemoryGraphCorrectionAction =
   | {
@@ -62,12 +62,8 @@ export interface BuildMemoryGraphRollbackFinalizePlanInput extends BuildMemoryGr
   >;
 }
 
-function scopeKey(scope: OwnerScope): string {
-  return `${scope.tenantId ?? ""}|${scope.workspaceId ?? ""}|${scope.userId}`;
-}
-
 function sameScope(left: OwnerScope, right: OwnerScope): boolean {
-  return scopeKey(left) === scopeKey(right);
+  return sameOwnerScope(left, right);
 }
 
 function unique(values: string[]): string[] {

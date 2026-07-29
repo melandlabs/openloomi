@@ -14,8 +14,10 @@ import {
   storeRawMessagesWithGraphEvolution,
 } from "@openloomi/indexeddb";
 import {
+  type MemoryGraphSnapshot,
   type OwnerScope,
   buildGraphAwareRetrievalDryRun,
+  buildMemoryGraphCorrectionPlan,
 } from "@openloomi/memory-consolidation";
 import { describe, expect, it } from "vitest";
 
@@ -199,10 +201,15 @@ class GovernanceRuntimeTestManager {
 
   async querySummaries(input: {
     userId?: string;
+    summaryIds?: string[];
     pageSize?: number;
   }): Promise<MemorySummaryRecord[]> {
     return [...this.summaries.values()]
-      .filter((summary) => !input.userId || summary.userId === input.userId)
+      .filter(
+        (summary) =>
+          (!input.userId || summary.userId === input.userId) &&
+          (!input.summaryIds || input.summaryIds.includes(summary.summaryId)),
+      )
       .slice(0, input.pageSize);
   }
 
@@ -1586,6 +1593,90 @@ describe("memory graph correction, rollback, and rollout runtime", () => {
 });
 
 describe("memory graph control-plane regressions", () => {
+  it("finds a correction target beyond the first summary page", async () => {
+    const manager = new GovernanceRuntimeTestManager();
+    const { cluster, summary } = await seedConsolidated(manager);
+    manager.summaries.clear();
+    for (let index = 0; index < 1000; index += 1) {
+      manager.summaries.set(`decoy-summary-${index}`, {
+        ...summary,
+        summaryId: `decoy-summary-${index}`,
+      });
+    }
+    manager.summaries.set(summary.summaryId, summary);
+
+    const result = await runMemoryGraphCorrection({
+      storage: manager,
+      userId: OWNER.userId,
+      command: {
+        commandId: "correct-summary-after-first-page",
+        reason: "Resolve the target by id instead of scanning one page",
+        action: {
+          type: "correct-summary",
+          clusterId: cluster.clusterId,
+          summaryId: summary.summaryId,
+          correctedSummaryId: "corrected-summary-after-first-page",
+          correctedContent: "The reviewed preference is Chinese responses.",
+        },
+      },
+    });
+
+    expect(result.status).toBe("applied");
+    expect(
+      manager.summaries.get("corrected-summary-after-first-page")?.summaryText,
+    ).toBe("The reviewed preference is Chinese responses.");
+  });
+
+  it("does not treat delimiter-colliding owner scopes as equal", () => {
+    const requestedScope = {
+      tenantId: "tenant",
+      workspaceId: "workspace|segment",
+      userId: "user",
+    } satisfies OwnerScope;
+    const foreignScope = {
+      tenantId: "tenant|workspace",
+      workspaceId: "segment",
+      userId: "user",
+    } satisfies OwnerScope;
+    const snapshot = {
+      ownerScope: requestedScope,
+      nodes: [],
+      edges: [],
+      clusters: [
+        {
+          clusterId: "foreign-cluster",
+          ownerScope: foreignScope,
+          nodeIds: [],
+          lifecycleStatus: "forming",
+          supportScore: 0,
+          updatedAt: NOW,
+          reasonCodes: [],
+        },
+      ],
+      version: "1",
+      capturedAt: NOW,
+    } satisfies MemoryGraphSnapshot;
+
+    const plan = buildMemoryGraphCorrectionPlan({
+      ownerScope: requestedScope,
+      snapshot,
+      commandId: "scope-delimiter-collision",
+      reason: "Keep tenant and workspace boundaries exact",
+      now: NOW,
+      persistence: { mode: "write", enabled: true },
+      action: {
+        type: "set-lifecycle",
+        clusterId: "foreign-cluster",
+        lifecycleStatus: "active",
+      },
+    });
+
+    expect(plan.operations).toEqual([]);
+    expect(plan.reasonCodes).toContain(
+      "memory_graph_correction_cluster_not_found",
+    );
+  });
+
   it("keeps retired supersession edges available to audit traversal", async () => {
     const manager = new GovernanceRuntimeTestManager();
     const { cluster } = await seedConsolidated(manager);
