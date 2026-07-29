@@ -48,6 +48,11 @@ test("WorkBuddy packaging docs keep development files outside the upload root", 
 
   assert.match(
     readme,
+    /node apps\\openloomi-skill\\scripts\\package-openloomi-skill\.cjs/,
+  );
+  assert.match(readme, /apps\/openloomi-skill\/dist\/openloomi-skill\.zip/);
+  assert.match(
+    readme,
     /Upload the `apps\/openloomi-skill\/openloomi\/` folder/,
   );
   assert.match(

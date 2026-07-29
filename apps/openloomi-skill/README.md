@@ -2,7 +2,19 @@
 
 This directory contains the uploadable OpenLoomi skill bundle for skill-based agent hosts such as WorkBuddy. It implements issue #321 Option B only: a Skill Bundle that routes requests to the local OpenLoomi Desktop API.
 
-## Upload
+## One-Click Package
+
+Build the WorkBuddy-ready zip from the repo root:
+
+```powershell
+node apps\openloomi-skill\scripts\package-openloomi-skill.cjs
+```
+
+The helper validates the skill metadata, runs the local tests, checks formatting, creates `apps/openloomi-skill/dist/openloomi-skill.zip`, and prints the WorkBuddy smoke prompt. Upload that zip to WorkBuddy Skills.
+
+Use `--out=<path>` to write the zip somewhere else. Use `--skip-checks` only when a prior CI or local run has already passed the same validation.
+
+## Manual Upload
 
 Upload the `apps/openloomi-skill/openloomi/` folder, or create a zip from that folder's contents:
 
@@ -69,7 +81,8 @@ $env:PYTHONUTF8='1'
 python skills\skill-creator\scripts\quick_validate.py apps\openloomi-skill\openloomi
 node --test apps\openloomi-skill\tests\bundle-structure.test.mjs
 node --test apps\openloomi-skill\tests\openloomi-script.test.mjs
-pnpm exec prettier --check apps/openloomi-skill/README.md apps/openloomi-skill/openloomi/SKILL.md apps/openloomi-skill/openloomi/agents/openai.yaml apps/openloomi-skill/openloomi/references/tool-surface.md apps/openloomi-skill/openloomi/references/examples.md apps/openloomi-skill/openloomi/scripts/openloomi.cjs apps/openloomi-skill/tests/openloomi-script.test.mjs apps/openloomi-skill/tests/bundle-structure.test.mjs
+node --test apps\openloomi-skill\tests\package-openloomi-skill.test.mjs
+pnpm exec prettier --check apps/openloomi-skill/README.md apps/openloomi-skill/openloomi/SKILL.md apps/openloomi-skill/openloomi/agents/openai.yaml apps/openloomi-skill/openloomi/references/tool-surface.md apps/openloomi-skill/openloomi/references/examples.md apps/openloomi-skill/openloomi/scripts/openloomi.cjs apps/openloomi-skill/tests/openloomi-script.test.mjs apps/openloomi-skill/tests/bundle-structure.test.mjs apps/openloomi-skill/tests/package-openloomi-skill.test.mjs apps/openloomi-skill/scripts/package-openloomi-skill.cjs
 ```
 
 Optional zip smoke on Windows:
