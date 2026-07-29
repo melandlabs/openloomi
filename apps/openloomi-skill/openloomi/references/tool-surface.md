@@ -52,7 +52,7 @@ Expected API probes:
 
 ### memory-search
 
-Search OpenLoomi memory for user context. This command falls back to RAG search when the unified memory endpoint is unavailable.
+Search OpenLoomi memory for user context. This command falls back to RAG search when the unified memory endpoint is unavailable, and if the API search returns no matches it performs a read-only local scan of `~/.openloomi/data/memory/**/*.md|json`.
 
 ```bash
 node "$SKILL_DIR/scripts/openloomi.cjs" memory-search "project alpha" --limit=5
@@ -65,6 +65,11 @@ Preferred API path:
 Fallback API path:
 
 - `POST /api/rag/search` with `{ "query": "...", "limit": 5 }`
+
+Local-file fallback:
+
+- Scans `.md` and `.json` files under `~/.openloomi/data/memory/` when the API result set is empty.
+- Returns local hits at top-level `results` with `source: "local-file"`, `file`, `line`, and `preview`.
 
 ### knowledge-search
 

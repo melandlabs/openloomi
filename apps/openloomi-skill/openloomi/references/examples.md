@@ -16,7 +16,7 @@ Run:
 node "$SKILL_DIR/scripts/openloomi.cjs" memory-search "internship project" --limit=5
 ```
 
-Respond with the most relevant matches, cite source ids or document ids when present, and say clearly when OpenLoomi returned no matches.
+Respond with the most relevant matches, cite source ids or document ids when present, cite `local-file` paths for local memory-file hits, and say clearly when OpenLoomi returned no matches.
 
 ## Check Connectors
 

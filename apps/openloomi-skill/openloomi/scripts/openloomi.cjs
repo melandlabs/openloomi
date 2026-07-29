@@ -15,6 +15,7 @@ const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 const TOKEN_PATH = path.join(os.homedir(), ".openloomi", "token");
+const MEMORY_DIR = path.join(os.homedir(), ".openloomi", "data", "memory");
 
 const SAFE_AGENT_ALLOWED_TOOLS = [
   "Read",
@@ -493,6 +494,154 @@ function shouldFallbackToRag(error) {
   return error?.code === "not_found" || error?.code === "method_not_allowed";
 }
 
+function resolveMemoryDir(env = process.env) {
+  return path.resolve(env.OPENLOOMI_MEMORY_DIR || MEMORY_DIR);
+}
+
+function fileSystemMethod(fileSystem, name) {
+  return typeof fileSystem?.[name] === "function"
+    ? fileSystem[name].bind(fileSystem)
+    : fs[name].bind(fs);
+}
+
+function normalizeRelativePath(value) {
+  return value.split(path.sep).join("/");
+}
+
+function buildLocalMemoryPreview(lines, index) {
+  const snippets = [];
+  for (
+    let cursor = index;
+    cursor < lines.length && snippets.join(" ").length < 200;
+    cursor += 1
+  ) {
+    const text = lines[cursor].trim();
+    if (text) {
+      snippets.push(text);
+    }
+  }
+  return snippets.join(" ").replace(/\s+/g, " ").slice(0, 200);
+}
+
+function extractSearchResults(body) {
+  const containers = [
+    body,
+    body?.data,
+    body?.result,
+    body?.memory,
+    body?.rag,
+  ].filter((value) => value && typeof value === "object");
+  const keys = ["results", "items", "documents", "matches", "memories"];
+
+  for (const container of containers) {
+    for (const key of keys) {
+      if (Array.isArray(container[key])) {
+        return container[key];
+      }
+    }
+  }
+  return [];
+}
+
+function hasSearchResults(body) {
+  if (extractSearchResults(body).length > 0) {
+    return true;
+  }
+
+  const counts = [
+    body?.count,
+    body?.total,
+    body?.data?.count,
+    body?.data?.total,
+    body?.result?.count,
+    body?.result?.total,
+  ];
+  return counts.some((value) => Number.isFinite(value) && Number(value) > 0);
+}
+
+function searchLocalMemoryFiles(query, options = {}) {
+  const {
+    env = process.env,
+    fileSystem = fs,
+    limit = 5,
+    maxDepth = 8,
+  } = options;
+  const memoryDir = resolveMemoryDir(env);
+  const existsSync = fileSystemMethod(fileSystem, "existsSync");
+  const readdirSync = fileSystemMethod(fileSystem, "readdirSync");
+  const readFileSync = fileSystemMethod(fileSystem, "readFileSync");
+
+  const localFiles = {
+    source: "local-files",
+    memoryDir,
+    results: [],
+    total: 0,
+  };
+
+  if (!existsSync(memoryDir)) {
+    localFiles.message = `Memory directory not found: ${memoryDir}`;
+    return localFiles;
+  }
+
+  const queryLower = query.toLocaleLowerCase();
+  const extensions = new Set([".md", ".json"]);
+
+  function walk(dir, depth = 0) {
+    if (depth > maxDepth || localFiles.results.length >= limit) {
+      return;
+    }
+
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      if (localFiles.results.length >= limit) {
+        return;
+      }
+
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath, depth + 1);
+        continue;
+      }
+      if (!entry.isFile() || !extensions.has(path.extname(entry.name))) {
+        continue;
+      }
+
+      let content;
+      try {
+        content = readFileSync(fullPath, "utf8");
+      } catch {
+        continue;
+      }
+
+      const lines = content.split(/\r?\n/);
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        if (!line.toLocaleLowerCase().includes(queryLower)) {
+          continue;
+        }
+        localFiles.results.push({
+          source: "local-file",
+          file: normalizeRelativePath(path.relative(memoryDir, fullPath)),
+          line: index + 1,
+          preview: buildLocalMemoryPreview(lines, index),
+        });
+        break;
+      }
+    }
+  }
+
+  walk(memoryDir);
+  localFiles.total = localFiles.results.length;
+  return localFiles;
+}
+
 async function memorySearchCommand(args, context) {
   const { flags, positionals } = parseCommandArgs(args);
   const query = positionals.join(" ").trim();
@@ -533,6 +682,22 @@ async function memorySearchCommand(args, context) {
     });
   }
 
+  const apiResults = extractSearchResults(response.body);
+  const localFiles = hasSearchResults(response.body)
+    ? {
+        source: "local-files",
+        memoryDir: resolveMemoryDir(context.env),
+        results: [],
+        total: 0,
+        skipped: "api-returned-results",
+      }
+    : searchLocalMemoryFiles(query, {
+        env: context.env,
+        fileSystem: context.fs,
+        limit,
+      });
+  const results = apiResults.length > 0 ? apiResults : localFiles.results;
+
   return {
     ok: true,
     command: "memory-search",
@@ -541,6 +706,10 @@ async function memorySearchCommand(args, context) {
     query,
     limit,
     result: response.body,
+    results,
+    total: results.length,
+    sources: localFiles.total > 0 ? ["api", "local-files"] : ["api"],
+    localFiles,
   };
 }
 

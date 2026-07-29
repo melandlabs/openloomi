@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import http from "node:http";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -164,6 +172,57 @@ test("memory-search falls back from unified memory to RAG search", async () => {
       assert.equal(result.json.result.results[0].documentId, "doc_1");
     },
   );
+});
+
+test("memory-search falls back to local memory files when API returns no results", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "openloomi-memory-"));
+  const notesDir = join(tempDir, "cloud_test", "notes");
+  mkdirSync(notesDir, { recursive: true });
+  writeFileSync(
+    join(notesDir, "roadmap.md"),
+    "# Roadmap\n\nThe roadmap priority is high.\n",
+    "utf8",
+  );
+
+  try {
+    await withMockServer(
+      async (req, res, body) => {
+        if (defaultProbeHandler(req, res)) return;
+        if (req.url === "/api/memory/search") {
+          assert.deepEqual(body, { query: "roadmap", limit: 5 });
+          sendJson(res, 200, {
+            query: body.query,
+            sources: ["memory", "insights", "knowledge"],
+            results: [],
+            count: 0,
+          });
+          return;
+        }
+        sendJson(res, 404, { error: "not found" });
+      },
+      async ({ baseUrl }) => {
+        const result = await runCli(
+          baseUrl,
+          ["memory-search", "roadmap", "--limit=5"],
+          { OPENLOOMI_MEMORY_DIR: tempDir },
+          { existsSync, readdirSync, readFileSync },
+        );
+
+        assert.equal(result.status, 0);
+        assert.equal(result.json.ok, true);
+        assert.equal(result.json.endpoint, "/api/memory/search");
+        assert.deepEqual(result.json.sources, ["api", "local-files"]);
+        assert.equal(result.json.total, 1);
+        assert.equal(result.json.localFiles.total, 1);
+        assert.equal(result.json.results[0].source, "local-file");
+        assert.equal(result.json.results[0].file, "cloud_test/notes/roadmap.md");
+        assert.equal(result.json.results[0].line, 1);
+        assert.match(result.json.results[0].preview, /high/);
+      },
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("knowledge commands use explicit RAG document APIs", async () => {
