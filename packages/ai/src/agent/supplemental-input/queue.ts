@@ -54,10 +54,30 @@ export type AgentSupplementalInputEnqueueResult =
       interrupt: AgentSupplementalInputInterruptResult;
     }
   | {
+      status: "superseded";
+      input: NormalizedAgentSupplementalInput;
+      interrupt: AgentSupplementalInputInterruptResult;
+    }
+  | {
       status: "duplicate";
       id: string;
       interrupt: { status: "not_requested" };
     };
+
+export interface AgentRunEpochAdvance {
+  expectedRunEpoch: number;
+  nextRunEpoch: number;
+}
+
+export interface AgentSupplementalInputEnqueueOptions {
+  /** A provider that is already idle can consume a steer without interruption. */
+  requestInterrupt?: boolean;
+}
+
+export interface AgentSupplementalInputHold {
+  readonly runEpoch: number;
+  release(): void;
+}
 
 export type NormalizedAgentSupplementalInput = Readonly<
   AgentSupplementalInput & {
@@ -76,6 +96,11 @@ type IteratorWaiter = (result: IteratorResult<AgentSupplementalInput>) => void;
 type InterruptOutcome =
   | { status: "completed" }
   | { status: "failed"; error: Error };
+
+interface InFlightInterrupt {
+  runEpoch: number;
+  operation: Promise<InterruptOutcome>;
+}
 
 const isoDateTimeSchema = z.iso.datetime({ offset: true });
 
@@ -102,12 +127,16 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
   private readonly pending: PendingInput[] = [];
   private readonly waiters: IteratorWaiter[] = [];
   private readonly acceptedIds = new Set<string>();
+  private readonly pendingInputHolds = new Map<number, Set<symbol>>();
 
   private state: "open" | "closed" | "aborted" = "open";
   private activeRunEpoch: number;
   private iteratorCreated = false;
   private interruptHandler: (() => Promise<void> | void) | null = null;
-  private interruptInFlight: Promise<InterruptOutcome> | null = null;
+  private handoffHandler:
+    | ((input: NormalizedAgentSupplementalInput) => void)
+    | null = null;
+  private interruptInFlight: InFlightInterrupt | null = null;
 
   constructor(options: AgentSupplementalInputQueueOptions = {}) {
     this.maxPendingInputs = validatePositiveIntegerOption(
@@ -129,6 +158,7 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
 
   async enqueue(
     candidate: AgentSupplementalInput,
+    options: AgentSupplementalInputEnqueueOptions = {},
   ): Promise<AgentSupplementalInputEnqueueResult> {
     if (this.state !== "open") {
       throw queueError("closed", "Supplemental input queue is closed");
@@ -175,10 +205,13 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
     this.drainReleasableInputs();
 
     const interrupt =
-      input.intent === "steer"
+      input.intent === "steer" && options.requestInterrupt !== false
         ? await this.interrupt()
         : { status: "not_requested" as const };
 
+    if (input.runEpoch !== this.activeRunEpoch) {
+      return { status: "superseded", input, interrupt };
+    }
     return { status: "accepted", input, interrupt };
   }
 
@@ -198,11 +231,31 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
     this.interruptHandler = handler;
   }
 
+  setHandoffHandler(
+    handler: ((input: NormalizedAgentSupplementalInput) => void) | null,
+  ): void {
+    if (handler !== null && typeof handler !== "function") {
+      throw queueError(
+        "invalid_input",
+        "Supplemental input handoff handler must be a function or null",
+      );
+    }
+    if (this.state !== "open" && handler !== null) {
+      throw queueError(
+        "closed",
+        "Cannot attach a handoff handler to a closed supplemental input queue",
+      );
+    }
+    this.handoffHandler = handler;
+  }
+
   hasPending(): boolean {
     return this.pending.length > 0;
   }
 
   takePendingInform(): AgentSupplementalInput[] {
+    if (this.isPendingInputHeld(this.activeRunEpoch)) return [];
+
     const informs: NormalizedAgentSupplementalInput[] = [];
     while (this.pending[0]?.input.intent === "inform") {
       const entry = this.pending.shift();
@@ -214,6 +267,8 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
   }
 
   releasePendingInform(): number {
+    if (this.isPendingInputHeld(this.activeRunEpoch)) return 0;
+
     let released = 0;
     for (const entry of this.pending) {
       if (entry.input.intent === "inform" && !entry.releasable) {
@@ -230,20 +285,70 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
   }
 
   /**
-   * Moves the queue to a newer run and removes inputs that can no longer be
-   * applied. Inputs already yielded remain fenced by downstream event state.
+   * Prevents both SDK iteration and hook-based reads from releasing buffered
+   * inform inputs while a turn-ending lifecycle transition is in flight.
    */
-  advanceRunEpoch(nextRunEpoch: number): AgentSupplementalInput[] {
-    const normalizedEpoch = validateRunEpoch(nextRunEpoch);
-    if (normalizedEpoch <= this.activeRunEpoch) {
+  holdPendingInputForRunEpoch(
+    expectedRunEpoch: number,
+  ): AgentSupplementalInputHold {
+    const runEpoch = validateRunEpoch(expectedRunEpoch);
+    if (this.state !== "open") {
+      throw queueError(
+        "closed",
+        "Cannot hold pending input on a closed supplemental input queue",
+      );
+    }
+    if (runEpoch !== this.activeRunEpoch) {
       throw queueError(
         "epoch_mismatch",
-        `nextRunEpoch must be greater than active runEpoch ${this.activeRunEpoch}`,
+        `Expected active runEpoch ${runEpoch}, received ${this.activeRunEpoch}`,
       );
     }
 
-    this.activeRunEpoch = normalizedEpoch;
+    const token = Symbol(`runEpoch:${runEpoch}`);
+    const holds = this.pendingInputHolds.get(runEpoch) ?? new Set<symbol>();
+    holds.add(token);
+    this.pendingInputHolds.set(runEpoch, holds);
+
+    let released = false;
+    return {
+      runEpoch,
+      release: () => {
+        if (released) return;
+        released = true;
+        const activeHolds = this.pendingInputHolds.get(runEpoch);
+        if (activeHolds === undefined || !activeHolds.delete(token)) return;
+        if (activeHolds.size > 0) return;
+
+        this.pendingInputHolds.delete(runEpoch);
+        this.drainReleasableInputs();
+      },
+    };
+  }
+
+  /**
+   * Moves the queue to a newer run and removes inputs that can no longer be
+   * applied. Inputs already yielded remain fenced by downstream event state.
+   */
+  advanceRunEpoch(input: AgentRunEpochAdvance): AgentSupplementalInput[] {
+    const expectedRunEpoch = validateRunEpoch(input.expectedRunEpoch);
+    const nextRunEpoch = validateRunEpoch(input.nextRunEpoch);
+    if (expectedRunEpoch !== this.activeRunEpoch) {
+      throw queueError(
+        "epoch_mismatch",
+        `Expected active runEpoch ${expectedRunEpoch}, received ${this.activeRunEpoch}`,
+      );
+    }
+    if (nextRunEpoch !== expectedRunEpoch + 1) {
+      throw queueError(
+        "epoch_mismatch",
+        `nextRunEpoch must advance exactly once from ${expectedRunEpoch}`,
+      );
+    }
+
+    this.activeRunEpoch = nextRunEpoch;
     const discarded = this.pending.splice(0).map((entry) => entry.input);
+    this.pendingInputHolds.delete(expectedRunEpoch);
     this.drainReleasableInputs();
     return discarded;
   }
@@ -255,11 +360,15 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
     }
 
     const activeInterrupt = this.interruptInFlight;
-    if (activeInterrupt !== null) {
-      return withCoalescedFlag(await activeInterrupt, true);
+    if (
+      activeInterrupt !== null &&
+      activeInterrupt.runEpoch === this.activeRunEpoch
+    ) {
+      return withCoalescedFlag(await activeInterrupt.operation, true);
     }
 
     const handler = this.interruptHandler;
+    const runEpoch = this.activeRunEpoch;
     const operation: Promise<InterruptOutcome> = Promise.resolve()
       .then(() => handler())
       .then((): InterruptOutcome => ({ status: "completed" }))
@@ -269,12 +378,13 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
           error: normalizeError(error),
         }),
       );
-    this.interruptInFlight = operation;
+    const inFlight = { runEpoch, operation };
+    this.interruptInFlight = inFlight;
 
     try {
       return withCoalescedFlag(await operation, false);
     } finally {
-      if (this.interruptInFlight === operation) {
+      if (this.interruptInFlight === inFlight) {
         this.interruptInFlight = null;
       }
     }
@@ -285,7 +395,9 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
     if (this.state !== "open") return;
     this.state = "closed";
     this.interruptHandler = null;
+    this.handoffHandler = null;
     this.acceptedIds.clear();
+    this.pendingInputHolds.clear();
     for (const entry of this.pending) {
       entry.releasable = true;
     }
@@ -297,7 +409,9 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
     const discarded = this.pending.splice(0).map((entry) => entry.input);
     this.state = "aborted";
     this.interruptHandler = null;
+    this.handoffHandler = null;
     this.acceptedIds.clear();
+    this.pendingInputHolds.clear();
     this.resolveAllWaitersDone();
     return discarded;
   }
@@ -327,7 +441,8 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
 
   private next(): Promise<IteratorResult<AgentSupplementalInput>> {
     const entry = this.pending[0];
-    if (entry?.releasable) {
+    if (entry?.releasable && !this.isPendingInputHeld(entry.input.runEpoch)) {
+      this.handoffHandler?.(entry.input);
       this.pending.shift();
       return Promise.resolve({ value: entry.input, done: false });
     }
@@ -347,10 +462,17 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
   }
 
   private drainReleasableInputs(): void {
-    while (this.waiters.length > 0 && this.pending[0]?.releasable) {
-      const waiter = this.waiters.shift();
-      const entry = this.pending.shift();
+    while (
+      this.waiters.length > 0 &&
+      this.pending[0]?.releasable &&
+      !this.isPendingInputHeld(this.pending[0].input.runEpoch)
+    ) {
+      const waiter = this.waiters[0];
+      const entry = this.pending[0];
       if (waiter === undefined || entry === undefined) break;
+      this.handoffHandler?.(entry.input);
+      this.waiters.shift();
+      this.pending.shift();
       waiter({ value: entry.input, done: false });
     }
     this.finishWaitingConsumersIfDrained();
@@ -366,6 +488,10 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
     for (const waiter of this.waiters.splice(0)) {
       waiter(doneResult());
     }
+  }
+
+  private isPendingInputHeld(runEpoch: number): boolean {
+    return (this.pendingInputHolds.get(runEpoch)?.size ?? 0) > 0;
   }
 }
 

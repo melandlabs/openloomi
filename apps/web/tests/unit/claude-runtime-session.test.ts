@@ -13,6 +13,8 @@ import type { AgentSupplementalInputSource } from "@openloomi/ai/agent/types";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  type ClaudeGoalRuntimeEpochMismatchError,
+  type ClaudeGoalRuntimeRecoveryRequiredError,
   ClaudeInputMultiplexer,
   ClaudeGoalRuntimeRegistrationError,
   ClaudeRuntimeSession,
@@ -242,6 +244,70 @@ describe("Claude Goal runtime registration", () => {
     expect(runtime.state).toBe("closed");
     expect(goalRuntime.sessions.size).toBe(0);
   });
+
+  it("fails closed for stale or not-yet-recoverable run epochs", async () => {
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
+    const runtime = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 0,
+      sdkTransport: sdk.transport,
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    const goalRuntime = createInMemoryAgentGoalRuntime();
+    vi.spyOn(goalRuntime.goals, "getRuntimeSessionRunEpoch").mockResolvedValue(
+      1,
+    );
+
+    await expect(
+      startClaudeGoalRuntimeSession({
+        session: { user: { id: "authenticated-owner" } },
+        runtime,
+        start: { initialPrompt: "initial request" },
+        goalRuntime,
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "ClaudeGoalRuntimeEpochMismatchError",
+        code: "run_epoch_mismatch",
+        runtimeSessionId: SESSION_ID,
+        expectedRunEpoch: 1,
+        actualRunEpoch: 0,
+      }) satisfies Partial<ClaudeGoalRuntimeEpochMismatchError>,
+    );
+    expect(sdk.queryInput).toBeUndefined();
+    expect(handle.close).not.toHaveBeenCalled();
+    expect(runtime.state).toBe("closed");
+    expect(goalRuntime.sessions.size).toBe(0);
+
+    const matchingEpochHandle = createControlledClaudeQuery();
+    const matchingEpochSdk = createFakeClaudeSdkTransport(matchingEpochHandle);
+    const matchingEpochRuntime = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 1,
+      sdkTransport: matchingEpochSdk.transport,
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    await expect(
+      startClaudeGoalRuntimeSession({
+        session: { user: { id: "authenticated-owner" } },
+        runtime: matchingEpochRuntime,
+        start: { initialPrompt: "initial request" },
+        goalRuntime,
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "ClaudeGoalRuntimeRecoveryRequiredError",
+        code: "run_epoch_recovery_required",
+        runtimeSessionId: SESSION_ID,
+        runEpoch: 1,
+      }) satisfies Partial<ClaudeGoalRuntimeRecoveryRequiredError>,
+    );
+    expect(matchingEpochSdk.queryInput).toBeUndefined();
+    expect(matchingEpochRuntime.state).toBe("closed");
+  });
 });
 
 describe("ClaudeRuntimeSession", () => {
@@ -319,7 +385,20 @@ describe("ClaudeRuntimeSession", () => {
 
     await session.interrupt("manual replacement");
     expect(handle.interrupt).toHaveBeenCalledTimes(2);
-    session.advanceRunEpoch(3);
+    const boundary = session.captureTurnBoundary();
+    const terminal = session.waitForTurnTerminal({
+      expectedRunEpoch: 2,
+      afterTerminalSequence: boundary.terminalSequence,
+    });
+    handle.push(resultMessage());
+    await expect(terminal).resolves.toMatchObject({
+      runEpoch: 2,
+      state: "idle",
+    });
+    session.advanceRunEpoch({
+      expectedRunEpoch: 2,
+      nextRunEpoch: 3,
+    });
     expect(session.runEpoch).toBe(3);
     await session.close();
   });
@@ -339,12 +418,186 @@ describe("ClaudeRuntimeSession", () => {
     await expect(
       session.interrupt({ reason: "stale", expectedRunEpoch: 3 }),
     ).rejects.toMatchObject({ code: "invalid_run_epoch" });
-    expect(() => session.advanceRunEpoch(4)).toThrowError(
-      expect.objectContaining({ code: "invalid_run_epoch" }),
-    );
+    const terminal = session.waitForTurnTerminal({
+      expectedRunEpoch: 4,
+      afterTerminalSequence: 0,
+    });
+    handle.push(resultMessage());
+    await terminal;
+    expect(() =>
+      session.advanceRunEpoch({
+        expectedRunEpoch: 4,
+        nextRunEpoch: 4,
+      }),
+    ).toThrowError(expect.objectContaining({ code: "invalid_run_epoch" }));
     expect(() => session.start({ initialPrompt: "again" })).toThrowError(
       expect.objectContaining({ code: "already_started" }),
     );
+    await session.close();
+  });
+
+  it("remembers terminal boundaries that arrive before a waiter is attached", async () => {
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
+    const session = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 0,
+      sdkTransport: sdk.transport,
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    const output = session.subscribe()[Symbol.asyncIterator]();
+    session.start({ initialPrompt: "initial request" });
+    const boundary = session.captureTurnBoundary();
+
+    handle.push(resultMessage());
+    await expect(output.next()).resolves.toMatchObject({
+      value: { type: "result", runEpoch: 0 },
+    });
+
+    await expect(
+      session.waitForTurnTerminal({
+        expectedRunEpoch: 0,
+        afterTerminalSequence: boundary.terminalSequence,
+      }),
+    ).resolves.toMatchObject({
+      runEpoch: 0,
+      terminalSequence: 1,
+      state: "idle",
+    });
+    await session.close();
+  });
+
+  it("removes an aborted terminal waiter without consuming a later boundary", async () => {
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
+    const session = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 0,
+      sdkTransport: sdk.transport,
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    const output = session.subscribe()[Symbol.asyncIterator]();
+    session.start({ initialPrompt: "initial request" });
+    const controller = new AbortController();
+    const waiting = session.waitForTurnTerminal({
+      expectedRunEpoch: 0,
+      afterTerminalSequence: 0,
+      signal: controller.signal,
+    });
+
+    controller.abort();
+    await expect(waiting).rejects.toMatchObject({
+      code: "terminal_wait_aborted",
+    });
+
+    handle.push(resultMessage());
+    await expect(output.next()).resolves.toMatchObject({
+      value: { type: "result", runEpoch: 0 },
+    });
+    await expect(
+      session.waitForTurnTerminal({
+        expectedRunEpoch: 0,
+        afterTerminalSequence: 0,
+      }),
+    ).resolves.toMatchObject({
+      runEpoch: 0,
+      terminalSequence: 1,
+    });
+    await session.close();
+  });
+
+  it("atomically holds terminal input and marks the next SDK handoff as running", async () => {
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
+    const session = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 0,
+      sdkTransport: sdk.transport,
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    const output = session.subscribe()[Symbol.asyncIterator]();
+    session.start({ initialPrompt: "initial request" });
+    const prompt = sdk.queryInput?.prompt as AsyncIterable<SDKUserMessage>;
+    const input = prompt[Symbol.asyncIterator]();
+    await input.next();
+
+    await session.deliver(
+      runtimeInstruction({
+        deliveryMode: "next_boundary",
+        idempotencyKey: "held-terminal-context",
+      }),
+    );
+    const captured = session.captureTurnBoundaryAndHoldPendingInput(0);
+    const waitingInput = input.next();
+    let handedOff = false;
+    void waitingInput.then(() => {
+      handedOff = true;
+    });
+
+    const terminal = session.waitForTurnTerminal({
+      expectedRunEpoch: captured.boundary.runEpoch,
+      afterTerminalSequence: captured.boundary.terminalSequence,
+    });
+    handle.push(resultMessage());
+    await output.next();
+    await terminal;
+    expect(session.state).toBe("idle");
+    expect(handedOff).toBe(false);
+
+    captured.hold.release({ releasePendingIfIdle: true });
+    await expect(waitingInput).resolves.toMatchObject({
+      value: {
+        priority: "next",
+        message: { content: expect.stringContaining("context.remove") },
+      },
+    });
+    expect(session.state).toBe("running");
+    await session.close();
+  });
+
+  it("does not release new-epoch informs for a delayed old result", async () => {
+    const handle = createControlledClaudeQuery();
+    const sdk = createFakeClaudeSdkTransport(handle);
+    const session = new ClaudeRuntimeSession({
+      runtimeSessionId: SESSION_ID,
+      runEpoch: 0,
+      sdkTransport: sdk.transport,
+      logger: logger(),
+      createMessageId: () => "message-id",
+    });
+    const output = session.subscribe()[Symbol.asyncIterator]();
+    session.start({ initialPrompt: "initial request" });
+    const terminal = session.waitForTurnTerminal({
+      expectedRunEpoch: 0,
+      afterTerminalSequence: 0,
+    });
+    handle.push(resultMessage());
+    await output.next();
+    await terminal;
+    session.advanceRunEpoch({
+      expectedRunEpoch: 0,
+      nextRunEpoch: 1,
+    });
+
+    await session.deliver(
+      runtimeInstruction({
+        id: "88888888-8888-4888-8888-888888888888",
+        sequence: 2,
+        deliveryMode: "next_boundary",
+        idempotencyKey: "new-epoch-inform",
+      }),
+    );
+    expect(session.liveInputSource.hasPending?.()).toBe(true);
+
+    handle.push(resultMessage());
+    await expect(output.next()).resolves.toMatchObject({
+      value: { type: "result", runEpoch: 0 },
+    });
+    expect(session.liveInputSource.hasPending?.()).toBe(true);
+    expect(session.state).toBe("idle");
     await session.close();
   });
 });

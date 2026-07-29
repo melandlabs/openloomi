@@ -1,4 +1,4 @@
-export const RUNTIME_INSTRUCTION_SCHEMA_VERSION = "1" as const;
+export const RUNTIME_INSTRUCTION_SCHEMA_VERSION = "2" as const;
 
 export const DEFAULT_GOAL_MAX_TURNS = 12;
 

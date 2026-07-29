@@ -42,6 +42,7 @@ export class SupplementalInputRuntimeInstructionTransport implements RuntimeInst
   private readonly queue: AgentSupplementalInputQueue;
   private readonly now: () => Date;
   private readonly acceptedInstructionIdentities = new Map<string, string>();
+  private readonly instructionRunEpochs = new Map<string, number>();
 
   constructor(input: {
     runtimeSessionId: string;
@@ -68,6 +69,10 @@ export class SupplementalInputRuntimeInstructionTransport implements RuntimeInst
 
   async deliver(
     candidate: RuntimeInstruction,
+    options: {
+      interruptControl?: boolean;
+      interruptSteer?: boolean;
+    } = {},
   ): Promise<RuntimeDeliveryReceipt> {
     const parsed = RuntimeInstructionSchema.safeParse(candidate);
     if (!parsed.success) {
@@ -101,20 +106,68 @@ export class SupplementalInputRuntimeInstructionTransport implements RuntimeInst
         "Instruction ID was already accepted for a different Goal revision",
       );
     }
+    if (acceptedIdentity === identity && isInterruptControl(instruction)) {
+      return this.queued(
+        instruction.id,
+        "Interrupting lifecycle instruction was already accepted",
+      );
+    }
+
+    const activeRunEpoch = this.queue.getRunEpoch();
+    const attemptedRunEpoch = this.instructionRunEpochs.get(instruction.id);
+    if (
+      attemptedRunEpoch !== undefined &&
+      attemptedRunEpoch !== activeRunEpoch
+    ) {
+      return this.rejected(
+        instruction.id,
+        `Instruction is fenced to runEpoch ${attemptedRunEpoch}, not active runEpoch ${activeRunEpoch}`,
+      );
+    }
+    this.instructionRunEpochs.set(instruction.id, activeRunEpoch);
 
     try {
-      const result = await this.queue.enqueue({
-        id: instruction.id,
-        content: formatRuntimeInstruction(instruction),
-        createdAt: instruction.issuedAt,
-        runEpoch: this.queue.getRunEpoch(),
-        intent:
-          instruction.deliveryMode === "next_boundary" ? "inform" : "steer",
-      });
+      if (isInterruptControl(instruction)) {
+        const expectedRunEpoch = instruction.payload.expectedRunEpoch;
+        if (expectedRunEpoch !== activeRunEpoch) {
+          return this.rejected(
+            instruction.id,
+            `Expected run epoch ${expectedRunEpoch}, active epoch is ${activeRunEpoch}`,
+          );
+        }
+        if (options.interruptControl !== false) {
+          await this.interrupt({
+            reason:
+              instruction.payload.reason ??
+              `Apply ${instruction.kind} lifecycle transition`,
+            expectedRunEpoch,
+          });
+        }
+        this.acceptedInstructionIdentities.set(instruction.id, identity);
+        return this.queued(instruction.id);
+      }
+
+      const result = await this.queue.enqueue(
+        {
+          id: instruction.id,
+          content: formatRuntimeInstruction(instruction),
+          createdAt: instruction.issuedAt,
+          runEpoch: this.queue.getRunEpoch(),
+          intent:
+            instruction.deliveryMode === "next_boundary" ? "inform" : "steer",
+        },
+        { requestInterrupt: options.interruptSteer },
+      );
 
       if (result.status === "duplicate") {
         this.acceptedInstructionIdentities.set(instruction.id, identity);
         return this.queued(instruction.id, "Instruction was already queued");
+      }
+      if (result.status === "superseded") {
+        return this.rejected(
+          instruction.id,
+          `Instruction was superseded while runEpoch advanced from ${result.input.runEpoch}`,
+        );
       }
       this.acceptedInstructionIdentities.set(instruction.id, identity);
       if (result.interrupt.status === "unavailable") {
@@ -154,6 +207,12 @@ export class SupplementalInputRuntimeInstructionTransport implements RuntimeInst
     }
 
     const result = await this.queue.interrupt();
+    if (this.queue.getRunEpoch() !== input.expectedRunEpoch) {
+      throw new SupplementalInputRuntimeTransportError(
+        "invalid_run_epoch",
+        `Run epoch advanced while interrupt ${input.expectedRunEpoch} was in flight`,
+      );
+    }
     if (result.status === "completed") return;
     if (result.status === "failed") {
       throw new SupplementalInputRuntimeTransportError(
@@ -168,15 +227,25 @@ export class SupplementalInputRuntimeInstructionTransport implements RuntimeInst
     );
   }
 
-  advanceRunEpoch(nextRunEpoch: number): AgentSupplementalInput[] {
-    const activeRunEpoch = this.queue.getRunEpoch();
-    if (!Number.isInteger(nextRunEpoch) || nextRunEpoch <= activeRunEpoch) {
-      throw new SupplementalInputRuntimeTransportError(
-        "invalid_run_epoch",
-        `nextRunEpoch must be greater than active run epoch ${activeRunEpoch}`,
-      );
+  advanceRunEpoch(input: {
+    expectedRunEpoch: number;
+    nextRunEpoch: number;
+  }): AgentSupplementalInput[] {
+    try {
+      return this.queue.advanceRunEpoch(input);
+    } catch (error) {
+      if (
+        error instanceof AgentSupplementalInputQueueError &&
+        error.code === "epoch_mismatch"
+      ) {
+        throw new SupplementalInputRuntimeTransportError(
+          "invalid_run_epoch",
+          error.message,
+          error,
+        );
+      }
+      throw error;
     }
-    return this.queue.advanceRunEpoch(nextRunEpoch);
   }
 
   private queued(
@@ -224,4 +293,17 @@ function instructionRevisionIdentity(instruction: RuntimeInstruction): string {
     instruction.goalId ?? "no-goal",
     instruction.goalRevision?.toString() ?? "no-revision",
   ].join(":");
+}
+
+function isInterruptControl(
+  instruction: RuntimeInstruction,
+): instruction is Extract<
+  RuntimeInstruction,
+  { kind: "control.interrupt" | "goal.pause" | "goal.cancel" }
+> {
+  return (
+    instruction.kind === "control.interrupt" ||
+    instruction.kind === "goal.pause" ||
+    instruction.kind === "goal.cancel"
+  );
 }

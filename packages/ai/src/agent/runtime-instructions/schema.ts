@@ -441,6 +441,13 @@ const optionalReasonSchema = z
   .object({ reason: z.string().trim().min(1).max(4_000).optional() })
   .strict();
 
+const interruptingLifecyclePayloadSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(4_000).optional(),
+    expectedRunEpoch: z.int().nonnegative(),
+  })
+  .strict();
+
 const goalInstructionEnvelopeSchema = instructionEnvelopeSchema.extend({
   goalId: z.uuid(),
   goalRevision: z.int().positive(),
@@ -482,7 +489,7 @@ export const RuntimeInstructionSchema = z
     }),
     goalInstructionEnvelopeSchema.extend({
       kind: z.literal("goal.pause"),
-      payload: optionalReasonSchema,
+      payload: interruptingLifecyclePayloadSchema,
     }),
     goalInstructionEnvelopeSchema.extend({
       kind: z.literal("goal.resume"),
@@ -490,7 +497,7 @@ export const RuntimeInstructionSchema = z
     }),
     goalInstructionEnvelopeSchema.extend({
       kind: z.literal("goal.cancel"),
-      payload: optionalReasonSchema,
+      payload: interruptingLifecyclePayloadSchema,
     }),
     goalInstructionEnvelopeSchema.extend({
       kind: z.literal("goal.continue"),
@@ -533,6 +540,7 @@ export const RuntimeInstructionSchema = z
       payload: z
         .object({
           reason: z.string().trim().min(1).max(4_000),
+          expectedRunEpoch: z.int().nonnegative(),
           replacementGoalId: z.uuid().optional(),
         })
         .strict(),
@@ -588,6 +596,40 @@ export const RuntimeInstructionSchema = z
         path: ["deliveryMode"],
         message: "control.interrupt requires interrupt_replace delivery",
       });
+    }
+    if (
+      (instruction.kind === "goal.pause" ||
+        instruction.kind === "goal.cancel") &&
+      instruction.deliveryMode !== "interrupt_replace"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["deliveryMode"],
+        message: `${instruction.kind} requires interrupt_replace delivery`,
+      });
+    }
+    if (
+      instruction.kind === "control.interrupt" &&
+      instruction.payload.replacementGoalId !== undefined
+    ) {
+      if (
+        instruction.goalId === undefined ||
+        instruction.goalRevision === undefined
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["goalId"],
+          message:
+            "A replacement interrupt must identify the superseded Goal and revision",
+        });
+      }
+      if (instruction.payload.replacementGoalId === instruction.goalId) {
+        context.addIssue({
+          code: "custom",
+          path: ["payload", "replacementGoalId"],
+          message: "A replacement Goal must differ from the superseded Goal",
+        });
+      }
     }
     if (
       (instruction.kind === "goal.activate" ||

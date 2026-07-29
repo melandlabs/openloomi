@@ -86,6 +86,7 @@ function formatInstructionBody(instruction: RuntimeInstruction): string {
       return [
         "Action: Interrupt the current turn. Do not begin a replacement Goal until OpenLoomi sends its activation instruction.",
         `Reason: ${escapeText(instruction.payload.reason)}`,
+        `Expected run epoch: ${instruction.payload.expectedRunEpoch}`,
         instruction.payload.replacementGoalId
           ? `Replacement Goal: ${escapeText(instruction.payload.replacementGoalId)}`
           : undefined,

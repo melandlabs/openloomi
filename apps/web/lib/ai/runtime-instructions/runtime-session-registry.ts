@@ -1,5 +1,6 @@
 import type {
   RuntimeInstructionTransportPort,
+  RuntimeSessionLifecycleControlPort,
   RuntimeSessionResolverPort,
 } from "@openloomi/ai/agent/runtime-instructions";
 
@@ -17,6 +18,7 @@ export interface RuntimeSessionRegistration {
 
 export type RuntimeSessionRegistryErrorCode =
   | "invalid_registration"
+  | "lifecycle_unsupported"
   | "owner_conflict"
   | "transport_conflict";
 
@@ -106,9 +108,45 @@ export class RuntimeSessionRegistry implements RuntimeSessionResolverPort {
     return session?.ownerId === ownerId ? session.transport : null;
   }
 
+  async resolveLifecycle(
+    ownerId: string,
+    runtimeSessionId: string,
+  ): Promise<RuntimeSessionLifecycleControlPort | null> {
+    const transport = await this.resolve(ownerId, runtimeSessionId);
+    if (!transport) return null;
+    if (!isLifecycleControl(transport)) {
+      throw new RuntimeSessionRegistryError(
+        "lifecycle_unsupported",
+        `Runtime Session ${runtimeSessionId} does not support Goal replacement lifecycle control`,
+      );
+    }
+    return transport;
+  }
+
+  isCurrent(
+    ownerId: string,
+    transport: RuntimeInstructionTransportPort,
+  ): boolean {
+    const session = this.sessions.get(transport.runtimeSessionId);
+    return session?.ownerId === ownerId && session.transport === transport;
+  }
+
   get size(): number {
     return this.sessions.size;
   }
+}
+
+function isLifecycleControl(
+  transport: RuntimeInstructionTransportPort,
+): transport is RuntimeSessionLifecycleControlPort {
+  const candidate = transport as Partial<RuntimeSessionLifecycleControlPort>;
+  return (
+    typeof candidate.runEpoch === "number" &&
+    typeof candidate.captureTurnBoundary === "function" &&
+    typeof candidate.captureTurnBoundaryAndHoldPendingInput === "function" &&
+    typeof candidate.waitForTurnTerminal === "function" &&
+    typeof candidate.advanceRunEpoch === "function"
+  );
 }
 
 const MAX_RUNTIME_IDENTIFIER_CHARACTERS = 256;
