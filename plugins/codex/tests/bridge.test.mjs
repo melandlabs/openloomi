@@ -548,7 +548,10 @@ test("setup-status reports OPENLOOMI_API_UNREACHABLE when API down and no token"
         j.autoFixCommands.some((c) => c.includes("run-host-probe")),
         "autoFixCommands must include run-host-probe",
       );
-      assert.equal(j.hostProbeCachePath, join(env.HOME, ".openloomi", "codex-host-probe-cache.json"));
+      assert.equal(
+        j.hostProbeCachePath,
+        join(env.HOME, ".openloomi", "codex-host-probe-cache.json"),
+      );
     }
   });
 });
@@ -563,12 +566,19 @@ test("setup-status --emit-host-probe returns host probe payload without writing 
     assert.equal(typeof j.hostProbeScript, "string");
     assert.ok(j.hostProbeScript.includes("codex-host-probe-cache.json"));
     assert.ok(j.hostProbeScript.includes("/api/native/providers"));
-    assert.equal(j.hostProbeCachePath, join(env.HOME, ".openloomi", "codex-host-probe-cache.json"));
+    assert.equal(
+      j.hostProbeCachePath,
+      join(env.HOME, ".openloomi", "codex-host-probe-cache.json"),
+    );
     assert.equal(j.hostProbeCacheMaxAgeMs, 5 * 60 * 1000);
     assert.ok(j.hostProbe);
     assert.equal(j.hostProbe.recommendedNextAction, "run-host-probe");
     // Cache file must NOT have been written just by reading setup-status.
-    const cachePath = join(env.HOME, ".openloomi", "codex-host-probe-cache.json");
+    const cachePath = join(
+      env.HOME,
+      ".openloomi",
+      "codex-host-probe-cache.json",
+    );
     assert.equal(existsSync(cachePath), false);
   });
 });
@@ -589,7 +599,11 @@ test("run-host-probe command is registered and returns ok:false when API unreach
     assert.ok(Array.isArray(j.attempts));
     assert.ok(j.attempts.length > 0, "must record at least one probe attempt");
     // Cache file should still be written (the cache record is best-effort).
-    const cachePath = join(env.HOME, ".openloomi", "codex-host-probe-cache.json");
+    const cachePath = join(
+      env.HOME,
+      ".openloomi",
+      "codex-host-probe-cache.json",
+    );
     assert.equal(existsSync(cachePath), true);
     const cached = JSON.parse(readFileSync(cachePath, "utf8"));
     assert.equal(cached.schemaVersion, 1);
@@ -603,7 +617,11 @@ test("setup-status honors a fresh host probe cache and reports READY_VIA_HOST_PR
     writeFakeToken(env.HOME);
     // Pre-write a fresh host probe cache so the sandbox-blocked fetch is
     // overridden.
-    const cachePath = join(env.HOME, ".openloomi", "codex-host-probe-cache.json");
+    const cachePath = join(
+      env.HOME,
+      ".openloomi",
+      "codex-host-probe-cache.json",
+    );
     mkdirSync(join(env.HOME, ".openloomi"), { recursive: true });
     writeFileSync(
       cachePath,
@@ -1053,6 +1071,16 @@ test("setup without --yes returns awaiting_user_action when install is required"
       "setup must record at least one step",
     );
     if (j.setup === "awaiting_user_action") {
+      assert.notEqual(
+        j.nextAction,
+        "run_host_probe",
+        "fresh installs must not be blocked by the stale loopback probe branch",
+      );
+      assert.notEqual(
+        j.reason,
+        "OPENLOOMI_API_AMBIGUOUS_HOST_PROBE_STALE",
+        "fresh installs should report install state before loopback ambiguity",
+      );
       // The state machine may now surface a new "open_openloomi" branch
       // when the local OpenLoomi API is unreachable even though no app was
       // discovered. Accept that as an awaiting_user_action signal too —
@@ -1081,7 +1109,7 @@ test("setup with --yes proceeds past the install step (not INSTALL_CONFIRMATION_
   withFakeHome((env) => {
     // Same "not installed" forcing as the previous test — but with --yes,
     // the bridge must NOT return INSTALL_CONFIRMATION_REQUIRED.
-    const r = runOutcome(["setup", "--yes"], {
+    const r = runOutcome(["setup", "--yes", "--install-timeout", "1"], {
       ...env,
       OPENLOOMI_BIN: "/nonexistent-ctl-please-ignore",
       OPENLOOMI_HOME: "/nonexistent-home",
@@ -1102,6 +1130,16 @@ test("setup with --yes proceeds past the install step (not INSTALL_CONFIRMATION_
       j.nextAction,
       "confirm_install_openloomi",
       "setup --yes must not stop at the confirm-install gate",
+    );
+    assert.notEqual(
+      j.nextAction,
+      "run_host_probe",
+      "setup --yes in a fresh env must proceed toward install, not host probe",
+    );
+    assert.notEqual(
+      j.reason,
+      "OPENLOOMI_API_AMBIGUOUS_HOST_PROBE_STALE",
+      "setup --yes must not classify a fresh install as loopback ambiguity",
     );
     // When steps[] is present (install got far enough to record an entry),
     // it should contain an install attempt.
@@ -1211,78 +1249,64 @@ test("setup --max-wait, --api-timeout, --permission-timeout, --bin-path flow int
   assert.equal(j.stages.apiMs, 7000);
   assert.equal(j.stages.permissionMs, 4000);
   assert.equal(j.stages.launchMs, 9000);
-  assert.equal(j.stages.installMs, 90000);
+  assert.equal(j.stages.installMs, 8000);
 });
 
 test("waitForApi reports API_NOT_READY when the desktop process is not running", () => {
-  const j = runJson(["__test-wait-for-api", "--api-timeout", "200"]);
-  assert.equal(j.ok, false);
-  assert.equal(j.code, "API_NOT_READY");
-  assert.equal(j.stage, "wait_api");
-  assert.equal(j.permissionLikely, false);
+  withFakeHome((env) => {
+    const j = runJson(["__test-wait-for-api", "--api-timeout", "200"], env);
+    assert.equal(j.ok, false);
+    assert.equal(j.code, "API_NOT_READY");
+    assert.equal(j.stage, "wait_api");
+    assert.equal(j.permissionLikely, false);
+  });
 });
 
 test("waitForApi reports PERMISSION_PROMPT_LIKELY when the probe signals a permission block", () => {
-  const j = runJson([
-    "__test-wait-for-api",
-    "--api-timeout",
-    "200",
-    "--permission-likely",
-  ]);
-  assert.equal(j.ok, false);
-  assert.equal(j.code, "PERMISSION_PROMPT_LIKELY");
-  assert.equal(j.permissionLikely, true);
-  assert.equal(j.stage, "wait_api");
+  withFakeHome((env) => {
+    const j = runJson(
+      ["__test-wait-for-api", "--api-timeout", "200", "--permission-likely"],
+      env,
+    );
+    assert.equal(j.ok, false);
+    assert.equal(j.code, "PERMISSION_PROMPT_LIKELY");
+    assert.equal(j.permissionLikely, true);
+    assert.equal(j.stage, "wait_api");
+  });
 });
 
 test("setup-status accepts --bin-path as a discovery override", () => {
   withFakeHome((env) => {
-    // Pointing --bin-path at a non-existent path must surface
-    // OPENLOOMI_APP_INVALID rather than silently falling through to PATH.
+    // In a clean fake HOME, a missing --bin-path should still hit install
+    // state before loopback ambiguity can ask for a host probe.
     const j = runJson(["setup-status", "--bin-path", "/nonexistent.app"], env);
     assert.equal(j.installed, false);
     assert.equal(j.nextAction, "install_openloomi");
+    assert.equal(j.reason, "INSTALL_REQUIRED");
   });
 });
 
 test("setup --api-timeout flows into the recorded wait_api step", () => {
   withFakeHome((env) => {
+    const ctl = writeFakeApp(env.HOME);
     const r = runOutcome(
-      [
-        "setup",
-        "--yes",
-        "--api-timeout",
-        "100",
-        "--permission-timeout",
-        "0",
-      ],
+      ["setup", "--yes", "--api-timeout", "100", "--permission-timeout", "1"],
       {
         ...env,
-        OPENLOOMI_BIN: "/nonexistent-ctl-please-ignore",
-        OPENLOOMI_HOME: "/nonexistent-home",
-        OPENLOOMI_REPO_DIR: "/nonexistent-repo",
-        PATH: dirname(process.execPath),
+        OPENLOOMI_APP: ctl,
+        OPENLOOMI_AGENT_PROVIDER: "codex",
+        OPENLOOMI_TEST_FORCE_APP_RUNNING: "1",
       },
     );
     const j = JSON.parse(r.stdout);
-    // We don't care which exact stop the wizard lands on; only that the
-    // explicit --api-timeout value reached the bridge. The wait_api step
-    // and the effectiveBudgetMs are the two ways it can be observed.
-    if (Array.isArray(j.steps)) {
-      const wait = j.steps.find((s) => s.step === "wait_api");
-      if (wait) {
-        assert.ok(
-          typeof wait.elapsedMs === "number",
-          "wait_api step should record elapsedMs",
-        );
-      }
-    }
-    if (j.setup === "api_not_ready") {
-      assert.equal(typeof j.effectiveBudgetMs, "number");
-      assert.ok(j.effectiveBudgetMs >= 100);
-      assert.ok(j.canResume);
-      assert.match(j.resumeCommand, /setup/);
-    }
+    assert.equal(j.setup, "api_not_ready");
+    const wait = j.steps.find((s) => s.step === "wait_api");
+    assert.ok(wait, "setup should record a wait_api step");
+    assert.equal(typeof wait.elapsedMs, "number");
+    assert.equal(typeof j.effectiveBudgetMs, "number");
+    assert.ok(j.effectiveBudgetMs >= 100);
+    assert.ok(j.canResume);
+    assert.match(j.resumeCommand, /setup/);
   });
 });
 
@@ -1891,6 +1915,43 @@ test("__test-windows-image-name appends .exe only when missing", () => {
   ]);
   assert.equal(j.binName, "openloomi");
   assert.equal(j.imageName, "openloomi.exe");
+});
+
+test("Windows install helper parses under Windows PowerShell 5.1", () => {
+  if (process.platform !== "win32") return;
+
+  const scriptPath = join(
+    PLUGIN_DIR,
+    "scripts",
+    "install-assets",
+    "setup.windows.ps1",
+  );
+  const check = [
+    "$tokens = $null",
+    "$errors = $null",
+    `[System.Management.Automation.Language.Parser]::ParseFile("${scriptPath.replace(/"/g, '""')}", [ref]$tokens, [ref]$errors) | Out-Null`,
+    "if ($errors -and $errors.Count -gt 0) {",
+    "  $errors | ForEach-Object { Write-Error $_.Message }",
+    "  exit 1",
+    "}",
+  ].join("; ");
+
+  const result = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-Command", check],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+      },
+    },
+  );
+
+  assert.equal(
+    result.status,
+    0,
+    `PowerShell parse check failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+  );
 });
 
 test("__test-launch-desktop rejects no appPath with NO_LAUNCH_TARGET", () => {

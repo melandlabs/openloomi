@@ -320,7 +320,9 @@ function makeSetupStageTicker(stage, budgetMs) {
 
 async function setupStatus(args = []) {
   const flags = parseFlags(args);
-  const status = await buildSetupStatus({ explicitApp: flags["bin-path"] || null });
+  const status = await buildSetupStatus({
+    explicitApp: flags["bin-path"] || null,
+  });
   if (flags.emitHostProbe) {
     status.hostProbe = buildHostProbePayload(status);
     status.hostProbeScript = HOST_PROBE_SNIPPET;
@@ -343,7 +345,12 @@ async function runHostProbeCommand(args = []) {
       explicitBaseUrl = arg.slice("--base-url=".length);
     }
   }
-  const baseUrls = (explicitBaseUrl || "http://127.0.0.1:3414,http://127.0.0.1:3515").split(",").map((s) => s.trim()).filter(Boolean);
+  const baseUrls = (
+    explicitBaseUrl || "http://127.0.0.1:3414,http://127.0.0.1:3515"
+  )
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   const result = await probeHostsForProviders(baseUrls);
   const writeOutcome = writeHostProbeCache({
     baseUrl: result.baseUrl,
@@ -376,7 +383,11 @@ async function probeHostsForProviders(baseUrls) {
       const response = await fetch(endpoint, { signal: controller.signal });
       clearTimeout(timer);
       if (!response.ok) {
-        attempts.push({ baseUrl, status: response.status, error: "HTTP_" + response.status });
+        attempts.push({
+          baseUrl,
+          status: response.status,
+          error: "HTTP_" + response.status,
+        });
         continue;
       }
       const body = await response.json();
@@ -392,7 +403,10 @@ async function probeHostsForProviders(baseUrls) {
         attempts,
       };
     } catch (error) {
-      attempts.push({ baseUrl, error: error && error.message ? error.message : String(error) });
+      attempts.push({
+        baseUrl,
+        error: error && error.message ? error.message : String(error),
+      });
     }
   }
   return { baseUrl: null, providers: [], defaultAgent: null, attempts };
@@ -410,8 +424,8 @@ function buildHostProbePayload(status) {
   };
 }
 
-const HOST_PROBE_SNIPPET = "#!/usr/bin/env bash\n# Refresh ~/.openloomi/codex-host-probe-cache.json so the bridge's next\n# setup-status can recover from a Codex sandbox loopback false negative.\nset -e\nCACHE_PATH=\"$HOME/.openloomi/codex-host-probe-cache.json\"\nmkdir -p \"$(dirname \"$CACHE_PATH\")\"\nBASE_URL=\"${OPENLOOMI_BASE_URL:-http://127.0.0.1:3414}\"\nnode - <<'NODE_PROBE'\nconst fs = require('node:fs');\nconst os = require('node:os');\nconst path = require('node:path');\nconst cachePath = path.join(os.homedir(), '.openloomi', 'codex-host-probe-cache.json');\nconst baseUrl = process.env.OPENLOOMI_BASE_URL || 'http://127.0.0.1:3414';\n(async () => {\n  try {\n    const r = await fetch(baseUrl.replace(/\\/$/, '') + '/api/native/providers');\n    if (!r.ok) throw new Error('HTTP_' + r.status);\n    const body = await r.json();\n    fs.mkdirSync(path.dirname(cachePath), { recursive: true });\n    fs.writeFileSync(cachePath, JSON.stringify({\n      baseUrl,\n      providers: Array.isArray(body.agents) ? body.agents : [],\n      defaultAgent: body.defaultAgent || null,\n      capturedAt: Date.now(),\n      schemaVersion: 1,\n    }, null, 2));\n    process.stdout.write('host-probe ok ' + cachePath + '\\n');\n  } catch (e) {\n    process.stderr.write('host-probe failed: ' + (e && e.message) + '\\n');\n    process.exit(1);\n  }\n})();\nNODE_PROBE";
-
+const HOST_PROBE_SNIPPET =
+  "#!/usr/bin/env bash\n# Refresh ~/.openloomi/codex-host-probe-cache.json so the bridge's next\n# setup-status can recover from a Codex sandbox loopback false negative.\nset -e\nCACHE_PATH=\"$HOME/.openloomi/codex-host-probe-cache.json\"\nmkdir -p \"$(dirname \"$CACHE_PATH\")\"\nBASE_URL=\"${OPENLOOMI_BASE_URL:-http://127.0.0.1:3414}\"\nnode - <<'NODE_PROBE'\nconst fs = require('node:fs');\nconst os = require('node:os');\nconst path = require('node:path');\nconst cachePath = path.join(os.homedir(), '.openloomi', 'codex-host-probe-cache.json');\nconst baseUrl = process.env.OPENLOOMI_BASE_URL || 'http://127.0.0.1:3414';\n(async () => {\n  try {\n    const r = await fetch(baseUrl.replace(/\\/$/, '') + '/api/native/providers');\n    if (!r.ok) throw new Error('HTTP_' + r.status);\n    const body = await r.json();\n    fs.mkdirSync(path.dirname(cachePath), { recursive: true });\n    fs.writeFileSync(cachePath, JSON.stringify({\n      baseUrl,\n      providers: Array.isArray(body.agents) ? body.agents : [],\n      defaultAgent: body.defaultAgent || null,\n      capturedAt: Date.now(),\n      schemaVersion: 1,\n    }, null, 2));\n    process.stdout.write('host-probe ok ' + cachePath + '\\n');\n  } catch (e) {\n    process.stderr.write('host-probe failed: ' + (e && e.message) + '\\n');\n    process.exit(1);\n  }\n})();\nNODE_PROBE";
 
 async function getCodexRuntimeEnvStatus() {
   const probe = await probeRuntimeEnvValue(RUNTIME_ENV_KEY);
@@ -1686,8 +1700,7 @@ function parseFlags(args) {
         flags[setupFlagName] = arg.slice(equalsAt + 1) || null;
       } else {
         const next = args[index + 1];
-        flags[setupFlagName] =
-          next && !next.startsWith("--") ? next : null;
+        flags[setupFlagName] = next && !next.startsWith("--") ? next : null;
         if (flags[setupFlagName] !== null) index += 1;
       }
       continue;
@@ -2504,6 +2517,8 @@ async function installDownloadedArtifact(filePath, options) {
       signal: null,
       stdoutPresent: false,
       stderrPresent: false,
+      stdout: "",
+      stderr: "",
     };
   }
 
@@ -2524,6 +2539,8 @@ async function installDownloadedArtifact(filePath, options) {
       signal: null,
       stdoutPresent: false,
       stderrPresent: false,
+      stdout: "",
+      stderr: "",
     };
   }
 
@@ -2547,6 +2564,8 @@ async function installDownloadedArtifact(filePath, options) {
     restartRequired: result.exitCode === 3010,
     stdoutPresent: hasValue(result.stdout),
     stderrPresent: hasValue(result.stderr),
+    stdout: result.stdout,
+    stderr: result.stderr,
   };
 }
 
@@ -2567,7 +2586,7 @@ function getDefaultInstallCommand(filePath) {
 }
 
 function summarizeInstallerResult(result) {
-  return {
+  const summary = {
     supported: result.supported,
     automatic: result.automatic,
     launched: result.launched,
@@ -2581,6 +2600,17 @@ function summarizeInstallerResult(result) {
     stdoutPresent: result.stdoutPresent,
     stderrPresent: result.stderrPresent,
   };
+
+  const stdoutTail = summarizeCommandOutput(result.stdout);
+  const stderrTail = summarizeCommandOutput(result.stderr);
+  if (stdoutTail) {
+    summary.stdoutTail = stdoutTail;
+  }
+  if (stderrTail) {
+    summary.stderrTail = stderrTail;
+  }
+
+  return summary;
 }
 
 function isSuccessfulInstallExitCode(exitCode) {
@@ -4600,7 +4630,11 @@ async function setCodexRuntimeEnv(args) {
       value: result.value,
       before: result.before,
       actions: result.plan.actions,
-      notes: rewriteRuntimeEnvNotes(result.plan.notes, result.key, result.value),
+      notes: rewriteRuntimeEnvNotes(
+        result.plan.notes,
+        result.key,
+        result.value,
+      ),
       requiresRestart: result.plan.requiresRestart,
       commands: result.plan.commands,
     });
@@ -5278,8 +5312,7 @@ async function setup(args) {
       }
       const apiTicker = makeSetupStageTicker("wait_api", stages.apiMs);
       apiTicker({ force: true });
-      const permissionProbe = () =>
-        probeDesktopProcessRunning(status.appPath);
+      const permissionProbe = () => probeDesktopProcessRunning(status.appPath);
       const wait = await waitForApi({
         timeoutMs: stages.apiMs,
         onProgress: apiTicker,
@@ -5319,8 +5352,9 @@ async function setup(args) {
 
       if (!wait.ok) {
         const elapsedMs = Date.now() - setupStartedAt;
-        const overCap = elapsedMs > stages.totalMs +
-          (wait.permissionLikely ? stages.permissionMs : 0);
+        const overCap =
+          elapsedMs >
+          stages.totalMs + (wait.permissionLikely ? stages.permissionMs : 0);
         const resumeBudget = Math.max(stages.totalMs, 180_000);
         const resumeCommand = [
           "node",
@@ -5467,11 +5501,14 @@ async function discoverOpenLoomi({ explicitApp = null } = {}) {
   const configuredApp = explicitApp || process.env.OPENLOOMI_APP;
 
   if (configuredApp) {
-    const result = await validateAppPath(normalizeExplicitAppPath(configuredApp), {
-      mode: "packaged",
-      source: explicitApp ? "--bin-path" : "OPENLOOMI_APP",
-      checked,
-    });
+    const result = await validateAppPath(
+      normalizeExplicitAppPath(configuredApp),
+      {
+        mode: "packaged",
+        source: explicitApp ? "--bin-path" : "OPENLOOMI_APP",
+        checked,
+      },
+    );
 
     if (result.status === "found" || result.status === "invalid") {
       return result;
@@ -5766,10 +5803,10 @@ function getReadinessDecision(
   const loopbackAccess = options.loopbackAccess || null;
   const hostProbeSaysReady = Boolean(
     hostProbeCache &&
-      hostProbeCache.payload &&
-      Array.isArray(hostProbeCache.payload.providers) &&
-      hostProbeCache.payload.providers.length > 0 &&
-      hostProbeCache.payload.baseUrl,
+    hostProbeCache.payload &&
+    Array.isArray(hostProbeCache.payload.providers) &&
+    hostProbeCache.payload.providers.length > 0 &&
+    hostProbeCache.payload.baseUrl,
   );
   // codexRuntimeEnv is intentionally NOT a gate here: a missing
   // OPENLOOMI_AGENT_PROVIDER only blocks the OpenLoomi GUI desktop from
@@ -5779,31 +5816,6 @@ function getReadinessDecision(
   void codexRuntimeEnv;
   const nativeCodexRuntimeReady = Boolean(nativeProviderStatus?.active);
 
-  if (hostProbeSaysReady) {
-    return {
-      ready: true,
-      nextAction: token.present ? null : "initialize_openloomi_session",
-      reason: "READY_VIA_HOST_PROBE_CACHE",
-      readinessSource: "host-probe-cache",
-      message: token.present
-        ? "OpenLoomi is ready; the Codex sandbox blocked the bridge's own loopback probe, but a fresh host-side probe (~/.openloomi/codex-host-probe-cache.json) confirms the local API is reachable."
-        : "OpenLoomi is ready via host probe cache. Initialize a local guest/session token before calling authenticated OpenLoomi APIs."
-    };
-  }
-
-  if (loopbackAccess && loopbackAccess.ambiguous) {
-    return {
-      ready: false,
-      nextAction: "run_host_probe",
-      reason: "OPENLOOMI_API_AMBIGUOUS_HOST_PROBE_STALE",
-      message:
-        "Codex sandbox blocked the bridge's loopback probe, and no fresh host probe cache is available. Run \`bridge run-host-probe\` - the bridge ships a one-shot host probe that writes its result to ~/.openloomi/codex-host-probe-cache.json so the next setup-status can see the real runtime.",
-      autoFixCommands: [
-        `node "${BRIDGE_SCRIPT_DIR}/loomi-bridge.mjs" run-host-probe`,
-      ],
-      hostProbeCachePath: getHostProbeCachePath(),
-    };
-  }
   if (discovery.status === "invalid") {
     return {
       ready: false,
@@ -5817,6 +5829,18 @@ function getReadinessDecision(
       ready: false,
       nextAction: "build_or_install_openloomi",
       reason: "SOURCE_FOUND_APP_NOT_BUILT",
+    };
+  }
+
+  if (hostProbeSaysReady) {
+    return {
+      ready: true,
+      nextAction: token.present ? null : "initialize_openloomi_session",
+      reason: "READY_VIA_HOST_PROBE_CACHE",
+      readinessSource: "host-probe-cache",
+      message: token.present
+        ? "OpenLoomi is ready; the Codex sandbox blocked the bridge's own loopback probe, but a fresh host-side probe (~/.openloomi/codex-host-probe-cache.json) confirms the local API is reachable."
+        : "OpenLoomi is ready via host probe cache. Initialize a local guest/session token before calling authenticated OpenLoomi APIs.",
     };
   }
 
@@ -5835,14 +5859,19 @@ function getReadinessDecision(
   if (!token.present && apiProbe && !apiProbe.reachableUrl) {
     return {
       ready: false,
-      nextAction: loopbackAccess && loopbackAccess.ambiguous ? "run_host_probe" : "open_openloomi",
-      reason: loopbackAccess && loopbackAccess.ambiguous
-        ? "OPENLOOMI_API_AMBIGUOUS_HOST_PROBE_STALE"
-        : "OPENLOOMI_API_UNREACHABLE",
+      nextAction:
+        loopbackAccess && loopbackAccess.ambiguous
+          ? "run_host_probe"
+          : "open_openloomi",
+      reason:
+        loopbackAccess && loopbackAccess.ambiguous
+          ? "OPENLOOMI_API_AMBIGUOUS_HOST_PROBE_STALE"
+          : "OPENLOOMI_API_UNREACHABLE",
       sessionInitializationRequired: true,
-      message: loopbackAccess && loopbackAccess.ambiguous
-        ? "Codex sandbox blocked the bridge's loopback probe. Run `bridge run-host-probe` to refresh the host probe cache; the next setup-status will see the real runtime."
-        : "OpenLoomi is installed but the local API is not reachable. Open OpenLoomi Desktop, or run `setup --yes` to install + launch + mint a guest session automatically.",
+      message:
+        loopbackAccess && loopbackAccess.ambiguous
+          ? "Codex sandbox blocked the bridge's loopback probe. Run `bridge run-host-probe` to refresh the host probe cache; the next setup-status will see the real runtime."
+          : "OpenLoomi is installed but the local API is not reachable. Open OpenLoomi Desktop, or run `setup --yes` to install + launch + mint a guest session automatically.",
       autoFixCommands: [
         `node "${BRIDGE_SCRIPT_DIR}/loomi-bridge.mjs" run-host-probe`,
       ],
@@ -5876,13 +5905,18 @@ function getReadinessDecision(
   if (!apiProbe?.reachableUrl) {
     return {
       ready: false,
-      nextAction: loopbackAccess && loopbackAccess.ambiguous ? "run_host_probe" : "open_openloomi",
-      reason: loopbackAccess && loopbackAccess.ambiguous
-        ? "OPENLOOMI_API_AMBIGUOUS_HOST_PROBE_STALE"
-        : "OPENLOOMI_API_UNREACHABLE",
-      message: loopbackAccess && loopbackAccess.ambiguous
-        ? "Codex sandbox blocked the bridge`s loopback probe. Run `bridge run-host-probe` to refresh the host probe cache; the next setup-status will see the real runtime."
-        : "OpenLoomi is installed but the local API is not reachable. Open OpenLoomi, then retry setup-status.",
+      nextAction:
+        loopbackAccess && loopbackAccess.ambiguous
+          ? "run_host_probe"
+          : "open_openloomi",
+      reason:
+        loopbackAccess && loopbackAccess.ambiguous
+          ? "OPENLOOMI_API_AMBIGUOUS_HOST_PROBE_STALE"
+          : "OPENLOOMI_API_UNREACHABLE",
+      message:
+        loopbackAccess && loopbackAccess.ambiguous
+          ? "Codex sandbox blocked the bridge`s loopback probe. Run `bridge run-host-probe` to refresh the host probe cache; the next setup-status will see the real runtime."
+          : "OpenLoomi is installed but the local API is not reachable. Open OpenLoomi, then retry setup-status.",
       autoFixCommands: [
         `node "${BRIDGE_SCRIPT_DIR}/loomi-bridge.mjs" run-host-probe`,
       ],
@@ -5987,7 +6021,8 @@ function writeHostProbeCache(payload) {
 function mapHostProbeToApiProbe(cache) {
   const payload = cache && cache.payload;
   const baseUrl = (payload && payload.baseUrl) || null;
-  const providers = payload && Array.isArray(payload.providers) ? payload.providers : [];
+  const providers =
+    payload && Array.isArray(payload.providers) ? payload.providers : [];
   const attemptBaseUrl = baseUrl || "http://127.0.0.1:3414";
   return {
     reachableUrl: providers.length > 0 && baseUrl ? baseUrl : null,
@@ -6007,7 +6042,8 @@ function mapHostProbeToApiProbe(cache) {
 function mapHostProbeToNativeProviderStatus(cache) {
   const payload = cache && cache.payload;
   const baseUrl = (payload && payload.baseUrl) || null;
-  const providers = payload && Array.isArray(payload.providers) ? payload.providers : [];
+  const providers =
+    payload && Array.isArray(payload.providers) ? payload.providers : [];
   const defaultAgent = (payload && payload.defaultAgent) || null;
   const active = providers.length > 0 && Boolean(baseUrl);
   return {
@@ -6025,9 +6061,6 @@ function mapHostProbeToNativeProviderStatus(cache) {
     cachedAt: cache ? cache.capturedAt : null,
   };
 }
-
-
-
 
 function readOpenLoomiAuthToken(tokenStatus = getTokenStatus()) {
   if (hasValue(process.env.OPENLOOMI_AUTH_TOKEN)) {
@@ -6258,6 +6291,14 @@ function expandHome(value) {
 
 function hasValue(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function summarizeCommandOutput(value) {
+  if (!hasValue(value)) {
+    return null;
+  }
+
+  return String(value).trim().slice(-512);
 }
 
 function debugPath(key, value) {

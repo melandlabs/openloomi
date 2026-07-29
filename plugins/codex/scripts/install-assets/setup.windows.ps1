@@ -1,4 +1,4 @@
-# OpenLoomi Codex plugin — Windows install helper.
+# OpenLoomi Codex plugin - Windows install helper.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Invoked by loomi-bridge.installOpenLoomi only after the user explicitly
@@ -12,7 +12,7 @@
 #   .msi -> msiexec /i <artifact> /qn /norestart (elevated)
 #   .exe -> <artifact> /S            (NSIS silent, default path)
 #
-# Companion to plugins/claude/scripts/install-assets/setup.windows.ps1 —
+# Companion to plugins/claude/scripts/install-assets/setup.windows.ps1 -
 # kept structurally aligned. Real differences:
 #   - This script does NOT call the GitHub Releases API or use winget.
 #     The codex bridge already resolved + downloaded the official artifact
@@ -46,7 +46,7 @@ $ext = [System.IO.Path]::GetExtension($Artifact).ToLowerInvariant()
 
 switch ($ext) {
   ".msi" {
-    Log "Running MSI installer (elevated)…"
+    Log "Running MSI installer (elevated)..."
     $proc = Start-Process -FilePath "msiexec.exe" `
       -ArgumentList @("/i", "`"$Artifact`"", "/qn", "/norestart") `
       -Verb RunAs -Wait -PassThru
@@ -55,7 +55,7 @@ switch ($ext) {
     }
   }
   ".exe" {
-    Log "Running NSIS installer (silent, default path)…"
+    Log "Running NSIS installer (silent, default path)..."
     $proc = Start-Process -FilePath $Artifact -ArgumentList @("/S") -Wait -PassThru
     if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
       Fail "Installer exited with code $($proc.ExitCode)."
@@ -69,11 +69,12 @@ switch ($ext) {
 # Resolve the installed main binary. Prefer %LOCALAPPDATA%\OpenLoomi, then PATH.
 $bin = Join-Path $env:LOCALAPPDATA "OpenLoomi\openloomi.exe"
 if (-not (Test-Path $bin)) {
-  $bin = (Get-Command openloomi.exe -ErrorAction SilentlyContinue)?.Source
+  $cmd = Get-Command openloomi.exe -ErrorAction SilentlyContinue
+  if ($cmd) { $bin = $cmd.Source }
 }
 
 if (-not $bin -or -not (Test-Path $bin)) {
-  # Files were installed but the main binary isn't placed yet — the
+  # Files were installed but the main binary isn't placed yet - the
   # desktop app's first launch does this. Report an empty binPath so the
   # bridge can guide the user, instead of failing.
   $bin = ""
@@ -81,14 +82,19 @@ if (-not $bin -or -not (Test-Path $bin)) {
   Log "Launch the OpenLoomi desktop app once so it places the main binary,"
   Log "then re-run setup-status from the Codex plugin to finish setup."
 } else {
-  Log "Verifying the OpenLoomi install…"
+  Log "Verifying the OpenLoomi install..."
   Log "  found main binary at: $bin"
 }
 
 # Emit a single structured JSON line on stdout for the bridge. The bridge
 # already knows version / tag / assetUrl from its earlier GitHub release
 # resolution; we only report what this script verified on disk (binPath).
-$binJson = $bin -replace '\\', '\\'
-Write-Output "{`"binPath`":`"$binJson`",`"version`":`"`",`"tag`":`"`",`"assetUrl`":`"`"}"
+$installRecord = [PSCustomObject]@{
+  binPath  = $bin
+  version  = ""
+  tag      = ""
+  assetUrl = ""
+}
+Write-Output ($installRecord | ConvertTo-Json -Compress)
 
 Log "Install complete. Re-run setup-status to continue."
