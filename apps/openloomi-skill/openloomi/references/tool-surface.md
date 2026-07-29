@@ -4,6 +4,18 @@ This reference defines the Option B skill-bundle command contract. The wrapper i
 
 The command implementation lives at `scripts/openloomi.cjs`.
 
+## Bundle Shape
+
+Upload the `openloomi/` folder, or a zip whose root contains these files:
+
+- `SKILL.md`
+- `agents/openai.yaml`
+- `scripts/openloomi.cjs`
+- `references/tool-surface.md`
+- `references/examples.md`
+
+Keep development-only tests outside the uploaded `openloomi/` folder.
+
 ## Runtime Discovery
 
 Resolve the local API base URL in this order:

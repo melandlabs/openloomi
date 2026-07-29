@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenLoomi"
+  short_description: "Use local OpenLoomi from WorkBuddy"
+  default_prompt: "Use $openloomi to check my local OpenLoomi status and list connected accounts."
