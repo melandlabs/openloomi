@@ -1,6 +1,6 @@
 ---
 name: openloomi
-description: Use local OpenLoomi from skill-based agent runtimes such as WorkBuddy to search memory, inspect connected accounts, and trigger OpenLoomi agent workflows through the local desktop API. Use for OpenLoomi, Loomi, memory search, knowledge base search, connector status, Slack or email drafts, Notion or document summarization, and local-first personal assistant workflows.
+description: Use local OpenLoomi from skill-based agent runtimes such as WorkBuddy to search memory, search/list/read/upload knowledge base documents, inspect connected accounts, and trigger OpenLoomi agent workflows through the local desktop API. Use for OpenLoomi, Loomi, memory search, knowledge base search or upload, connector status, Slack or email drafts, Notion or document summarization, and local-first personal assistant workflows.
 ---
 
 # OpenLoomi
@@ -30,7 +30,9 @@ When you implement the wrapper, reuse the existing OpenLoomi plugin scripts and 
 
 1. Identify the requested OpenLoomi surface:
    - Memory or previous context: use `memory-search`.
-   - Uploaded documents or knowledge base: use `memory-search` first, then knowledge-base commands when available.
+   - Uploaded documents or knowledge base search: use `knowledge-search`.
+   - Knowledge base inventory or document content: use `knowledge-list` or `knowledge-get`.
+   - Knowledge base upload: confirm the exact file and intent first, then use `knowledge-upload`.
    - Connector status: use `connectors-list`.
    - Complex action, draft, summary, or cross-app task: use `agent-run`.
 
@@ -45,6 +47,7 @@ When you implement the wrapper, reuse the existing OpenLoomi plugin scripts and 
 Read [references/examples.md](references/examples.md) for worked patterns:
 
 - Search OpenLoomi memory for prior context.
+- Search, list, read, or upload OpenLoomi knowledge base documents.
 - Check whether Slack, Gmail, Notion, or other accounts are connected.
 - Draft an email without sending it.
 - Summarize a Notion page or another connected document.

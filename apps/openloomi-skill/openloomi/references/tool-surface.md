@@ -52,7 +52,7 @@ Expected API probes:
 
 ### memory-search
 
-Search OpenLoomi memory and knowledge surfaces for user context.
+Search OpenLoomi memory for user context. This command falls back to RAG search when the unified memory endpoint is unavailable.
 
 ```bash
 node "$SKILL_DIR/scripts/openloomi.cjs" memory-search "project alpha" --limit=5
@@ -65,6 +65,66 @@ Preferred API path:
 Fallback API path:
 
 - `POST /api/rag/search` with `{ "query": "...", "limit": 5 }`
+
+### knowledge-search
+
+Search uploaded knowledge base documents explicitly through RAG.
+
+```bash
+node "$SKILL_DIR/scripts/openloomi.cjs" knowledge-search "project alpha" --limit=5
+```
+
+Preferred API path:
+
+- `POST /api/rag/search` with `{ "query": "...", "limit": 5 }`
+
+### knowledge-list
+
+List uploaded knowledge base documents.
+
+```bash
+node "$SKILL_DIR/scripts/openloomi.cjs" knowledge-list --limit=50
+```
+
+Preferred API path:
+
+- `GET /api/rag/documents?pageSize=<limit>`
+
+Optional cursor:
+
+- `--cursor=<timestamp>` forwards cursor-based pagination as `cursor`.
+
+### knowledge-get
+
+Read a single uploaded knowledge base document and its chunks.
+
+```bash
+node "$SKILL_DIR/scripts/openloomi.cjs" knowledge-get doc_xxx
+```
+
+Preferred API path:
+
+- `GET /api/rag/documents/[documentId]`
+
+### knowledge-upload
+
+Upload a small local file into the OpenLoomi knowledge base. This is a write operation and requires explicit user confirmation before running.
+
+```bash
+node "$SKILL_DIR/scripts/openloomi.cjs" knowledge-upload ./notes/project-alpha.md
+```
+
+Preferred API path:
+
+- `POST /api/rag/upload` with multipart field `file`.
+
+Default upload policy:
+
+- Files are limited to 8 MB by default. For larger files, tell the user to upload through OpenLoomi Desktop Library.
+- `--skip-embeddings` stores the document without generating embeddings when the local OpenLoomi runtime supports that mode.
+- `--file-name=<name>` overrides the uploaded filename.
+- `--content-type=<mime>` overrides the default `application/octet-stream`; OpenLoomi infers common types from the filename when possible.
+- The wrapper may pass the decoded local auth token to the local API as `cloudAuthToken`, but must never print it.
 
 ### connectors-list
 

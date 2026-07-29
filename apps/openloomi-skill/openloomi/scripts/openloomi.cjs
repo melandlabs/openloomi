@@ -12,6 +12,8 @@ const DEFAULT_BASE_URLS = [
 ];
 const DEFAULT_TIMEOUT_MS = 15000;
 const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 const TOKEN_PATH = path.join(os.homedir(), ".openloomi", "token");
 
 const SAFE_AGENT_ALLOWED_TOOLS = [
@@ -195,6 +197,10 @@ function parseOptionalNumber(value, name) {
   return parsed;
 }
 
+function isTruthyFlag(value) {
+  return value === true || value === "true" || value === "1" || value === "yes";
+}
+
 function extractMessage(body, fallbackText) {
   if (body && typeof body === "object") {
     if (typeof body.message === "string") {
@@ -299,6 +305,49 @@ async function apiRequest(baseUrl, endpoint, options = {}) {
     const message =
       extractMessage(parsed, text) ||
       `${method} ${endpoint} returned HTTP ${response.status}`;
+    throw new OpenLoomiError(httpErrorCode(response.status), message, {
+      status: response.status,
+      endpoint,
+      baseUrl,
+      body: parsed ?? text,
+    });
+  }
+
+  return {
+    baseUrl,
+    endpoint,
+    status: response.status,
+    body: parsed ?? text,
+    text,
+  };
+}
+
+async function apiFormDataRequest(baseUrl, endpoint, formData, options = {}) {
+  const { auth, timeoutMs = DEFAULT_UPLOAD_TIMEOUT_MS } = options;
+  const url = new URL(endpoint, baseUrl).toString();
+  const headers = {
+    Accept: "application/json",
+  };
+  if (auth?.token) {
+    headers.Authorization = `Bearer ${auth.token}`;
+  }
+
+  const response = await fetchWithTimeout(
+    url,
+    {
+      method: "POST",
+      headers,
+      body: formData,
+    },
+    timeoutMs,
+  );
+  const text = await response.text();
+  const parsed = parseJsonMaybe(text);
+
+  if (!response.ok) {
+    const message =
+      extractMessage(parsed, text) ||
+      `POST ${endpoint} returned HTTP ${response.status}`;
     throw new OpenLoomiError(httpErrorCode(response.status), message, {
       status: response.status,
       endpoint,
@@ -491,6 +540,176 @@ async function memorySearchCommand(args, context) {
     endpoint,
     query,
     limit,
+    result: response.body,
+  };
+}
+
+async function knowledgeSearchCommand(args, context) {
+  const { flags, positionals } = parseCommandArgs(args);
+  const query = positionals.join(" ").trim();
+  if (!query) {
+    throw new OpenLoomiError(
+      "usage",
+      'Query required: knowledge-search "your query" [--limit=5]',
+    );
+  }
+
+  const limit = parsePositiveInteger(flags.limit, 5, "--limit");
+  const auth = readAuthToken(context.env, context.fs);
+  const located = await locateBaseUrl(context.env, auth);
+  const body = { query, limit };
+  const response = await apiRequest(located.baseUrl, "/api/rag/search", {
+    method: "POST",
+    auth,
+    body,
+  });
+
+  return {
+    ok: true,
+    command: "knowledge-search",
+    baseUrl: located.baseUrl,
+    endpoint: "/api/rag/search",
+    query,
+    limit,
+    result: response.body,
+  };
+}
+
+async function knowledgeListCommand(args, context) {
+  const { flags } = parseCommandArgs(args);
+  const pageSize = parsePositiveInteger(flags.limit, 50, "--limit");
+  const params = new URLSearchParams({ pageSize: String(pageSize) });
+  if (typeof flags.cursor === "string" && flags.cursor.trim()) {
+    params.set("cursor", flags.cursor.trim());
+  }
+
+  const auth = readAuthToken(context.env, context.fs);
+  const located = await locateBaseUrl(context.env, auth);
+  const endpoint = `/api/rag/documents?${params.toString()}`;
+  const response = await apiRequest(located.baseUrl, endpoint, { auth });
+
+  return {
+    ok: true,
+    command: "knowledge-list",
+    baseUrl: located.baseUrl,
+    endpoint,
+    limit: pageSize,
+    cursor: params.get("cursor") || undefined,
+    result: response.body,
+  };
+}
+
+async function knowledgeGetCommand(args, context) {
+  const { positionals } = parseCommandArgs(args);
+  const documentId = positionals.join(" ").trim();
+  if (!documentId) {
+    throw new OpenLoomiError(
+      "usage",
+      "Document id required: knowledge-get <documentId>",
+    );
+  }
+
+  const auth = readAuthToken(context.env, context.fs);
+  const located = await locateBaseUrl(context.env, auth);
+  const encodedId = encodeURIComponent(documentId);
+  const endpoint = `/api/rag/documents/${encodedId}`;
+  const response = await apiRequest(located.baseUrl, endpoint, { auth });
+
+  return {
+    ok: true,
+    command: "knowledge-get",
+    baseUrl: located.baseUrl,
+    endpoint,
+    documentId,
+    result: response.body,
+  };
+}
+
+function assertFormDataRuntime() {
+  if (typeof FormData !== "function" || typeof Blob !== "function") {
+    throw new OpenLoomiError(
+      "unsupported_runtime",
+      "knowledge-upload requires Node.js 18 or newer with FormData and Blob support.",
+    );
+  }
+}
+
+async function knowledgeUploadCommand(args, context) {
+  const { flags, positionals } = parseCommandArgs(args);
+  const filePath = positionals.join(" ").trim();
+  if (!filePath) {
+    throw new OpenLoomiError(
+      "usage",
+      "File path required: knowledge-upload <path> [--file-name=name.md] [--skip-embeddings]",
+    );
+  }
+
+  assertFormDataRuntime();
+  const timeoutMs = parsePositiveInteger(
+    flags["timeout-ms"],
+    DEFAULT_UPLOAD_TIMEOUT_MS,
+    "--timeout-ms",
+  );
+  const maxBytes = parsePositiveInteger(
+    flags["max-bytes"],
+    DEFAULT_UPLOAD_MAX_BYTES,
+    "--max-bytes",
+  );
+  const resolvedPath = path.resolve(filePath);
+  let buffer;
+  try {
+    buffer = context.fs.readFileSync(resolvedPath);
+  } catch (error) {
+    throw new OpenLoomiError(
+      "file_read",
+      `Could not read file for knowledge upload: ${resolvedPath}`,
+      { cause: error?.message },
+    );
+  }
+  if (!Buffer.isBuffer(buffer)) {
+    buffer = Buffer.from(buffer);
+  }
+  if (buffer.byteLength > maxBytes) {
+    throw new OpenLoomiError(
+      "file_too_large",
+      `knowledge-upload supports files up to ${maxBytes} bytes. Use OpenLoomi Desktop Library for larger files.`,
+      { filePath: resolvedPath, sizeBytes: buffer.byteLength, maxBytes },
+    );
+  }
+
+  const auth = readAuthToken(context.env, context.fs);
+  const located = await locateBaseUrl(context.env, auth);
+  const fileName =
+    typeof flags["file-name"] === "string" && flags["file-name"].trim()
+      ? flags["file-name"].trim()
+      : path.basename(resolvedPath);
+  const contentType =
+    typeof flags["content-type"] === "string" && flags["content-type"].trim()
+      ? flags["content-type"].trim()
+      : "application/octet-stream";
+  const formData = new FormData();
+  formData.append("file", new Blob([buffer], { type: contentType }), fileName);
+  if (isTruthyFlag(flags["skip-embeddings"])) {
+    formData.append("skipEmbeddings", "true");
+  }
+  if (auth?.token && !isTruthyFlag(flags["no-cloud-auth-token"])) {
+    formData.append("cloudAuthToken", auth.token);
+  }
+
+  const response = await apiFormDataRequest(
+    located.baseUrl,
+    "/api/rag/upload",
+    formData,
+    { auth, timeoutMs },
+  );
+
+  return {
+    ok: true,
+    command: "knowledge-upload",
+    baseUrl: located.baseUrl,
+    endpoint: "/api/rag/upload",
+    fileName,
+    sizeBytes: buffer.byteLength,
     result: response.body,
   };
 }
@@ -778,6 +997,14 @@ function helpResult() {
       status: 'node "$SKILL_DIR/scripts/openloomi.cjs" status',
       "memory-search":
         'node "$SKILL_DIR/scripts/openloomi.cjs" memory-search "query" --limit=5',
+      "knowledge-search":
+        'node "$SKILL_DIR/scripts/openloomi.cjs" knowledge-search "query" --limit=5',
+      "knowledge-list":
+        'node "$SKILL_DIR/scripts/openloomi.cjs" knowledge-list [--limit=50]',
+      "knowledge-get":
+        'node "$SKILL_DIR/scripts/openloomi.cjs" knowledge-get <documentId>',
+      "knowledge-upload":
+        'node "$SKILL_DIR/scripts/openloomi.cjs" knowledge-upload <path> [--skip-embeddings]',
       "connectors-list":
         'node "$SKILL_DIR/scripts/openloomi.cjs" connectors-list [--platform=gmail]',
       "agent-run":
@@ -799,6 +1026,14 @@ async function runCommand(argv, context = { env: process.env, fs }) {
       return statusCommand(args, context);
     case "memory-search":
       return memorySearchCommand(args, context);
+    case "knowledge-search":
+      return knowledgeSearchCommand(args, context);
+    case "knowledge-list":
+      return knowledgeListCommand(args, context);
+    case "knowledge-get":
+      return knowledgeGetCommand(args, context);
+    case "knowledge-upload":
+      return knowledgeUploadCommand(args, context);
     case "connectors-list":
       return connectorsListCommand(args, context);
     case "agent-run":

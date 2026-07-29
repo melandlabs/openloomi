@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -70,7 +72,7 @@ async function withMockServer(handler, fn) {
   }
 }
 
-async function runCli(baseUrl, args, env = {}) {
+async function runCli(baseUrl, args, env = {}, fsOverride) {
   const json = await runCommand(args, {
     env: {
       OPENLOOMI_API_URL: baseUrl,
@@ -78,7 +80,7 @@ async function runCli(baseUrl, args, env = {}) {
       OPENLOOMI_AUTH_TOKEN: "test.jwt.token",
       ...env,
     },
-    fs: {
+    fs: fsOverride || {
       readFileSync() {
         throw new Error("token file should not be read when env token exists");
       },
@@ -162,6 +164,123 @@ test("memory-search falls back from unified memory to RAG search", async () => {
       assert.equal(result.json.result.results[0].documentId, "doc_1");
     },
   );
+});
+
+test("knowledge commands use explicit RAG document APIs", async () => {
+  await withMockServer(
+    async (req, res, body) => {
+      if (defaultProbeHandler(req, res)) return;
+      if (req.url === "/api/rag/search") {
+        assert.deepEqual(body, { query: "launch plan", limit: 3 });
+        sendJson(res, 200, {
+          results: [{ documentId: "doc_1", content: "launch result" }],
+        });
+        return;
+      }
+      if (req.url === "/api/rag/documents?pageSize=2&cursor=1700000000000") {
+        sendJson(res, 200, {
+          documents: [{ id: "doc_1", fileName: "launch.md" }],
+          hasMore: false,
+          nextCursor: null,
+          total: 1,
+        });
+        return;
+      }
+      if (req.url === "/api/rag/documents/doc_1") {
+        sendJson(res, 200, {
+          document: {
+            id: "doc_1",
+            fileName: "launch.md",
+            chunks: [{ id: "chunk_1", content: "Launch notes" }],
+          },
+        });
+        return;
+      }
+      sendJson(res, 404, { error: "not found" });
+    },
+    async ({ baseUrl }) => {
+      const search = await runCli(baseUrl, [
+        "knowledge-search",
+        "launch",
+        "plan",
+        "--limit=3",
+      ]);
+      assert.equal(search.json.ok, true);
+      assert.equal(search.json.endpoint, "/api/rag/search");
+      assert.equal(search.json.result.results[0].documentId, "doc_1");
+
+      const list = await runCli(baseUrl, [
+        "knowledge-list",
+        "--limit=2",
+        "--cursor=1700000000000",
+      ]);
+      assert.equal(list.json.ok, true);
+      assert.equal(
+        list.json.endpoint,
+        "/api/rag/documents?pageSize=2&cursor=1700000000000",
+      );
+      assert.equal(list.json.result.documents[0].fileName, "launch.md");
+
+      const get = await runCli(baseUrl, ["knowledge-get", "doc_1"]);
+      assert.equal(get.json.ok, true);
+      assert.equal(get.json.endpoint, "/api/rag/documents/doc_1");
+      assert.equal(get.json.result.document.chunks[0].content, "Launch notes");
+    },
+  );
+});
+
+test("knowledge-upload posts a small file as multipart form data", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "openloomi-skill-"));
+  const filePath = join(tempDir, "phase-five.md");
+  writeFileSync(filePath, "# Phase five\n\nUpload me.", "utf8");
+
+  try {
+    await withMockServer(
+      async (req, res, body) => {
+        if (defaultProbeHandler(req, res)) return;
+        if (req.url === "/api/rag/upload") {
+          assert.equal(req.method, "POST");
+          assert.equal(req.headers.authorization, "Bearer test.jwt.token");
+          assert.match(
+            req.headers["content-type"],
+            /^multipart\/form-data; boundary=/,
+          );
+          assert.match(body, /name="file"; filename="phase-five.md"/);
+          assert.match(body, /# Phase five/);
+          assert.match(body, /name="skipEmbeddings"/);
+          assert.match(body, /true/);
+          assert.match(body, /name="cloudAuthToken"/);
+          sendJson(res, 200, {
+            success: true,
+            documentId: "doc_uploaded",
+            fileName: "phase-five.md",
+          });
+          return;
+        }
+        sendJson(res, 404, { error: "not found" });
+      },
+      async ({ baseUrl }) => {
+        const result = await runCli(
+          baseUrl,
+          [
+            "knowledge-upload",
+            filePath,
+            "--skip-embeddings",
+            "--timeout-ms=2000",
+          ],
+          {},
+          { readFileSync },
+        );
+        assert.equal(result.json.ok, true);
+        assert.equal(result.json.endpoint, "/api/rag/upload");
+        assert.equal(result.json.fileName, "phase-five.md");
+        assert.equal(result.json.result.documentId, "doc_uploaded");
+        assert.doesNotMatch(JSON.stringify(result.json), /test\.jwt\.token/);
+      },
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("connectors-list returns accounts and supports platform filtering", async () => {

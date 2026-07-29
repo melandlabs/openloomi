@@ -48,11 +48,16 @@ Use $openloomi to list my connected accounts.
 Use $openloomi to search memory for "project alpha".
 ```
 
+```text
+Use $openloomi to list my uploaded OpenLoomi documents.
+```
+
 Expected behavior:
 
 - `status` reports the discovered local API URL, auth availability, and provider probe status.
 - `connectors-list` returns connected accounts or a clear empty state.
 - `memory-search` returns matching OpenLoomi memory/RAG results or a clear no-results message.
+- `knowledge-list` returns uploaded document ids, filenames, and pagination details or a clear empty state.
 - If OpenLoomi Desktop is closed or setup is incomplete, the skill reports the local API or auth problem without inventing data.
 
 ## Local Validation
