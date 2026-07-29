@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(testDir, "../openloomi");
+const docsDir = resolve(testDir, "..");
 
 function listFiles(dir) {
   const files = [];
@@ -25,6 +26,10 @@ function readSkillFile(path) {
   return readFileSync(resolve(skillDir, path), "utf8");
 }
 
+function readDocsFile(path) {
+  return readFileSync(resolve(docsDir, path), "utf8");
+}
+
 test("WorkBuddy upload bundle has the required root skill files", () => {
   const files = listFiles(skillDir);
 
@@ -35,6 +40,25 @@ test("WorkBuddy upload bundle has the required root skill files", () => {
     "references/tool-surface.md",
     "scripts/openloomi.cjs",
   ]);
+});
+
+test("WorkBuddy packaging docs keep development files outside the upload root", () => {
+  const readme = readDocsFile("README.md");
+  const files = listFiles(skillDir);
+
+  assert.match(
+    readme,
+    /Upload the `apps\/openloomi-skill\/openloomi\/` folder/,
+  );
+  assert.match(
+    readme,
+    /Compress-Archive -Path apps\\openloomi-skill\\openloomi\\\*/,
+  );
+  assert.match(readme, /Do not include `apps\/openloomi-skill\/tests\/`/);
+  assert.equal(
+    files.some((file) => file === "README.md" || file.startsWith("tests/")),
+    false,
+  );
 });
 
 test("SKILL.md exposes a valid OpenLoomi skill trigger", () => {
