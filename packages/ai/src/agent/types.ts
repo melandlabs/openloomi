@@ -81,6 +81,8 @@ export interface AgentMessage {
   /** Unique identifier for deduplication */
   messageId?: string;
   sessionId?: string;
+  /** Goal run fence captured when the provider event was observed. */
+  runEpoch?: number;
   content?: string;
   name?: string;
   id?: string;

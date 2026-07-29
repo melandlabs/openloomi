@@ -63,7 +63,7 @@ describe("SupplementalInputRuntimeInstructionTransport", () => {
     expect(pending?.content).toContain('delivery_mode="next_boundary"');
   });
 
-  it("maps steer and interrupt-replace delivery to immediate input", async () => {
+  it("maps steer to immediate input and executes control interrupts directly", async () => {
     const queue = new AgentSupplementalInputQueue({ runEpoch: 4 });
     const interrupt = vi.fn(async () => {});
     queue.setInterruptHandler(interrupt);
@@ -85,15 +85,41 @@ describe("SupplementalInputRuntimeInstructionTransport", () => {
       sequence: 2,
       kind: "control.interrupt",
       deliveryMode: "interrupt_replace",
-      payload: { reason: "replace the active goal" },
+      payload: {
+        reason: "replace the active goal",
+        expectedRunEpoch: 4,
+      },
       idempotencyKey: "interrupt-2",
     });
-    const replacementInput = iterator.next();
     await expect(runtimeTransport.deliver(replacement)).resolves.toMatchObject({
       state: "queued",
     });
-    await expect(replacementInput).resolves.toMatchObject({
-      value: { id: replacement.id, intent: "steer" },
+    expect(interrupt).toHaveBeenCalledTimes(2);
+    expect(queue.hasPending()).toBe(false);
+
+    await expect(runtimeTransport.deliver(replacement)).resolves.toMatchObject({
+      state: "queued",
+      reason: expect.stringContaining("already accepted"),
+    });
+    expect(interrupt).toHaveBeenCalledTimes(2);
+
+    if (replacement.kind !== "control.interrupt") {
+      throw new Error("Expected a control interrupt fixture");
+    }
+    await expect(
+      runtimeTransport.deliver(
+        {
+          ...replacement,
+          id: "77777777-7777-4777-8777-777777777777",
+          sequence: 3,
+          payload: { ...replacement.payload, expectedRunEpoch: 3 },
+          idempotencyKey: "interrupt-stale",
+        },
+        { interruptControl: false },
+      ),
+    ).resolves.toMatchObject({
+      state: "rejected",
+      reason: expect.stringContaining("active epoch is 4"),
     });
     expect(interrupt).toHaveBeenCalledTimes(2);
     queue.close();

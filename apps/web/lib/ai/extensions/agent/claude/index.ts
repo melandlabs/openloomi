@@ -1961,8 +1961,13 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
         };
       }
     } finally {
-      goalRuntimeRegistration?.release();
-      await claudeRuntime.close();
+      try {
+        await claudeRuntime.close();
+      } finally {
+        // Keep a closing Query registered until it can no longer accept Goal
+        // commands or emit old-epoch events.
+        goalRuntimeRegistration?.release();
+      }
       this.sessions.delete(session.id);
       // Windows cleanup prevents skill files generated for this session from
       // leaking into the next Claude Code run.

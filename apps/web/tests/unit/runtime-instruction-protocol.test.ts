@@ -339,13 +339,53 @@ describe("Runtime Instruction protocol", () => {
       kind: "control.interrupt" as const,
       deliveryMode: "steer" as const,
       targetSessionId: SESSION_ID,
-      payload: { reason: "Replace the active Goal" },
+      payload: {
+        reason: "Replace the active Goal",
+        expectedRunEpoch: 0,
+      },
       source: { type: "user" as const, authority: "user" as const },
       idempotencyKey: "interrupt-goal-1",
       issuedAt: NOW.toISOString(),
     };
 
     expect(RuntimeInstructionSchema.safeParse(interrupt).success).toBe(false);
+  });
+
+  it("binds replacement interrupts to an old Goal and run epoch", () => {
+    const replacementGoalId = "99999999-9999-4999-8999-999999999999";
+    const interrupt = {
+      schemaVersion: RUNTIME_INSTRUCTION_SCHEMA_VERSION,
+      id: INSTRUCTION_ID,
+      sequence: 2,
+      goalId: GOAL_ID,
+      goalRevision: 2,
+      kind: "control.interrupt" as const,
+      deliveryMode: "interrupt_replace" as const,
+      targetSessionId: SESSION_ID,
+      payload: {
+        reason: "Replace the active Goal",
+        expectedRunEpoch: 4,
+        replacementGoalId,
+      },
+      source: { type: "user" as const, authority: "user" as const },
+      idempotencyKey: "interrupt-goal-1",
+      issuedAt: NOW.toISOString(),
+    };
+
+    expect(RuntimeInstructionSchema.safeParse(interrupt).success).toBe(true);
+    expect(
+      RuntimeInstructionSchema.safeParse({
+        ...interrupt,
+        goalId: undefined,
+        goalRevision: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      RuntimeInstructionSchema.safeParse({
+        ...interrupt,
+        payload: { ...interrupt.payload, replacementGoalId: GOAL_ID },
+      }).success,
+    ).toBe(false);
   });
 
   it("keeps evaluation results internally consistent", () => {

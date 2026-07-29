@@ -83,6 +83,55 @@ export interface PersistedAgentGoal {
   goal: AgentGoal;
 }
 
+export type GoalLifecycleTransitionAction = "pause" | "cancel";
+export type GoalLifecycleTransitionPhase =
+  | "prepared"
+  | "boundary_observed"
+  | "finalized";
+
+/**
+ * Durable shape of a terminal-boundary lifecycle transition.
+ *
+ * The semantic pause/cancel instruction and authoritative Goal transition are
+ * committed together during `prepared`. The primary slot remains reserved
+ * until the provider turn reaches its terminal boundary. Cancel records that
+ * durable boundary before the runtime epoch is reconciled and the slot is
+ * released.
+ */
+export interface AgentGoalLifecycleTransition {
+  ownerId: string;
+  runtimeSessionId: string;
+  action: GoalLifecycleTransitionAction;
+  transitionedGoal: PersistedAgentGoal;
+  instruction: RuntimeInstruction;
+  expectedRunEpoch: number;
+  runEpoch: number;
+  phase: GoalLifecycleTransitionPhase;
+}
+
+export type GoalReplacementPhase =
+  | "prepared"
+  | "boundary_observed"
+  | "activated";
+
+/**
+ * Durable shape of a two-phase primary Goal replacement.
+ *
+ * `replacementGoal` is reserved but must not be returned by normal Goal reads
+ * until the replacement reaches `activated`.
+ */
+export interface AgentGoalReplacement {
+  ownerId: string;
+  runtimeSessionId: string;
+  supersededGoal: PersistedAgentGoal;
+  replacementGoal: PersistedAgentGoal;
+  controlInstruction: RuntimeInstruction;
+  activationInstruction?: RuntimeInstruction;
+  expectedRunEpoch: number;
+  runEpoch: number;
+  phase: GoalReplacementPhase;
+}
+
 export interface AgentGoalRun {
   id: string;
   ownerId: string;
@@ -125,4 +174,34 @@ export interface RuntimeDeliveryReceipt {
   providerEventId?: string;
   recordedAt: string;
   reason?: string;
+}
+
+export interface RuntimeTurnBoundary {
+  runtimeSessionId: string;
+  runEpoch: number;
+  terminalSequence: number;
+  state: RuntimeSessionState;
+}
+
+export interface RuntimeTurnTerminal {
+  runtimeSessionId: string;
+  runEpoch: number;
+  terminalSequence: number;
+  state: "idle";
+}
+
+export interface RuntimeRunEpochAdvanceResult {
+  previousRunEpoch: number;
+  runEpoch: number;
+  discardedInputIds: string[];
+}
+
+export interface RuntimeTerminalInputHold {
+  readonly runEpoch: number;
+  release(options?: { releasePendingIfIdle?: boolean }): void;
+}
+
+export interface RuntimeTurnBoundaryInputHold {
+  boundary: RuntimeTurnBoundary;
+  hold: RuntimeTerminalInputHold;
 }

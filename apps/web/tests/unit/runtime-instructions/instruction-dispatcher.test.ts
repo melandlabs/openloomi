@@ -17,7 +17,9 @@ const INSTRUCTION_IDS = [
   "20000000-0000-4000-8000-000000000001",
   "20000000-0000-4000-8000-000000000002",
   "20000000-0000-4000-8000-000000000003",
+  "20000000-0000-4000-8000-000000000004",
 ] as const;
+const GOAL_ID = "30000000-0000-4000-8000-000000000001";
 
 type DeliveryBehavior = (
   instruction: RuntimeInstruction,
@@ -52,6 +54,30 @@ function instruction(sequence: number): RuntimeInstruction {
     payload: { contextRefId: `context-${sequence}` },
     source: { type: "user", authority: "user" },
     idempotencyKey: `dispatcher-instruction-${sequence}`,
+    issuedAt: NOW,
+  });
+}
+
+function lifecycleInstruction(
+  sequence: number,
+  kind: "goal.pause" | "goal.cancel" | "goal.resume",
+): RuntimeInstruction {
+  return RuntimeInstructionSchema.parse({
+    schemaVersion: RUNTIME_INSTRUCTION_SCHEMA_VERSION,
+    id: INSTRUCTION_IDS[sequence - 1],
+    sequence,
+    kind,
+    goalId: GOAL_ID,
+    goalRevision: sequence,
+    deliveryMode:
+      kind === "goal.resume" ? "steer" : ("interrupt_replace" as const),
+    targetSessionId: SESSION_ID,
+    payload:
+      kind === "goal.resume"
+        ? {}
+        : { expectedRunEpoch: 0, reason: `${kind} test` },
+    source: { type: "user", authority: "user" },
+    idempotencyKey: `dispatcher-${kind}-${sequence}`,
     issuedAt: NOW,
   });
 }
@@ -291,6 +317,147 @@ describe("RuntimeInstructionDispatcher ordered outbox drain", () => {
       code: "outbox_read_failed",
       cause: expect.objectContaining({ message: "state unavailable" }),
     });
+  });
+});
+
+describe("RuntimeInstructionDispatcher control barriers", () => {
+  it("preserves pause predecessors and later drains them without redelivering the pause", async () => {
+    const instructions = [
+      instruction(1),
+      lifecycleInstruction(2, "goal.pause"),
+    ];
+    const transport = new ScriptedTransport(SESSION_ID);
+    const dispatcher = registeredDispatcher(transport, instructions);
+
+    await dispatcher.deliverControl({
+      ownerId: OWNER_ID,
+      runtimeSessionId: SESSION_ID,
+      targetInstructionId: instructions[1].id,
+    });
+    await expect(
+      dispatcher.commitControlBarrier({
+        ownerId: OWNER_ID,
+        runtimeSessionId: SESSION_ID,
+        targetInstructionId: instructions[1].id,
+        transport,
+        predecessorPolicy: "preserve_predecessors",
+        reason: "Pause retains pending work",
+      }),
+    ).resolves.toEqual([]);
+
+    instructions.push(lifecycleInstruction(3, "goal.resume"));
+    await expect(
+      dispatcher.drainOnTransport({
+        ownerId: OWNER_ID,
+        runtimeSessionId: SESSION_ID,
+        targetInstructionId: instructions[2].id,
+        transport,
+      }),
+    ).resolves.toMatchObject({
+      status: "accepted",
+      instructionId: instructions[2].id,
+    });
+    expect(transport.delivered.map(({ id }) => id)).toEqual([
+      instructions[1].id,
+      instructions[0].id,
+      instructions[2].id,
+    ]);
+  });
+
+  it("supersedes cancel predecessors while allowing later instructions to drain", async () => {
+    const instructions = [
+      instruction(1),
+      lifecycleInstruction(2, "goal.cancel"),
+    ];
+    const transport = new ScriptedTransport(SESSION_ID);
+    const dispatcher = registeredDispatcher(transport, instructions);
+
+    await dispatcher.deliverControl({
+      ownerId: OWNER_ID,
+      runtimeSessionId: SESSION_ID,
+      targetInstructionId: instructions[1].id,
+    });
+    await expect(
+      dispatcher.commitControlBarrier({
+        ownerId: OWNER_ID,
+        runtimeSessionId: SESSION_ID,
+        targetInstructionId: instructions[1].id,
+        transport,
+        predecessorPolicy: "supersede_predecessors",
+        reason: "Cancel fences pending work",
+      }),
+    ).resolves.toEqual([instructions[0].id]);
+
+    instructions.push(instruction(3));
+    await expect(
+      dispatcher.drainOnTransport({
+        ownerId: OWNER_ID,
+        runtimeSessionId: SESSION_ID,
+        targetInstructionId: instructions[2].id,
+        transport,
+      }),
+    ).resolves.toMatchObject({
+      status: "accepted",
+      instructionId: instructions[2].id,
+    });
+    await expect(
+      dispatcher.drain({
+        ownerId: OWNER_ID,
+        runtimeSessionId: SESSION_ID,
+        targetInstructionId: instructions[0].id,
+      }),
+    ).resolves.toMatchObject({
+      status: "superseded",
+      instructionId: instructions[0].id,
+    });
+    expect(transport.delivered.map(({ id }) => id)).toEqual([
+      instructions[1].id,
+      instructions[2].id,
+    ]);
+  });
+
+  it("fails a serialized drain when the registered transport changes during its outbox read", async () => {
+    const instructions = outbox(1);
+    const sessions = new RuntimeSessionRegistry();
+    const first = new ScriptedTransport(SESSION_ID);
+    const firstRegistration = sessions.register({
+      ownerId: OWNER_ID,
+      transport: first,
+    });
+    let continueRead!: () => void;
+    let markReadStarted!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      markReadStarted = resolve;
+    });
+    const readCanContinue = new Promise<void>((resolve) => {
+      continueRead = resolve;
+    });
+    const dispatcher = new RuntimeInstructionDispatcher(sessions, {
+      async listInstructions() {
+        markReadStarted();
+        await readCanContinue;
+        return structuredClone(instructions);
+      },
+    });
+
+    const drain = dispatcher.drainOnTransport({
+      ownerId: OWNER_ID,
+      runtimeSessionId: SESSION_ID,
+      targetInstructionId: instructions[0].id,
+      transport: first,
+    });
+    await readStarted;
+    firstRegistration.release();
+    const replacement = new ScriptedTransport(SESSION_ID);
+    sessions.register({ ownerId: OWNER_ID, transport: replacement });
+    continueRead();
+
+    await expect(drain).rejects.toMatchObject({
+      code: "outbox_progress_conflict",
+      message: expect.stringContaining("changed before its outbox was drained"),
+    });
+    expect(first.delivered).toEqual([]);
+    expect(replacement.delivered).toEqual([]);
   });
 });
 

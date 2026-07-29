@@ -1,0 +1,7 @@
+name: video-resizer
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - ffmpeg>=7,<9

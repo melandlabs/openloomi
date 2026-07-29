@@ -25,6 +25,18 @@ import {
 } from "@openloomi/ai/agent/runtime-instructions";
 
 import { createGoalCommandFingerprint } from "./command-fingerprint";
+import {
+  findUnauthorizedConstraintChange,
+  findUnsupportedRuntimeConstraint,
+  goalSourceMatchesCommand,
+} from "./goal-command-policy";
+import type {
+  CancelGoalCommand,
+  GoalLifecycleService,
+  PauseGoalCommand,
+  ResumeGoalCommand,
+} from "./goal-lifecycle-service";
+import { GoalServiceError } from "./goal-service-error";
 import type {
   RuntimeInstructionDispatch,
   RuntimeInstructionDispatcher,
@@ -52,6 +64,8 @@ export type GoalActivationCommandSource = Extract<
   TrustedGoalCommandSource,
   { type: "user" | "automation" }
 >;
+
+export type GoalLifecycleCommandSource = GoalActivationCommandSource;
 
 export type ContextGoalCommandSource =
   | TrustedGoalCommandSource
@@ -92,6 +106,12 @@ export interface RemoveGoalContextCommand extends GoalCommandBase<ContextGoalCom
   deliveryMode?: "next_boundary" | "steer";
 }
 
+export type {
+  CancelGoalCommand,
+  PauseGoalCommand,
+  ResumeGoalCommand,
+} from "./goal-lifecycle-service";
+
 export interface GoalCommandResult {
   goal: PersistedAgentGoal;
   instruction: GoalInstructionCommit["instruction"];
@@ -99,28 +119,10 @@ export interface GoalCommandResult {
   dispatch: RuntimeInstructionDispatch;
 }
 
-export type GoalServiceErrorCode =
-  | "context_not_found"
-  | "goal_not_active"
-  | "goal_not_found"
-  | "goal_session_mismatch"
-  | "invalid_command"
-  | "invalid_constraint_authority"
-  | "invalid_context_provenance"
-  | "invalid_goal_provenance"
-  | "no_change"
-  | "runtime_constraint_unsupported";
-
-export class GoalServiceError extends Error {
-  constructor(
-    public readonly code: GoalServiceErrorCode,
-    message: string,
-    public readonly cause?: unknown,
-  ) {
-    super(message);
-    this.name = "GoalServiceError";
-  }
-}
+export {
+  GoalServiceError,
+  type GoalServiceErrorCode,
+} from "./goal-service-error";
 
 /**
  * Application service for the first in-memory Goal runtime vertical slice.
@@ -137,6 +139,7 @@ export class GoalService {
     private readonly dispatcher: RuntimeInstructionDispatcher,
     private readonly clock: RuntimeClockPort,
     private readonly ids: RuntimeIdGeneratorPort,
+    private readonly lifecycle: GoalLifecycleService,
   ) {}
 
   activate(input: ActivateGoalCommand): Promise<GoalCommandResult> {
@@ -161,6 +164,18 @@ export class GoalService {
     return this.commands.run(commandScope(input), () =>
       this.removeContextCommand(input),
     );
+  }
+
+  pause(input: PauseGoalCommand): Promise<GoalCommandResult> {
+    return this.lifecycle.pause(input);
+  }
+
+  resume(input: ResumeGoalCommand): Promise<GoalCommandResult> {
+    return this.lifecycle.resume(input);
+  }
+
+  cancel(input: CancelGoalCommand): Promise<GoalCommandResult> {
+    return this.lifecycle.cancel(input);
   }
 
   private async activateCommand(
@@ -464,6 +479,16 @@ export class GoalService {
     return this.state.getActivePrimaryGoal(ownerId, runtimeSessionId);
   }
 
+  getRuntimeSessionRunEpoch(
+    ownerId: string,
+    runtimeSessionId: string,
+  ): Promise<number> {
+    return this.state.getRuntimeSessionRunEpoch(
+      requiredIdentifier(ownerId, "ownerId"),
+      requiredIdentifier(runtimeSessionId, "runtimeSessionId"),
+    );
+  }
+
   replayPendingInstructions(
     ownerId: string,
     runtimeSessionId: string,
@@ -507,6 +532,21 @@ export class GoalService {
     runtimeSessionId: string,
     goalId: string,
   ): Promise<PersistedAgentGoal> {
+    const goal = await this.requireGoal(ownerId, runtimeSessionId, goalId);
+    if (goal.goal.status !== "active") {
+      throw new GoalServiceError(
+        "goal_not_active",
+        `Goal ${goalId} is ${goal.goal.status}, not active`,
+      );
+    }
+    return goal;
+  }
+
+  private async requireGoal(
+    ownerId: string,
+    runtimeSessionId: string,
+    goalId: string,
+  ): Promise<PersistedAgentGoal> {
     const goal = await this.state.getGoal(ownerId, goalId);
     if (!goal) {
       throw new GoalServiceError(
@@ -518,12 +558,6 @@ export class GoalService {
       throw new GoalServiceError(
         "goal_session_mismatch",
         `Goal ${goalId} belongs to a different Runtime Session`,
-      );
-    }
-    if (goal.goal.status !== "active") {
-      throw new GoalServiceError(
-        "goal_not_active",
-        `Goal ${goalId} is ${goal.goal.status}, not active`,
       );
     }
     return goal;
@@ -659,9 +693,7 @@ function instructionDraft(
 function assertSupportedConstraints(
   constraints: AgentGoal["constraints"],
 ): void {
-  const unsupported = constraints.find(
-    (constraint) => constraint.enforcement === "runtime_enforced",
-  );
+  const unsupported = findUnsupportedRuntimeConstraint(constraints);
   if (unsupported) {
     throw new GoalServiceError(
       "runtime_constraint_unsupported",
@@ -674,16 +706,7 @@ function assertGoalSourceProvenance(
   goalSource: GoalSource,
   instructionSource: RuntimeInstructionSource,
 ): void {
-  if (instructionSource.type === "user" && goalSource.type === "user") {
-    return;
-  }
-  if (
-    instructionSource.type === "automation" &&
-    goalSource.type !== "user" &&
-    goalSource.id === instructionSource.sourceRef
-  ) {
-    return;
-  }
+  if (goalSourceMatchesCommand(goalSource, instructionSource)) return;
 
   throw new GoalServiceError(
     "invalid_goal_provenance",
@@ -717,42 +740,12 @@ function assertConstraintChanges(
   next: GoalConstraint[],
   source: RuntimeInstructionSource,
 ): void {
-  const currentById = new Map(
-    current.map((constraint) => [constraint.id, constraint]),
-  );
-  const nextById = new Map(
-    next.map((constraint) => [constraint.id, constraint]),
-  );
-  const changedIds = new Set([...currentById.keys(), ...nextById.keys()]);
-
-  for (const id of changedIds) {
-    const previous = currentById.get(id);
-    const revised = nextById.get(id);
-    if (
-      previous !== undefined &&
-      revised !== undefined &&
-      canonicalJson(previous) === canonicalJson(revised)
-    ) {
-      continue;
-    }
-    if (previous) assertConstraintAuthority(previous, source);
-    if (revised) assertConstraintAuthority(revised, source);
-  }
-}
-
-function assertConstraintAuthority(
-  constraint: GoalConstraint,
-  source: RuntimeInstructionSource,
-): void {
-  const sourceMatches =
-    constraint.authority === source.authority &&
-    (constraint.authority === "user" ||
-      constraint.sourceRef === source.sourceRef);
-  if (sourceMatches) return;
+  const unauthorized = findUnauthorizedConstraintChange(current, next, source);
+  if (!unauthorized) return;
 
   throw new GoalServiceError(
     "invalid_constraint_authority",
-    `Command source ${source.type} cannot change ${constraint.authority} constraint ${constraint.id}`,
+    `Command source ${source.type} cannot change ${unauthorized.authority} constraint ${unauthorized.id}`,
   );
 }
 

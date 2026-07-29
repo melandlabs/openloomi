@@ -136,9 +136,12 @@ describe("AgentSupplementalInputQueue delivery", () => {
     await queue.enqueue({ ...input("old-inform"), runEpoch: 5 });
 
     expect(queue.getRunEpoch()).toBe(5);
-    expect(queue.advanceRunEpoch(6)).toMatchObject([
-      { id: "old-inform", runEpoch: 5 },
-    ]);
+    expect(
+      queue.advanceRunEpoch({
+        expectedRunEpoch: 5,
+        nextRunEpoch: 6,
+      }),
+    ).toMatchObject([{ id: "old-inform", runEpoch: 5 }]);
     expect(queue.hasPending()).toBe(false);
     await expect(
       queue.enqueue({ ...input("late-old-run"), runEpoch: 5 }),
@@ -174,6 +177,31 @@ describe("AgentSupplementalInputQueue delivery", () => {
     expect(queue.releasePendingInform()).toBe(0);
     await expect(waiting).resolves.toMatchObject({
       value: { id: "boundary-input", intent: "inform" },
+    });
+  });
+
+  it("wakes a waiting consumer when the last input hold is released", async () => {
+    const queue = new AgentSupplementalInputQueue({ runEpoch: 2 });
+    const iterator = queue[Symbol.asyncIterator]();
+    const waiting = iterator.next();
+    const firstHold = queue.holdPendingInputForRunEpoch(2);
+    const lastHold = queue.holdPendingInputForRunEpoch(2);
+
+    await queue.enqueue({
+      ...input("held-steer", "steer"),
+      runEpoch: 2,
+    });
+    firstHold.release();
+    let delivered = false;
+    void waiting.then(() => {
+      delivered = true;
+    });
+    await Promise.resolve();
+    expect(delivered).toBe(false);
+
+    lastHold.release();
+    await expect(waiting).resolves.toMatchObject({
+      value: { id: "held-steer", runEpoch: 2 },
     });
   });
 
@@ -330,6 +358,41 @@ describe("AgentSupplementalInputQueue interruption", () => {
       error: expect.objectContaining({ message: "provider interrupt failed" }),
     });
     expect(queue.size).toBe(1);
+  });
+
+  it("does not coalesce a new-epoch interrupt with an old in-flight interrupt", async () => {
+    const queue = new AgentSupplementalInputQueue({ runEpoch: 0 });
+    const oldInterrupt = deferred<void>();
+    const newInterrupt = deferred<void>();
+    const interruptHandler = vi
+      .fn<() => Promise<void>>()
+      .mockImplementationOnce(() => oldInterrupt.promise)
+      .mockImplementationOnce(() => newInterrupt.promise);
+    queue.setInterruptHandler(interruptHandler);
+
+    const oldDelivery = queue.enqueue({
+      ...input("old-steer", "steer"),
+      runEpoch: 0,
+    });
+    await vi.waitFor(() => expect(interruptHandler).toHaveBeenCalledOnce());
+    queue.advanceRunEpoch({ expectedRunEpoch: 0, nextRunEpoch: 1 });
+
+    const newDelivery = queue.enqueue({
+      ...input("new-steer", "steer"),
+      runEpoch: 1,
+    });
+    await vi.waitFor(() => expect(interruptHandler).toHaveBeenCalledTimes(2));
+    newInterrupt.resolve();
+    await expect(newDelivery).resolves.toMatchObject({
+      status: "accepted",
+      interrupt: { status: "completed", coalesced: false },
+    });
+
+    oldInterrupt.resolve();
+    await expect(oldDelivery).resolves.toMatchObject({
+      status: "superseded",
+      interrupt: { status: "completed", coalesced: false },
+    });
   });
 });
 
