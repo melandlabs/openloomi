@@ -341,9 +341,7 @@ describe("aggregateEmailBursts", () => {
     const digest = res.decision;
     expect(digest.type).toBe("email_burst_digest");
     expect(digest.title).toMatch(/^5 emails from /);
-    expect((digest.context as { from: string }).from).toBe(
-      "alice@example.com",
-    );
+    expect((digest.context as { from: string }).from).toBe("alice@example.com");
     expect((digest.context as { fromName: string }).fromName).toBe("Alice");
     expect((digest.context as { count: number }).count).toBe(BURST_THRESHOLD);
     expect(res.newKeys).toHaveLength(BURST_THRESHOLD);
