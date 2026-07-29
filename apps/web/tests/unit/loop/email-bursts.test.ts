@@ -21,7 +21,6 @@
 import { describe, expect, it } from "vitest";
 import {
   BURST_THRESHOLD,
-  BURST_WINDOW_MS,
   EMAIL_BURSTS_MODULE,
   MAX_EMAIL_BURST_ITEMS,
   aggregateEmailBursts,
@@ -227,8 +226,11 @@ describe("isEmailBurstDecision + collectCoveredEmailBurstKeys", () => {
     });
     const typed = typedDecision(sig1);
     const covered = collectCoveredEmailBurstKeys([typed]);
-    expect(covered.has(emailBurstKey(sig1)!)).toBe(true);
-    expect(covered.has(emailBurstKey(sig2)!)).toBe(false);
+    const k1 = emailBurstKey(sig1);
+    const k2 = emailBurstKey(sig2);
+    if (!k1 || !k2) throw new Error("expected non-null keys");
+    expect(covered.has(k1)).toBe(true);
+    expect(covered.has(k2)).toBe(false);
   });
 
   it("does not treat unknown decisions as covered", () => {
@@ -243,7 +245,9 @@ describe("isEmailBurstDecision + collectCoveredEmailBurstKeys", () => {
       source_signal: sig1,
     };
     const covered = collectCoveredEmailBurstKeys([unknown]);
-    expect(covered.has(emailBurstKey(sig1)!)).toBe(false);
+    const k = emailBurstKey(sig1);
+    if (!k) throw new Error("expected non-null key");
+    expect(covered.has(k)).toBe(false);
   });
 });
 
@@ -331,18 +335,17 @@ describe("aggregateEmailBursts", () => {
       now: NOW,
     });
     expect(res.kind).toBe("create");
-    expect(res.decision).not.toBeNull();
-    expect(res.decision!.type).toBe("email_burst_digest");
-    expect(res.decision!.title).toMatch(/^5 emails from /);
-    expect((res.decision!.context as { from: string }).from).toBe(
+    if (res.kind !== "create" || !res.decision) {
+      throw new Error("expected create kind with non-null decision");
+    }
+    const digest = res.decision;
+    expect(digest.type).toBe("email_burst_digest");
+    expect(digest.title).toMatch(/^5 emails from /);
+    expect((digest.context as { from: string }).from).toBe(
       "alice@example.com",
     );
-    expect((res.decision!.context as { fromName: string }).fromName).toBe(
-      "Alice",
-    );
-    expect((res.decision!.context as { count: number }).count).toBe(
-      BURST_THRESHOLD,
-    );
+    expect((digest.context as { fromName: string }).fromName).toBe("Alice");
+    expect((digest.context as { count: number }).count).toBe(BURST_THRESHOLD);
     expect(res.newKeys).toHaveLength(BURST_THRESHOLD);
   });
 
@@ -385,7 +388,10 @@ describe("aggregateEmailBursts", () => {
       now: NOW,
     });
     expect(res.kind).toBe("create");
-    expect(res.decision!.title).toMatch(/alice/);
+    if (res.kind !== "create" || !res.decision) {
+      throw new Error("expected create kind with non-null decision");
+    }
+    expect(res.decision.title).toMatch(/alice/);
   });
 
   it("excludes keys already covered by a typed email_reply decision", () => {
@@ -398,7 +404,10 @@ describe("aggregateEmailBursts", () => {
       now: NOW,
     });
     expect(res.kind).toBe("create");
-    expect((res.decision!.context as { count: number }).count).toBe(
+    if (res.kind !== "create" || !res.decision) {
+      throw new Error("expected create kind with non-null decision");
+    }
+    expect((res.decision.context as { count: number }).count).toBe(
       BURST_THRESHOLD - 2,
     );
     expect(res.newKeys).toHaveLength(BURST_THRESHOLD - 2);
@@ -409,6 +418,7 @@ describe("aggregateEmailBursts", () => {
       "alice@example.com",
       "Alice",
       fiveFromAlice().map((s) => ({
+        // biome-ignore lint/style/noNonNullAssertion: test fixture has valid keys
         key: emailBurstKey(s)!,
         from: "alice@example.com",
         title: "old",
@@ -437,8 +447,11 @@ describe("aggregateEmailBursts", () => {
       now: NOW,
     });
     expect(res.kind).toBe("merge");
-    expect(res.decision!.id).toBe(pending.id);
-    expect((res.decision!.context as { count: number }).count).toBe(
+    if (res.kind !== "merge" || !res.decision) {
+      throw new Error("expected merge kind with non-null decision");
+    }
+    expect(res.decision.id).toBe(pending.id);
+    expect((res.decision.context as { count: number }).count).toBe(
       BURST_THRESHOLD + BURST_THRESHOLD,
     );
   });
@@ -449,6 +462,7 @@ describe("aggregateEmailBursts", () => {
       "alice@example.com",
       undefined,
       sigs.map((s) => ({
+        // biome-ignore lint/style/noNonNullAssertion: test fixture has valid keys
         key: emailBurstKey(s)!,
         from: "alice@example.com",
         title: "old",

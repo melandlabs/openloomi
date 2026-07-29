@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { ensureDirs, ensureParent, LOOP_PATHS } from "./paths";
-import { derivePriority, rankByPriority } from "./readiness";
+import { derivePriority } from "./readiness";
 import type {
   DecisionStatus,
   DecisionType,

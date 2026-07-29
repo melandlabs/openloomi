@@ -20,8 +20,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
@@ -60,7 +59,7 @@ vi.mock("@/lib/loop/paths", async () => {
   };
 });
 
-import { decisions, log as _log } from "@/lib/loop/store";
+import { decisions } from "@/lib/loop/store";
 import { LOOP_PATHS } from "@/lib/loop/paths";
 
 beforeEach(() => {
@@ -101,8 +100,9 @@ describe("decisions.add — SP-1 priority stamp", () => {
         },
       });
       expect(dec).not.toBeNull();
-      expect(dec!.priority).toBe("P0");
-      expect(dec!.context?.priority).toBe("P0");
+      if (!dec) throw new Error("dec is null");
+      expect(dec.priority).toBe("P0");
+      expect(dec.context?.priority).toBe("P0");
     } finally {
       vi.useRealTimers();
     }
@@ -123,8 +123,9 @@ describe("decisions.add — SP-1 priority stamp", () => {
       confidence: 0.9,
     });
     expect(dec).not.toBeNull();
-    expect(dec!.priority).toBe("P2");
-    expect(dec!.context?.priority).toBe("P2");
+    if (!dec) throw new Error("dec is null");
+    expect(dec.priority).toBe("P2");
+    expect(dec.context?.priority).toBe("P2");
   });
 
   it("retains FIFO insertion order — the priority is on the record, not the order", () => {
@@ -153,8 +154,9 @@ describe("decisions.add — SP-1 priority stamp", () => {
     });
     expect(p1).not.toBeNull();
     expect(p0).not.toBeNull();
+    if (!p0 || !p1) throw new Error("p0 or p1 is null");
     const list = decisions.pending();
-    expect(list.map((d) => d.id)).toEqual([p0!.id, p1!.id]);
+    expect(list.map((d) => d.id)).toEqual([p0.id, p1.id]);
   });
 });
 
