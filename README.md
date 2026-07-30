@@ -81,8 +81,7 @@ OpenLoomi ships official marketplace plugins that turn your existing agent into 
 
 The slim public marketplace lives at [`melandlabs/plugins`](https://github.com/melandlabs/plugins) so adding it only fetches the plugin payloads. See the plugin docs for full reference: [`plugins/claude`](https://openloomi.ai/docs/plugins/claude) · [`plugins/codex`](https://openloomi.ai/docs/plugins/codex).
 
-**Use in skill-only agent runtimes** (for WorkBuddy and other agents that
-support Skills but do not support OpenLoomi plugins):
+**Use in skill-only agent runtimes**:
 
 Install the OpenLoomi skill set directly from this repository:
 
