@@ -29,3 +29,11 @@ export {
   type OpenLoomiAuthToken,
   type OpenLoomiAuthTokenSource,
 } from "./openloomi/token";
+export {
+  OPENLOOMI_INSTALL_URL,
+  checkOpenLoomiReadiness,
+  formatOpenLoomiReadiness,
+  type OpenLoomiApiProbe,
+  type OpenLoomiReadiness,
+  type OpenLoomiReadinessState,
+} from "./openloomi/readiness";

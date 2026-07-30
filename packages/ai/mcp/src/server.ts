@@ -5,7 +5,10 @@ import {
   OpenLoomiClient,
   type OpenLoomiClientOptions,
 } from "./openloomi/client";
-import { readOpenLoomiAuthToken } from "./openloomi/token";
+import {
+  readOpenLoomiAuthToken,
+  type OpenLoomiAuthToken,
+} from "./openloomi/token";
 import { registerOpenLoomiTools } from "./tools";
 
 const DEFAULT_SERVER_NAME = "@openloomi/mcp";
@@ -20,7 +23,7 @@ export async function createOpenLoomiMcpServer(
   options: CreateOpenLoomiMcpServerOptions = {},
 ): Promise<McpServer> {
   const tokenResult = options.token
-    ? { token: options.token }
+    ? ({ token: options.token, source: "env" } satisfies OpenLoomiAuthToken)
     : await readOpenLoomiAuthToken();
   const client = new OpenLoomiClient({
     ...options,
@@ -31,7 +34,7 @@ export async function createOpenLoomiMcpServer(
     version: options.version ?? DEFAULT_SERVER_VERSION,
   });
 
-  registerOpenLoomiTools(server, { client });
+  registerOpenLoomiTools(server, { client, authToken: tokenResult });
 
   return server;
 }

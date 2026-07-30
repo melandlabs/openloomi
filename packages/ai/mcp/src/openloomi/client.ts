@@ -1,4 +1,4 @@
-const DEFAULT_OPENLOOMI_BASE_URLS = [
+export const DEFAULT_OPENLOOMI_BASE_URLS = [
   "http://127.0.0.1:3414",
   "http://localhost:3414",
   "http://127.0.0.1:3515",
