@@ -43,13 +43,13 @@ for (const sample of samples) {
   );
 }
 
-console.log(`\n=== Totals ===`);
+console.log("\n=== Totals ===");
 console.log(`  samples: ${samples.length}`);
 console.log(`  total QA: ${grandTotal}`);
 console.log(`  non-empty answers: ${grandNonEmptyAnswers}`);
 console.log(`  by category: ${JSON.stringify(categoryTotals)}`);
 
-console.log(`\n=== Assertions ===`);
+console.log("\n=== Assertions ===");
 assert(samples.length === 10, "samples.length === 10");
 
 for (const sample of samples) {
@@ -75,4 +75,4 @@ for (const sample of samples) {
   }
 }
 
-console.log(`\n✅ All smoke test assertions passed.`);
+console.log("\n✅ All smoke test assertions passed.");
