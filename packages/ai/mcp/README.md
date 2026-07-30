@@ -3,11 +3,6 @@
 Stdio MCP server for using local OpenLoomi Desktop from MCP-capable agent
 runtimes.
 
-## Requirements
-
-- OpenLoomi Desktop is installed, running, and initialized.
-- Node.js/npm is available to the agent runtime.
-
 ## MCP Configuration
 
 After `@openloomi/mcp` is published, add this server to WorkBuddy or any other
@@ -26,10 +21,10 @@ MCP-capable runtime:
 
 ## User Flow
 
-1. Start OpenLoomi Desktop and complete first-use setup.
-2. Add the MCP server config in the agent runtime.
-3. Reload or restart the runtime's MCP servers.
-4. Run `openloomi_setup` or `openloomi_status` first.
+1. Add the MCP server config in the agent runtime.
+2. Reload or restart the runtime's MCP servers.
+3. Run `openloomi_setup` or `openloomi_status` first.
+4. Follow the returned setup guidance if OpenLoomi Desktop is not ready.
 5. Use OpenLoomi memory, RAG, knowledge base, connector, and Loop tools.
 
 ## Tools
