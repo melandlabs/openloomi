@@ -15,6 +15,34 @@ This document covers the system architecture, data model, and the relationships 
   alt="OpenLoomi memory architecture — Context sources feed the Proactive Agent, which drives the Controller and the Memory Brain (Save / Retrieve)"
 />
 
+## What the system continuously knows
+
+The memory is not a document library, nor a chat log. It is a **living archive with structure, timestamps, and reasoning** — six kinds of records:
+
+1. **Entity records** — the same object appearing across different contexts gets merged into one tagged record, not a stand-alone string. For example, "Alice is now a Senior Engineer" carries a start date, source conversation, owning task, owning channel, and an expiry date. The record keeps updating and changing.
+
+2. **Decision trail** — not just "what is true now" but "why did it become true." When a discount moved from 10% to 20%, the chain (the service incident + the VP's exception + the prior quarter's precedent) is stored explicitly, not flattened to a single fact. See [Insights](#insights) for how this surfaces in the structured layer.
+
+3. **Entity relationships** — entities are not isolated. "Customer A" → "Ticket #1234" → "VP Zhang" has an "approved-by" edge. Edges are not predefined — they emerge from use. The more often two entities are pulled together, the stronger the connection.
+
+4. **Temporal validity** — every fact has an explicit "valid from / superseded by" interval. The system can answer "what did I tell you about X last quarter?" by re-entering the snapshot at that point in time. See [Time-Travel Queries](#temporal-reasoning-time-travel-queries) for the query surface.
+
+5. **Source and credibility** — every belief carries a source tag distinguishing "the user said it" from "the AI inferred it." The two have different weights. A VP's approval in a private Slack DM is high-weight evidence; an AI-inferred possibility is low-weight evidence.
+
+<Callout type="warning">
+  Source and credibility grading is **not yet fully implemented**. Today, every
+  Insight is treated as equally trustworthy; the weighting described above is
+  the target design.
+</Callout>
+
+6. **Scope boundaries** — which memories belong to which user, workspace, and tenant is strictly isolated at the architecture level. Cross-tenant access requires an explicit relationship; sharing is never the default.
+
+<Callout type="warning">
+  Multi-tenant scope isolation is **not yet fully implemented**. Single-user
+  isolation is in place; cross-tenant / cross-workspace boundaries are the next
+  step.
+</Callout>
+
 ## Mental model
 
 OpenLoomi memory is built from three pillars:
@@ -94,6 +122,24 @@ When a message arrives from a connector, it flows through this pipeline:
 4. Periodically processed by the forgetting engine, which may compress groups of records into `memory_summaries`
 
 The three layers are not redundant — they serve different query patterns. Raw messages answer "what was said exactly." Summaries answer "what was the gist of this time period." Vector index answers "what messages are semantically similar to this query."
+
+---
+
+## How the system captures, cleans, and updates knowledge
+
+**Capture — tag at ingest, not in post-processing.** Every record is tagged the moment it arrives (task, conversation, channel, person, valid-from). The tag set is the `Insights` structure, not a later pipeline stage. See [Insights](#insights) for the schema.
+
+**Cleaning — three rules.**
+
+- _No silent overwrite._ When new evidence conflicts with an old belief, the new evidence does not directly replace it. They form a "competing" pair and only the stronger side wins after a full evaluation. States can be replaced; events are append-only.
+- _Doubt interval._ When two pieces of evidence are too close in weight, the system does not pick a side. The entity is marked "disputed" and both sides are surfaced on query, so the user judges.
+- _Close old validity on revision._ Only after a new belief is accepted does the old belief's "valid-until" close. The transition "the system knew X on Tuesday, knew ¬X on Wednesday" becomes a queryable state change rather than an implicit overwrite.
+
+**Association — emergent, not predefined.** Connections are built from use, not from a schema. Two entities retrieved within 5 minutes strengthen their edge; unused edges slowly decay. Edges that cross an "active connection" threshold qualify for multi-hop expansion; edges that sink to the bottom degrade to background. This is **Hebbian learning** in practice — it avoids the static build/update cost of a traditional GraphRAG knowledge graph and builds the graph progressively instead of constructing it in one shot.
+
+**Update — revisions are replayable state transitions.** The system can answer "what did you believe in June 2024?" by entering that snapshot exactly, and "when did Alice's title change from Engineer to Senior Engineer, and what triggered it?" by looking up the source event.
+
+**Forgetting — tiered eviction plus auditable compression.** Records move through three tiers by age and value score, with summaries preserving the link back to source records. See [The Forgetting Engine](#the-forgetting-engine) for the full scoring and tier-transition logic.
 
 ---
 
@@ -303,6 +349,22 @@ If a new cycle starts while one is running, the second cycle returns `status: "s
 | long        | L3           |
 
 This L1/L2/L3 distinction in `memory_summaries.summaryTier` allows the query layer to know the provenance of each summary — what lifecycle stage the source material was in when summarized.
+
+---
+
+## Boundaries
+
+OpenLoomi memory is strong at three workloads and weak at one. Knowing the boundary matters as much as knowing the capability.
+
+### Capability
+
+OpenLoomi memory works best when:
+
+1. **The same entity is referenced across sessions** — for example, the same client appearing in different conversations over weeks.
+2. **Information changes over time** — titles, statuses, and relationships that evolve and need to be tracked through each transition.
+3. **Evidence is distributed across multiple entities or sessions** — questions that require reasoning across entities, not within a single message.
+
+It is **not the right tool** for single-session, short-context, isolated-fact retrieval. For those workloads, a long-context model or a simple RAG may be more cost-effective. The overhead of entity linking, conflict resolution, tier maintenance, and relationship updates is justified only when the work crosses the boundaries above.
 
 ---
 
@@ -646,6 +708,20 @@ Structured Memory Insights + Timeline + Global Relationship Graph + Self-Evolvin
 ```
 
 This creates a complete **Holistic Context**: global/local preferences + structured code + GitHub Issue/Kanban + Git History + Coding Agent patterns + immutable raw context + Insights + Timeline + global relationship graph + self-evolving memory.
+
+---
+
+## How this differs from RAG, vector memory, and chat history
+
+OpenLoomi memory is not "more accurate retrieval." It is an **organizational world model** — capable of tracing how a decision was reached, how changes propagate, and how different parts of work interact with each other. The shift is qualitative, not just quantitative.
+
+| Approach                | What it stores                                                 | What it can answer                                                             | Where it falls short                                                                                                            |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat history**        | A flat log of past turns                                       | "What was said before?"                                                        | No structure, no cross-entity reasoning, no time awareness, no forgetting                                                       |
+| **Vector memory / RAG** | Embedded chunks with similarity search                         | "What is semantically close to this query?"                                    | No entity relationships, no decision trail, no temporal validity, no source grading                                             |
+| **OpenLoomi memory**    | Entities, decisions, relationships, temporal validity, sources | "Why is this true? When did it change? What's connected to what? Who said it?" | Higher compute / storage cost; not the cheapest tool for single-session isolated-fact retrieval (see [Boundaries](#boundaries)) |
+
+For a deeper comparison, see the [Memory Capabilities Comparison](/blogs/memory-capabilities-comparison) blog post. For benchmark numbers, see [Benchmarks](/docs/benchmark).
 
 ---
 

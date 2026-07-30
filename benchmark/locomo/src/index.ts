@@ -1,7 +1,7 @@
 /**
  * LoCoMo Benchmark CLI
  *
- * Run via: pnpm benchmark:locomo -- --dataset path/to/locomo10.json --mode observation --quick
+ * Run via: pnpm benchmark -- --dataset path/to/locomo_v2.json --mode observation --quick
  */
 
 import "dotenv/config";
@@ -58,7 +58,7 @@ function parseCliArgs(): CliArgs {
   if (!values.dataset) {
     console.error("Error: --dataset is required");
     console.error(
-      "Usage: pnpm benchmark:locomo -- --dataset path/to/locomo10.json --mode observation",
+      "Usage: pnpm benchmark -- --dataset path/to/locomo_v2.json --mode observation",
     );
     process.exit(1);
   }

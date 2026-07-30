@@ -8,12 +8,16 @@ This benchmark evaluates how well the memory system answers questions from conve
 
 ## Dataset
 
-The LoCoMo dataset contains conversation sessions with multiple question-answer pairs per sample. Each sample includes:
+This benchmark uses [LoCoMo V2](https://github.com/BrianV1981/locomo-v2) (the `locomo_v2_minicpm.json` variant — text-only with MiniCPM-V OCR baked in) instead of the original V1. V2 fixes V1's 99 score-corrupting ground-truth hallucinations and ~75 dead image URLs, and is drop-in compatible with the loader (no `evidence` field on QA items, plus a new category 5 "abstention" set that the loader skips automatically).
+
+The dataset contains 10 conversation samples (`conv-26`, `conv-30`, `conv-41`–`conv-50`) with 1,922 total QA pairs. The loader drops category-5 items without an answer (430 of 438) and keeps the 8 category-5 items that do have an answer, so the effective question set is **1,492 questions**.
+
+Each sample includes:
 
 - **Conversation history** - Raw dialog between speakers
 - **Observations** - Summarized observations with dialog references
 - **Session summaries** - High-level summaries of each session
-- **QA pairs** - Questions with ground truth answers across 4 categories
+- **QA pairs** - Questions with ground truth answers across 5 categories
 
 ### Question Categories
 
@@ -23,6 +27,7 @@ The LoCoMo dataset contains conversation sessions with multiple question-answer 
 | 2        | temporal    | Questions requiring date/time reasoning    |
 | 3        | multi_hop   | Multi-step inference across sessions       |
 | 4        | open_domain | Open-ended questions requiring synthesis   |
+| 5        | abstention  | Questions without an answer (loader skips) |
 
 ## Retrieval Modes
 
@@ -52,16 +57,16 @@ OPENROUTER_API_KEY=your_openrouter_api_key_here
 
 ```bash
 # Run full benchmark with observation mode
-pnpm benchmark -- --dataset dataset/locomo10.json --mode observation
+pnpm benchmark -- --dataset dataset/locomo_v2.json --mode observation
 
 # Quick mode (first 5 questions per sample)
-pnpm benchmark -- --dataset dataset/locomo10.json --mode observation --quick
+pnpm benchmark -- --dataset dataset/locomo_v2.json --mode observation --quick
 
 # Run with specific samples
-pnpm benchmark -- --dataset dataset/locomo10.json --mode dialog --samples sample_001,sample_002
+pnpm benchmark -- --dataset dataset/locomo_v2.json --mode dialog --samples conv-26,conv-30
 
 # Save results to file
-pnpm benchmark -- --dataset dataset/locomo10.json --mode observation --output results.json
+pnpm benchmark -- --dataset dataset/locomo_v2.json --mode observation --output results.json
 ```
 
 ### CLI Options
