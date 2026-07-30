@@ -1,6 +1,7 @@
 ---
 name: openloomi-setup
 description: "OpenLoomi first-use setup and readiness guidance for skill-only agent runtimes. Use when OpenLoomi is not yet installed, the local API is not reachable, the session/token is missing, or the user needs a manual install and launch walkthrough before using OpenLoomi skills."
+allowed-tools: "Bash(node $SKILL_DIR/scripts/openloomi-setup.cjs *)"
 ---
 
 # OpenLoomi Setup
@@ -49,4 +50,3 @@ If the desktop app is missing, direct the user to:
 
 - `https://openloomi.ai/docs/getting-started`
 - `https://github.com/melandlabs/openloomi/releases`
-

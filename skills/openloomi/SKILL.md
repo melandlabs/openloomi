@@ -34,6 +34,25 @@ Use the narrow OpenLoomi skill that matches the task:
 | Answer backend route, local API, auth, RAG, integrations, or workspace questions | `openloomi-api` |
 | Explain OpenLoomi concepts, product capabilities, or user workflows | `openloomi-feature-guide` |
 
+## Common Flows
+
+Use these examples to route common requests without reimplementing OpenLoomi
+logic in the agent:
+
+- Search memory: start with `openloomi-setup` if readiness is unknown, then
+  use `openloomi-memory` to search memory, knowledge base documents, or
+  insights.
+- Post to Slack: start with `openloomi-setup`, use `openloomi-connectors` to
+  check connector/account readiness, then use `composio` for the
+  OAuth-backed Slack action when the user asks to send or post.
+- Draft an email: start with `openloomi-setup`, use `openloomi-memory` for
+  relevant context, then use `composio` or connector guidance for the mail
+  surface the user has authorized.
+- Summarize a Notion page: start with `openloomi-setup`, use `composio` for
+  the authorized Notion access path, then hand useful context to
+  `openloomi-memory` or `openloomi-api` when the user wants it saved,
+  searched, or grounded in the local knowledge base.
+
 ## Boundaries
 
 - Do not depend on Codex or Claude plugin files.
@@ -43,4 +62,3 @@ Use the narrow OpenLoomi skill that matches the task:
   platform-specific flows.
 - If OpenLoomi Desktop is missing or the local API is unavailable, use
   `openloomi-setup` to provide official installation and recovery guidance.
-

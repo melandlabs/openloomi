@@ -81,6 +81,23 @@ OpenLoomi ships official marketplace plugins that turn your existing agent into 
 
 The slim public marketplace lives at [`melandlabs/plugins`](https://github.com/melandlabs/plugins) so adding it only fetches the plugin payloads. See the plugin docs for full reference: [`plugins/claude`](https://openloomi.ai/docs/plugins/claude) · [`plugins/codex`](https://openloomi.ai/docs/plugins/codex).
 
+**Use in skill-only agent runtimes** (for WorkBuddy and other agents that
+support Skills but do not support OpenLoomi plugins):
+
+Install the OpenLoomi skill set directly from this repository:
+
+```bash
+npx skills add https://github.com/melandlabs/openloomi/tree/main/skills \
+  --skill openloomi openloomi-setup openloomi-memory openloomi-connectors openloomi-loop openloomi-api openloomi-feature-guide composio \
+  -y
+```
+
+Start with the `openloomi` or `openloomi-setup` skill. The first setup pass
+checks whether OpenLoomi Desktop is installed, whether the local API is
+reachable, and whether a local session token is available. If OpenLoomi
+Desktop is missing, the skill points the user to the official Getting Started
+guide and release downloads before continuing.
+
 **Develop locally** (for developers):
 
 ```bash
