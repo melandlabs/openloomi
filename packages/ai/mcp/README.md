@@ -24,20 +24,6 @@ MCP-capable runtime:
 }
 ```
 
-Optional API override:
-
-```json
-{
-  "env": {
-    "OPENLOOMI_API_URL": "http://127.0.0.1:3414"
-  }
-}
-```
-
-Normally no auth environment variable is required. The MCP server uses the token
-created by OpenLoomi Desktop. `OPENLOOMI_AUTH_TOKEN` is only for nonstandard
-setups.
-
 ## User Flow
 
 1. Start OpenLoomi Desktop and complete first-use setup.
@@ -55,26 +41,3 @@ setups.
   `openloomi_kb_stats`
 - `openloomi_connectors_list_accounts`, `openloomi_connectors_status`
 - `openloomi_loop_state`, `openloomi_loop_list_decisions`
-
-`openloomi_connectors_status` performs a live OpenLoomi connector check. If the
-native check cannot complete, the tool returns the real failure or timeout
-instead of cached status.
-
-## WorkBuddy Test Flow
-
-1. Open WorkBuddy MCP settings.
-2. Add a server named `openloomi` with command `npx` and args `-y`,
-   `@openloomi/mcp`.
-3. Save the config and reload WorkBuddy MCP servers.
-4. In WorkBuddy chat, ask it to run OpenLoomi setup/status.
-5. Verify memory search, connected accounts, and pending Loop decisions return
-   structured results.
-6. Optionally run connector status and confirm it returns either live health or
-   an explicit OpenLoomi error/timeout.
-
-## Distribution Note
-
-`npx skills add <github path>` works for skills because the skills CLI downloads
-and installs skill folders. MCP runtimes need an executable stdio server, so the
-supported distribution path is the published npm package:
-`npx -y @openloomi/mcp`.
