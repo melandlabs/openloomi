@@ -1,3 +1,5 @@
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+
 import { OpenLoomiApiError, OpenLoomiClient } from "../openloomi/client";
 import {
   checkOpenLoomiReadiness,
@@ -7,11 +9,7 @@ import type { OpenLoomiToolContext } from "./index";
 
 const MAX_TEXT_RESULT_LENGTH = 12000;
 
-export interface OpenLoomiToolResult {
-  content: Array<{ type: "text"; text: string }>;
-  structuredContent?: Record<string, unknown>;
-  isError?: boolean;
-}
+export type OpenLoomiToolResult = CallToolResult;
 
 function toStructuredContent(value: unknown): Record<string, unknown> {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
