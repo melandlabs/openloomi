@@ -5,7 +5,8 @@
     "rootDir": "./src",
     "incremental": false,
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
-    "noEmit": false
+    "noEmit": false,
+    "types": ["node"]
   },
   "include": ["src"]
 }

@@ -1,19 +1,30 @@
 {
   "name": "@openloomi/mcp",
   "version": "0.8.8",
-  "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
+  "bin": {
+    "openloomi-mcp": "./dist/cli.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@openloomi/config": "workspace:*",
+    "@types/node": "^22.13.10",
     "typescript": "^5.6.3"
   },
   "scripts": {
-    "build": "echo no build needed"
+    "build": "tsup"
   }
 }

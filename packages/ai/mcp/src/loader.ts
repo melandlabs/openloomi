@@ -9,10 +9,40 @@ import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { FileCache } from "@openloomi/shared";
 
-// Module-level file cache for MCP configs (5 minute TTL for safety)
-const mcpFileCache = new FileCache<Record<string, McpServerConfig>>();
+const MCP_CONFIG_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface McpFileCacheEntry {
+  value: Record<string, McpServerConfig>;
+  mtimeMs: number;
+  expiresAt: number;
+}
+
+// Module-level file cache for MCP configs (5 minute TTL for safety).
+const mcpFileCache = new Map<string, McpFileCacheEntry>();
+
+function getCachedMcpConfig(
+  configPath: string,
+  mtimeMs: number,
+): Record<string, McpServerConfig> | null {
+  const cached = mcpFileCache.get(configPath);
+  if (!cached || cached.mtimeMs !== mtimeMs || cached.expiresAt < Date.now()) {
+    return null;
+  }
+  return cached.value;
+}
+
+function setCachedMcpConfig(
+  configPath: string,
+  mtimeMs: number,
+  value: Record<string, McpServerConfig>,
+): void {
+  mcpFileCache.set(configPath, {
+    value,
+    mtimeMs,
+    expiresAt: Date.now() + MCP_CONFIG_CACHE_TTL_MS,
+  });
+}
 
 export interface McpStdioServerConfig {
   type?: "stdio";
@@ -131,7 +161,7 @@ export async function loadMcpServers(
   // Check if config file exists and get mtime for cache
   try {
     const stats = fsSync.statSync(configPath);
-    const cached = mcpFileCache.get(configPath, stats.mtimeMs);
+    const cached = getCachedMcpConfig(configPath, stats.mtimeMs);
     if (cached) {
       console.log(
         `[MCP] Using cached config for ${configPath} (mtime: ${stats.mtimeMs})`,
@@ -141,7 +171,7 @@ export async function loadMcpServers(
 
     // Load and cache
     const servers = await loadMcpServersFromFile(configPath, "openloomi");
-    mcpFileCache.set(configPath, stats.mtimeMs, servers);
+    setCachedMcpConfig(configPath, stats.mtimeMs, servers);
     return servers;
   } catch {
     // File doesn't exist or can't be read
