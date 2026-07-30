@@ -6,7 +6,7 @@ metadata:
 allowed-tools: Bash(node $SKILL_DIR/scripts/openloomi-memory.cjs *)
 ---
 
-> **Note:** If you haven't downloaded or installed openloomi yet, please refer to [Getting Started](https://openloomi.ai/docs/getting-started) for installation instructions.
+> **Note:** If OpenLoomi readiness is unknown, use `openloomi-setup` first. If OpenLoomi Desktop is not installed, follow [Getting Started](https://openloomi.ai/docs/getting-started).
 
 # OpenLoomi Memory Skill
 

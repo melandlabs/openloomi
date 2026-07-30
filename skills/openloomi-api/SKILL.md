@@ -3,7 +3,7 @@ name: openloomi-api
 description: "openloomi HTTP API reference (local-first, served from the OpenLoomi Desktop app at http://localhost:3414). Use when working with openloomi backend routes — auth, AI, files, integrations, RAG, memory, Loop, pet, workspace, platform callbacks. Triggers: API endpoints, backend routes, /api/*, local API, port 3414, integrations REST, OAuth start, RAG search, loop state, memory search, pet state, audit logs"
 ---
 
-> **Note:** If you haven't downloaded or installed openloomi yet, please refer to [Getting Started](https://openloomi.ai/docs/getting-started) for installation instructions.
+> **Note:** If OpenLoomi readiness is unknown, use `openloomi-setup` first. If OpenLoomi Desktop is not installed, follow [Getting Started](https://openloomi.ai/docs/getting-started).
 
 # OpenLoomi API Documentation
 
