@@ -3,8 +3,15 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   checkOpenLoomiReadiness,
   formatOpenLoomiReadiness,
+  type OpenLoomiReadiness,
 } from "../openloomi/readiness";
 import type { OpenLoomiToolContext } from "./index";
+
+function toStructuredContent(
+  readiness: OpenLoomiReadiness,
+): Record<string, unknown> {
+  return { ...readiness };
+}
 
 export function registerStatusTools(
   server: McpServer,
@@ -36,7 +43,7 @@ export function registerStatusTools(
             text: formatOpenLoomiReadiness(readiness),
           },
         ],
-        structuredContent: readiness,
+        structuredContent: toStructuredContent(readiness),
       };
     },
   );
@@ -67,7 +74,7 @@ export function registerStatusTools(
             text: formatOpenLoomiReadiness(readiness),
           },
         ],
-        structuredContent: readiness,
+        structuredContent: toStructuredContent(readiness),
       };
     },
   );

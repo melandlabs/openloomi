@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { head } from "@vercel/blob";
-import { auth } from "@/app/(auth)/auth";
 import { getDocument } from "@/lib/ai/rag/langchain-service";
+import { getAuthUser } from "@/lib/auth/dual-auth";
 import { isTauriMode } from "@/lib/env";
 import { fileExists, readFile } from "@/lib/storage";
 import { fetchWithSSRFProtection } from "@openloomi/security/url-validator";
@@ -53,15 +53,15 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ documentId: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) {
+  const user = await getAuthUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const { documentId } = await params;
     const document = await getDocument(documentId);
-    if (!document || document.userId !== session.user.id) {
+    if (!document || document.userId !== user.id) {
       return NextResponse.json(
         { error: "Document not found" },
         { status: 404 },

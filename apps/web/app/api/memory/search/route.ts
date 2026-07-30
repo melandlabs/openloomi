@@ -1,5 +1,5 @@
-import { auth } from "@/app/(auth)/auth";
 import { extractCloudAuthToken } from "@/lib/ai/request-context";
+import { getAuthUser } from "@/lib/auth/dual-auth";
 import {
   clampUnifiedMemorySearchLimit,
   clampUnifiedMemorySearchThreshold,
@@ -21,8 +21,8 @@ function parseStringArray(value: unknown): string[] | undefined {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
+  const user = await getAuthUser(request);
+  if (!user?.id) {
     return new AppError("unauthorized:api").toResponse();
   }
 
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await searchUnifiedMemory({
-      userId: session.user.id,
+      userId: user.id,
       query,
       sources: normalizeUnifiedMemorySearchSources(body.sources),
       limit: clampUnifiedMemorySearchLimit(body.limit),

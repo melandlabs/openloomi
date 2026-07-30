@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/app/(auth)/auth";
+import { getAuthUser } from "@/lib/auth/dual-auth";
 import {
   getDocument,
   getDocumentChunks,
@@ -14,8 +14,8 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ documentId: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) {
+  const user = await getAuthUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -32,7 +32,7 @@ export async function GET(
     }
 
     // Verify document ownership (IDOR protection)
-    if (document.userId !== session.user.id) {
+    if (document.userId !== user.id) {
       return NextResponse.json(
         { error: "Document not found" },
         { status: 404 },
@@ -79,8 +79,8 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ documentId: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) {
+  const user = await getAuthUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -97,7 +97,7 @@ export async function DELETE(
     }
 
     // Verify document ownership (IDOR protection)
-    if (document.userId !== session.user.id) {
+    if (document.userId !== user.id) {
       return NextResponse.json(
         { error: "Document not found" },
         { status: 404 },

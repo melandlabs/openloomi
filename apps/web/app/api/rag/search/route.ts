@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/app/(auth)/auth";
 import { extractCloudAuthToken } from "@/lib/ai/request-context";
+import { getAuthUser } from "@/lib/auth/dual-auth";
 import {
   searchSimilarChunks,
   formatSearchResultsForLLM,
 } from "@/lib/ai/rag/langchain-service";
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user) {
+  const user = await getAuthUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
 
     // Search for similar chunks
     const results = await searchSimilarChunks(
-      session.user.id,
+      user.id,
       query,
       {
         limit,

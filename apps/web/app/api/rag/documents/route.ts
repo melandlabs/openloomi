@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/app/(auth)/auth";
+import { getAuthUser } from "@/lib/auth/dual-auth";
 import {
   getUserDocuments,
   deleteUserDocuments,
@@ -14,12 +14,12 @@ import { eq, and, inArray } from "drizzle-orm";
  * Supports pagination with cursor-based pagination for infinite scroll
  */
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user) {
+  const user = await getAuthUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = session.user.id;
+  const userId = user.id;
   const { searchParams } = new URL(request.url);
 
   // Pagination parameters
@@ -140,12 +140,12 @@ export async function GET(request: Request) {
  * Delete all RAG documents for the current user
  */
 export async function DELETE(request: Request) {
-  const session = await auth();
-  if (!session?.user) {
+  const user = await getAuthUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = session.user.id;
+  const userId = user.id;
 
   try {
     await deleteUserDocuments(userId);

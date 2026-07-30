@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/app/(auth)/auth";
 import { getUserRAGStats } from "@/lib/ai/rag/langchain-service";
+import { getAuthUser } from "@/lib/auth/dual-auth";
 
 /**
  * GET /api/rag/stats
  * Get RAG statistics for the current user
  */
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user) {
+  const user = await getAuthUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const stats = await getUserRAGStats(session.user.id);
+    const stats = await getUserRAGStats(user.id);
 
     return NextResponse.json({
       totalDocuments: stats.totalDocuments,
