@@ -3,10 +3,9 @@
 Stdio MCP server for using local OpenLoomi Desktop from MCP-capable agent
 runtimes.
 
-## MCP Configuration
+## Published Package
 
-After `@openloomi/mcp` is published, add this server to WorkBuddy or any other
-MCP-capable runtime:
+Use the published npm package from any MCP-capable runtime:
 
 ```json
 {
@@ -18,6 +17,45 @@ MCP-capable runtime:
   }
 }
 ```
+
+CLI clients can add the same server with:
+
+```bash
+codex mcp add openloomi -- npx -y @openloomi/mcp
+claude mcp add --transport stdio --scope user openloomi -- npx -y @openloomi/mcp
+```
+
+## Local Build
+
+For local testing before an npm release, build the MCP server from the
+OpenLoomi repository:
+
+```bash
+pnpm --filter @openloomi/mcp build
+```
+
+Then point the runtime at the built stdio entrypoint:
+
+```json
+{
+  "mcpServers": {
+    "openloomi-local": {
+      "command": "node",
+      "args": ["/path/to/openloomi/packages/ai/mcp/dist/cli.js"]
+    }
+  }
+}
+```
+
+CLI clients can add the local server with:
+
+```bash
+codex mcp add openloomi-local -- node "/path/to/openloomi/packages/ai/mcp/dist/cli.js"
+claude mcp add --transport stdio --scope user openloomi-local -- node "/path/to/openloomi/packages/ai/mcp/dist/cli.js"
+```
+
+On Windows, use an escaped path in JSON, such as
+`C:\\path\\to\\openloomi\\packages\\ai\\mcp\\dist\\cli.js`.
 
 ## User Flow
 

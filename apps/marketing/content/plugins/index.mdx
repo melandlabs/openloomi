@@ -14,10 +14,28 @@ First-party plugins that turn external agent shells into a coding surface for a 
 | ----------------------- | --------------------------------------------------------------------------------------------- | --------------------------------- |
 | **Claude Code**         | `/plugin marketplace add melandlabs/plugins` then `/plugin install openloomi`                 | `/openloomi:setup`                |
 | **Codex CLI**           | `codex plugin marketplace add melandlabs/plugins` then `codex plugin add openloomi@openloomi` | `@OpenLoomi Run first-use setup.` |
+| **MCP runtime**         | `npx -y @openloomi/mcp`                                                                       | `openloomi_setup`                 |
 
 ## Overview
 
 If you already live in **Claude Code** or **Codex CLI**, you don't need to leave your editor to use OpenLoomi. Install the matching plugin, run its first-use setup, and OpenLoomi's memory, connectors, scheduled jobs, and Pet become reachable as slash commands, skills, or `@OpenLoomi` prompts inside your existing shell.
+
+For runtimes that support MCP directly, use the OpenLoomi MCP server instead of
+a runtime-specific plugin:
+
+```json
+{
+  "mcpServers": {
+    "openloomi": {
+      "command": "npx",
+      "args": ["-y", "@openloomi/mcp"]
+    }
+  }
+}
+```
+
+For local testing, build `@openloomi/mcp` from the repository and point the MCP
+client at `/path/to/openloomi/packages/ai/mcp/dist/cli.js`.
 
 Both plugins follow the same contract:
 
