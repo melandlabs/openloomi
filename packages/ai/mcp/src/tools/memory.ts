@@ -1,35 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import type { OpenLoomiClient } from "../openloomi/client";
 import type { OpenLoomiToolContext } from "./index";
-import {
-  apiErrorToolResult,
-  jsonToolResult,
-  requireReadyOpenLoomiClient,
-  type OpenLoomiToolResult,
-} from "./response";
+import { jsonToolResult, withReadyOpenLoomiClient } from "./response";
 
 const memorySourceSchema = z.enum(["memory", "insights", "knowledge"]);
 
 const optionalStringArraySchema = z.array(z.string().min(1)).min(1).optional();
-
-async function withReadyClient(
-  context: OpenLoomiToolContext,
-  title: string,
-  run: (client: OpenLoomiClient) => Promise<OpenLoomiToolResult>,
-): Promise<OpenLoomiToolResult> {
-  const ready = await requireReadyOpenLoomiClient(context);
-  if (!ready.ready) {
-    return ready.result;
-  }
-
-  try {
-    return await run(ready.client);
-  } catch (error) {
-    return apiErrorToolResult(title, error);
-  }
-}
 
 export function registerMemoryTools(
   server: McpServer,
@@ -80,7 +57,7 @@ export function registerMemoryTools(
       },
     },
     async (args) =>
-      withReadyClient(
+      withReadyOpenLoomiClient(
         context,
         "OpenLoomi memory search failed",
         async (client) => {
@@ -132,7 +109,7 @@ export function registerMemoryTools(
       },
     },
     async (args) =>
-      withReadyClient(
+      withReadyOpenLoomiClient(
         context,
         "OpenLoomi RAG search failed",
         async (client) => {
@@ -178,7 +155,7 @@ export function registerMemoryTools(
       },
     },
     async (args) =>
-      withReadyClient(
+      withReadyOpenLoomiClient(
         context,
         "OpenLoomi knowledge-base document listing failed",
         async (client) => {
@@ -221,7 +198,7 @@ export function registerMemoryTools(
       },
     },
     async (args) =>
-      withReadyClient(
+      withReadyOpenLoomiClient(
         context,
         "OpenLoomi knowledge-base document read failed",
         async (client) => {
@@ -252,7 +229,7 @@ export function registerMemoryTools(
       },
     },
     async () =>
-      withReadyClient(
+      withReadyOpenLoomiClient(
         context,
         "OpenLoomi knowledge-base stats failed",
         async (client) => {

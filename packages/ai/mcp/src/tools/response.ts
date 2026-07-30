@@ -47,6 +47,23 @@ export function apiErrorToolResult(
   title: string,
   error: unknown,
 ): OpenLoomiToolResult {
+  if (
+    error instanceof Error &&
+    (error.name === "AbortError" || /aborted/i.test(error.message))
+  ) {
+    const message = "Request timed out before OpenLoomi responded.";
+    return {
+      content: [{ type: "text", text: `${title}: ${message}` }],
+      structuredContent: {
+        error: {
+          kind: "timeout",
+          message,
+        },
+      },
+      isError: true,
+    };
+  }
+
   if (error instanceof OpenLoomiApiError) {
     return {
       content: [
@@ -112,4 +129,21 @@ export async function requireReadyOpenLoomiClient(
       token: context.authToken.token ?? undefined,
     }),
   };
+}
+
+export async function withReadyOpenLoomiClient(
+  context: OpenLoomiToolContext,
+  title: string,
+  run: (client: OpenLoomiClient) => Promise<OpenLoomiToolResult>,
+): Promise<OpenLoomiToolResult> {
+  const ready = await requireReadyOpenLoomiClient(context);
+  if (!ready.ready) {
+    return ready.result;
+  }
+
+  try {
+    return await run(ready.client);
+  } catch (error) {
+    return apiErrorToolResult(title, error);
+  }
 }
