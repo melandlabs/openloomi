@@ -18,7 +18,7 @@ const OPENROUTER_IMAGE_MODELS: ImageModelInfo[] = [
     id: "bytedance-seed/seedream-4.5",
     name: "bytedance-seed/seedream-4.5",
     displayName: "Seedream 4.5 (OpenRouter)",
-    supportedModality: ["text"],
+    supportedModality: ["text", "image"],
     supportedSizes: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     supportedQualities: ["auto", "low", "medium", "high"],
     supportedOutputFormats: ["png", "jpeg", "webp"],
@@ -27,7 +27,7 @@ const OPENROUTER_IMAGE_MODELS: ImageModelInfo[] = [
 
 const OPENROUTER_CAPABILITIES: ImageGenerationCapabilities = {
   supportsTextToImage: true,
-  supportsImageReference: false,
+  supportsImageReference: true,
   supportsUrlOutput: false,
   supportsBase64Output: true,
   supportedSizes: ["1:1", "16:9", "9:16", "4:3", "3:4"],
@@ -126,19 +126,6 @@ export class OpenRouterImageGenProvider extends ImageGenProvider {
       });
     }
 
-    if (modality === "image") {
-      return failure({
-        model,
-        prompt: request.prompt,
-        imageCount,
-        modality,
-        creditsUsed,
-        error:
-          "Reference images are not supported by the Day 1 OpenRouter text-to-image provider.",
-        errorType: "validation_error",
-      });
-    }
-
     try {
       const response = await fetch(
         buildImagesUrl(this.baseUrl, this.imageGenerationUrl),
@@ -149,7 +136,14 @@ export class OpenRouterImageGenProvider extends ImageGenProvider {
             referer: this.referer,
             title: this.title,
           }),
-          body: JSON.stringify(buildPayload(request, model, imageCount)),
+          body: JSON.stringify(
+            buildPayload(
+              request,
+              model,
+              imageCount,
+              this.referenceImageDataUrls(request),
+            ),
+          ),
           signal: AbortSignal.timeout(this.timeoutMs),
         },
       );
@@ -238,6 +232,7 @@ function buildPayload(
   request: ImageGenerationRequest,
   model: string,
   imageCount: number,
+  referenceImages: string[] = [],
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     model,
@@ -249,6 +244,9 @@ function buildPayload(
   if (aspectRatio) payload.aspect_ratio = aspectRatio;
   if (request.quality) payload.quality = request.quality;
   if (request.outputFormat) payload.output_format = request.outputFormat;
+  if (referenceImages.length > 0) {
+    payload.input_references = referenceImages;
+  }
 
   return payload;
 }

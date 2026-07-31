@@ -205,6 +205,46 @@ describe("POST /api/ai/v1/images/generations", () => {
     );
   });
 
+  test("uses OpenAI edits payload when reference images are provided", async () => {
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.OPENAI_IMAGE_MODEL = "gpt-image-2";
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: "aGVsbG8=" }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await POST(
+      request({
+        provider: "openai",
+        prompt: "a lifestyle image",
+        referenceImages: [{ b64Json: "cmVmLWltYWdl", mimeType: "image/png" }],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/images/edits",
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          "Content-Type": expect.any(String),
+        }),
+      }),
+    );
+    const [, options] = fetchMock.mock.calls[0];
+    const payload = (options as RequestInit).body as FormData;
+    expect(payload).toBeInstanceOf(FormData);
+    expect(payload.get("model")).toBe("gpt-image-2");
+    expect(payload.get("prompt")).toBe("a lifestyle image");
+    expect(payload.getAll("image[]")).toHaveLength(1);
+    const image = payload.getAll("image[]")[0] as File;
+    expect(image.type).toBe("image/png");
+    expect(image.name).toBe("reference-1.png");
+  });
+
   test("uses OpenRouter image API shape with aspect_ratio output", async () => {
     process.env.OPENROUTER_API_KEY = "test-openrouter-key";
     process.env.OPENROUTER_IMAGE_MODEL = "bytedance-seed/seedream-4.5";
@@ -267,6 +307,34 @@ describe("POST /api/ai/v1/images/generations", () => {
     });
   });
 
+  test("passes reference images to the OpenRouter image API", async () => {
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    process.env.OPENROUTER_IMAGE_MODEL = "bytedance-seed/seedream-4.5";
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: "aGVsbG8=" }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await POST(
+      request({
+        provider: "openrouter",
+        prompt: "a lifestyle image",
+        referenceImages: [{ b64Json: "cmVmLWltYWdl", mimeType: "image/png" }],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const [, options] = fetchMock.mock.calls[0];
+    const payload = JSON.parse((options as RequestInit).body as string);
+    expect(payload.input_references).toEqual([
+      "data:image/png;base64,cmVmLWltYWdl",
+    ]);
+  });
+
   test("uses request provider over env default and accepts Nano Banana url output", async () => {
     process.env.IMAGE_GENERATION_PROVIDER = "openai";
     process.env.NANO_BANANA_API_KEY = "test-nano-key";
@@ -308,5 +376,35 @@ describe("POST /api/ai/v1/images/generations", () => {
       provider: "nano-banana",
       imageUrl: "https://cdn.example/generated.png",
     });
+  });
+
+  test("passes reference images to Nano Banana", async () => {
+    process.env.NANO_BANANA_API_KEY = "test-nano-key";
+    process.env.NANO_BANANA_IMAGE_GENERATION_URL =
+      "https://nano.example/images";
+    process.env.NANO_BANANA_MODEL = "nano-banana";
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [{ url: "https://cdn.example/generated.png" }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await POST(
+      request({
+        provider: "nano-banana",
+        prompt: "a lifestyle image",
+        referenceImages: [{ b64Json: "cmVmLWltYWdl", mimeType: "image/png" }],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const [, options] = fetchMock.mock.calls[0];
+    const payload = JSON.parse((options as RequestInit).body as string);
+    expect(payload.referenceImageUrls).toEqual([
+      "data:image/png;base64,cmVmLWltYWdl",
+    ]);
   });
 });

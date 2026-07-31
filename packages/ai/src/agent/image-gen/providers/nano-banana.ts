@@ -18,7 +18,7 @@ const NANO_BANANA_MODELS: ImageModelInfo[] = [
     id: "nano-banana",
     name: "nano-banana",
     displayName: "Nano Banana",
-    supportedModality: ["text"],
+    supportedModality: ["text", "image"],
     supportedSizes: ["1024x1024", "1024x1536", "1536x1024", "auto"],
     supportedQualities: ["auto", "low", "medium", "high"],
     supportedOutputFormats: ["png", "jpeg", "webp"],
@@ -27,7 +27,7 @@ const NANO_BANANA_MODELS: ImageModelInfo[] = [
 
 const NANO_BANANA_CAPABILITIES: ImageGenerationCapabilities = {
   supportsTextToImage: true,
-  supportsImageReference: false,
+  supportsImageReference: true,
   supportsUrlOutput: true,
   supportsBase64Output: true,
   supportedSizes: ["1024x1024", "1024x1536", "1536x1024", "auto"],
@@ -119,19 +119,6 @@ export class NanoBananaImageGenProvider extends ImageGenProvider {
       });
     }
 
-    if (modality === "image") {
-      return failure({
-        model,
-        prompt: request.prompt,
-        imageCount,
-        modality,
-        creditsUsed,
-        error:
-          "Reference images are not supported by the Day 1 Nano Banana text-to-image provider.",
-        errorType: "validation_error",
-      });
-    }
-
     try {
       const response = await fetch(endpoint, {
         method: "POST",
@@ -140,7 +127,14 @@ export class NanoBananaImageGenProvider extends ImageGenProvider {
           "x-api-key": this.apiKey,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(buildPayload(request, model, imageCount)),
+        body: JSON.stringify(
+          buildPayload(
+            request,
+            model,
+            imageCount,
+            this.referenceImageDataUrls(request),
+          ),
+        ),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
 
@@ -224,6 +218,7 @@ function buildPayload(
   request: ImageGenerationRequest,
   model: string,
   imageCount: number,
+  referenceImages: string[] = [],
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     model,
@@ -239,6 +234,9 @@ function buildPayload(
       request.responseFormat === "data_url"
         ? "b64_json"
         : request.responseFormat;
+  }
+  if (referenceImages.length > 0) {
+    payload.referenceImageUrls = referenceImages;
   }
 
   return payload;

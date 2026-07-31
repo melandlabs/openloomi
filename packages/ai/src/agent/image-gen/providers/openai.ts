@@ -19,7 +19,7 @@ const OPENAI_IMAGE_MODELS: ImageModelInfo[] = [
     id: "gpt-image-2",
     name: "gpt-image-2",
     displayName: "GPT-Image-2",
-    supportedModality: ["text"],
+    supportedModality: ["text", "image"],
     supportedSizes: ["1024x1024", "1024x1536", "1536x1024", "auto"],
     supportedQualities: ["auto", "low", "medium", "high"],
     supportedOutputFormats: ["png", "jpeg", "webp"],
@@ -28,7 +28,7 @@ const OPENAI_IMAGE_MODELS: ImageModelInfo[] = [
 
 const OPENAI_CAPABILITIES: ImageGenerationCapabilities = {
   supportsTextToImage: true,
-  supportsImageReference: false,
+  supportsImageReference: true,
   supportsUrlOutput: false,
   supportsBase64Output: true,
   supportedSizes: ["1024x1024", "1024x1536", "1536x1024", "auto"],
@@ -121,7 +121,9 @@ export class OpenAIImageGenProvider extends ImageGenProvider {
       });
     }
 
-    if (modality === "image") {
+    const referenceFiles =
+      modality === "image" ? this.referenceImageFiles(request) : [];
+    if (modality === "image" && referenceFiles.length === 0) {
       return failure({
         model,
         prompt: request.prompt,
@@ -129,21 +131,31 @@ export class OpenAIImageGenProvider extends ImageGenProvider {
         modality,
         creditsUsed,
         error:
-          "Reference images are not supported by the Day 1 OpenAI text-to-image provider.",
+          "OpenAI reference image generation requires base64/data URL reference images.",
         errorType: "validation_error",
       });
     }
 
     try {
       const response = await fetch(
-        buildImagesUrl(this.baseUrl, this.imageGenerationUrl),
+        modality === "image"
+          ? buildImageEditsUrl(this.baseUrl, this.imageGenerationUrl)
+          : buildImagesUrl(this.baseUrl, this.imageGenerationUrl),
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(buildPayload(request, model, imageCount)),
+          headers:
+            modality === "image"
+              ? {
+                  Authorization: `Bearer ${this.apiKey}`,
+                }
+              : {
+                  Authorization: `Bearer ${this.apiKey}`,
+                  "Content-Type": "application/json",
+                },
+          body:
+            modality === "image"
+              ? buildEditFormData(request, model, imageCount, referenceFiles)
+              : JSON.stringify(buildPayload(request, model, imageCount)),
           signal: AbortSignal.timeout(this.timeoutMs),
         },
       );
@@ -242,6 +254,33 @@ function buildPayload(
   return payload;
 }
 
+function buildEditFormData(
+  request: ImageGenerationRequest,
+  model: string,
+  imageCount: number,
+  referenceFiles: Array<{ blob: Blob; filename: string }>,
+): FormData {
+  const form = new FormData();
+  form.set("model", model);
+  form.set("prompt", request.prompt);
+  form.set("n", String(imageCount));
+  form.set("size", request.size || DEFAULT_SIZE);
+
+  if (request.quality) {
+    form.set("quality", request.quality);
+  }
+
+  if (request.outputFormat) {
+    form.set("output_format", request.outputFormat);
+  }
+
+  for (const file of referenceFiles) {
+    form.append("image[]", file.blob, file.filename);
+  }
+
+  return form;
+}
+
 function buildImagesUrl(baseUrl: string, imageGenerationUrl?: string): string {
   const direct = normalizeOptionalString(imageGenerationUrl);
   if (direct) return direct;
@@ -250,6 +289,19 @@ function buildImagesUrl(baseUrl: string, imageGenerationUrl?: string): string {
   return normalized.endsWith("/v1")
     ? `${normalized}/images/generations`
     : `${normalized}/v1/images/generations`;
+}
+
+function buildImageEditsUrl(
+  baseUrl: string,
+  imageGenerationUrl?: string,
+): string {
+  const direct = normalizeOptionalString(imageGenerationUrl);
+  if (direct) return direct;
+
+  const normalized = baseUrl.replace(/\/+$/, "");
+  return normalized.endsWith("/v1")
+    ? `${normalized}/images/edits`
+    : `${normalized}/v1/images/edits`;
 }
 
 function usesLegacyImageResponseFormat(model: string): boolean {
