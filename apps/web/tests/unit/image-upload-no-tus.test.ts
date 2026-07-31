@@ -102,6 +102,9 @@ describe("issue #380 source regressions", () => {
     expect(end).toBeGreaterThan(start);
 
     const imageBlock = source.slice(start, end);
+    expect(source).toContain("type AgentImageDataInput");
+    expect(source).toContain("url?: never");
+    expect(source).toContain("const images: AgentImageDataInput[] = [];");
     expect(imageBlock).toContain("resolveImagePartToBase64");
     expect(imageBlock).not.toContain("serverImageTUSUrl");
     expect(imageBlock).not.toMatch(/images\.push\(\s*{\s*url:/s);

@@ -31,7 +31,7 @@ import { useTranslation } from "react-i18next";
 import { saveMessagesToDatabase } from "@/lib/ai/chat/save-messages";
 import { getAuthToken } from "@/lib/auth/token-manager";
 import { uploadImageTUS } from "@/lib/files/tus-upload";
-import type { ImageAttachment } from "@openloomi/ai/agent/types";
+import type { ImageAttachment as AgentImageAttachment } from "@openloomi/ai/agent/types";
 import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 import {
   artifactPathBasename,
@@ -352,6 +352,11 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
     blobPath?: unknown;
   };
 
+  type AgentImageDataInput = Pick<AgentImageAttachment, "mimeType"> & {
+    data: string;
+    url?: never;
+  };
+
   function isBrowserFile(value: unknown): value is File {
     return typeof File !== "undefined" && value instanceof File;
   }
@@ -418,7 +423,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
   async function fetchImageSourceAsBase64(
     source: string,
     fallbackMimeType: string,
-  ): Promise<ImageAttachment | undefined> {
+  ): Promise<AgentImageDataInput | undefined> {
     if (source.startsWith("data:image/")) {
       const data = base64FromDataUrl(source);
       if (!data) return undefined;
@@ -469,7 +474,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
   async function resolveImagePartToBase64(
     part: ImageMessagePart,
     messageObject: unknown,
-  ): Promise<ImageAttachment | undefined> {
+  ): Promise<AgentImageDataInput | undefined> {
     const fallbackMimeType = normalizeImageMimeType(part.mediaType);
 
     if (isBrowserFile(part.file)) {
@@ -1009,7 +1014,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       }
 
       // Extract image attachments, file attachments, RAG documents and focused insights from message
-      const images: ImageAttachment[] = [];
+      const images: AgentImageDataInput[] = [];
       const fileAttachments: Array<{
         name: string;
         data: string;
@@ -1027,7 +1032,8 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       }> = [];
 
       if (message && typeof message === "object") {
-        // Extract image attachments - read directly from local file, not via URL
+        // Extract image attachments as base64-only agent inputs. URLs remain
+        // UI/download references and are resolved before crossing this boundary.
         if ((message as any).parts && Array.isArray((message as any).parts)) {
           for (const part of (message as any).parts) {
             if (part.type === "file" && part.mediaType?.startsWith("image/")) {
@@ -1037,7 +1043,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 if (image) images.push(image);
               } catch (error) {
                 console.error(
-                  "[safeSendMessage] 閴?Exception loading image:",
+                  "[safeSendMessage] Exception loading image:",
                   part.name,
                   error,
                 );

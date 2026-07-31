@@ -289,8 +289,10 @@ export interface AgentSupplementalInputSource extends AsyncIterable<AgentSupplem
 }
 
 /**
- * Image attachment for vision capabilities
- * Either data (base64) or url (cloud-accessible) must be provided.
+ * Image attachment for vision capabilities.
+ * Local uploads should prefer `data` (base64) so the payload stays
+ * self-contained; `url` remains available for runtimes that can fetch a
+ * reachable image source.
  */
 export interface ImageAttachment {
   /** Base64 encoded image data */
