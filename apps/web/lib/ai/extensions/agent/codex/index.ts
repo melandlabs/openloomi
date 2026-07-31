@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
@@ -263,11 +263,16 @@ export class CodexAgent extends BaseAgent {
     const providerConfig = normalizeCodexProviderConfig(
       this.config.providerConfig,
     );
+    const imagePaths = await this.materializeImagesForCodex(
+      options?.images,
+      cwd,
+    );
 
     const command = buildCodexRunCommand({
       prompt: addConversationContext(prompt, options),
       cwd,
       model: this.config.model,
+      imagePaths,
       permissionMode: options?.permissionMode,
       mode,
       providerConfig: this.config.providerConfig,
@@ -413,6 +418,33 @@ export class CodexAgent extends BaseAgent {
     };
   }
 
+  private async materializeImagesForCodex(
+    images: AgentOptions["images"] | undefined,
+    cwd: string,
+  ): Promise<string[]> {
+    const imageInputs =
+      images?.filter((image) => typeof image.data === "string" && image.data) ??
+      [];
+    if (imageInputs.length === 0) return [];
+
+    const imageDir = join(cwd, ".openloomi-codex-images");
+    await mkdir(imageDir, { recursive: true });
+
+    const timestamp = Date.now();
+    const imagePaths: string[] = [];
+    for (const [index, image] of imageInputs.entries()) {
+      const ext = codexImageExtension(image.mimeType);
+      const imagePath = join(imageDir, `image_${timestamp}_${index}.${ext}`);
+      await writeFile(
+        imagePath,
+        Buffer.from(stripDataUrlPrefix(image.data!), "base64"),
+      );
+      imagePaths.push(imagePath);
+    }
+
+    return imagePaths;
+  }
+
   private withMessageId(message: AgentMessage): AgentMessage {
     return message.messageId
       ? message
@@ -471,6 +503,27 @@ function resolveHome(filePath: string) {
     return join(homedir(), filePath.slice(2));
   }
   return isAbsolute(filePath) ? filePath : join(process.cwd(), filePath);
+}
+
+function stripDataUrlPrefix(data: string): string {
+  const commaIndex = data.indexOf(",");
+  return commaIndex === -1 ? data : data.slice(commaIndex + 1);
+}
+
+function codexImageExtension(mimeType: string): string {
+  switch (mimeType.toLowerCase()) {
+    case "image/jpeg":
+    case "image/jpg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    default:
+      return "png";
+  }
 }
 
 export function createCodexAgent(config: AgentConfig): CodexAgent {
