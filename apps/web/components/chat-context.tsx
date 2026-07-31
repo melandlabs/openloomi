@@ -1133,7 +1133,9 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 data: {
                   id: consentMessageId,
                   prompt: generationPrompt,
-                  reason: lifestyleSkillDecision.reason,
+                  reason:
+                    lifestyleSkillDecision?.reason ||
+                    lifestyleSkillRoute.fallbackReason,
                   createdAt: new Date().toISOString(),
                   ...(referenceImages.length ? { referenceImages } : {}),
                 },
