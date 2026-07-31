@@ -106,7 +106,7 @@ export function createLifestyleImageSkillFallbackRoute(
   };
 }
 
-export function shouldBlockLifestyleImageClassifierFallback(input: {
+export function shouldGenerateLifestyleImageFromClassifierFallback(input: {
   route: LifestyleImageSkillRouteResult;
   message: string;
   hasReferenceImage: boolean;

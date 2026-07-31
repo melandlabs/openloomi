@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   parseLifestyleImageSkillDecision,
   resolveLifestyleImageSkillRoute,
-  shouldBlockLifestyleImageClassifierFallback,
+  shouldGenerateLifestyleImageFromClassifierFallback,
 } from "@/lib/ai/image-generation/lifestyle-skill-router";
 
 describe("parseLifestyleImageSkillDecision", () => {
@@ -161,10 +161,10 @@ describe("resolveLifestyleImageSkillRoute", () => {
   });
 });
 
-describe("shouldBlockLifestyleImageClassifierFallback", () => {
-  test("blocks explicit lifestyle generation requests when the classifier is unavailable", () => {
+describe("shouldGenerateLifestyleImageFromClassifierFallback", () => {
+  test("allows explicit lifestyle generation requests when the classifier is unavailable", () => {
     expect(
-      shouldBlockLifestyleImageClassifierFallback({
+      shouldGenerateLifestyleImageFromClassifierFallback({
         route: {
           shouldGenerate: false,
           decision: null,
@@ -177,9 +177,9 @@ describe("shouldBlockLifestyleImageClassifierFallback", () => {
     ).toBe(true);
   });
 
-  test("does not block ordinary image understanding when the classifier is unavailable", () => {
+  test("does not route ordinary image understanding when the classifier is unavailable", () => {
     expect(
-      shouldBlockLifestyleImageClassifierFallback({
+      shouldGenerateLifestyleImageFromClassifierFallback({
         route: {
           shouldGenerate: false,
           decision: null,
@@ -191,9 +191,9 @@ describe("shouldBlockLifestyleImageClassifierFallback", () => {
     ).toBe(false);
   });
 
-  test("does not block non-classifier fallbacks", () => {
+  test("does not route non-classifier fallbacks", () => {
     expect(
-      shouldBlockLifestyleImageClassifierFallback({
+      shouldGenerateLifestyleImageFromClassifierFallback({
         route: {
           shouldGenerate: false,
           decision: null,

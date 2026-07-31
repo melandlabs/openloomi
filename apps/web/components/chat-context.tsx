@@ -44,7 +44,7 @@ import { createCodexTransportStatusController } from "@/lib/ai/extensions/agent/
 import {
   createLifestyleImageSkillFallbackRoute,
   isLifestyleImageSkillRouteResult,
-  shouldBlockLifestyleImageClassifierFallback,
+  shouldGenerateLifestyleImageFromClassifierFallback,
   type LifestyleImageSkillRouteResult,
 } from "@/lib/ai/image-generation/lifestyle-skill-router";
 import {
@@ -1077,74 +1077,18 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               selectedModel === "default" ? DEFAULT_AI_MODEL : selectedModel,
           });
       const lifestyleSkillDecision = lifestyleSkillRoute.decision;
-      if (
-        shouldBlockLifestyleImageClassifierFallback({
+      const shouldGenerateFromClassifierFallback =
+        shouldGenerateLifestyleImageFromClassifierFallback({
           route: lifestyleSkillRoute,
           message: messageContent,
           hasReferenceImage: hasLifestyleReferenceImage,
-        })
-      ) {
-        const userMessageCreatedAt = new Date();
-        const userMessage = {
-          role: "user" as const,
-          content: messageContent,
-          createdAt: userMessageCreatedAt,
-          parts: triggerMessageObject?.parts || [
-            { type: "text" as const, text: messageContent },
-          ],
-          metadata: {
-            ...triggerMessageObject?.metadata,
-            createdAt: userMessageCreatedAt.toISOString(),
-            lifestyleImageTrigger: {
-              kind: "skill_lifestyle_image_request",
-              reason: "classifier_unavailable",
-              confidence: "low",
-              hasReferenceImage: hasLifestyleReferenceImage,
-            },
-          },
-          id: generateUUID(),
-        } as ChatMessage;
-        setMessages((prev) => [...prev, userMessage], chatIdForMessages);
-        await saveUserMessageAndUpdateHistory(userMessage, chatIdForMessages);
-
-        const errorMessage =
-          "Lifestyle image generation is temporarily unavailable. Please try again with a chat provider that supports lifestyle image intent routing.";
-        const assistantMessageId = generateUUID();
-        const assistantMessageCreatedAt = new Date(
-          userMessageCreatedAt.getTime() + 1,
-        );
-        const assistantMessage = {
-          role: "assistant" as const,
-          content: errorMessage,
-          id: assistantMessageId,
-          createdAt: assistantMessageCreatedAt,
-          parts: [
-            {
-              type: "error" as const,
-              content: errorMessage,
-            },
-          ],
-          metadata: {
-            createdAt: assistantMessageCreatedAt.toISOString(),
-            lifestyleImage: {
-              status: "error",
-              error: errorMessage,
-              sourceUserMessageId: userMessage.id,
-            },
-          },
-        } as ChatMessage;
-        setMessages((prev) => [...prev, assistantMessage], chatIdForMessages);
-        saveChatMessageImmediately(assistantMessage, chatIdForMessages);
-        toast({
-          type: "error",
-          description: errorMessage,
         });
-        setIsSending(false);
-        return Promise.resolve();
-      }
-      if (lifestyleSkillRoute.shouldGenerate && lifestyleSkillDecision) {
+      if (
+        (lifestyleSkillRoute.shouldGenerate && lifestyleSkillDecision) ||
+        shouldGenerateFromClassifierFallback
+      ) {
         const generationPrompt =
-          lifestyleSkillDecision.refinedPrompt || messageContent;
+          lifestyleSkillDecision?.refinedPrompt || messageContent;
         const userMessageCreatedAt = new Date();
         const userMessage = {
           role: "user" as const,
@@ -1157,9 +1101,13 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             ...triggerMessageObject?.metadata,
             createdAt: userMessageCreatedAt.toISOString(),
             lifestyleImageTrigger: {
-              kind: "skill_lifestyle_image_request",
-              reason: lifestyleSkillDecision.reason,
-              confidence: lifestyleSkillDecision.confidence,
+              kind: lifestyleSkillDecision
+                ? "skill_lifestyle_image_request"
+                : "classifier_fallback_lifestyle_image_request",
+              reason:
+                lifestyleSkillDecision?.reason ||
+                lifestyleSkillRoute.fallbackReason,
+              confidence: lifestyleSkillDecision?.confidence || "low",
               hasReferenceImage: hasLifestyleReferenceImage,
             },
           },
