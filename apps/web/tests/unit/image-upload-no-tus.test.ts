@@ -93,6 +93,39 @@ describe("issue #380 source regressions", () => {
     expect(imageBlock).toBeDefined();
     expect(imageBlock).not.toMatch(/await\s+uploadImageTUS\s*\(/);
   });
+
+  it("chat-context.tsx resolves local image parts to base64-only agent inputs", () => {
+    const source = readSource("components/chat-context.tsx");
+    const start = source.indexOf("Extract image attachments");
+    const end = source.indexOf("Handle all file attachments", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+
+    const imageBlock = source.slice(start, end);
+    expect(imageBlock).toContain("resolveImagePartToBase64");
+    expect(imageBlock).not.toContain("serverImageTUSUrl");
+    expect(imageBlock).not.toMatch(/images\.push\(\s*{\s*url:/s);
+  });
+
+  it("chat-context.tsx converts blobPath references through the local download endpoint", () => {
+    const source = readSource("components/chat-context.tsx");
+    expect(source).toContain("function localDownloadUrlFromBlobPath");
+    expect(source).toContain("/api/files/download?path=");
+    expect(source).toContain("localDownloadUrlFromBlobPath(part.blobPath)");
+  });
+
+  it("input surfaces no longer forward serverImageTUSUrl", () => {
+    const files = [
+      "components/task-composer/use-attachment-upload.ts",
+      "components/task-composer/task-composer.tsx",
+      "components/multimodal-input.tsx",
+      "components/agent/chat-panel.tsx",
+    ];
+
+    for (const file of files) {
+      expect(readSource(file)).not.toContain("serverImageTUSUrl");
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
