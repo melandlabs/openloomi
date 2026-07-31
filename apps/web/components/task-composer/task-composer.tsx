@@ -34,7 +34,7 @@ const MAX_TEXTAREA_HEIGHT_PX = TEXTAREA_LINE_HEIGHT_PX * MAX_VISIBLE_LINES;
 const MAX_TEXT_LENGTH = 5000;
 const TASK_COMPOSER_MAX_WIDTH_CLASS = "max-w-[730px]";
 
-function isImageAttachmentMissingServerUpload(attachment: Attachment): boolean {
+function isImageAttachmentMissingLocalSource(attachment: Attachment): boolean {
   const file =
     typeof File !== "undefined" && (attachment as any).file instanceof File
       ? ((attachment as any).file as File)
@@ -42,8 +42,10 @@ function isImageAttachmentMissingServerUpload(attachment: Attachment): boolean {
 
   return (
     attachment.contentType.startsWith("image/") &&
-    Boolean(file) &&
-    !(attachment as any).serverImageTUSUrl &&
+    !file &&
+    !attachment.downloadUrl &&
+    !attachment.blobPath &&
+    !attachment.url &&
     !(attachment as any).isUploading
   );
 }
@@ -147,8 +149,8 @@ function PureTaskComposer({
   const hasUploadingAttachment = attachments.some(
     (att) => (att as any).isUploading,
   );
-  const hasImageMissingServerUpload = attachments.some(
-    isImageAttachmentMissingServerUpload,
+  const hasImageMissingLocalSource = attachments.some(
+    isImageAttachmentMissingLocalSource,
   );
   const hasComposerContent = value.trim().length > 0 || attachments.length > 0;
   const sendDisabled =
@@ -156,13 +158,13 @@ function PureTaskComposer({
     isLocked ||
     !hasComposerContent ||
     hasUploadingAttachment ||
-    hasImageMissingServerUpload;
+    hasImageMissingLocalSource;
   const sendButtonMuted =
     !hasComposerContent &&
     !composerBusy &&
     !isLocked &&
     !hasUploadingAttachment &&
-    !hasImageMissingServerUpload;
+    !hasImageMissingLocalSource;
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -220,7 +222,7 @@ function PureTaskComposer({
   const handleSubmit = useCallback(() => {
     if (composerBusy || isLocked || hasUploadingAttachment) return;
     if (!hasComposerContent) return;
-    if (hasImageMissingServerUpload) {
+    if (hasImageMissingLocalSource) {
       toast.error(t("chat.imageUploadFailed", "Image upload failed"));
       return;
     }
@@ -234,7 +236,7 @@ function PureTaskComposer({
     attachments,
     composerBusy,
     hasComposerContent,
-    hasImageMissingServerUpload,
+    hasImageMissingLocalSource,
     hasUploadingAttachment,
     isLocked,
     onSubmit,
@@ -358,17 +360,9 @@ function PureTaskComposer({
       const fileName = `screenshot-${Date.now()}.png`;
       const file = new File([blob], fileName, { type: "image/png" });
       const result = await uploadFile(file, { createRecord: false });
-      // Reuse the local URL from uploadFile — no TUS hop needed.
-      const serverImageTUSUrl = result.url || result.downloadUrl;
-      if (!serverImageTUSUrl) {
-        throw new Error(
-          t("chat.imageUploadFailed", "Image upload failed (no URL returned)"),
-        );
-      }
 
       const attachment: Attachment & {
         file?: File;
-        serverImageTUSUrl?: string;
       } = {
         name: result.name || fileName,
         url: result.url,
@@ -377,7 +371,6 @@ function PureTaskComposer({
         contentType: result.contentType,
         sizeBytes: result.size,
         file,
-        serverImageTUSUrl,
       };
 
       setAttachments((prev) => [...prev, attachment]);

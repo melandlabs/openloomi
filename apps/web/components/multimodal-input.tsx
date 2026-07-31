@@ -1612,27 +1612,15 @@ function PureMultimodalInput({
           )?.id;
 
           const result = await uploadFile(file, { createRecord: false });
-          // Reuse the local URL returned by uploadFile — no TUS hop needed.
-          const blobUrl = result.url || result.downloadUrl;
-          if (!blobUrl) {
-            throw new Error(
-              t(
-                "chat.imageUploadFailed",
-                "Image upload failed (no URL returned)",
-              ),
-            );
-          }
 
           const newAttachment: Attachment & {
             file?: File;
-            serverImageTUSUrl?: string;
           } = {
             name: result.name || file.name,
             url: result.url,
             contentType: result.contentType,
             sizeBytes: result.size,
             blobPath: result.blobPath, // local path for display
-            serverImageTUSUrl: blobUrl || undefined, // cloud URL for agent
             downloadUrl: result.downloadUrl,
             // Save original file object for native agent to read directly
             file: file,
@@ -1979,10 +1967,6 @@ function PureMultimodalInput({
           downloadUrl: attachment.downloadUrl,
           // Include original file object (if any) - used by Native Agent to extract files
           file: (attachment as Attachment & { file?: File }).file,
-          // Include TUS upload URL for large images (>400KB)
-          serverImageTUSUrl: (
-            attachment as Attachment & { serverImageTUSUrl?: string }
-          ).serverImageTUSUrl,
         })),
         {
           type: "text",

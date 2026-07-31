@@ -67,7 +67,6 @@ async function readDroppedTauriFiles(paths: string[]) {
 interface UploadingAttachment extends Attachment {
   isUploading?: boolean;
   file?: File;
-  serverImageTUSUrl?: string;
 }
 
 function isPendingAttachmentForUpload(
@@ -193,23 +192,7 @@ export function useAttachmentUpload({
         try {
           const result = await uploadFile(file, { createRecord: false });
 
-          // For images, reuse the local URL returned by uploadFile so the
-          // selected AI model can fetch the attachment via the same origin.
-          // We do NOT call uploadImageTUS here — that route (/api/ai/v1/upload)
-          // does not exist in this app and any fallback would be redundant.
-          let serverImageTUSUrl: string | undefined;
-          if (file.type.startsWith("image/")) {
-            serverImageTUSUrl = result.url || result.downloadUrl;
-            if (!serverImageTUSUrl) {
-              throw new Error(
-                t(
-                  "chat.imageUploadFailed",
-                  "Image upload failed (no URL returned)",
-                ),
-              );
-            }
-          }
-
+          // Keep local URLs for UI only; images are converted to base64 when sent.
           // Update the attachment with upload results and mark as complete
           setAttachments((prev) =>
             prev.map((att) => {
@@ -222,7 +205,6 @@ export function useAttachmentUpload({
                   downloadUrl: result.downloadUrl,
                   blobPath: result.blobPath,
                   isUploading: false,
-                  serverImageTUSUrl,
                 };
               }
               return att;
