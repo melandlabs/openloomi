@@ -117,17 +117,48 @@ export function PersonalizationLinkedAccounts({
    * counterpart. Mirrors `ComposioConnectorList`'s dedup rule so the
    * header count matches what's rendered.
    */
-  const composioOnlyCount = (() => {
-    const nativePlatforms = new Set<IntegrationId>(
-      integrationAccounts.map((a) => a.platform),
-    );
-    return loopConnectors.filter(
-      (e) =>
-        e.connected &&
-        e.probed !== false &&
-        !nativePlatforms.has(e.id as IntegrationId),
-    ).length;
-  })();
+  const nativePlatforms = new Set<IntegrationId>(
+    integrationAccounts.map((account) => account.platform),
+  );
+  const composioOnlyCount = loopConnectors.filter(
+    (entry) =>
+      entry.connected &&
+      entry.probed !== false &&
+      !nativePlatforms.has(entry.id as IntegrationId),
+  ).length;
+  const hasKnownComposioSnapshot = loopConnectors.some(
+    (entry) =>
+      entry.probed === true &&
+      entry.source !== "native" &&
+      !nativePlatforms.has(entry.id as IntegrationId),
+  );
+  const connectedAccountsSummary =
+    lastProbeError && !hasKnownComposioSnapshot
+      ? [
+          integrationAccounts.length > 0
+            ? String(integrationAccounts.length)
+            : null,
+          t("connectors.snapshotUnavailable", "Composio status unavailable"),
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : [
+          integrationAccounts.length > 0 || !lastProbeError
+            ? String(integrationAccounts.length)
+            : null,
+          composioOnlyCount > 0 || lastProbeError
+            ? `${t(
+                "connectors.sourceComposio",
+                "Composio",
+              )} ${composioOnlyCount}${
+                lastProbeError
+                  ? ` · ${t("connectors.snapshotStale", "last known")}`
+                  : ""
+              }`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
   const [internalAddConnectorDialogOpen, setInternalAddConnectorDialogOpen] =
     useState(false);
 
@@ -422,14 +453,7 @@ export function PersonalizationLinkedAccounts({
                   <span className="text-sm font-semibold text-foreground truncate">
                     {t("common.connectedAccounts")}{" "}
                     <span className="text-xs font-medium text-muted-foreground">
-                      ({integrationAccounts.length}
-                      {composioOnlyCount > 0
-                        ? ` · ${t(
-                            "connectors.sourceComposio",
-                            "Composio",
-                          )} ${composioOnlyCount}`
-                        : ""}
-                      )
+                      ({connectedAccountsSummary})
                     </span>
                   </span>
                 </AccordionTrigger>

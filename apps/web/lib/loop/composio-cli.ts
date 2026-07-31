@@ -39,6 +39,9 @@
  */
 
 import { execFile } from "node:child_process";
+import { accessSync, constants } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { writeConnectorSnapshot } from "./connectors";
@@ -140,8 +143,8 @@ export type CliProbeOutcome =
 
 /**
  * Run a single `composio` CLI invocation. Catches `ENOENT` and other
- * spawn-level failures and returns `null` so callers can render a
- * structured `cli_not_found` outcome instead of an exception.
+ * spawn-level failures and returns a structured error so callers can
+ * render a `cli_not_found` outcome instead of throwing.
  *
  * `execImpl` is a test seam — production passes the real
  * `promisify(execFile)`. Tests pass a stub returning `{stdout, stderr}`
@@ -154,7 +157,25 @@ interface ExecResult {
   stderr: string;
 }
 
+/**
+ * Finder/launchd does not inherit shell PATH additions, while the Composio
+ * installer places the CLI at `~/.composio/composio`. Prefer that documented
+ * user install location when it is executable, then retain the existing
+ * PATH lookup as the fallback for every other installation layout.
+ */
+function resolveComposioExecutable(env: NodeJS.ProcessEnv): string {
+  const home = env.HOME || env.USERPROFILE || homedir();
+  const userInstall = join(home, ".composio", "composio");
+  try {
+    accessSync(userInstall, constants.X_OK);
+    return userInstall;
+  } catch {
+    return "composio";
+  }
+}
+
 async function runCli(
+  executable: string,
   args: string[],
   execImpl: (
     cmd: string,
@@ -165,15 +186,16 @@ async function runCli(
     args: string[],
     opts: unknown,
   ) => Promise<ExecResult>,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<{ ok: true; result: ExecResult } | { ok: false; error: string }> {
   try {
-    const result = await execImpl("composio", args, {
+    const result = await execImpl(executable, args, {
       timeout: CLI_CALL_TIMEOUT_MS,
       maxBuffer: 8 * 1024 * 1024,
       // `whoami` and `connections list` both print JSON to stdout.
       // Don't ask for human-readable output — we want the raw shape so
       // the parser can stay stable across CLI versions.
-      env: { ...process.env, NO_COLOR: "1" },
+      env: { ...env, NO_COLOR: "1" },
     });
     return { ok: true, result };
   } catch (e: unknown) {
@@ -183,10 +205,13 @@ async function runCli(
       killed?: boolean;
       signal?: string;
     };
-    // ENOENT = the `composio` binary isn't on `$PATH`. Surface it
+    // ENOENT = the resolved executable couldn't be spawned. Surface it
     // distinctly so the agentic fallback isn't blamed for the gap.
     if (err?.code === "ENOENT") {
-      return { ok: false, error: "composio CLI not on $PATH" };
+      return {
+        ok: false,
+        error: "composio CLI not found at ~/.composio/composio or on $PATH",
+      };
     }
     // Spawn-level timeout — the CLI didn't return within
     // `CLI_CALL_TIMEOUT_MS`. The agentic fallback will retry.
@@ -210,15 +235,17 @@ async function runCli(
  * (something else went wrong, e.g. unexpected JSON shape).
  */
 async function probeWhoami(
+  executable: string,
   execImpl?: (
     cmd: string,
     args: string[],
     opts: unknown,
   ) => Promise<ExecResult>,
+  env?: NodeJS.ProcessEnv,
 ): Promise<
   { ok: true; whoami: WhoamiResult } | { ok: false; outcome: CliProbeOutcome }
 > {
-  const r = await runCli(["whoami"], execImpl);
+  const r = await runCli(executable, ["whoami"], execImpl, env);
   if (!r.ok) {
     return {
       ok: false,
@@ -279,16 +306,18 @@ async function probeWhoami(
  * `dev init` required.
  */
 async function probeConnectedAccounts(
+  executable: string,
   execImpl?: (
     cmd: string,
     args: string[],
     opts: unknown,
   ) => Promise<ExecResult>,
+  env?: NodeJS.ProcessEnv,
 ): Promise<
   | { ok: true; accounts: Record<string, ConnectedAccountRaw[]> }
   | { ok: false; outcome: CliProbeOutcome }
 > {
-  const r = await runCli(["connections", "list"], execImpl);
+  const r = await runCli(executable, ["connections", "list"], execImpl, env);
   if (!r.ok) {
     return {
       ok: false,
@@ -452,9 +481,13 @@ export async function probeViaCli(
       args: string[],
       opts: unknown,
     ) => Promise<ExecResult>;
+    /** Environment used for CLI discovery/execution; exposed for regression tests. */
+    env?: NodeJS.ProcessEnv;
   } = {},
 ): Promise<CliProbeOutcome> {
   const toolkits = opts.toolkits ?? DEFAULT_TOOLKITS;
+  const env = opts.env ?? process.env;
+  const executable = resolveComposioExecutable(env);
   const t0 = Date.now();
   log("composio-cli: probing via local composio CLI");
 
@@ -470,7 +503,7 @@ export async function probeViaCli(
   // do. So the CLI diagnostic is dead weight; the caller's
   // `probeConnectorState` gets the full picture and decides what to
   // persist.
-  const whoami = await probeWhoami(opts.execImpl);
+  const whoami = await probeWhoami(executable, opts.execImpl, env);
   if (!whoami.ok) {
     log(`composio-cli: whoami outcome=${whoami.outcome.kind}`);
     return whoami.outcome;
@@ -480,7 +513,7 @@ export async function probeViaCli(
   // installed and auth works, but we can't enumerate accounts (most
   // commonly the JSON shape changed). Same persistence rationale as
   // above — caller decides.
-  const list = await probeConnectedAccounts(opts.execImpl);
+  const list = await probeConnectedAccounts(executable, opts.execImpl, env);
   if (!list.ok) {
     log(`composio-cli: list outcome=${list.outcome.kind}`);
     return list.outcome;

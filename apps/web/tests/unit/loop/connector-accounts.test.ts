@@ -320,7 +320,7 @@ describe("probeConnectorState structured outcomes (#391)", () => {
         { type: "tool_call", content: "{}" },
         {
           type: "tool_result",
-          content: {
+          output: JSON.stringify({
             connectors: [
               {
                 id: "gmail",
@@ -330,7 +330,7 @@ describe("probeConnectorState structured outcomes (#391)", () => {
                 accounts: [{ id: "ga_1", label: "me@x.com" }],
               },
             ],
-          },
+          }),
         },
       ],
     });

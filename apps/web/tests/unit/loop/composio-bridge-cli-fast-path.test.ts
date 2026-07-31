@@ -128,11 +128,33 @@ describe("probeConnectorState fallback to agent", () => {
       kind: "cli_not_found",
       error: "composio CLI not on $PATH",
     });
-    invokeAgentPrompt.mockResolvedValueOnce(agentOk([GMAIL_ENTRY]));
+    invokeAgentPrompt.mockResolvedValueOnce({
+      ok: true,
+      result: "success",
+      text: JSON.stringify({
+        surfaces_used: ["skill"],
+        connectors: [GMAIL_ENTRY],
+      }),
+      reasoning: "",
+      events: [
+        { type: "session", content: "started" },
+        {
+          type: "text",
+          content: JSON.stringify({ connectors: [GMAIL_ENTRY] }),
+        },
+        { type: "done", content: "success" },
+      ],
+    });
 
     const outcome = await probeConnectorState({ toolkits: TOOLKITS });
     expect(outcome.kind).toBe("ok");
     expect(invokeAgentPrompt).toHaveBeenCalledTimes(1);
+    const prompt = invokeAgentPrompt.mock.calls[0][0] as string;
+    expect(prompt).toContain(
+      "structured JSON object as your final assistant response",
+    );
+    expect(prompt).toContain("runtime owns SSE framing");
+    expect(prompt).not.toContain("Emit exactly one SSE");
   });
 
   it("falls through when CLI returns cli_no_dev_project (most common prod failure)", async () => {
@@ -222,5 +244,34 @@ describe("probeConnectorState when both surfaces fail", () => {
 
     const outcome = await probeConnectorState({ toolkits: TOOLKITS });
     expect(outcome.kind).toBe("empty_response");
+  });
+
+  it("reports the hollow three-event Codex response as malformed without replacing the snapshot", async () => {
+    probeViaCli.mockResolvedValueOnce({
+      kind: "cli_not_found",
+      error: "composio CLI not on $PATH",
+    });
+    invokeAgentPrompt.mockResolvedValueOnce({
+      ok: true,
+      result: "success",
+      text: "",
+      reasoning: "",
+      events: [
+        { type: "session", content: "started" },
+        { type: "result", content: "success" },
+        { type: "done", content: "success" },
+      ],
+    });
+
+    const outcome = await probeConnectorState({ toolkits: TOOLKITS });
+
+    expect(outcome.kind).toBe("malformed_response");
+    if (outcome.kind !== "malformed_response") return;
+    expect(outcome.diagnostic).toContain('events=3 text-head=""');
+    expect(writeProbeError).toHaveBeenCalledWith(
+      "malformed_response",
+      expect.stringContaining('events=3 text-head=""'),
+    );
+    expect(writeConnectorSnapshot).not.toHaveBeenCalled();
   });
 });

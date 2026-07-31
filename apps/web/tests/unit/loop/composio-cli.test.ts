@@ -37,7 +37,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -169,6 +177,80 @@ const enoentError = (args: string[]) => ({
 // Happy path — both calls succeed; entries are persisted
 // ---------------------------------------------------------------------------
 describe("probeViaCli happy path", () => {
+  it("discovers the default ~/.composio/composio install with a Finder-like PATH", async () => {
+    const composioDir = join(tmp, ".composio");
+    const composioBinary = join(composioDir, "composio");
+    mkdirSync(composioDir, { recursive: true });
+    writeFileSync(composioBinary, "");
+    chmodSync(composioBinary, 0o755);
+
+    const calls: Array<ExecCall & { opts: unknown }> = [];
+    const exec = async (cmd: string, args: string[], opts: unknown) => {
+      calls.push({ cmd, args, opts });
+      if (args[0] === "whoami") {
+        return whoamiSuccess.resolve;
+      }
+      if (args[0] === "connections" && args[1] === "list") {
+        return {
+          stdout: JSON.stringify({
+            github: [
+              {
+                status: "ACTIVE",
+                alias: "semiok",
+                word_id: "github_active",
+              },
+            ],
+            linear: [
+              {
+                status: "ACTIVE",
+                alias: "semiok@example.com",
+                word_id: "linear_active",
+              },
+            ],
+          }),
+          stderr: "",
+        };
+      }
+      throw new Error(`unhandled call: ${cmd} ${args.join(" ")}`);
+    };
+
+    const outcome = await probeViaCli({
+      execImpl: exec,
+      env: {
+        ...process.env,
+        HOME: tmp,
+        PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+      },
+    });
+
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(calls.map((call) => call.cmd)).toEqual([
+      composioBinary,
+      composioBinary,
+    ]);
+    expect(
+      calls.map((call) => (call.opts as { env?: NodeJS.ProcessEnv }).env?.PATH),
+    ).toEqual([
+      "/usr/bin:/bin:/usr/sbin:/sbin",
+      "/usr/bin:/bin:/usr/sbin:/sbin",
+    ]);
+    expect(outcome.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "github",
+          connected: true,
+          accountCount: 1,
+        }),
+        expect.objectContaining({
+          id: "linear",
+          connected: true,
+          accountCount: 1,
+        }),
+      ]),
+    );
+  });
+
   it("returns ok with parsed entries and persists the snapshot", async () => {
     const exec = makeExec([
       whoamiSuccess,

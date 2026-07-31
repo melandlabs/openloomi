@@ -883,6 +883,8 @@ const enUS = {
     sync: "Sync",
     sourceComposio: "Composio",
     sourceComposioHint: "Connected via Composio (agent-managed)",
+    snapshotStale: "last known",
+    snapshotUnavailable: "Composio status unavailable",
     probeError: "Last sync failed",
     // #412 — per-kind callout copy + affordances. Keys live here so the
     // connectors page can render a localized reason + one-click fix

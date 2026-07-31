@@ -816,6 +816,8 @@ const zhHans = {
     sync: "同步",
     sourceComposio: "Composio",
     sourceComposioHint: "通过 Composio（智能体管理）连接",
+    snapshotStale: "上次已知状态",
+    snapshotUnavailable: "Composio 状态不可用",
     probeError: "最近同步失败",
     // #412 — 每种探测失败类型对应的提示与一键修复。详见
     // `apps/web/components/loop/probe-error-callout.tsx`。

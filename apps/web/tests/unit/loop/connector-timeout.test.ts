@@ -219,17 +219,26 @@ describe("refreshConnectors timeout (#391)", () => {
     // the last-known connector state.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
-    // Seed a cache with a known snapshot that predates the timeout
-    // (#411: the cache TTL is now 30s, so 5s old is comfortably
-    // within validity and still meaningfully "predates" the probe
-    // call we're about to make).
-    const seededFetchedAt = new Date(Date.now() - 5 * 1000).toISOString();
+    // Seed a cache older than the 30s TTL. A failed refresh must still
+    // return these last-known-good rows instead of replacing them with
+    // the all-disconnected fallback.
+    const seededFetchedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const seededConnectors = [
       {
-        id: "gmail",
-        label: "Gmail",
+        id: "github",
+        label: "GitHub",
         connected: true,
         accountCount: 1,
+        accounts: [{ id: "github_active", healthy: true }],
+        probed: true,
+        fetchedAt: seededFetchedAt,
+      },
+      {
+        id: "linear",
+        label: "Linear",
+        connected: true,
+        accountCount: 1,
+        accounts: [{ id: "linear_active", healthy: true }],
         probed: true,
         fetchedAt: seededFetchedAt,
       },
@@ -253,7 +262,8 @@ describe("refreshConnectors timeout (#391)", () => {
     // Snapshot was preserved.
     expect(result).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "gmail", connected: true }),
+        expect.objectContaining({ id: "github", connected: true }),
+        expect.objectContaining({ id: "linear", connected: true }),
       ]),
     );
 
@@ -261,8 +271,11 @@ describe("refreshConnectors timeout (#391)", () => {
     // cooldown marker.
     const raw = JSON.parse(readFileSync(CONNECTORS_PATH, "utf8"));
     expect(raw.fetchedAt).toBe(seededFetchedAt);
-    expect(raw.connectors).toHaveLength(1);
-    expect(raw.connectors[0].id).toBe("gmail");
+    expect(raw.connectors).toHaveLength(2);
+    expect(raw.connectors.map((entry: { id: string }) => entry.id)).toEqual([
+      "github",
+      "linear",
+    ]);
     expect(raw.lastProbeError?.kind).toBe("timeout");
     expect(typeof raw.probeCooldownUntil).toBe("string");
   });

@@ -15,8 +15,8 @@
  * posting a small "probe only" prompt to the same `/api/native/agent`
  * endpoint the tick uses; the agent runs the same §1 of the tick
  * prompt (discover which Composio surfaces are reachable), returns
- * the `connectors` block in its `result` event, and we persist +
- * return it.
+ * the `connectors` block as its final assistant response, and we
+ * persist + return it.
  *
  * The result is shape-compatible with `ConnectorEntry[]` from
  * `types.ts`; persistence is the same `writeConnectorSnapshot` the
@@ -97,8 +97,8 @@ const DEFAULT_TOOLKITS: NonNullable<ProbeConnectorPromptOptions["toolkits"]> = [
  * toolkits via whatever Composio surfaces are reachable in the current
  * session (composio CLI / composio skill / openloomi-memory insights).
  * The prompt is intentionally narrow — no signal pull, no classify, no
- * decision persist. The expected output is a single `result` event whose
- * `content` is a JSON `connectors` block matching `ConnectorEntry[]`.
+ * decision persist. The expected output is one JSON `connectors` block
+ * in the final assistant response, matching `ConnectorEntry[]`.
  *
  * IMPORTANT: the prompt requires the agent to **work through every
  * surface, even after an earlier one errors**. The original wording
@@ -122,7 +122,7 @@ function buildProbePrompt(
     })
     .join("\n");
 
-  return `You are running a **connector probe** for the openloomi Loop. Your job is to inspect active Composio surfaces, identify which of the toolkits below have at least one healthy connected account, and emit a single structured \`result\` event. NO signal pull, NO classify, NO decision persist — just the connector snapshot.
+  return `You are running a **connector probe** for the openloomi Loop. Your job is to inspect active Composio surfaces, identify which of the toolkits below have at least one healthy connected account, and return one structured JSON object as your final assistant response. NO signal pull, NO classify, NO decision persist — just the connector snapshot.
 
 # Available Composio surfaces — work through ALL of them before giving up
 
@@ -144,7 +144,7 @@ ${catalog}
 
 # Output
 
-Emit exactly one SSE \`result\` event with this content:
+Return exactly one JSON object as your final assistant response:
 
 \`\`\`json
 {
@@ -162,7 +162,9 @@ Emit exactly one SSE \`result\` event with this content:
 
 The \`connectors\` array MUST contain one entry per toolkit in the catalog above, in the same order, with the \`id\` and \`label\` matching exactly. Do not omit any toolkit. \`accountCount\` MUST equal \`accounts.length\`, and every \`accounts\` entry carries only the non-secret \`{ id, label, healthy }\` — never tokens or credentials.
 
-Do not pull signals, do not classify, do not write to \`~/.openloomi/loop/\` — the bridge persists the snapshot for you. Just emit the \`result\` event and stop.`;
+The runtime owns SSE framing. Do not emit or describe SSE events. You may return raw JSON or a single \`\`\`json fenced block, with no additional prose.
+
+Do not pull signals, do not classify, do not write to \`~/.openloomi/loop/\` — the bridge persists the snapshot for you. Return the final JSON and stop.`;
 }
 
 interface ConnectorBlockShape {
@@ -321,9 +323,9 @@ function findMatchingBrace(text: string, start: number): number {
 
 /**
  * Fourth extraction pass (#391): walk `res.events` for any event whose
- * `content` (already-parsed object or stringified JSON) carries a
- * `connectors` array. Covers agents that wrap the snapshot inside a
- * `tool_call` / `tool_result` event instead of the final `result` event.
+ * payload (already-parsed object or stringified JSON) carries a
+ * `connectors` array. Most events use `content`; native Codex
+ * `tool_result` events use `output`.
  * Returns the LAST usable block found (agents emit the final payload
  * last), or `null` when no event contains one.
  */
@@ -334,15 +336,23 @@ function extractConnectorsFromEvents(
   let last: ConnectorBlockShape | null = null;
   for (const evt of events) {
     if (!evt || typeof evt !== "object") continue;
-    const content = (evt as { content?: unknown }).content;
-    if (!content) continue;
-    if (typeof content === "object") {
-      const obj = content as ConnectorBlockShape;
-      if (Array.isArray(obj.connectors)) last = obj;
+    const event = evt as {
+      type?: unknown;
+      content?: unknown;
+      output?: unknown;
+    };
+    const payload =
+      event.type === "tool_result"
+        ? (event.output ?? event.content)
+        : event.content;
+    if (!payload) continue;
+    if (typeof payload === "object") {
+      const parsed = extractConnectorsFromResult(payload);
+      if (parsed) last = parsed;
       continue;
     }
-    if (typeof content === "string") {
-      const parsed = tryParseJsonObject(content);
+    if (typeof payload === "string") {
+      const parsed = extractConnectorsFromText(payload);
       if (parsed) last = parsed;
     }
   }
@@ -434,7 +444,7 @@ export async function probeConnectorState(
   }
   if (cliOutcome.kind === "cli_not_found") {
     log(
-      "composio-bridge: CLI fast-path unavailable (composio binary not on $PATH) — falling through to agentic probe",
+      "composio-bridge: CLI fast-path unavailable (composio binary not found) — falling through to agentic probe",
     );
     // Don't write a sticky diagnostic for `cli_not_found` — the CLI
     // install state is unlikely to flip mid-session, but the user
@@ -497,18 +507,17 @@ export async function probeConnectorState(
     return { kind: "agent_http_error", status: res.status, error: msg };
   }
 
-  // The agent has THREE ways to return the snapshot; the prompt asks
-  // for the structured `result` event path. In practice we see all of
-  // them, so we try each in order of reliability:
+  // The agent has THREE ways to return the snapshot; native Codex
+  // normally returns the final assistant response as text. Other
+  // runtimes may still expose a structured result, so try each path:
   //
-  //   - **Preferred**: a `result` SSE event with `content` set to the
-  //     JSON object — `runner.ts` reads `evt.content` into `res.result`.
-  //   - **Text fallback**: the agent prints the JSON in its text output.
+  //   - **Structured result**: a `result` SSE event with `content` set
+  //     to the JSON object.
+  //   - **Final text**: the agent prints the JSON in its text output.
   //     We grep the text tail for a ```json ... ``` block and parse it.
   //   - **Event fallback** (#391): the agent wrapped the snapshot inside
-  //     a `tool_call` / `tool_result` event rather than the final
-  //     `result`. Walk `res.events` for any event whose `content`
-  //     carries a `connectors` array.
+  //     a `tool_call` / `tool_result` event rather than its final text.
+  //     Walk `res.events` and inspect each event's real payload field.
   const fromResult = extractConnectorsFromResult(res.result);
   let raw: ConnectorBlockShape | null = fromResult;
   let path = "result";

@@ -78,7 +78,7 @@ interface ConnectorCache {
   lastProbeError?: ProbeErrorInfo;
 }
 
-function readCache(): ConnectorCache | null {
+function readCache(opts: { allowStale?: boolean } = {}): ConnectorCache | null {
   try {
     if (!existsSync(LOOP_PATHS.connectors)) return null;
     // The on-disk shape can carry the top-level stamp under either
@@ -117,7 +117,21 @@ function readCache(): ConnectorCache | null {
     }, null);
     const stamp = topLevel ?? entryMax;
     if (!stamp) return null;
-    if (Date.now() - new Date(stamp).getTime() > CACHE_TTL_MS) return null;
+    const stampMs = new Date(stamp).getTime();
+    if (!Number.isFinite(stampMs)) return null;
+    const probeError = parseProbeError(raw.lastProbeError);
+    // A failed refresh must not turn a healthy, older snapshot into the
+    // all-disconnected fallback. Keep serving the last-known-good rows
+    // while the persisted error tells callers that they are stale.
+    // Explicit refresh still bypasses this read, and the next successful
+    // snapshot rewrite clears `lastProbeError`.
+    if (
+      !opts.allowStale &&
+      !probeError &&
+      Date.now() - stampMs > CACHE_TTL_MS
+    ) {
+      return null;
+    }
     // Defensively treat any cache entry that lacks `probed` as
     // probed: true. Cron-executor and other external writers may have
     // written the snapshot before the field existed; if it's in the
@@ -134,7 +148,6 @@ function readCache(): ConnectorCache | null {
           : { ...c, probed: true };
       return withConnectorCapability(probed as ConnectorEntry);
     });
-    const probeError = parseProbeError(raw.lastProbeError);
     return {
       fetchedAt: stamp,
       connectors,
@@ -485,12 +498,11 @@ export function getLastProbeError(): ProbeErrorInfo | null {
  *
  *   1. Probe succeeded → return + persist the entries.
  *   2. Probe failed (transport / timeout / malformed result) but the
- *      cache is fresh (within CACHE_TTL_MS) → return the cache. The
- *      pill row stays accurate to the last good agent report; we just
- *      can't give the user a live update.
- *   3. Probe failed AND cache is stale / missing → return FALLBACK so
- *      the UI can still render the row. Caller should surface a
- *      "stale" hint to the user.
+ *      cache exists → return it even when older than CACHE_TTL_MS. The
+ *      pill row stays accurate to the last good agent report while the
+ *      persisted `lastProbeError` tells the UI that refresh failed.
+ *   3. Probe failed AND no valid cache exists → return FALLBACK so the
+ *      UI can still render the row.
  */
 export async function refreshConnectors(
   opts: { silent?: boolean } = {},
@@ -500,7 +512,7 @@ export async function refreshConnectors(
   // return whatever the cache (or FALLBACK) has. This prevents a stuck
   // or slow agent from being hammered on rapid card re-opens.
   if (opts.silent && Date.now() < readProbeCooldown()) {
-    const cached = readCache();
+    const cached = readCache({ allowStale: true });
     if (cached) return appendCustomChannels(cached.connectors);
     return appendCustomChannels(FALLBACK_CONNECTORS);
   }
@@ -536,7 +548,7 @@ export async function refreshConnectors(
     if (raced === TIMED_OUT) {
       writeProbeError("timeout", `probe exceeded ${PROBE_TIMEOUT_MS}ms`);
       writeProbeCooldownMarker();
-      const cached = readCache();
+      const cached = readCache({ allowStale: true });
       if (cached) return appendCustomChannels(cached.connectors);
       return appendCustomChannels(FALLBACK_CONNECTORS);
     }
@@ -547,7 +559,7 @@ export async function refreshConnectors(
     // ok — treat like a soft failure: leave a cooldown so a rapid re-
     // open doesn't hammer a broken probe, and degrade to cache/FALLBACK.
     writeProbeCooldownMarker();
-    const cached = readCache();
+    const cached = readCache({ allowStale: true });
     if (cached) return appendCustomChannels(cached.connectors);
     return appendCustomChannels(FALLBACK_CONNECTORS);
   }
@@ -558,8 +570,8 @@ export async function refreshConnectors(
   }
   // Probe failed (the diagnostic was already persisted by
   // `probeConnectorState`) — degrade gracefully to the last-known
-  // snapshot, or the FALLBACK sentinel when the cache is stale/missing.
-  const cached = readCache();
+  // snapshot, or the FALLBACK sentinel when no valid snapshot exists.
+  const cached = readCache({ allowStale: true });
   if (cached) {
     return appendCustomChannels(cached.connectors);
   }
