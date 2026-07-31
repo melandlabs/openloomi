@@ -46,6 +46,10 @@ import {
   isLifestyleImageSkillRouteResult,
   type LifestyleImageSkillRouteResult,
 } from "@/lib/ai/image-generation/lifestyle-skill-router";
+import {
+  buildLifestyleReferenceImages,
+  type LifestyleReferenceImagePayload,
+} from "@/lib/ai/image-generation/lifestyle-reference-images";
 
 // Max retry attempts for stream errors
 const MAX_STREAM_RETRY_ATTEMPTS = 3;
@@ -401,11 +405,12 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
   // 400KB stays well under Vercel's 4.5MB body limit and protects small images too.
   const TUS_SIZE_THRESHOLD = 400 * 1024;
 
-  function isImageFile(mediaType?: string): boolean {
-    return mediaType?.startsWith("image/") ?? false;
+  function isImageFile(mediaType?: unknown): boolean {
+    return typeof mediaType === "string" && mediaType.startsWith("image/");
   }
 
   type ImageMessagePart = {
+    type?: unknown;
     name?: unknown;
     mediaType?: unknown;
     file?: unknown;
@@ -584,6 +589,47 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
     return undefined;
   }
 
+  async function collectLifestyleReferenceImages(
+    messageObject: unknown,
+  ): Promise<LifestyleReferenceImagePayload[]> {
+    const parts =
+      messageObject &&
+      typeof messageObject === "object" &&
+      Array.isArray((messageObject as { parts?: unknown }).parts)
+        ? ((messageObject as { parts: unknown[] }).parts ?? [])
+        : [];
+    if (parts.length === 0) return [];
+
+    const sources: Array<{ data: string; mimeType: string; role: "style" }> =
+      [];
+    for (const part of parts) {
+      if (!part || typeof part !== "object") continue;
+      const imagePart = part as ImageMessagePart;
+      if (imagePart.type !== "file" || !isImageFile(imagePart.mediaType)) {
+        continue;
+      }
+
+      try {
+        const image = await resolveImagePartToBase64(imagePart, messageObject);
+        if (image) {
+          sources.push({
+            data: image.data,
+            mimeType: image.mimeType,
+            role: "style",
+          });
+        }
+      } catch (error) {
+        console.error(
+          "[LifestyleImage] Failed to resolve reference image:",
+          imagePart.name,
+          error,
+        );
+      }
+    }
+
+    return buildLifestyleReferenceImages(sources);
+  }
+
   // Set isAgentRunning for a specific chatId (used by stream callbacks to clear lock for correct chat)
   // Defined early to avoid initialization order issues with sendMessage
   const setIsAgentRunningForChatFn = useCallback(
@@ -671,11 +717,13 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       prompt,
       assistantMessageId,
       sourceUserMessageId,
+      referenceImages,
     }: {
       chatId: string;
       prompt: string;
       assistantMessageId?: string;
       sourceUserMessageId?: string;
+      referenceImages?: LifestyleReferenceImagePayload[];
     }) => {
       const replyId = assistantMessageId || generateUUID();
       const replyCreatedAt = new Date();
@@ -737,6 +785,12 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             outputFormat: "png",
             responseFormat: "data_url",
             imageCount: 1,
+            ...(referenceImages?.length
+              ? {
+                  referenceImages,
+                  passReferenceImagesToProvider: true,
+                }
+              : {}),
           }),
         });
         const data = (await response
@@ -1079,10 +1133,14 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           return Promise.resolve();
         }
 
+        const referenceImages = hasLifestyleReferenceImage
+          ? await collectLifestyleReferenceImages(triggerMessageObject)
+          : [];
         await generateLifestyleImageReply({
           chatId: chatIdForMessages,
           prompt: generationPrompt,
           sourceUserMessageId: userMessage.id,
+          referenceImages,
         });
         return Promise.resolve();
       }
