@@ -76,6 +76,13 @@ export async function POST(request: Request) {
     } satisfies LifestyleImageIntentResponseBody);
   }
 
+  if (provider.flavor === "agent_runtime") {
+    return Response.json({
+      success: true,
+      route: createLifestyleImageSkillFallbackRoute("classifier_unavailable"),
+    } satisfies LifestyleImageIntentResponseBody);
+  }
+
   try {
     const response = await provider.complete({
       system: buildLifestyleImageIntentSystemPrompt(skillInstructions),

@@ -106,6 +106,24 @@ export function createLifestyleImageSkillFallbackRoute(
   };
 }
 
+export function shouldBlockLifestyleImageClassifierFallback(input: {
+  route: LifestyleImageSkillRouteResult;
+  message: string;
+  hasReferenceImage: boolean;
+}): boolean {
+  if (
+    input.route.fallbackReason !== "classifier_unavailable" &&
+    input.route.fallbackReason !== "classifier_error"
+  ) {
+    return false;
+  }
+
+  return isLikelyLifestyleImageGenerationRequest(
+    input.message,
+    input.hasReferenceImage,
+  );
+}
+
 export function isLifestyleImageSkillRouteResult(
   value: unknown,
 ): value is LifestyleImageSkillRouteResult {
@@ -206,4 +224,34 @@ function isEmptySkillOutput(rawOutput: unknown): boolean {
   return (
     rawOutput == null || (typeof rawOutput === "string" && !rawOutput.trim())
   );
+}
+
+function isLikelyLifestyleImageGenerationRequest(
+  message: string,
+  hasReferenceImage: boolean,
+): boolean {
+  const normalized = message.toLowerCase();
+  if (!normalized.trim()) return false;
+
+  const wantsGeneration =
+    /\b(generate|create|make|render|produce|design|compose)\b/.test(
+      normalized,
+    ) || /生成|生图|出图|做图|制图|画一张|画个|制作/.test(normalized);
+  if (!wantsGeneration) return false;
+
+  const mentionsImage =
+    /\b(image|picture|photo|visual|mockup|render|png|jpg|jpeg)\b/.test(
+      normalized,
+    ) || /图片|照片|图像|视觉|效果图|渲染图/.test(normalized);
+
+  const mentionsLifestyle =
+    /\b(lifestyle|scene|setup|desk|room|interior|product|reference|style)\b/.test(
+      normalized,
+    ) || /生活方式|场景|桌面|室内|产品|参考图|风格/.test(normalized);
+
+  if (hasReferenceImage) {
+    return mentionsImage || mentionsLifestyle;
+  }
+
+  return mentionsImage && mentionsLifestyle;
 }

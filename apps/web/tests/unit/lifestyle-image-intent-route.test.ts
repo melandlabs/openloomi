@@ -110,32 +110,27 @@ describe("lifestyle image intent route", () => {
     expect(mocks.complete).not.toHaveBeenCalled();
   });
 
-  test("does not pass selected chat model overrides to agent runtimes", async () => {
+  test("falls back when the provider resolves to an agent runtime", async () => {
     mocks.resolveLlmProvider.mockResolvedValue({
       flavor: "agent_runtime",
       model: "agent-runtime",
       complete: mocks.complete,
     });
-    mocks.complete.mockResolvedValue({
-      text: JSON.stringify({
-        matched: false,
-        confidence: "low",
-        hasReferenceImage: false,
-      }),
-      model: "agent-runtime",
-    });
 
-    await postIntent({
+    const response = await postIntent({
       message: "Let's talk about lifestyle design.",
       hasReferenceImage: false,
       model: "deepseek/deepseek-v4-pro",
     });
+    const body = await response.json();
 
-    expect(mocks.complete).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: undefined,
-      }),
-    );
+    expect(response.status).toBe(200);
+    expect(body.route).toEqual({
+      shouldGenerate: false,
+      decision: null,
+      fallbackReason: "classifier_unavailable",
+    });
+    expect(mocks.complete).not.toHaveBeenCalled();
   });
 });
 

@@ -245,7 +245,10 @@ function buildPayload(
   if (request.quality) payload.quality = request.quality;
   if (request.outputFormat) payload.output_format = request.outputFormat;
   if (referenceImages.length > 0) {
-    payload.input_references = referenceImages;
+    payload.input_references = referenceImages.map((url) => ({
+      type: "image_url",
+      image_url: { url },
+    }));
   }
 
   return payload;

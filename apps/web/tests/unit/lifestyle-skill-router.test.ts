@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   parseLifestyleImageSkillDecision,
   resolveLifestyleImageSkillRoute,
+  shouldBlockLifestyleImageClassifierFallback,
 } from "@/lib/ai/image-generation/lifestyle-skill-router";
 
 describe("parseLifestyleImageSkillDecision", () => {
@@ -157,5 +158,50 @@ describe("resolveLifestyleImageSkillRoute", () => {
       decision: null,
       fallbackReason: "empty_output",
     });
+  });
+});
+
+describe("shouldBlockLifestyleImageClassifierFallback", () => {
+  test("blocks explicit lifestyle generation requests when the classifier is unavailable", () => {
+    expect(
+      shouldBlockLifestyleImageClassifierFallback({
+        route: {
+          shouldGenerate: false,
+          decision: null,
+          fallbackReason: "classifier_unavailable",
+        },
+        message:
+          "Use this uploaded image as a style reference and generate a lifestyle image.",
+        hasReferenceImage: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("does not block ordinary image understanding when the classifier is unavailable", () => {
+    expect(
+      shouldBlockLifestyleImageClassifierFallback({
+        route: {
+          shouldGenerate: false,
+          decision: null,
+          fallbackReason: "classifier_unavailable",
+        },
+        message: "What is in this uploaded image?",
+        hasReferenceImage: true,
+      }),
+    ).toBe(false);
+  });
+
+  test("does not block non-classifier fallbacks", () => {
+    expect(
+      shouldBlockLifestyleImageClassifierFallback({
+        route: {
+          shouldGenerate: false,
+          decision: null,
+          fallbackReason: "invalid_json",
+        },
+        message: "Generate a lifestyle image.",
+        hasReferenceImage: false,
+      }),
+    ).toBe(false);
   });
 });

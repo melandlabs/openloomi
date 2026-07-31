@@ -331,7 +331,12 @@ describe("POST /api/ai/v1/images/generations", () => {
     const [, options] = fetchMock.mock.calls[0];
     const payload = JSON.parse((options as RequestInit).body as string);
     expect(payload.input_references).toEqual([
-      "data:image/png;base64,cmVmLWltYWdl",
+      {
+        type: "image_url",
+        image_url: {
+          url: "data:image/png;base64,cmVmLWltYWdl",
+        },
+      },
     ]);
   });
 
