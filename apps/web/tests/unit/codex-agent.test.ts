@@ -798,7 +798,9 @@ describe("CodexAgent", () => {
     const imageFlagIndex = args.indexOf("--image");
     expect(imageFlagIndex).toBeGreaterThan(-1);
 
-    const imagePath = args[imageFlagIndex + 1]!;
+    const imagePath = args[imageFlagIndex + 1];
+    expect(imagePath).toBeDefined();
+    if (!imagePath) throw new Error("Codex --image path was not provided");
     expect(imagePath).toContain(".openloomi-codex-images");
     expect(imagePath).toMatch(/\.png$/);
     expect(await readFile(imagePath)).toEqual(imageBytes);

@@ -423,8 +423,10 @@ export class CodexAgent extends BaseAgent {
     cwd: string,
   ): Promise<string[]> {
     const imageInputs =
-      images?.filter((image) => typeof image.data === "string" && image.data) ??
-      [];
+      images?.filter(
+        (image): image is typeof image & { data: string } =>
+          typeof image.data === "string" && image.data.length > 0,
+      ) ?? [];
     if (imageInputs.length === 0) return [];
 
     const imageDir = join(cwd, ".openloomi-codex-images");
@@ -437,7 +439,7 @@ export class CodexAgent extends BaseAgent {
       const imagePath = join(imageDir, `image_${timestamp}_${index}.${ext}`);
       await writeFile(
         imagePath,
-        Buffer.from(stripDataUrlPrefix(image.data!), "base64"),
+        Buffer.from(stripDataUrlPrefix(image.data), "base64"),
       );
       imagePaths.push(imagePath);
     }
