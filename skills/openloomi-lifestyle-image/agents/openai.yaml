@@ -1,0 +1,3 @@
+interface:
+  display_name: "Lifestyle Image Intent"
+  short_description: "Decide when a user wants OpenLoomi to generate a lifestyle image."
