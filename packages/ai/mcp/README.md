@@ -3,32 +3,9 @@
 Stdio MCP server for using local OpenLoomi Desktop from MCP-capable agent
 runtimes.
 
-## Published Package
-
-Use the published npm package from any MCP-capable runtime:
-
-```json
-{
-  "mcpServers": {
-    "openloomi": {
-      "command": "npx",
-      "args": ["-y", "@openloomi/mcp"]
-    }
-  }
-}
-```
-
-CLI clients can add the same server with:
-
-```bash
-codex mcp add openloomi -- npx -y @openloomi/mcp
-claude mcp add --transport stdio --scope user openloomi -- npx -y @openloomi/mcp
-```
-
 ## Local Build
 
-For local testing before an npm release, build the MCP server from the
-OpenLoomi repository:
+Build the MCP server from the OpenLoomi repository:
 
 ```bash
 pnpm --filter @openloomi/mcp build
