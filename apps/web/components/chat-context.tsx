@@ -124,6 +124,7 @@ export interface ChatContextValue {
     chatId: string;
     assistantMessageId: string;
     prompt: string;
+    referenceImages?: LifestyleReferenceImagePayload[];
   }) => Promise<void>;
   declineLifestyleImageGeneration: (input: {
     chatId: string;
@@ -932,12 +933,13 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
   const confirmLifestyleImageGeneration = useCallback<
     ChatContextValue["confirmLifestyleImageGeneration"]
   >(
-    async ({ chatId, assistantMessageId, prompt }) => {
+    async ({ chatId, assistantMessageId, prompt, referenceImages }) => {
       acceptLifestyleImageConsent();
       await generateLifestyleImageReply({
         chatId,
         prompt,
         assistantMessageId,
+        referenceImages,
       });
     },
     [generateLifestyleImageReply],
@@ -1100,6 +1102,9 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
         setMessages((prev) => [...prev, userMessage], chatIdForMessages);
         await saveUserMessageAndUpdateHistory(userMessage, chatIdForMessages);
 
+        const referenceImages = hasLifestyleReferenceImage
+          ? await collectLifestyleReferenceImages(triggerMessageObject)
+          : [];
         if (!hasAcceptedLifestyleImageConsent()) {
           const consentMessageId = generateUUID();
           const consentCreatedAt = new Date(userMessageCreatedAt.getTime() + 1);
@@ -1116,6 +1121,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                   prompt: generationPrompt,
                   reason: lifestyleSkillDecision.reason,
                   createdAt: new Date().toISOString(),
+                  ...(referenceImages.length ? { referenceImages } : {}),
                 },
               },
             ],
@@ -1133,9 +1139,6 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
           return Promise.resolve();
         }
 
-        const referenceImages = hasLifestyleReferenceImage
-          ? await collectLifestyleReferenceImages(triggerMessageObject)
-          : [];
         await generateLifestyleImageReply({
           chatId: chatIdForMessages,
           prompt: generationPrompt,
