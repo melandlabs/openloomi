@@ -6,9 +6,10 @@
  * (TUS chunked upload) — that route does not exist, so the second call
  * returned 404 and the user saw "Image upload failed".
  *
- * The fix routes images through `/api/files/upload` only and reuses the
- * returned URL so the selected AI model can fetch the attachment via the
- * same origin. These tests guard against re-introducing the broken call.
+ * The fix routes images through `/api/files/upload` only. Local URLs remain
+ * UI/download references; images are converted to base64 when sent to agents.
+ * These tests guard against re-introducing the broken call or URL-as-model-input
+ * behavior.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -92,10 +93,46 @@ describe("issue #380 source regressions", () => {
     expect(imageBlock).toBeDefined();
     expect(imageBlock).not.toMatch(/await\s+uploadImageTUS\s*\(/);
   });
+
+  it("chat-context.tsx resolves local image parts to base64-only agent inputs", () => {
+    const source = readSource("components/chat-context.tsx");
+    const start = source.indexOf("Extract image attachments");
+    const end = source.indexOf("Handle all file attachments", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+
+    const imageBlock = source.slice(start, end);
+    expect(source).toContain("type AgentImageDataInput");
+    expect(source).toContain("url?: never");
+    expect(source).toContain("const images: AgentImageDataInput[] = [];");
+    expect(imageBlock).toContain("resolveImagePartToBase64");
+    expect(imageBlock).not.toContain("serverImageTUSUrl");
+    expect(imageBlock).not.toMatch(/images\.push\(\s*{\s*url:/s);
+  });
+
+  it("chat-context.tsx converts blobPath references through the local download endpoint", () => {
+    const source = readSource("components/chat-context.tsx");
+    expect(source).toContain("function localDownloadUrlFromBlobPath");
+    expect(source).toContain("/api/files/download?path=");
+    expect(source).toContain("localDownloadUrlFromBlobPath(part.blobPath)");
+  });
+
+  it("input surfaces no longer forward serverImageTUSUrl", () => {
+    const files = [
+      "components/task-composer/use-attachment-upload.ts",
+      "components/task-composer/task-composer.tsx",
+      "components/multimodal-input.tsx",
+      "components/agent/chat-panel.tsx",
+    ];
+
+    for (const file of files) {
+      expect(readSource(file)).not.toContain("serverImageTUSUrl");
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
-// Behavior check: hook delegates to uploadFile and reuses its URL
+// Behavior check: hook delegates to uploadFile and keeps URLs UI-only
 // ---------------------------------------------------------------------------
 
 describe("issue #380 behavior — image uploads skip /api/ai/v1/upload", () => {
@@ -120,7 +157,7 @@ describe("issue #380 behavior — image uploads skip /api/ai/v1/upload", () => {
     );
   });
 
-  it("uploads the image exactly once via /api/files/upload and reuses the URL", async () => {
+  it("uploads the image exactly once via /api/files/upload without setting a model URL", async () => {
     const localUrl = "/api/files/download?path=user-1/img.png";
     uploadFileMock.mockResolvedValueOnce({
       url: localUrl,
@@ -139,7 +176,8 @@ describe("issue #380 behavior — image uploads skip /api/ai/v1/upload", () => {
     type CapturedAttachment = {
       name?: string;
       url?: string;
-      serverImageTUSUrl?: string;
+      downloadUrl?: string;
+      blobPath?: string;
       isUploading?: boolean;
     };
 
@@ -180,10 +218,13 @@ describe("issue #380 behavior — image uploads skip /api/ai/v1/upload", () => {
       (a) =>
         a && typeof a === "object" && a.name === "img.png" && !a.isUploading,
     );
-    expect(finished?.serverImageTUSUrl).toBe(localUrl);
+    expect(finished?.url).toBe(localUrl);
+    expect(finished?.downloadUrl).toBe(localUrl);
+    expect(finished?.blobPath).toBe("user-1/img.png");
+    expect(finished).not.toHaveProperty("serverImageTUSUrl");
   });
 
-  it("surfaces a clear error when uploadFile returns no URL", async () => {
+  it("keeps the attachment when uploadFile returns only a blobPath", async () => {
     uploadFileMock.mockResolvedValueOnce({
       url: "",
       downloadUrl: "",
@@ -197,7 +238,7 @@ describe("issue #380 behavior — image uploads skip /api/ai/v1/upload", () => {
     const { useAttachmentUpload } =
       await import("@/components/task-composer/use-attachment-upload");
 
-    type CapturedAttachment = { name?: string };
+    type CapturedAttachment = { name?: string; isUploading?: boolean };
     let capturedAttachments: CapturedAttachment[] = [];
     const setAttachments = ((updater: unknown) => {
       capturedAttachments =
@@ -216,8 +257,15 @@ describe("issue #380 behavior — image uploads skip /api/ai/v1/upload", () => {
     await hook.handleFileUpload([file]);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(toastMock.error).toHaveBeenCalledTimes(1);
-    const message = toastMock.error.mock.calls[0]?.[0] as string;
-    expect(message).toMatch(/no URL returned|upload failed/i);
+    expect(toastMock.error).not.toHaveBeenCalled();
+    const finished = capturedAttachments.find(
+      (a) =>
+        a && typeof a === "object" && a.name === "img.png" && !a.isUploading,
+    );
+    expect(finished).toMatchObject({
+      url: "",
+      downloadUrl: "",
+      blobPath: "user-1/img.png",
+    });
   });
 });

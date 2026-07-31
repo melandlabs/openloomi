@@ -128,6 +128,24 @@ describe("Codex command builder", () => {
     expect(command.args).not.toContain("--full-auto");
   });
 
+  it("passes image paths as Codex CLI attachments", () => {
+    const command = buildCodexRunCommand({
+      prompt: "describe the attached image",
+      cwd: "/workspace/project",
+      imagePaths: [" /tmp/one.png ", "/tmp/two.jpg"],
+    });
+
+    expect(command.args).toEqual(
+      expect.arrayContaining([
+        "--image",
+        "/tmp/one.png",
+        "--image",
+        "/tmp/two.jpg",
+      ]),
+    );
+    expect(command.stdin).toBe("describe the attached image");
+  });
+
   it("rejects unsafe sandbox/approval values and ignores unsafe extraArgs", () => {
     const command = buildCodexRunCommand({
       prompt: "validate input",
@@ -751,6 +769,41 @@ describe("CodexAgent", () => {
     expect(args).not.toContain("hello codex");
     expect(await readFile(join(workDir, "stdin.txt"), "utf8")).toBe(
       "hello codex",
+    );
+  });
+
+  it("materializes image inputs and passes them to codex exec", async () => {
+    const workDir = await createFakeCodexWorkDir(defaultFakeCodexScript());
+    const agent = new CodexAgent({
+      provider: "codex",
+      workDir,
+      providerConfig: { codexPath: process.execPath },
+    });
+    const imageBytes = Buffer.from("fake-png-bytes");
+
+    await collectMessages(
+      agent.run("what is in this image?", {
+        images: [
+          {
+            data: imageBytes.toString("base64"),
+            mimeType: "image/png",
+          },
+        ],
+      }),
+    );
+
+    const args = JSON.parse(
+      await readFile(join(workDir, "args.json"), "utf8"),
+    ) as string[];
+    const imageFlagIndex = args.indexOf("--image");
+    expect(imageFlagIndex).toBeGreaterThan(-1);
+
+    const imagePath = args[imageFlagIndex + 1]!;
+    expect(imagePath).toContain(".openloomi-codex-images");
+    expect(imagePath).toMatch(/\.png$/);
+    expect(await readFile(imagePath)).toEqual(imageBytes);
+    expect(await readFile(join(workDir, "stdin.txt"), "utf8")).toBe(
+      "what is in this image?",
     );
   });
 

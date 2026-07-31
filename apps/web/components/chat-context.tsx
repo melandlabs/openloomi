@@ -31,7 +31,7 @@ import { useTranslation } from "react-i18next";
 import { saveMessagesToDatabase } from "@/lib/ai/chat/save-messages";
 import { getAuthToken } from "@/lib/auth/token-manager";
 import { uploadImageTUS } from "@/lib/files/tus-upload";
-import type { ImageAttachment } from "@openloomi/ai/agent/types";
+import type { ImageAttachment as AgentImageAttachment } from "@openloomi/ai/agent/types";
 import { DEFAULT_AI_MODEL, AI_PROXY_BASE_URL } from "@/lib/env/constants";
 import {
   artifactPathBasename,
@@ -341,6 +341,185 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
   function isImageFile(mediaType?: string): boolean {
     return mediaType?.startsWith("image/") ?? false;
+  }
+
+  type ImageMessagePart = {
+    name?: unknown;
+    mediaType?: unknown;
+    file?: unknown;
+    downloadUrl?: unknown;
+    url?: unknown;
+    blobPath?: unknown;
+  };
+
+  type AgentImageDataInput = Pick<AgentImageAttachment, "mimeType"> & {
+    data: string;
+    url?: never;
+  };
+
+  function isBrowserFile(value: unknown): value is File {
+    return typeof File !== "undefined" && value instanceof File;
+  }
+
+  function normalizeImageMimeType(
+    value: unknown,
+    fallback = "image/png",
+  ): string {
+    return typeof value === "string" && value.startsWith("image/")
+      ? value
+      : fallback;
+  }
+
+  function base64FromDataUrl(dataUrl: string): string | undefined {
+    const commaIndex = dataUrl.indexOf(",");
+    if (commaIndex === -1) return undefined;
+    const data = dataUrl.slice(commaIndex + 1);
+    return data.length > 0 ? data : undefined;
+  }
+
+  function mimeTypeFromDataUrl(dataUrl: string): string | undefined {
+    const match = dataUrl.match(/^data:([^;,]+)[;,]/);
+    return match?.[1]?.startsWith("image/") ? match[1] : undefined;
+  }
+
+  async function readBlobAsBase64(blob: Blob): Promise<string | undefined> {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+          return;
+        }
+        reject(new Error("Failed to read image data"));
+      };
+      reader.onerror = () =>
+        reject(reader.error ?? new Error("Failed to read image data"));
+      reader.readAsDataURL(blob);
+    });
+
+    return base64FromDataUrl(dataUrl);
+  }
+
+  function localDownloadUrlFromBlobPath(blobPath: unknown): string | undefined {
+    if (typeof blobPath !== "string") return undefined;
+    const trimmed = blobPath.trim();
+    if (!trimmed) return undefined;
+    if (
+      trimmed.startsWith("http://") ||
+      trimmed.startsWith("https://") ||
+      trimmed.startsWith("/")
+    ) {
+      return trimmed;
+    }
+    return `/api/files/download?path=${encodeURIComponent(trimmed)}`;
+  }
+
+  function stringSource(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  async function fetchImageSourceAsBase64(
+    source: string,
+    fallbackMimeType: string,
+  ): Promise<AgentImageDataInput | undefined> {
+    if (source.startsWith("data:image/")) {
+      const data = base64FromDataUrl(source);
+      if (!data) return undefined;
+      return {
+        data,
+        mimeType: mimeTypeFromDataUrl(source) ?? fallbackMimeType,
+      };
+    }
+
+    try {
+      const response = await fetch(source);
+      if (!response.ok) {
+        console.error("[safeSendMessage] image fetch failed:", {
+          source,
+          status: response.status,
+        });
+        return undefined;
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (contentType && !contentType.startsWith("image/")) {
+        console.error("[safeSendMessage] source did not return image:", {
+          source,
+          contentType,
+        });
+        return undefined;
+      }
+
+      const blob = await response.blob();
+      const data = await readBlobAsBase64(blob);
+      if (!data) return undefined;
+
+      return {
+        data,
+        mimeType: contentType?.startsWith("image/")
+          ? contentType
+          : fallbackMimeType,
+      };
+    } catch (error) {
+      console.error("[safeSendMessage] image fetch error:", {
+        source,
+        error,
+      });
+      return undefined;
+    }
+  }
+
+  async function resolveImagePartToBase64(
+    part: ImageMessagePart,
+    messageObject: unknown,
+  ): Promise<AgentImageDataInput | undefined> {
+    const fallbackMimeType = normalizeImageMimeType(part.mediaType);
+
+    if (isBrowserFile(part.file)) {
+      const data = await readBlobAsBase64(part.file);
+      if (data) {
+        return {
+          data,
+          mimeType: normalizeImageMimeType(part.file.type, fallbackMimeType),
+        };
+      }
+    }
+
+    const messageFiles =
+      messageObject &&
+      typeof messageObject === "object" &&
+      Array.isArray((messageObject as { files?: unknown }).files)
+        ? ((messageObject as { files: unknown[] }).files ?? [])
+        : [];
+    const matchingFile = messageFiles.find(
+      (file) =>
+        isBrowserFile(file) &&
+        (typeof part.name !== "string" || file.name === part.name),
+    );
+    if (isBrowserFile(matchingFile)) {
+      const data = await readBlobAsBase64(matchingFile);
+      if (data) {
+        return {
+          data,
+          mimeType: normalizeImageMimeType(matchingFile.type, fallbackMimeType),
+        };
+      }
+    }
+
+    const candidates = [
+      stringSource(part.downloadUrl),
+      stringSource(part.url),
+      localDownloadUrlFromBlobPath(part.blobPath),
+    ].filter((value): value is string => Boolean(value));
+
+    for (const source of [...new Set(candidates)]) {
+      const resolved = await fetchImageSourceAsBase64(source, fallbackMimeType);
+      if (resolved) return resolved;
+    }
+
+    return undefined;
   }
 
   // Set isAgentRunning for a specific chatId (used by stream callbacks to clear lock for correct chat)
@@ -835,7 +1014,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       }
 
       // Extract image attachments, file attachments, RAG documents and focused insights from message
-      const images: ImageAttachment[] = [];
+      const images: AgentImageDataInput[] = [];
       const fileAttachments: Array<{
         name: string;
         data: string;
@@ -853,138 +1032,18 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
       }> = [];
 
       if (message && typeof message === "object") {
-        // Extract image attachments - read directly from local file, not via URL
+        // Extract image attachments as base64-only agent inputs. URLs remain
+        // UI/download references and are resolved before crossing this boundary.
         if ((message as any).parts && Array.isArray((message as any).parts)) {
           for (const part of (message as any).parts) {
             if (part.type === "file" && part.mediaType?.startsWith("image/")) {
               // Image attachment - check if there is an original file object
               try {
-                let base64Data: string | undefined;
-
-                // Method 1: If imageUrl is set (TUS-uploaded to cloud), use it directly as image URL
-                if ((part as any).serverImageTUSUrl) {
-                  images.push({
-                    url: (part as any).serverImageTUSUrl,
-                    mimeType: part.mediaType,
-                  });
-                }
-                // Method 2: If blobPath is set (local path), fetch and convert to base64
-                else if (part.blobPath) {
-                  try {
-                    const resp = await fetch(part.blobPath);
-                    if (!resp.ok) {
-                      console.error(
-                        "[safeSendMessage] ✗ blobPath fetch failed:",
-                        resp.status,
-                      );
-                    } else {
-                      const blob = await resp.blob();
-                      const base64 = await new Promise<string>((resolve) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () =>
-                          resolve(reader.result as string);
-                        reader.readAsDataURL(blob);
-                      });
-                      base64Data = base64.split(",")[1];
-                    }
-                  } catch (err) {
-                    console.error(
-                      "[safeSendMessage] ✗ blobPath fetch error:",
-                      err,
-                    );
-                  }
-                }
-                // Method 2: Prefer checking if part has original file object (fallback upload)
-                else if (part.file && part.file instanceof File) {
-                  // All images are processed locally via FileReader → base64.
-                  // We previously routed large files through uploadImageTUS(),
-                  // but /api/ai/v1/upload does not exist and we no longer need
-                  // a separate server hop just to read the bytes back.
-                  const file = part.file as File;
-                  const base64 = await new Promise<string>(
-                    (resolve, reject) => {
-                      const reader = new FileReader();
-                      reader.onloadend = () => resolve(reader.result as string);
-                      reader.onerror = reject;
-                      reader.readAsDataURL(file);
-                    },
-                  );
-                  base64Data = base64.split(",")[1];
-                }
-                // Method 2: Check message.files array
-                else if (
-                  (message as any).files &&
-                  Array.isArray((message as any).files)
-                ) {
-                  const file = (message as any).files.find(
-                    (f: any) => f.name === part.name,
-                  );
-                  if (file && file instanceof File) {
-                    // Read directly as base64 — see sibling block above for rationale.
-                    const base64 = await new Promise<string>(
-                      (resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () =>
-                          resolve(reader.result as string);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                      },
-                    );
-                    base64Data = base64.split(",")[1];
-                  }
-                }
-                // Method 3: Get via downloadUrl (with validation)
-                else if (part.downloadUrl) {
-                  const response = await fetch(part.downloadUrl);
-
-                  const contentType = response.headers.get("content-type");
-                  if (!contentType?.startsWith("image/")) {
-                    console.error(
-                      "[safeSendMessage] ✗ downloadUrl did not return image:",
-                      contentType,
-                    );
-                    continue; // Skip this image
-                  }
-
-                  const blob = await response.blob();
-                  const base64 = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
-                    reader.readAsDataURL(blob);
-                  });
-                  base64Data = base64.split(",")[1];
-                }
-                // Method 4: Try normal URL (last resort)
-                else if (part.url) {
-                  const response = await fetch(part.url);
-
-                  const contentType = response.headers.get("content-type");
-                  if (!contentType?.startsWith("image/")) {
-                    console.error(
-                      "[safeSendMessage] ✗ url did not return image:",
-                      contentType,
-                    );
-                    continue; // Skip this image
-                  }
-
-                  const blob = await response.blob();
-                  const base64 = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
-                    reader.readAsDataURL(blob);
-                  });
-                  base64Data = base64.split(",")[1];
-                }
-
-                if (base64Data) {
-                  images.push({
-                    data: base64Data,
-                    mimeType: part.mediaType,
-                  });
-                }
+                const image = await resolveImagePartToBase64(part, message);
+                if (image) images.push(image);
               } catch (error) {
                 console.error(
-                  "[safeSendMessage] ✗ Exception loading image:",
+                  "[safeSendMessage] Exception loading image:",
                   part.name,
                   error,
                 );
@@ -1121,7 +1180,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 }
               } catch (error) {
                 console.error(
-                  "[safeSendMessage] ✗ Exception loading file attachment:",
+                  "[safeSendMessage] 閴?Exception loading file attachment:",
                   part.name,
                   error,
                 );
@@ -1707,7 +1766,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               // informational notice.
               if (!handledCodexTransportStatus) {
                 const retryMessage =
-                  data.content || data.message || "Agent is retrying…";
+                  data.content || data.message || "Agent is retrying...";
                 toast({
                   type: "info",
                   description: retryMessage,
@@ -1735,7 +1794,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               // so the chat UI can render an explicit Continue action that
               // reuses the preserved workspace. We deliberately skip the
               // stream-level auto-retry path (handled in onError) by tagging
-              // the part with an interruption payload — see issue #356.
+              // the part with an interruption payload 閳?see issue #356.
               const interruption = parseCodexInterruptedError(errorMessage);
               if (interruption?.canResume) {
                 parts.push({

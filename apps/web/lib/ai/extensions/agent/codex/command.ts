@@ -47,6 +47,7 @@ export interface CodexRunCommandOptions {
   prompt: string;
   cwd: string;
   model?: string;
+  imagePaths?: string[];
   permissionMode?: AgentOptions["permissionMode"];
   /**
    * Planning-mode callers pass `plan` to force `read-only` sandbox and disable
@@ -200,6 +201,9 @@ export function buildCodexRunCommand(
   if (providerConfig.skipGitRepoCheck) {
     args.push("--skip-git-repo-check");
   }
+  for (const imagePath of normalizeImagePaths(options.imagePaths)) {
+    args.push("--image", imagePath);
+  }
   if (
     mode !== "plan" &&
     options.permissionMode === "bypassPermissions" &&
@@ -217,6 +221,11 @@ export function buildCodexRunCommand(
     args,
     stdin: options.prompt,
   };
+}
+
+function normalizeImagePaths(value: string[] | undefined): string[] {
+  if (!value) return [];
+  return value.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
 }
 
 export async function* runCodexCli(

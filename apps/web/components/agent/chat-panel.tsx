@@ -569,9 +569,14 @@ export function AgentChatPanel({
                 onSubmit={async ({ text, attachments: submitAttachments }) => {
                   type UploadingAttachment = Attachment & {
                     isUploading?: boolean;
+                    file?: File;
                   };
                   const supportedAttachments = submitAttachments.filter(
-                    (att: UploadingAttachment) => att.url && !att.isUploading,
+                    (att: UploadingAttachment) =>
+                      !att.isUploading &&
+                      Boolean(
+                        att.file || att.url || att.downloadUrl || att.blobPath,
+                      ),
                   );
 
                   const messageObj = {
@@ -586,11 +591,6 @@ export function AgentChatPanel({
                         blobPath: attachment.blobPath,
                         downloadUrl: attachment.downloadUrl,
                         file: (attachment as Attachment & { file?: File }).file,
-                        serverImageTUSUrl: (
-                          attachment as Attachment & {
-                            serverImageTUSUrl?: string;
-                          }
-                        ).serverImageTUSUrl,
                       })),
                       {
                         type: "text" as const,
