@@ -13,7 +13,9 @@ export type LifestyleImageSkillFallbackReason =
   | "invalid_json"
   | "invalid_schema"
   | "intent_not_matched"
-  | "confidence_not_high";
+  | "confidence_not_high"
+  | "classifier_unavailable"
+  | "classifier_error";
 
 export interface LifestyleImageSkillRouteResult {
   shouldGenerate: boolean;
@@ -21,10 +23,16 @@ export interface LifestyleImageSkillRouteResult {
   fallbackReason?: LifestyleImageSkillFallbackReason;
 }
 
-const CONFIDENCE_VALUES = new Set<LifestyleImageSkillConfidence>([
-  "high",
-  "medium",
-  "low",
+const CONFIDENCE_VALUES = new Set<string>(["high", "medium", "low"]);
+
+const FALLBACK_REASON_VALUES = new Set<string>([
+  "empty_output",
+  "invalid_json",
+  "invalid_schema",
+  "intent_not_matched",
+  "confidence_not_high",
+  "classifier_unavailable",
+  "classifier_error",
 ]);
 
 export function parseLifestyleImageSkillDecision(
@@ -86,6 +94,40 @@ export function resolveLifestyleImageSkillRoute(
     shouldGenerate: true,
     decision,
   };
+}
+
+export function createLifestyleImageSkillFallbackRoute(
+  fallbackReason: LifestyleImageSkillFallbackReason,
+): LifestyleImageSkillRouteResult {
+  return {
+    shouldGenerate: false,
+    decision: null,
+    fallbackReason,
+  };
+}
+
+export function isLifestyleImageSkillRouteResult(
+  value: unknown,
+): value is LifestyleImageSkillRouteResult {
+  const route = asPlainObject(value);
+  if (!route) return false;
+  if (typeof route.shouldGenerate !== "boolean") return false;
+
+  const decision =
+    route.decision === null
+      ? null
+      : parseLifestyleImageSkillDecision(route.decision);
+  if (route.decision !== null && !decision) return false;
+  if (route.shouldGenerate && !decision) return false;
+
+  if (
+    route.fallbackReason !== undefined &&
+    !isLifestyleImageSkillFallbackReason(route.fallbackReason)
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function coerceLifestyleImageSkillDecision(
@@ -152,6 +194,12 @@ function isLifestyleImageSkillConfidence(
   value: unknown,
 ): value is LifestyleImageSkillConfidence {
   return typeof value === "string" && CONFIDENCE_VALUES.has(value);
+}
+
+function isLifestyleImageSkillFallbackReason(
+  value: unknown,
+): value is LifestyleImageSkillFallbackReason {
+  return typeof value === "string" && FALLBACK_REASON_VALUES.has(value);
 }
 
 function isEmptySkillOutput(rawOutput: unknown): boolean {

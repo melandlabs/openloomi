@@ -41,7 +41,11 @@ import {
 import { formatAgentStreamErrorForUser } from "@/lib/ai/runtime/format-error";
 import { parseCodexInterruptedError } from "@/lib/ai/extensions/agent/codex/interrupt-marker";
 import { createCodexTransportStatusController } from "@/lib/ai/extensions/agent/codex/transport-status";
-import { detectLifestyleImageTrigger } from "@/lib/ai/image-generation/lifestyle-trigger";
+import {
+  createLifestyleImageSkillFallbackRoute,
+  isLifestyleImageSkillRouteResult,
+  type LifestyleImageSkillRouteResult,
+} from "@/lib/ai/image-generation/lifestyle-skill-router";
 
 // Max retry attempts for stream errors
 const MAX_STREAM_RETRY_ATTEMPTS = 3;
@@ -214,6 +218,64 @@ function getLifestyleImageUrl(
     (response.b64Json ? `data:${mimeType};base64,${response.b64Json}` : null);
 
   return url ? { url, mediaType: mimeType } : null;
+}
+
+function messageHasImageAttachment(message: unknown): boolean {
+  if (!message || typeof message !== "object") return false;
+  const parts = (message as { parts?: unknown }).parts;
+  if (!Array.isArray(parts)) return false;
+
+  return parts.some((part) => {
+    if (!part || typeof part !== "object") return false;
+    const mediaType = (part as { mediaType?: unknown }).mediaType;
+    return typeof mediaType === "string" && mediaType.startsWith("image/");
+  });
+}
+
+async function requestLifestyleImageSkillRoute(input: {
+  message: string;
+  hasReferenceImage: boolean;
+  model: string;
+}): Promise<LifestyleImageSkillRouteResult> {
+  try {
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+    let authToken: string | null = null;
+    try {
+      authToken = getAuthToken();
+    } catch (error) {
+      console.error("[LifestyleImageIntent] Failed to read auth token", error);
+    }
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+
+    const response = await fetch("/api/ai/v1/images/lifestyle/intent", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) {
+      return createLifestyleImageSkillFallbackRoute("classifier_error");
+    }
+
+    const data = (await response.json().catch(() => null)) as {
+      route?: unknown;
+    } | null;
+    if (!isLifestyleImageSkillRouteResult(data?.route)) {
+      return createLifestyleImageSkillFallbackRoute("invalid_schema");
+    }
+
+    return data.route;
+  } catch (error) {
+    console.error(
+      "[LifestyleImageIntent] Failed to resolve skill route",
+      error,
+    );
+    return createLifestyleImageSkillFallbackRoute("classifier_error");
+  }
 }
 
 export function ChatContextProvider({ children }: { children: ReactNode }) {
@@ -945,12 +1007,22 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
               metadata?: Record<string, unknown>;
             })
           : null;
-      const lifestyleTrigger = detectLifestyleImageTrigger(messageContent);
-      if (
-        lifestyleTrigger.matched &&
-        lifestyleTrigger.confidence === "high" &&
-        triggerMessageObject?.metadata?.skipLifestyleImageTrigger !== true
-      ) {
+      const hasLifestyleReferenceImage =
+        messageHasImageAttachment(triggerMessageObject);
+      const shouldSkipLifestyleImageSkill =
+        triggerMessageObject?.metadata?.skipLifestyleImageTrigger === true;
+      const lifestyleSkillRoute = shouldSkipLifestyleImageSkill
+        ? createLifestyleImageSkillFallbackRoute("intent_not_matched")
+        : await requestLifestyleImageSkillRoute({
+            message: messageContent,
+            hasReferenceImage: hasLifestyleReferenceImage,
+            model:
+              selectedModel === "default" ? DEFAULT_AI_MODEL : selectedModel,
+          });
+      const lifestyleSkillDecision = lifestyleSkillRoute.decision;
+      if (lifestyleSkillRoute.shouldGenerate && lifestyleSkillDecision) {
+        const generationPrompt =
+          lifestyleSkillDecision.refinedPrompt || messageContent;
         const userMessageCreatedAt = new Date();
         const userMessage = {
           role: "user" as const,
@@ -963,8 +1035,10 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
             ...triggerMessageObject?.metadata,
             createdAt: userMessageCreatedAt.toISOString(),
             lifestyleImageTrigger: {
-              kind: lifestyleTrigger.kind,
-              reason: lifestyleTrigger.reason,
+              kind: "skill_lifestyle_image_request",
+              reason: lifestyleSkillDecision.reason,
+              confidence: lifestyleSkillDecision.confidence,
+              hasReferenceImage: hasLifestyleReferenceImage,
             },
           },
           id: generateUUID(),
@@ -985,8 +1059,8 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
                 type: "data-lifestyleImageConsent" as const,
                 data: {
                   id: consentMessageId,
-                  prompt: messageContent,
-                  reason: lifestyleTrigger.reason,
+                  prompt: generationPrompt,
+                  reason: lifestyleSkillDecision.reason,
                   createdAt: new Date().toISOString(),
                 },
               },
@@ -1007,7 +1081,7 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
 
         await generateLifestyleImageReply({
           chatId: chatIdForMessages,
-          prompt: messageContent,
+          prompt: generationPrompt,
           sourceUserMessageId: userMessage.id,
         });
         return Promise.resolve();
