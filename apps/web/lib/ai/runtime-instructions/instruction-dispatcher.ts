@@ -8,6 +8,10 @@ import {
 } from "@openloomi/ai/agent/runtime-instructions";
 
 import { KeyedSerialExecutor } from "./keyed-serial-executor";
+import {
+  recordRuntimeObservation,
+  type RuntimeDeliveryJournalPort,
+} from "./runtime-observation";
 
 export interface RuntimeInstructionDrainInput {
   ownerId: string;
@@ -137,6 +141,7 @@ export class RuntimeInstructionDispatcher {
   constructor(
     private readonly sessions: RuntimeSessionResolverPort,
     private readonly outbox: RuntimeInstructionOutboxReader,
+    private readonly deliveryJournal?: RuntimeDeliveryJournalPort,
   ) {}
 
   drain(
@@ -233,7 +238,11 @@ export class RuntimeInstructionDispatcher {
         return accepted(sequential.receipt);
       }
 
-      const result = await this.deliverOne(transport, parsed.target);
+      const result = await this.deliverOne(
+        parsed.ownerId,
+        transport,
+        parsed.target,
+      );
       if (result.status === "accepted") {
         progress.directlyAcceptedById.set(parsed.target.id, {
           instructionId: parsed.target.id,
@@ -309,6 +318,16 @@ export class RuntimeInstructionDispatcher {
         }
       }
       advanceSettledPrefix(progress, parsed.instructions);
+      if (supersededInstructionIds.length > 0) {
+        await recordRuntimeObservation("record superseded deliveries", () =>
+          this.deliveryJournal?.supersedeDeliveries({
+            ownerId: parsed.ownerId,
+            runtimeSessionId: parsed.runtimeSessionId,
+            instructionIds: supersededInstructionIds,
+            reason,
+          }),
+        );
+      }
       return supersededInstructionIds;
     });
   }
@@ -404,7 +423,11 @@ export class RuntimeInstructionDispatcher {
         );
       }
 
-      const result = await this.deliverOne(transport, instruction);
+      const result = await this.deliverOne(
+        input.ownerId,
+        transport,
+        instruction,
+      );
       if (result.status !== "accepted") {
         const acceptedTarget = progress.acceptedBySequence.get(
           input.target.sequence,
@@ -495,6 +518,7 @@ export class RuntimeInstructionDispatcher {
   }
 
   private async deliverOne(
+    ownerId: string,
     transport: RuntimeInstructionTransportPort,
     instruction: RuntimeInstruction,
   ): Promise<
@@ -502,9 +526,21 @@ export class RuntimeInstructionDispatcher {
     | RuntimeInstructionDispatchFailure
   > {
     try {
+      await recordRuntimeObservation("prepare instruction delivery", () =>
+        this.deliveryJournal?.prepareDelivery({ ownerId, instruction }),
+      );
       const receipt = validateReceipt(
         await transport.deliver(instruction),
         instruction,
+      );
+      await recordRuntimeObservation(
+        "record instruction delivery receipt",
+        () =>
+          this.deliveryJournal?.recordDeliveryReceipt({
+            ownerId,
+            instruction,
+            receipt,
+          }),
       );
       return receipt.state === "rejected"
         ? {

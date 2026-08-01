@@ -29,6 +29,10 @@ import type {
   RuntimeInstructionDispatcher,
 } from "./instruction-dispatcher";
 import { KeyedSerialExecutor } from "./keyed-serial-executor";
+import {
+  recordRuntimeObservation,
+  type RuntimeLifecycleObservationPort,
+} from "./runtime-observation";
 import type { RuntimeSessionRegistry } from "./runtime-session-registry";
 
 interface GoalLifecycleCommand {
@@ -80,6 +84,7 @@ export class GoalLifecycleService {
     private readonly clock: RuntimeClockPort,
     private readonly ids: RuntimeIdGeneratorPort,
     private readonly terminalTimeoutMs = 30_000,
+    private readonly observations?: RuntimeLifecycleObservationPort,
   ) {
     if (
       !Number.isInteger(terminalTimeoutMs) ||
@@ -200,6 +205,7 @@ export class GoalLifecycleService {
         return lifecycleResult(transition, wasReplay, controlDispatch);
       }
       await this.commitControlBarrier(transition, command.ownerId, transport);
+      await this.finalizeObservation(transition, command.ownerId);
       return lifecycleResult(transition, wasReplay, controlDispatch);
     }
 
@@ -229,7 +235,15 @@ export class GoalLifecycleService {
           transport,
         );
       }
-      this.reconcileCancelEpoch(transition, transport);
+      const discardedInputIds = this.reconcileCancelEpoch(
+        transition,
+        transport,
+      );
+      await this.supersedeDiscardedInputs(
+        transition,
+        command.ownerId,
+        discardedInputIds,
+      );
       stored = await this.state.finalizeLifecycleTransition({
         ownerId: command.ownerId,
         runtimeSessionId: command.runtimeSessionId,
@@ -238,6 +252,7 @@ export class GoalLifecycleService {
         nextRunEpoch: transition.runEpoch,
         command: command.command,
       });
+      await this.finalizeObservation(stored.transition, command.ownerId);
       this.releaseTerminalBarrier(transition.instruction.id);
       return lifecycleResult(stored.transition, wasReplay, controlDispatch);
     }
@@ -295,7 +310,15 @@ export class GoalLifecycleService {
         nextRunEpoch,
         command: command.command,
       });
-      this.advanceAndValidate(stored.transition, transport);
+      const discardedInputIds = this.advanceAndValidate(
+        stored.transition,
+        transport,
+      );
+      await this.supersedeDiscardedInputs(
+        stored.transition,
+        command.ownerId,
+        discardedInputIds,
+      );
     }
     stored = await this.state.finalizeLifecycleTransition({
       ownerId: command.ownerId,
@@ -305,6 +328,7 @@ export class GoalLifecycleService {
       nextRunEpoch,
       command: command.command,
     });
+    await this.finalizeObservation(stored.transition, command.ownerId);
     this.releaseTerminalBarrier(transition.instruction.id);
     return lifecycleResult(stored.transition, wasReplay, controlDispatch);
   }
@@ -499,7 +523,7 @@ export class GoalLifecycleService {
   private advanceAndValidate(
     transition: AgentGoalLifecycleTransition,
     transport: RuntimeSessionLifecycleControlPort,
-  ): void {
+  ): string[] {
     const advanced = transport.advanceRunEpoch({
       expectedRunEpoch: transition.expectedRunEpoch,
       nextRunEpoch: transition.runEpoch,
@@ -515,20 +539,21 @@ export class GoalLifecycleService {
         "Runtime Session returned an invalid cancellation epoch advance",
       );
     }
+    return [...advanced.discardedInputIds];
   }
 
   private reconcileCancelEpoch(
     transition: AgentGoalLifecycleTransition,
     transport: RuntimeSessionLifecycleControlPort,
-  ): void {
-    if (transport.runEpoch === transition.runEpoch) return;
+  ): string[] {
+    if (transport.runEpoch === transition.runEpoch) return [];
     if (transport.runEpoch !== transition.expectedRunEpoch) {
       throw new GoalServiceError(
         "invalid_command",
         `Goal cancellation epoch ${transition.runEpoch} cannot reconcile live Runtime Session epoch ${transport.runEpoch}`,
       );
     }
-    this.advanceAndValidate(transition, transport);
+    return this.advanceAndValidate(transition, transport);
   }
 
   private releaseTerminalBarrier(instructionId: string): void {
@@ -602,6 +627,44 @@ export class GoalLifecycleService {
           ? "preserve_predecessors"
           : "supersede_predecessors",
     });
+  }
+
+  private async finalizeObservation(
+    transition: AgentGoalLifecycleTransition,
+    ownerId: string,
+  ): Promise<void> {
+    const observations = this.observations;
+    if (!observations) return;
+    await recordRuntimeObservation("finalize lifecycle observation", () =>
+      observations.finalizeControlInstruction({
+        ownerId,
+        runtimeSessionId: transition.runtimeSessionId,
+        instructionId: transition.instruction.id,
+        runEpoch: transition.expectedRunEpoch,
+        status: transition.action === "pause" ? "paused" : "cancelled",
+      }),
+    );
+  }
+
+  private async supersedeDiscardedInputs(
+    transition: AgentGoalLifecycleTransition,
+    ownerId: string,
+    instructionIds: string[],
+  ): Promise<void> {
+    const observations = this.observations;
+    if (instructionIds.length === 0 || !observations) {
+      return;
+    }
+    await recordRuntimeObservation(
+      "record lifecycle-discarded deliveries",
+      () =>
+        observations.supersedeDeliveries({
+          ownerId,
+          runtimeSessionId: transition.runtimeSessionId,
+          instructionIds,
+          reason: `Discarded when Goal ${transition.action} crossed runEpoch ${transition.expectedRunEpoch}`,
+        }),
+    );
   }
 }
 

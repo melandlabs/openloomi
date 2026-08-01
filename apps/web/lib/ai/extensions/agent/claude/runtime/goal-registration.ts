@@ -5,6 +5,7 @@ import {
   type RuntimeSessionRegistration,
 } from "@/lib/ai/runtime-instructions";
 import type { ClaudeRuntimeSession } from "./session";
+import { ClaudeRuntimeEventObserver } from "./event-observer";
 
 export interface StartClaudeGoalRuntimeSessionInput {
   session?: unknown;
@@ -65,7 +66,7 @@ export class ClaudeGoalRuntimeRecoveryRequiredError extends Error {
 export async function startClaudeGoalRuntimeSession(
   input: StartClaudeGoalRuntimeSessionInput,
 ): Promise<RuntimeSessionRegistration | undefined> {
-  const ownerId = authenticatedOwnerId(input.session);
+  const ownerId = resolveAuthenticatedGoalRuntimeOwnerId(input.session);
   if (!ownerId) {
     input.runtime.start(input.start);
     return undefined;
@@ -91,6 +92,13 @@ export async function startClaudeGoalRuntimeSession(
         expectedRunEpoch,
       );
     }
+    input.runtime.attachEventObserver(
+      new ClaudeRuntimeEventObserver(
+        ownerId,
+        input.runtime.runtimeSessionId,
+        goalRuntime.observations,
+      ),
+    );
     registration = goalRuntime.sessions.register({
       ownerId,
       transport: input.runtime,
@@ -114,7 +122,9 @@ export async function startClaudeGoalRuntimeSession(
   }
 }
 
-function authenticatedOwnerId(session: unknown): string | undefined {
+export function resolveAuthenticatedGoalRuntimeOwnerId(
+  session: unknown,
+): string | undefined {
   if (!session || typeof session !== "object") return undefined;
 
   const user = (session as { user?: unknown }).user;

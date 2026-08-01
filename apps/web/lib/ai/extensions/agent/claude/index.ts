@@ -82,6 +82,7 @@ import {
 import {
   claudeAgentSdkTransport,
   ClaudeRuntimeSession,
+  resolveAuthenticatedGoalRuntimeOwnerId,
   startClaudeGoalRuntimeSession,
 } from "./runtime";
 import {
@@ -1763,6 +1764,9 @@ ${formattedMessages}${truncationNotice}\n\n---\n## Current Request\n`;
       settings: settingsConfig,
       agentOptions: options,
       supplementalInput: claudeRuntime.liveInputSource,
+      toolObserver: resolveAuthenticatedGoalRuntimeOwnerId(options?.session)
+        ? claudeRuntime
+        : undefined,
       permissionMode: options?.permissionMode,
       abortController: session.abortController,
       env: envConfig,

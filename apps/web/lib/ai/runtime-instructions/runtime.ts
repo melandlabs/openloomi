@@ -7,41 +7,61 @@ import { GoalService } from "./goal-service";
 import { GoalLifecycleService } from "./goal-lifecycle-service";
 import { GoalReplacementCoordinator } from "./goal-replacement-coordinator";
 import { InMemoryAgentGoalState } from "./in-memory-goal-state";
+import { InMemoryRuntimeObservationJournal } from "./in-memory-runtime-observation-journal";
 import { RuntimeInstructionDispatcher } from "./instruction-dispatcher";
+import type { RuntimeProviderObservationPort } from "./runtime-observation";
 import { RuntimeSessionRegistry } from "./runtime-session-registry";
 
 export interface InMemoryAgentGoalRuntime {
   readonly state: InMemoryAgentGoalState;
+  readonly observations: InMemoryRuntimeObservationJournal;
   readonly sessions: RuntimeSessionRegistry;
   readonly dispatcher: RuntimeInstructionDispatcher;
   readonly goals: GoalService;
   readonly replacements: GoalReplacementCoordinator;
 }
 
-export type AgentGoalRuntime = Pick<
-  InMemoryAgentGoalRuntime,
-  "sessions" | "goals" | "replacements"
->;
+export interface AgentGoalRuntime {
+  readonly sessions: RuntimeSessionRegistry;
+  readonly goals: GoalService;
+  readonly observations: RuntimeProviderObservationPort;
+  readonly replacements: GoalReplacementCoordinator;
+}
 
 export function createInMemoryAgentGoalRuntime(
   options: {
     clock?: RuntimeClockPort;
     idGenerator?: RuntimeIdGeneratorPort;
+    observationIdGenerator?: RuntimeIdGeneratorPort;
   } = {},
 ): InMemoryAgentGoalRuntime {
   const state = new InMemoryAgentGoalState();
   const sessions = new RuntimeSessionRegistry();
-  const dispatcher = new RuntimeInstructionDispatcher(sessions, state);
   const clock = options.clock ?? { now: () => new Date() };
   const idGenerator = options.idGenerator ?? {
     generate: () => crypto.randomUUID(),
   };
+  const observationIdGenerator = options.observationIdGenerator ?? {
+    generate: () => crypto.randomUUID(),
+  };
+  const observations = new InMemoryRuntimeObservationJournal(
+    state,
+    clock,
+    observationIdGenerator,
+  );
+  const dispatcher = new RuntimeInstructionDispatcher(
+    sessions,
+    state,
+    observations,
+  );
   const lifecycle = new GoalLifecycleService(
     state,
     dispatcher,
     sessions,
     clock,
     idGenerator,
+    30_000,
+    observations,
   );
   const goals = new GoalService(
     state,
@@ -56,8 +76,17 @@ export function createInMemoryAgentGoalRuntime(
     sessions,
     clock,
     idGenerator,
+    30_000,
+    observations,
   );
-  return { state, sessions, dispatcher, goals, replacements };
+  return {
+    state,
+    observations,
+    sessions,
+    dispatcher,
+    goals,
+    replacements,
+  };
 }
 
 let agentGoalRuntime: InMemoryAgentGoalRuntime | undefined;

@@ -33,6 +33,10 @@ import type {
   RuntimeInstructionDispatcher,
 } from "./instruction-dispatcher";
 import { KeyedSerialExecutor } from "./keyed-serial-executor";
+import {
+  recordRuntimeObservation,
+  type RuntimeLifecycleObservationPort,
+} from "./runtime-observation";
 import type { RuntimeSessionRegistry } from "./runtime-session-registry";
 
 export type GoalReplacementCommandSource =
@@ -117,6 +121,7 @@ export class GoalReplacementCoordinator {
     private readonly clock: RuntimeClockPort,
     private readonly ids: RuntimeIdGeneratorPort,
     private readonly terminalTimeoutMs = 30_000,
+    private readonly observations?: RuntimeLifecycleObservationPort,
   ) {
     if (
       !Number.isInteger(terminalTimeoutMs) ||
@@ -249,6 +254,7 @@ export class GoalReplacementCoordinator {
             requireActivationInstruction(replacement),
             command.ownerId,
           );
+      await this.finalizeControlObservation(replacement, command.ownerId);
       return {
         replacement,
         deduplicated: wasReplay,
@@ -332,6 +338,11 @@ export class GoalReplacementCoordinator {
       });
       replacement = stored.replacement;
       discardedInputIds = this.advanceAndValidate(replacement, transport);
+      await this.supersedeDiscardedInputs(
+        replacement,
+        command.ownerId,
+        discardedInputIds,
+      );
       this.releaseTerminalBarrier(replacement.controlInstruction.id);
     } else {
       if (replacement.phase !== "boundary_observed") {
@@ -365,6 +376,11 @@ export class GoalReplacementCoordinator {
         transport,
       );
       discardedInputIds = this.reconcileLiveEpoch(replacement, transport);
+      await this.supersedeDiscardedInputs(
+        replacement,
+        command.ownerId,
+        discardedInputIds,
+      );
       this.releaseTerminalBarrier(replacement.controlInstruction.id);
     }
 
@@ -391,6 +407,7 @@ export class GoalReplacementCoordinator {
       command: command.identity,
     });
     replacement = stored.replacement;
+    await this.finalizeControlObservation(replacement, command.ownerId);
     const activationDispatch = await this.dispatchOnTransport(
       requireActivationInstruction(replacement),
       command.ownerId,
@@ -642,6 +659,44 @@ export class GoalReplacementCoordinator {
       reason: `Superseded by Goal replacement ${instruction.id}`,
       predecessorPolicy: "supersede_predecessors",
     });
+  }
+
+  private async finalizeControlObservation(
+    replacement: AgentGoalReplacement,
+    ownerId: string,
+  ): Promise<void> {
+    const observations = this.observations;
+    if (!observations) return;
+    await recordRuntimeObservation("finalize replacement observation", () =>
+      observations.finalizeControlInstruction({
+        ownerId,
+        runtimeSessionId: replacement.runtimeSessionId,
+        instructionId: replacement.controlInstruction.id,
+        runEpoch: replacement.expectedRunEpoch,
+        status: "cancelled",
+      }),
+    );
+  }
+
+  private async supersedeDiscardedInputs(
+    replacement: AgentGoalReplacement,
+    ownerId: string,
+    instructionIds: string[],
+  ): Promise<void> {
+    const observations = this.observations;
+    if (instructionIds.length === 0 || !observations) {
+      return;
+    }
+    await recordRuntimeObservation(
+      "record replacement-discarded deliveries",
+      () =>
+        observations.supersedeDeliveries({
+          ownerId,
+          runtimeSessionId: replacement.runtimeSessionId,
+          instructionIds,
+          reason: `Discarded when Goal replacement crossed runEpoch ${replacement.expectedRunEpoch}`,
+        }),
+    );
   }
 
   private dispatch(

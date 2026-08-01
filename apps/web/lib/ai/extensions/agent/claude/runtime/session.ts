@@ -29,6 +29,11 @@ import type {
 } from "@openloomi/ai/agent/types";
 
 import type { ClaudeRuntimeLogger } from "../skills";
+import type {
+  ClaudeRuntimeEventObserverPort,
+  ClaudeRuntimeToolOutcome,
+  ClaudeRuntimeToolStart,
+} from "./event-observer";
 import { ClaudeInputMultiplexer } from "./input-multiplexer";
 import { ClaudeOutputMultiplexer } from "./output-multiplexer";
 import type { ClaudeSdkTransport } from "./sdk-transport";
@@ -75,6 +80,7 @@ export class ClaudeRuntimeSession implements RuntimeSessionLifecycleControlPort 
   private terminalSequence = 0;
   private readonly terminalHistory: RuntimeTurnTerminal[] = [];
   private readonly terminalWaiters = new Set<TerminalWaiter>();
+  private eventObserver: ClaudeRuntimeEventObserverPort | null = null;
 
   claudeSessionId?: string;
 
@@ -122,6 +128,22 @@ export class ClaudeRuntimeSession implements RuntimeSessionLifecycleControlPort 
     return this.processedSdkMessages;
   }
 
+  attachEventObserver(observer: ClaudeRuntimeEventObserverPort): void {
+    if (this.query || this.currentState !== "starting") {
+      throw new ClaudeRuntimeSessionError(
+        "already_started",
+        "Claude runtime event observer must be attached before start",
+      );
+    }
+    if (this.eventObserver && this.eventObserver !== observer) {
+      throw new ClaudeRuntimeSessionError(
+        "observer_already_attached",
+        "Claude runtime session already has an event observer",
+      );
+    }
+    this.eventObserver = observer;
+  }
+
   start(input: {
     initialPrompt: string | AsyncIterable<SDKUserMessage>;
     queryOptions?: Options;
@@ -135,6 +157,10 @@ export class ClaudeRuntimeSession implements RuntimeSessionLifecycleControlPort 
 
     this.inputQueue.setHandoffHandler((supplementalInput) => {
       this.observeSupplementalInputHandoff(supplementalInput);
+      void this.observeInstructionWritten(
+        supplementalInput.id,
+        supplementalInput.runEpoch,
+      );
     });
     const multiplexer = new ClaudeInputMultiplexer(
       input.initialPrompt,
@@ -184,6 +210,10 @@ export class ClaudeRuntimeSession implements RuntimeSessionLifecycleControlPort 
       instruction.kind === "goal.pause" ||
       instruction.kind === "goal.cancel"
     ) {
+      await this.observeInstructionWritten(
+        instruction.id,
+        instruction.payload.expectedRunEpoch,
+      );
       if (
         this.runEpoch === instruction.payload.expectedRunEpoch &&
         (this.currentState === "running" || this.currentState === "evaluating")
@@ -389,6 +419,16 @@ export class ClaudeRuntimeSession implements RuntimeSessionLifecycleControlPort 
     }
 
     if (this.outputPump) await this.outputPump;
+    if (this.eventObserver) {
+      try {
+        await this.eventObserver.flush();
+      } catch (error) {
+        this.logger.warn(
+          `[Claude ${this.runtimeSessionId}] Failed to flush Goal observations`,
+          error,
+        );
+      }
+    }
   }
 
   private async pumpQuery(query: Query): Promise<void> {
@@ -397,7 +437,8 @@ export class ClaudeRuntimeSession implements RuntimeSessionLifecycleControlPort 
       for await (const message of query) {
         const observedRunEpoch = this.providerOutputEpoch;
         this.processedSdkMessages++;
-        this.observeSdkMessage(message, observedRunEpoch);
+        this.updateSessionFromSdkMessage(message, observedRunEpoch);
+        await this.recordProviderObservation(message, observedRunEpoch);
         for (const agentMessage of this.outputMultiplexer.convert(message)) {
           await this.output.publish({
             ...agentMessage,
@@ -459,7 +500,7 @@ export class ClaudeRuntimeSession implements RuntimeSessionLifecycleControlPort 
     }
   }
 
-  private observeSdkMessage(
+  private updateSessionFromSdkMessage(
     message: SDKMessage,
     observedRunEpoch: number,
   ): void {
@@ -495,6 +536,64 @@ export class ClaudeRuntimeSession implements RuntimeSessionLifecycleControlPort 
       this.currentState === "interrupted"
     ) {
       this.transition("running");
+    }
+  }
+
+  async captureToolStart(
+    input: Omit<ClaudeRuntimeToolStart, "runEpoch">,
+  ): Promise<void> {
+    if (!this.eventObserver) return;
+    await this.eventObserver.captureToolStart({
+      ...input,
+      runEpoch: this.providerOutputEpoch,
+    });
+  }
+
+  async observeToolOutcome(
+    input: Omit<ClaudeRuntimeToolOutcome, "runEpoch">,
+  ): Promise<void> {
+    if (!this.eventObserver) return;
+    await this.eventObserver.observeToolOutcome({
+      ...input,
+      runEpoch: this.providerOutputEpoch,
+    });
+  }
+
+  private async observeInstructionWritten(
+    instructionId: string,
+    runEpoch: number,
+  ): Promise<void> {
+    await this.recordObservation("record SDK instruction handoff", (observer) =>
+      observer.instructionWritten({
+        instructionId,
+        runEpoch,
+        recordedAt: new Date().toISOString(),
+      }),
+    );
+  }
+
+  private async recordProviderObservation(
+    message: SDKMessage,
+    runEpoch: number,
+  ): Promise<void> {
+    await this.recordObservation("record SDK event", (observer) =>
+      observer.observeSdkMessage(message, runEpoch),
+    );
+  }
+
+  private async recordObservation(
+    operation: string,
+    record: (observer: ClaudeRuntimeEventObserverPort) => Promise<void>,
+  ): Promise<void> {
+    const observer = this.eventObserver;
+    if (!observer) return;
+    try {
+      await record(observer);
+    } catch (error) {
+      this.logger.warn(
+        `[Claude ${this.runtimeSessionId}] Failed to ${operation}`,
+        error,
+      );
     }
   }
 
@@ -563,6 +662,7 @@ export type ClaudeRuntimeSessionErrorCode =
   | "invalid_terminal_boundary"
   | "invalid_run_epoch"
   | "not_started"
+  | "observer_already_attached"
   | "terminal_unavailable"
   | "terminal_wait_aborted"
   | "turn_not_terminal";

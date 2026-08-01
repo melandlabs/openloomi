@@ -258,8 +258,11 @@ export class AgentSupplementalInputQueue implements AgentSupplementalInputSource
 
     const informs: NormalizedAgentSupplementalInput[] = [];
     while (this.pending[0]?.input.intent === "inform") {
-      const entry = this.pending.shift();
-      if (entry !== undefined) informs.push(entry.input);
+      const entry = this.pending[0];
+      if (entry === undefined) break;
+      this.handoffHandler?.(entry.input);
+      this.pending.shift();
+      informs.push(entry.input);
     }
 
     this.drainReleasableInputs();
