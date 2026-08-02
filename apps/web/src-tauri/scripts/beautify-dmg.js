@@ -1,14 +1,14 @@
 // Builds a "beautiful" macOS DMG installer (the classic drag-to-Applications
-// layout) for the Alloomi .app bundle produced by Tauri.
+// layout) for the OpenLoomi .app bundle produced by Tauri.
 //
 // Layout mirrors mainstream macOS DMGs (Manus / Slack / Chrome):
 //
 //     ┌──────────────────────────────────────┐
-//     │ ●●●  Alloomi <version>                │
+//     │ ●●●  OpenLoomi <version>              │
 //     │                                       │
 //     │   [App icon]    ⇢ dashed arrow       │
 //     │                                       │
-//     │   Alloomi              Applications   │
+//     │   OpenLoomi            Applications   │
 //     └──────────────────────────────────────┘
 //
 // The arrow is baked into the background PNG (see gen-dmg-background.js);
@@ -32,7 +32,7 @@
 // the template on a Mac with a GUI and commit it:
 //     node src-tauri/scripts/beautify-dmg.js   # build the DMG locally
 //     # mount it, then copy its .DS_Store over the template:
-//     cp /Volumes/Alloomi/.DS_Store apps/web/src-tauri/resources/dmg_DS_Store
+//     cp /Volumes/openloomi/.DS_Store apps/web/src-tauri/resources/dmg_DS_Store
 // (The file is named dmg_DS_Store — no leading dot — so .gitignore's
 // .DS_Store rule does not block it.)
 //
@@ -64,7 +64,7 @@ const DS_STORE_TEMPLATE = path.join(SRC_TAURI_DIR, "resources", "dmg_DS_Store");
 
 function parseArgs(argv) {
   const args = {
-    appName: "Alloomi",
+    appName: "openloomi",
     bg: path.join(ICONS_DIR, "dmg-background@2x.png"),
   };
   const positional = [];
@@ -200,7 +200,7 @@ function main() {
   // mountPoint is assigned after attach (we mount at the default /Volumes/
   // location so Finder can resolve the disk by name). Declared here so the
   // cleanup handler can reference it.
-  const mountPoint = "";
+  let mountPoint = "";
 
   // C1: track mounted state and register cleanup on any exit path (incl.
   // SIGINT/SIGTERM) so a killed build never leaks an attached volume or the
@@ -244,7 +244,7 @@ function main() {
       // with no custom layout. Stop the build instead of emitting a broken
       // installer.
       console.error(
-        `[beautify-dmg] ERROR: Finder unavailable AND no .DS_Store template found at ${DS_STORE_TEMPLATE}. The DMG would have NO custom layout. Generate the template on a Mac with a GUI and commit it:\n    node src-tauri/scripts/beautify-dmg.js\n    cp /Volumes/Alloomi/.DS_Store apps/web/src-tauri/resources/dmg_DS_Store`,
+        `[beautify-dmg] ERROR: Finder unavailable AND no .DS_Store template found at ${DS_STORE_TEMPLATE}. The DMG would have NO custom layout. Generate the template on a Mac with a GUI and commit it:\n    node src-tauri/scripts/beautify-dmg.js\n    cp /Volumes/openloomi/.DS_Store apps/web/src-tauri/resources/dmg_DS_Store`,
       );
       process.exit(1);
     }
@@ -265,7 +265,7 @@ function main() {
 
     // --- 3) Mount at the DEFAULT location (/Volumes/<volumeName>) so Finder
     // can locate the disk by volume name. We detach any stale same-named
-    // volume first (detachStaleVolume) to avoid the "Alloomi 1" suffix that
+    // volume first (detachStaleVolume) to avoid the "openloomi 1" suffix that
     // macOS adds on a name collision — that would also break name-based
     // targeting. (Earlier we used a custom -mountpoint under /tmp, but Finder
     // only resolves `disk "<name>"` for volumes mounted under /Volumes.)
@@ -273,7 +273,7 @@ function main() {
     const attachOut = runQuiet(
       `hdiutil attach -readwrite -noverify -noautoopen -nobrowse "${rwDmg}"`,
     );
-    const mountPoint = parseMountPoint(attachOut) || `/Volumes/${volumeName}`;
+    mountPoint = parseMountPoint(attachOut) || `/Volumes/${volumeName}`;
     if (!fs.existsSync(mountPoint)) {
       throw new Error(`Failed to mount RW DMG (expected at ${mountPoint})`);
     }
@@ -380,7 +380,7 @@ function main() {
 // /private/tmp/... path and the background would break on other machines
 // (incl. end users). This mirrors Tauri's own create-dmg template.
 //
-// We locate the disk by VOLUME NAME (after ensuring no stale "Alloomi"
+// We locate the disk by VOLUME NAME (after ensuring no stale "openloomi"
 // volume is still attached in main()), and pass the name as an osascript
 // argument rather than interpolating it, to avoid any quoting issues.
 function writeLayout({
@@ -463,7 +463,7 @@ function parseMountPoint(attachOutput) {
 }
 
 // Detach any currently-attached volume whose label matches `volumeName`
-// (including the "Alloomi 1"/"Alloomi 2" suffixes macOS adds on collision).
+// (including the "openloomi 1"/"openloomi 2" suffixes macOS adds on collision).
 // Needed because the layout AppleScript targets the disk by volume name, so a
 // leftover same-named volume would be selected instead of the one we just made.
 function detachStaleVolume(volumeName) {

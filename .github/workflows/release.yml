@@ -164,19 +164,13 @@ jobs:
           COMMIT_SHA=$(git rev-parse --short HEAD)
           DMG_PATH="./apps/web/src-tauri/target/release/bundle/dmg/openloomi_${COMMIT_SHA}_aarch64.dmg"
 
-          TEMP_DMG_DIR=$(mktemp -d)
-          cp -R "$APP_BUNDLE" "$TEMP_DMG_DIR/"
-          ln -s /Applications "$TEMP_DMG_DIR/Applications"
+          node apps/web/src-tauri/scripts/beautify-dmg.js \
+            "$APP_BUNDLE" \
+            "$DMG_PATH" \
+            --app-name openloomi \
+            --bg ./apps/web/src-tauri/icons/dmg-background@2x.png
 
-          hdiutil create -volname "openloomi" \
-            -fs HFS+ \
-            -srcfolder "$TEMP_DMG_DIR" \
-            -format UDZO \
-            "$DMG_PATH"
-
-          rm -rf "$TEMP_DMG_DIR"
-
-          echo "✅ DMG created from signed app bundle"
+          echo "✅ Styled DMG created from signed app bundle"
 
       - name: Notarize DMG
         if: env.SKIP_SIGNING != 'true'
@@ -413,19 +407,13 @@ jobs:
           COMMIT_SHA=$(git rev-parse --short HEAD)
           DMG_PATH="./apps/web/src-tauri/target/release/bundle/dmg/openloomi_${COMMIT_SHA}_x64.dmg"
 
-          TEMP_DMG_DIR=$(mktemp -d)
-          cp -R "$APP_BUNDLE" "$TEMP_DMG_DIR/"
-          ln -s /Applications "$TEMP_DMG_DIR/Applications"
+          node apps/web/src-tauri/scripts/beautify-dmg.js \
+            "$APP_BUNDLE" \
+            "$DMG_PATH" \
+            --app-name openloomi \
+            --bg ./apps/web/src-tauri/icons/dmg-background@2x.png
 
-          hdiutil create -volname "openloomi" \
-            -fs HFS+ \
-            -srcfolder "$TEMP_DMG_DIR" \
-            -format UDZO \
-            "$DMG_PATH"
-
-          rm -rf "$TEMP_DMG_DIR"
-
-          echo "✅ DMG created from signed app bundle"
+          echo "✅ Styled DMG created from signed app bundle"
 
       - name: Notarize DMG
         if: env.SKIP_SIGNING != 'true'
