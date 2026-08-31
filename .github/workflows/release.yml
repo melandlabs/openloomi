@@ -39,7 +39,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 10.14.0
 
       - name: Add pnpm to PATH
         run: |
@@ -270,7 +270,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 10.14.0
 
       - name: Add pnpm to PATH
         run: |
@@ -511,7 +511,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 10.14.0
 
       - name: Add pnpm to PATH
         run: |
@@ -637,7 +637,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 10.14.0
 
       - name: Add pnpm to PATH
         shell: bash
@@ -793,7 +793,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 10.14.0
 
       - name: Add pnpm to PATH
         run: |
