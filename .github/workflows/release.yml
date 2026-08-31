@@ -78,15 +78,33 @@ jobs:
 
       - name: Rebuild native modules for Tauri
         run: |
-          pnpm rebuild better-sqlite3
+          # Root better-sqlite3 is v13+ which ships prebuilds at
+          # node_modules/better-sqlite3/prebuilds/<platform>.node (no install
+          # script, gypfile: false). The v11/v12 build/Release path is gone.
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            "macOS-ARM64") PLATFORM=darwin-arm64 ;;
+            "macOS-X64")   PLATFORM=darwin-x64 ;;
+            "Linux-X64")   PLATFORM=linux-x64 ;;
+            "Linux-ARM64") PLATFORM=linux-arm64 ;;
+            "Windows-X64") PLATFORM=win32-x64 ;;
+            *) echo "::error::Unknown runner: ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
           mkdir -p node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build
-          cp node_modules/better-sqlite3/build/Release/better_sqlite3.node \
-             node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node
+          cp "node_modules/better-sqlite3/prebuilds/${PLATFORM}.node" \
+             "node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node"
 
       - name: Verify native modules are built
         run: |
-          echo "=== Checking top-level better-sqlite3 ==="
-          ls -la node_modules/better-sqlite3/build/Release/better_sqlite3.node || exit 1
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            "macOS-ARM64") PLATFORM=darwin-arm64 ;;
+            "macOS-X64")   PLATFORM=darwin-x64 ;;
+            "Linux-X64")   PLATFORM=linux-x64 ;;
+            "Linux-ARM64") PLATFORM=linux-arm64 ;;
+            "Windows-X64") PLATFORM=win32-x64 ;;
+            *) echo "::error::Unknown runner: ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
+          echo "=== Checking top-level better-sqlite3 prebuild (${PLATFORM}) ==="
+          ls -la "node_modules/better-sqlite3/prebuilds/${PLATFORM}.node" || exit 1
           echo "=== Checking nested better-sqlite3 in imessage-kit ==="
           ls -la node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node || exit 1
           echo "✅ All native modules built successfully"
@@ -311,15 +329,33 @@ jobs:
         env:
           npm_config_arch: x64
         run: |
-          pnpm rebuild better-sqlite3
+          # Root better-sqlite3 is v13+ which ships prebuilds at
+          # node_modules/better-sqlite3/prebuilds/<platform>.node (no install
+          # script, gypfile: false). The v11/v12 build/Release path is gone.
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            "macOS-ARM64") PLATFORM=darwin-arm64 ;;
+            "macOS-X64")   PLATFORM=darwin-x64 ;;
+            "Linux-X64")   PLATFORM=linux-x64 ;;
+            "Linux-ARM64") PLATFORM=linux-arm64 ;;
+            "Windows-X64") PLATFORM=win32-x64 ;;
+            *) echo "::error::Unknown runner: ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
           mkdir -p node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build
-          cp node_modules/better-sqlite3/build/Release/better_sqlite3.node \
-             node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node
+          cp "node_modules/better-sqlite3/prebuilds/${PLATFORM}.node" \
+             "node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node"
 
       - name: Verify native modules are built
         run: |
-          echo "=== Checking top-level better-sqlite3 ==="
-          ls -la node_modules/better-sqlite3/build/Release/better_sqlite3.node || exit 1
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            "macOS-ARM64") PLATFORM=darwin-arm64 ;;
+            "macOS-X64")   PLATFORM=darwin-x64 ;;
+            "Linux-X64")   PLATFORM=linux-x64 ;;
+            "Linux-ARM64") PLATFORM=linux-arm64 ;;
+            "Windows-X64") PLATFORM=win32-x64 ;;
+            *) echo "::error::Unknown runner: ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
+          echo "=== Checking top-level better-sqlite3 prebuild (${PLATFORM}) ==="
+          ls -la "node_modules/better-sqlite3/prebuilds/${PLATFORM}.node" || exit 1
           echo "=== Checking nested better-sqlite3 in imessage-kit ==="
           ls -la node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node || exit 1
           echo "✅ All native modules built successfully"
@@ -566,15 +602,33 @@ jobs:
 
       - name: Rebuild native modules for Tauri
         run: |
-          pnpm rebuild better-sqlite3
+          # Root better-sqlite3 is v13+ which ships prebuilds at
+          # node_modules/better-sqlite3/prebuilds/<platform>.node (no install
+          # script, gypfile: false). The v11/v12 build/Release path is gone.
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            "macOS-ARM64") PLATFORM=darwin-arm64 ;;
+            "macOS-X64")   PLATFORM=darwin-x64 ;;
+            "Linux-X64")   PLATFORM=linux-x64 ;;
+            "Linux-ARM64") PLATFORM=linux-arm64 ;;
+            "Windows-X64") PLATFORM=win32-x64 ;;
+            *) echo "::error::Unknown runner: ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
           mkdir -p node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build
-          cp node_modules/better-sqlite3/build/Release/better_sqlite3.node \
-             node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node
+          cp "node_modules/better-sqlite3/prebuilds/${PLATFORM}.node" \
+             "node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node"
 
       - name: Verify native modules are built
         run: |
-          echo "=== Checking top-level better-sqlite3 ==="
-          ls -la node_modules/better-sqlite3/build/Release/better_sqlite3.node || exit 1
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            "macOS-ARM64") PLATFORM=darwin-arm64 ;;
+            "macOS-X64")   PLATFORM=darwin-x64 ;;
+            "Linux-X64")   PLATFORM=linux-x64 ;;
+            "Linux-ARM64") PLATFORM=linux-arm64 ;;
+            "Windows-X64") PLATFORM=win32-x64 ;;
+            *) echo "::error::Unknown runner: ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
+          echo "=== Checking top-level better-sqlite3 prebuild (${PLATFORM}) ==="
+          ls -la "node_modules/better-sqlite3/prebuilds/${PLATFORM}.node" || exit 1
           echo "=== Checking nested better-sqlite3 in imessage-kit ==="
           ls -la node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node || exit 1
           echo "All native modules built successfully"
@@ -683,17 +737,35 @@ jobs:
         working-directory: .
         shell: bash
         run: |
-          pnpm rebuild better-sqlite3
+          # Root better-sqlite3 is v13+ which ships prebuilds at
+          # node_modules/better-sqlite3/prebuilds/<platform>.node (no install
+          # script, gypfile: false). The v11/v12 build/Release path is gone.
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            "macOS-ARM64") PLATFORM=darwin-arm64 ;;
+            "macOS-X64")   PLATFORM=darwin-x64 ;;
+            "Linux-X64")   PLATFORM=linux-x64 ;;
+            "Linux-ARM64") PLATFORM=linux-arm64 ;;
+            "Windows-X64") PLATFORM=win32-x64 ;;
+            *) echo "::error::Unknown runner: ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
           mkdir -p node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build
-          cp node_modules/better-sqlite3/build/Release/better_sqlite3.node \
-             node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node
+          cp "node_modules/better-sqlite3/prebuilds/${PLATFORM}.node" \
+             "node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node"
 
       - name: Verify native modules are built
         working-directory: .
         shell: bash
         run: |
-          echo "=== Checking top-level better-sqlite3 ==="
-          ls -la node_modules/better-sqlite3/build/Release/better_sqlite3.node || exit 1
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            "macOS-ARM64") PLATFORM=darwin-arm64 ;;
+            "macOS-X64")   PLATFORM=darwin-x64 ;;
+            "Linux-X64")   PLATFORM=linux-x64 ;;
+            "Linux-ARM64") PLATFORM=linux-arm64 ;;
+            "Windows-X64") PLATFORM=win32-x64 ;;
+            *) echo "::error::Unknown runner: ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
+          echo "=== Checking top-level better-sqlite3 prebuild (${PLATFORM}) ==="
+          ls -la "node_modules/better-sqlite3/prebuilds/${PLATFORM}.node" || exit 1
           echo "=== Checking nested better-sqlite3 in imessage-kit ==="
           ls -la node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node || exit 1
           echo "All native modules built successfully"
@@ -843,15 +915,33 @@ jobs:
 
       - name: Rebuild native modules for Tauri
         run: |
-          pnpm rebuild better-sqlite3
+          # Root better-sqlite3 is v13+ which ships prebuilds at
+          # node_modules/better-sqlite3/prebuilds/<platform>.node (no install
+          # script, gypfile: false). The v11/v12 build/Release path is gone.
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            "macOS-ARM64") PLATFORM=darwin-arm64 ;;
+            "macOS-X64")   PLATFORM=darwin-x64 ;;
+            "Linux-X64")   PLATFORM=linux-x64 ;;
+            "Linux-ARM64") PLATFORM=linux-arm64 ;;
+            "Windows-X64") PLATFORM=win32-x64 ;;
+            *) echo "::error::Unknown runner: ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
           mkdir -p node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build
-          cp node_modules/better-sqlite3/build/Release/better_sqlite3.node \
-             node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node
+          cp "node_modules/better-sqlite3/prebuilds/${PLATFORM}.node" \
+             "node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node"
 
       - name: Verify native modules are built
         run: |
-          echo "=== Checking top-level better-sqlite3 ==="
-          ls -la node_modules/better-sqlite3/build/Release/better_sqlite3.node || exit 1
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            "macOS-ARM64") PLATFORM=darwin-arm64 ;;
+            "macOS-X64")   PLATFORM=darwin-x64 ;;
+            "Linux-X64")   PLATFORM=linux-x64 ;;
+            "Linux-ARM64") PLATFORM=linux-arm64 ;;
+            "Windows-X64") PLATFORM=win32-x64 ;;
+            *) echo "::error::Unknown runner: ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
+          echo "=== Checking top-level better-sqlite3 prebuild (${PLATFORM}) ==="
+          ls -la "node_modules/better-sqlite3/prebuilds/${PLATFORM}.node" || exit 1
           echo "=== Checking nested better-sqlite3 in imessage-kit ==="
           ls -la node_modules/@photon-ai/imessage-kit/node_modules/better-sqlite3/build/better_sqlite3.node || exit 1
           echo "All native modules built successfully"
