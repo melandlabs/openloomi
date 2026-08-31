@@ -65,16 +65,16 @@ An always-on desktop **attention agent** â€” the friendly desk companion Loomi â
 **Download directly** (for end users):
 
 <p align="center">
-  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.8.8/openloomi_0.8.8_macOS_aarch64.dmg"><img src="https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS Apple Silicon"></a>
-  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.8.8/openloomi_0.8.8_macOS_amd64.dmg"><img src="https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS Intel"></a>
-  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.8.8/openloomi_0.8.8_windows_amd64.exe"><img src="https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows x64"></a>
+  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.9.0/openloomi_0.9.0_macOS_aarch64.dmg"><img src="https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS Apple Silicon"></a>
+  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.9.0/openloomi_0.9.0_macOS_amd64.dmg"><img src="https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS Intel"></a>
+  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.9.0/openloomi_0.9.0_windows_amd64.exe"><img src="https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows x64"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.8.8/openloomi_0.8.8_linux_amd64.deb"><img src="https://img.shields.io/badge/Linux_AMD64_(.deb)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux AMD64 .deb"></a>
-  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.8.8/openloomi_0.8.8_linux_amd64.rpm"><img src="https://img.shields.io/badge/Linux_AMD64_(.rpm)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux AMD64 .rpm"></a>
-  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.8.8/openloomi_0.8.8_linux_aarch64.deb"><img src="https://img.shields.io/badge/Linux_ARM64_(.deb)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux ARM64 .deb"></a>
-  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.8.8/openloomi_0.8.8_linux_aarch64.rpm"><img src="https://img.shields.io/badge/Linux_ARM64_(.rpm)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux ARM64 .rpm"></a>
+  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.9.0/openloomi_0.9.0_linux_amd64.deb"><img src="https://img.shields.io/badge/Linux_AMD64_(.deb)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux AMD64 .deb"></a>
+  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.9.0/openloomi_0.9.0_linux_amd64.rpm"><img src="https://img.shields.io/badge/Linux_AMD64_(.rpm)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux AMD64 .rpm"></a>
+  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.9.0/openloomi_0.9.0_linux_aarch64.deb"><img src="https://img.shields.io/badge/Linux_ARM64_(.deb)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux ARM64 .deb"></a>
+  <a href="https://github.com/melandlabs/openloomi/releases/download/v0.9.0/openloomi_0.9.0_linux_aarch64.rpm"><img src="https://img.shields.io/badge/Linux_ARM64_(.rpm)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux ARM64 .rpm"></a>
 </p>
 
 Full documentation: [openloomi.ai/docs](https://openloomi.ai/docs)
