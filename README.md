@@ -158,6 +158,47 @@ This is early-stage software. We're looking for people who'll actually install i
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). Look for [`good first issue`](https://github.com/melandlabs/openloomi/labels/good%20first%20issue) labels.
 
+## Related Projects
+
+OpenLoomi is the desktop experience. Many of the lower-level building blocks
+it depends on — AI runtime, integrations, loop engine, audit, memory — are
+developed in the open at:
+
+### [OpenContext](https://github.com/melandlabs/opencontext) — the context layer
+
+**Your agent forgets why it made decisions. OpenContext fixes that.**
+
+OpenContext is the agentic context runtime that sits underneath an agentic
+application — a temporal context graph, a memory API, retrieval primitives, a
+multi-platform integration mesh, a deterministic loop engine, and an agent
+runtime, all behind a single library-first dependency.
+
+- **Temporal Context Graph.** A directed acyclic graph where every fact carries
+  `valid_from` / `valid_until`. Supersession, contradiction, and merge are
+  first-class edges — corrections are append-only, not destructive, so *"what
+  did we believe last quarter?"* is a real, citable query.
+- **Library-First API.** Drop it into any host process with
+  `pnpm add @melandlabs/opencontext`. It's not a UI, a chat surface, or a model
+  provider — it's the glue between durable memory, retrieval, context
+  correction, and multi-platform connectivity.
+- **Platform Integration Mesh.** One uniform `IntegrationRecord` shape across
+  Gmail, Slack, Telegram, Linear, Jira, iMessage, Feishu, Weixin, and friends —
+  credential rotation, rate-limit handling, and reconnect logic live behind the
+  adapter.
+- **Deterministic Loop Engine.** A scheduler that wakes up, decides whether
+  there is real work, and only then calls into the agent runtime. LLM calls are
+  not the foundation — they are the last step.
+- **Built for embedded agents.** Designed to be embedded into any host process
+  — CLI, MCP server, daemon, desktop app, or product backend. OpenLoomi Desktop
+  is one such host.
+
+→ Read [`docs/architecture.md`](https://github.com/melandlabs/opencontext/blob/main/docs/architecture.md)
+for the full data model, lifecycle of a fact, and transport surface map.
+
+```bash
+pnpm add @melandlabs/opencontext
+```
+
 ## License
 
 [Apache 2.0](./LICENSE)

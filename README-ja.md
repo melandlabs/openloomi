@@ -140,6 +140,28 @@ Node.js 22以上、pnpm 9以上、Rust 1.75以上が必要です。Windows で�
 
 [CONTRIBUTING.md](./CONTRIBUTING.md)をご覧ください。[`good first issue`](https://github.com/melandlabs/openloomi/labels/good%20first%20issue)ラベルを探してみてください。
 
+## 関連プロジェクト
+
+OpenLoomi はデスクトップ体験です。依存している多くの基盤部品——AI ランタイム、インテグレーション、ループエンジン、監査、メモリ——は以下のオープンソース monorepo で開発されています：
+
+### [OpenContext](https://github.com/melandlabs/opencontext) — コンテキストレイヤー
+
+**エージェントがなぜその決定を下したか、忘れてしまう。OpenContext はそれを解決します。**
+
+OpenContext はエージェント型アプリケーションの基盤となるコンテキストランタイムです——時系列コンテキストグラフ、メモリ API、検索プリミティブ、マルチプラットフォーム統合メッシュ、決定論的ループエンジン、エージェントランタイムを、単一のライブラリファーストな依存関係として提供します。
+
+- **時系列コンテキストグラフ (Temporal Context Graph)。** 各事実が `valid_from` / `valid_until` を持つ有向非巡回グラフ。置換・矛盾・マージはファーストクラスのエッジ——修正は追加専用で破壊的ではないため、*"前四半期に何を信じていたか？"* は実際に引用可能なクエリになります。
+- **ライブラリファースト API。** `pnpm add @melandlabs/opencontext` で任意のホストプロセスに組み込めます。UI でもチャット画面でもモデルプロバイダーでもなく、持続的なメモリ・検索・コンテキスト修正・マルチプラットフォーム接続を結びつける糊です。
+- **プラットフォーム統合メッシュ (Platform Integration Mesh)。** Gmail、Slack、Telegram、Linear、Jira、iMessage、Feishu、Weixin などを統一的な `IntegrationRecord` 形式でカバー——認証情報のローテーション、レート制限処理、再接続ロジックはアダプタの裏に隠されています。
+- **決定論的ループエンジン (Deterministic Loop Engine)。** スケジューラが目覚め、本当に仕事があるかどうかを判断し、その場合にのみエージェントランタイムを呼び出します。LLM 呼び出しは基礎ではなく、最後の一歩です。
+- **組み込みエージェント向け。** CLI、MCP サーバ、デーモン、デスクトップアプリ、製品バックエンドなど、任意のホストプロセスへの組み込みを前提に設計されています。OpenLoomi Desktop もその一例です。
+
+→ データモデル・ファクトのライフサイクル・トランスポート面の詳細は [`docs/architecture.md`](https://github.com/melandlabs/opencontext/blob/main/docs/architecture.md) をご覧ください。
+
+```bash
+pnpm add @melandlabs/opencontext
+```
+
 ## ライセンス
 
 [Apache 2.0](./LICENSE)

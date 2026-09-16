@@ -141,6 +141,28 @@ pnpm tauri:dev
 
 参见 [CONTRIBUTING.md](./CONTRIBUTING.md)。可以关注 [`good first issue`](https://github.com/melandlabs/openloomi/labels/good%20first%20issue) 标签。
 
+## 相关项目
+
+OpenLoomi 是桌面体验层。它所依赖的许多底层构件——AI 运行时、集成适配、循环引擎、审计、记忆——都在下面这个开源 monorepo 里开发：
+
+### [OpenContext](https://github.com/melandlabs/opencontext) —— 上下文层
+
+**你的 agent 总是忘记自己为什么做出那些决定。OpenContext 专门解决这件事。**
+
+OpenContext 是 agent 应用底层的上下文运行时——一个时序上下文图、记忆 API、检索原语、多平台集成网格、确定性循环引擎与 agent 运行时,全部封装在同一个以库为先的依赖里。
+
+- **时序上下文图 (Temporal Context Graph)。** 一个有向无环图,每条事实都带有 `valid_from` / `valid_until` 字段。取代、矛盾、合并是一等图边——所有修正都是只追加、非破坏性的,所以 *"上个季度我们相信什么？"* 是一个可以真正引用、可被查询的问题。
+- **库优先 API。** 用 `pnpm add @melandlabs/opencontext` 就能嵌入到任何宿主进程。它不是 UI、不是聊天界面、也不是模型提供商——它是把持久记忆、检索、上下文校正与多平台连接这些能力粘合起来的中间层。
+- **平台集成网格 (Platform Integration Mesh)。** 统一的 `IntegrationRecord` 数据结构覆盖 Gmail、Slack、Telegram、Linear、Jira、iMessage、飞书、微信等等——凭据轮换、限流处理与重连逻辑都由适配器封装。
+- **确定性循环引擎 (Deterministic Loop Engine)。** 一个调度器,先决定是否有真正的工作要做,只有确实需要时才调用 agent 运行时。LLM 调用不是基础,只是最后一步。
+- **为嵌入式 agent 而生。** 设计上就是被嵌入到任何宿主进程里——CLI、MCP server、守护进程、桌面应用或产品后端。OpenLoomi Desktop 正是其中一种宿主。
+
+→ 想了解完整的数据模型、事实生命周期与传输接口,阅读 [`docs/architecture.md`](https://github.com/melandlabs/opencontext/blob/main/docs/architecture.md)。
+
+```bash
+pnpm add @melandlabs/opencontext
+```
+
 ## 开源协议
 
 [Apache 2.0](./LICENSE)
