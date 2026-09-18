@@ -17,6 +17,7 @@ import {
 } from "@openloomi/ui";
 import { AgentRuntimeSettings } from "@/components/agent-runtime-settings";
 import { EmbeddingApiSettings } from "@/components/embedding-api-settings";
+import { LlmUsagePanel } from "@/components/llm-usage-panel";
 import { RemixIcon } from "@/components/remix-icon";
 import { toast } from "@/components/toast";
 import { MISSING_API_KEY_REASON } from "@/lib/ai/conversation-api-configuration";
@@ -777,6 +778,8 @@ export function AiApiSettings() {
               </section>
             );
           })}
+
+          <LlmUsagePanel />
         </div>
 
         <Separator />

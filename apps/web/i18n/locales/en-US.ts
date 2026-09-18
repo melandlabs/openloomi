@@ -550,6 +550,20 @@ const en = {
     aiSettingsRequiredTitle: "Configure a model provider to start chatting",
     aiSettingsRequiredDescription: "Choose and save any supported provider.",
     aiSettingsRequiredForChat: "Required for chat",
+    llmUsageTitle: "API usage",
+    llmUsageLocalBadge: "Local",
+    llmUsageLoading: "Loading usage…",
+    llmUsageUnconfigured:
+      "Save a provider configuration to start tracking token usage.",
+    llmUsageError: "Usage tracking is unavailable right now.",
+    llmUsageProvider: "Active provider",
+    llmUsageRequests: "Requests",
+    llmUsageTokens: "Tokens",
+    llmUsageTokensIn: "in",
+    llmUsageTokensOut: "out",
+    llmUsageLastActivity: "Last activity",
+    llmUsageFootnote:
+      "Token counts are recorded locally by OpenLoomi and may exclude requests that fail before the provider reports usage. Your provider's billing dashboard remains the source of truth for spend.",
     aiSetupEyebrow: "One-minute setup",
     aiSetupTitle: "Connect your conversation model",
     aiSetupDescription:
